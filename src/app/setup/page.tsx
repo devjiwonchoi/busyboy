@@ -17,7 +17,7 @@ import { Item, ItemActions, ItemContent, ItemDescription, ItemGroup, ItemTitle }
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { Skeleton } from '@/components/ui/skeleton'
 import { alwaysAskRules } from '@/server/always-ask-list'
-import { COMPANIONS, companionImageUrl, currentCompanion } from '@/server/companions'
+import { COMPANIONS, companionImageUrl, currentCompanion, DEFAULT_COMPANION_ID } from '@/server/companions'
 import { isSetupComplete, readSettings } from '@/server/config'
 import { defaultProvider, PROVIDERS, providerState, signedInProviders, skillsState } from '@/server/providers'
 import type { SignInStatus } from '@/server/runner/contract'
@@ -67,8 +67,8 @@ async function BackToChat() {
 
 const HEADINGS: Record<StepId, { title: string; description: string }> = {
   companion: {
-    title: 'Choose your companion',
-    description: 'Your companion becomes your director: the agent you chat with, who hands work to other agents. Its personality shapes how it talks to you.',
+    title: 'Pick a Director',
+    description: 'The main agent who leads every project manager. You can change this later in settings.',
   },
   agents: {
     title: 'Sign in to an agent',
@@ -120,7 +120,7 @@ async function CurrentStep({ searchParams }: Pick<PageProps<'/setup'>, 'searchPa
 
 async function CompanionPage() {
   const [companion, imageUrl] = await Promise.all([currentCompanion(), companionImageUrl()])
-  return <CompanionStep companions={COMPANIONS} selected={companion?.id} imageUrl={imageUrl} />
+  return <CompanionStep companions={COMPANIONS} selected={companion?.id} defaultId={DEFAULT_COMPANION_ID} imageUrl={imageUrl} />
 }
 
 // ---- Agents -----------------------------------------------------------------
@@ -285,7 +285,7 @@ async function ApprovalsPage() {
 async function StartPage() {
   const { previous } = neighborSteps('start')
   const [{ projects }, signedIn, companion] = await Promise.all([readSettings(), signedInProviders(), currentCompanion()])
-  const hint = !companion ? 'Choose a companion first.' : signedIn.length === 0 ? 'Sign in to an agent first.' : undefined
+  const hint = !companion ? 'Pick a director first.' : signedIn.length === 0 ? 'Sign in to an agent first.' : undefined
   return (
     <>
       {projects.length === 0 ? (

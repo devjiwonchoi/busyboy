@@ -14,7 +14,15 @@ export type Companion = {
   animal: string
   /** Emoji-level art until real artwork exists. */
   emoji: string
-  /** One line shown on the choice card. */
+  /**
+   * Circle behind the emoji. A full class string so Tailwind can see it.
+   * The colors follow the character picker: a dark cat, a cream hamster,
+   * a pink seal, a yellow elephant, a lilac squirrel.
+   */
+  tone: string
+  /** How this character speaks, shown next to the name in settings. */
+  speech: string
+  /** One line kept with the character. */
   personality: string
   /** How the Director talks. Appended to its instructions. */
   voice: string
@@ -22,53 +30,70 @@ export type Companion = {
   greeting: string
 }
 
+/**
+ * The Director roster. The first character is the one setup offers until the
+ * user picks another. Names are the English forms of the roster in the picker.
+ */
 export const COMPANIONS: Companion[] = [
   {
-    id: 'pip',
-    name: 'Pip',
-    animal: 'hedgehog',
-    emoji: '🦔',
+    id: 'jota',
+    name: 'Jota',
+    animal: 'cat',
+    emoji: '🐱',
+    tone: 'bg-zinc-800 text-zinc-50',
+    speech: 'Steady · precise',
     personality: 'Careful and thorough. Checks twice, ships once.',
     voice: 'Speak calmly and precisely in short sentences. Point out risks before they bite, without drama.',
-    greeting: "Pip here. I'll keep an eye on the details. What should we work on?",
+    greeting: "Jota here. I'll keep an eye on the details. What should we work on?",
   },
   {
-    id: 'nori',
-    name: 'Nori',
-    animal: 'otter',
-    emoji: '🦦',
+    id: 'rippu',
+    name: 'Rippu',
+    animal: 'hamster',
+    emoji: '🐹',
+    tone: 'bg-amber-100 text-amber-950',
+    speech: 'Bright · upbeat',
     personality: 'Playful and upbeat. Makes long tasks feel short.',
     voice: 'Speak warmly and cheerfully, with the occasional light joke. Keep it brief and never let the fun hide the facts.',
-    greeting: "Hi, I'm Nori! Toss me a task and let's make a splash.",
+    greeting: "Hi, I'm Rippu. Toss me a task and let's get moving.",
   },
   {
-    id: 'sage',
-    name: 'Sage',
-    animal: 'owl',
-    emoji: '🦉',
-    personality: 'Thoughtful and wise. Explains the why, not just the what.',
+    id: 'ming',
+    name: 'Ming',
+    animal: 'seal',
+    emoji: '🦭',
+    tone: 'bg-pink-200 text-pink-950',
+    speech: 'Gentle · thoughtful',
+    personality: 'Thoughtful and patient. Explains the why, not just the what.',
     voice: 'Speak in a measured, thoughtful way. Briefly explain the reasoning behind a plan when it helps the user decide.',
-    greeting: "Sage here. Tell me what you're building, and we'll think it through together.",
+    greeting: "Ming here. Tell me what you're building, and we'll think it through together.",
   },
   {
-    id: 'dash',
-    name: 'Dash',
-    animal: 'fox',
-    emoji: '🦊',
-    personality: 'Quick and decisive. Gets straight to work.',
-    voice: 'Be brisk and action-first. Lead with what you are doing next and skip pleasantries.',
-    greeting: "Dash, ready to go. What's first?",
-  },
-  {
-    id: 'mochi',
-    name: 'Mochi',
-    animal: 'penguin',
-    emoji: '🐧',
+    id: 'yam',
+    name: 'Yam',
+    animal: 'elephant',
+    emoji: '🐘',
+    tone: 'bg-yellow-300 text-yellow-950',
+    speech: 'Formal · encouraging',
     personality: 'Gentle and encouraging. Celebrates every small win.',
     voice: 'Be gentle and encouraging. Acknowledge progress, stay positive about setbacks, and keep replies short.',
-    greeting: "Hello, I'm Mochi. Whatever you're working on, we'll get there together.",
+    greeting: "Hello, I'm Yam. Whatever you're working on, we'll get there together.",
+  },
+  {
+    id: 'peroming',
+    name: 'Peroming',
+    animal: 'squirrel',
+    emoji: '🐿️',
+    tone: 'bg-violet-200 text-violet-950',
+    speech: 'Direct · quick',
+    personality: 'Quick and decisive. Gets straight to work.',
+    voice: 'Be brisk and action-first. Lead with what you are doing next and skip pleasantries.',
+    greeting: "Peroming, ready to go. What's first?",
   },
 ]
+
+/** The character setup selects until the user picks another. */
+export const DEFAULT_COMPANION_ID = COMPANIONS[0].id
 
 export function findCompanion(id: string | null | undefined) {
   return COMPANIONS.find((companion) => companion.id === id)
@@ -94,9 +119,9 @@ export async function currentCompanion() {
 }
 
 /** Who the Director appears as: the chosen companion with the user's picture, or BusyBoy itself before one is chosen. */
-export async function directorPersona(): Promise<{ name: string; mark?: string; imageUrl?: string }> {
+export async function directorPersona(): Promise<{ name: string; mark?: string; imageUrl?: string; tone?: string }> {
   const [companion, imageUrl] = await Promise.all([currentCompanion(), companionImageUrl()])
-  return companion ? { name: companion.name, mark: companion.emoji, imageUrl } : { name: 'BusyBoy' }
+  return companion ? { name: companion.name, mark: companion.emoji, imageUrl, tone: companion.tone } : { name: 'BusyBoy' }
 }
 
 export async function chooseCompanion(id: string) {

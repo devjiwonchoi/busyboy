@@ -70,7 +70,7 @@ test('asking in side chat should not add to the main chat', async ({ page, conte
 test('a side answer should know what the main chat discussed', async ({ page, context, baseURL }) => {
   const { home } = await useProjectsHome(context, baseURL!, ['web'])
   const settingsFile = join(home, 'app-settings.json')
-  writeFileSync(settingsFile, JSON.stringify({ ...JSON.parse(readFileSync(settingsFile, 'utf8')), companion: 'nori' }))
+  writeFileSync(settingsFile, JSON.stringify({ ...JSON.parse(readFileSync(settingsFile, 'utf8')), companion: 'rippu' }))
   await startMainChat(page)
 
   const agent = await askSide(page, SIDE_QUESTION)
@@ -78,7 +78,7 @@ test('a side answer should know what the main chat discussed', async ({ page, co
   const side = page.getByRole('log', { name: 'Side chat' })
   await expect(side.getByLabel('Side answer')).toHaveText('It is called Bluebird.')
   // The same companion answers as in the main chat.
-  await expect(side.getByText('Nori', { exact: true })).toBeVisible()
+  await expect(side.getByText('Rippu', { exact: true })).toBeVisible()
   // The tab is named after its first question.
   await expect(page.getByRole('tab', { name: SIDE_QUESTION })).toBeVisible()
   expect(agent).toMatch(/\/api\/side-chat\/[^/]+\/events/)

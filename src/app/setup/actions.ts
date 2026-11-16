@@ -16,7 +16,7 @@ export type FormResult = { error?: string }
 
 export async function chooseCompanionAction(_previous: FormResult, form: FormData): Promise<FormResult> {
   const id = form.get('companion')
-  if (typeof id !== 'string' || !findCompanion(id)) return { error: 'Choose a companion to continue.' }
+  if (typeof id !== 'string' || !findCompanion(id)) return { error: 'Choose a director to continue.' }
   await chooseCompanion(id)
   redirect(stepHref('agents'))
 }

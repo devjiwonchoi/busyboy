@@ -46,7 +46,7 @@ async function skipApprovals(page: Page) {
 }
 
 /** From the companion step to the start step, skipping skills and approvals. */
-async function goToStart(page: Page, companion = 'Nori') {
+async function goToStart(page: Page, companion = 'Rippu') {
   await page.goto('/setup')
   await chooseCompanion(page, companion)
   await page.getByRole('button', { name: 'Continue' }).click()
@@ -66,11 +66,11 @@ test('finishing setup should open the main screen', async ({ page, context, base
 
   await page.goto('/')
   await expect(page).toHaveURL(/\/setup$/)
-  await expect(page.getByRole('navigation', { name: 'Setup steps' }).getByRole('link', { name: '1 Companion' })).toHaveAttribute(
+  await expect(page.getByRole('navigation', { name: 'Setup steps' }).getByRole('link', { name: '1 Director' })).toHaveAttribute(
     'aria-current',
     'step',
   )
-  await chooseCompanion(page, 'Nori')
+  await chooseCompanion(page, 'Rippu')
 
   const agents = page.getByRole('list', { name: 'Agents' })
   await expect(agents.getByRole('listitem').filter({ hasText: 'Claude Code' })).toContainText('Signed in')
@@ -95,9 +95,9 @@ test("choosing a companion should carry it into the Director's greeting", async 
   const home = track(await useTestHome(context, baseURL!, { claude: 'signed-in' }))
 
   await page.goto('/setup')
-  await chooseCompanion(page, 'Sage')
+  await chooseCompanion(page, 'Ming')
   await page.getByRole('link', { name: 'Back' }).click()
-  await expect(page.getByRole('radio', { name: /^Sage the owl/ })).toBeChecked()
+  await expect(page.getByRole('radio', { name: /^Ming the seal/ })).toBeChecked()
 
   await page.getByRole('button', { name: 'Continue' }).click()
   await page.getByRole('button', { name: 'Continue' }).click()
@@ -106,9 +106,9 @@ test("choosing a companion should carry it into the Director's greeting", async 
   await page.getByRole('button', { name: 'Start without a project' }).click()
 
   const chat = page.getByRole('region', { name: 'Chat' })
-  await expect(chat.getByText('Sage, your director', { exact: true })).toBeVisible()
-  await expect(chat.getByText("Sage here. Tell me what you're building, and we'll think it through together.")).toBeVisible()
-  expect(readSettings(home).companion).toBe('sage')
+  await expect(chat.getByText('Ming, your director', { exact: true })).toBeVisible()
+  await expect(chat.getByText("Ming here. Tell me what you're building, and we'll think it through together.")).toBeVisible()
+  expect(readSettings(home).companion).toBe('ming')
 })
 
 test('starting without a project should open the chat', async ({ page, context, baseURL }) => {
@@ -129,7 +129,7 @@ test('continuing without a signed-in agent should not be possible', async ({ pag
   track(await useTestHome(context, baseURL!, { claude: 'signed-out', codex: 'signed-out' }))
 
   await page.goto('/setup')
-  await chooseCompanion(page, 'Pip')
+  await chooseCompanion(page, 'Jota')
 
   await expect(page.getByLabel('Claude Code login command')).toHaveValue('claude /login')
   await expect(page.getByText('Sign in to an agent to continue.')).toBeVisible()
@@ -140,7 +140,7 @@ test('an outdated Claude Code should ask for an update before continuing', async
   track(await useTestHome(context, baseURL!, { claude: 'outdated', codex: 'signed-out' }))
 
   await page.goto('/setup')
-  await chooseCompanion(page, 'Pip')
+  await chooseCompanion(page, 'Jota')
 
   const agents = page.getByRole('list', { name: 'Agents' })
   await expect(agents.getByRole('listitem').filter({ hasText: 'Claude Code' })).toContainText('Update needed')
@@ -189,7 +189,7 @@ test('choosing a default agent should save it', async ({ page, context, baseURL 
   const home = track(await useTestHome(context, baseURL!, { claude: 'signed-in', codex: 'signed-in' }))
 
   await page.goto('/setup')
-  await chooseCompanion(page, 'Dash')
+  await chooseCompanion(page, 'Peroming')
   await page.getByRole('radio', { name: 'Use Codex by default' }).click()
   await page.getByRole('button', { name: 'Continue' }).click()
 
@@ -245,7 +245,7 @@ test('setting a companion picture should show it in the greeting', async ({ page
   const home = track(await useTestHome(context, baseURL!, { claude: 'signed-in' }))
 
   await page.goto('/setup')
-  await page.getByRole('radio', { name: /^Mochi the penguin/ }).click()
+  await page.getByRole('radio', { name: /^Yam the elephant/ }).click()
   await page.getByLabel('Your own picture').setInputFiles({ name: 'me.png', mimeType: 'image/png', buffer: PNG })
   await page.getByRole('button', { name: 'Use picture' }).click()
   await expect(page.getByRole('button', { name: 'Remove picture' })).toBeVisible()
@@ -258,7 +258,7 @@ test('setting a companion picture should show it in the greeting', async ({ page
   await page.getByRole('button', { name: 'Start without a project' }).click()
 
   const chat = page.getByRole('region', { name: 'Chat' })
-  await expect(chat.getByText('Mochi, your director', { exact: true })).toBeVisible()
+  await expect(chat.getByText('Yam, your director', { exact: true })).toBeVisible()
   await expect(chat.locator('img[src^="/api/companion-image"]')).toBeVisible()
 })
 
@@ -327,7 +327,7 @@ test('opening the app with a corrupt settings file should show setup again', asy
   expect(moved).toHaveLength(1)
   expect(readFileSync(join(home, moved[0]), 'utf8')).toBe(corrupt)
 
-  await chooseCompanion(page, 'Pip')
+  await chooseCompanion(page, 'Jota')
   await page.getByRole('button', { name: 'Continue' }).click()
   await page.getByRole('link', { name: 'Skip' }).click()
   await skipApprovals(page)

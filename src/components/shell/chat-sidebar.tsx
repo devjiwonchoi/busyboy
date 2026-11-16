@@ -34,9 +34,9 @@ const NEW_FOLDER = '\0new-folder'
 const managerHref = (id: string) => `/?manager=${encodeURIComponent(id)}`
 
 /**
- * The chat list on the left: the Director on top, then one manager per
- * project, each with the start of its latest message. The list follows
- * /api/chats/events; `projects` are the projects BusyBoy knows, for New manager.
+ * The chat list on the left: the Director pinned on top, then one manager per
+ * project, each with an emoji picture and the start of its latest message.
+ * The list follows /api/chats/events; `projects` are the projects BusyBoy knows, for New manager.
  */
 export function ChatSidebar({ director, projects }: { director: Persona; projects: string[] }) {
   const [chats, setChats] = useState<ChatSummary[] | null>(null)
@@ -53,39 +53,58 @@ export function ChatSidebar({ director, projects }: { director: Persona; project
   const managed = new Set(managers.map(({ project }) => project?.toLowerCase()))
 
   return (
-    <nav aria-label="Chats" data-loaded={chats !== null} className="hidden w-64 shrink-0 flex-col gap-2 overflow-y-auto border-r p-2 md:flex">
-      <div className="flex items-center justify-between pl-2">
-        <h2 className="text-muted-foreground text-xs font-medium">Managers</h2>
+    <nav aria-label="Chats" data-loaded={chats !== null} className="hidden h-full w-64 shrink-0 flex-col border-r bg-background md:flex">
+      <div className="flex items-center justify-end px-2 pt-2">
         <NewManager projects={projects.filter((name) => !managed.has(name.toLowerCase()))} />
       </div>
-      <Item
-        variant={active === null ? 'muted' : 'default'}
-        // A link styled as an item, so the Director's chat opens like any page.
-        render={<Link href="/" aria-current={active === null ? 'page' : undefined} aria-label={`${director.name}, director`} />}
-        className="flex-col items-center gap-1 py-3"
-      >
-        {director.mark && <PersonaAvatar persona={director} className="size-14 text-3xl" />}
-        <ItemTitle>{director.name}</ItemTitle>
-        <ChatState chat={directorChat} />
-      </Item>
-      <ItemGroup aria-label="Managers" className="gap-1">
-        {managers.map((manager) => (
-          <ManagerItem key={manager.chat} manager={manager} active={manager.chat === active} />
-        ))}
-      </ItemGroup>
-      {chats !== null && managers.length === 0 && (
-        <p className="text-muted-foreground px-2 text-xs">No managers yet. Create one for a project to talk to it here.</p>
-      )}
+      <div className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto px-2 pb-2">
+        {/* Stays at the top of the list while the managers below scroll. */}
+        <div className="sticky top-0 z-10 bg-background pb-1">
+          <Item
+            size="sm"
+            variant={active === null ? 'muted' : 'default'}
+            // A link styled as an item, so the Director's chat opens like any page.
+            render={<Link href="/" aria-current={active === null ? 'page' : undefined} aria-label={`${director.name}, director`} />}
+          >
+            {director.mark && (
+              <ItemMedia>
+                <PersonaAvatar persona={director} className="size-9" />
+              </ItemMedia>
+            )}
+            <ItemContent className="min-w-0">
+              <ItemTitle className="line-clamp-none w-full min-w-0 gap-1.5">
+                <span className="truncate">{director.name}</span>
+                <Badge variant="secondary" className="h-4 shrink-0 border-transparent bg-violet-500/15 px-1.5 text-violet-700 dark:bg-violet-400/15 dark:text-violet-200">
+                  Director
+                </Badge>
+              </ItemTitle>
+              <ChatSubtitle chat={directorChat} fallback="Leads every manager" />
+            </ItemContent>
+          </Item>
+        </div>
+        <ItemGroup aria-label="Managers" className="gap-0.5">
+          {managers.map((manager) => (
+            <ManagerItem key={manager.chat} manager={manager} active={manager.chat === active} />
+          ))}
+        </ItemGroup>
+        {chats !== null && managers.length === 0 && (
+          <p className="text-muted-foreground px-2 text-xs">No managers yet. Create one for a project to talk to it here.</p>
+        )}
+      </div>
     </nav>
   )
 }
 
-/** What a chat is doing, when that is worth a glance: cards waiting for the user, or a reply being written. */
-function ChatState({ chat }: { chat: ChatSummary | undefined }) {
-  if (!chat) return null
-  if (chat.waiting > 0) return <Badge variant="outline">{chat.waiting} waiting for you</Badge>
-  if (chat.status === 'answering') return <span className="text-muted-foreground animate-pulse text-xs">Replying…</span>
-  return null
+/** The one line under a chat's name: work waiting on the user, a reply in progress, or the latest message. */
+function ChatSubtitle({ chat, fallback }: { chat: ChatSummary | undefined; fallback: string }) {
+  const waiting = chat?.waiting ?? 0
+  const text =
+    waiting > 0 ? (waiting === 1 ? '1 thing waiting for you' : `${waiting} things waiting for you`) : chat?.status === 'answering' ? 'Replying…' : chat?.preview || fallback
+  return (
+    <ItemDescription className="line-clamp-1">
+      {chat?.status === 'answering' && waiting === 0 ? <span className="animate-pulse">{text}</span> : text}
+    </ItemDescription>
+  )
 }
 
 function ManagerItem({ manager, active }: { manager: ChatSummary; active: boolean }) {
@@ -102,8 +121,7 @@ function ManagerItem({ manager, active }: { manager: ChatSummary; active: boolea
             {manager.name}
           </Link>
         </ItemTitle>
-        <ItemDescription className="truncate">{manager.preview || manager.project}</ItemDescription>
-        <ChatState chat={manager} />
+        <ChatSubtitle chat={manager} fallback={manager.project ?? ''} />
       </ItemContent>
       {/* Above the row's link, and shown on hover or keyboard focus. */}
       <ItemActions className="relative z-10 opacity-0 group-focus-within/manager:opacity-100 group-hover/manager:opacity-100">

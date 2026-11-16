@@ -26,10 +26,10 @@ test('choosing a companion in settings should save it without a Continue button'
   folders.push(home, ...Object.values(projects).map((path) => dirname(path)))
   await openSettings(page)
 
-  await page.getByRole('radio', { name: /^Sage the/ }).click()
+  await page.getByRole('radio', { name: /^Ming the/ }).click()
 
-  await expect.poll(() => readSettings(home).companion).toBe('sage')
-  await expect(page.getByRole('radio', { name: /^Sage the/ })).toBeChecked()
+  await expect.poll(() => readSettings(home).companion).toBe('ming')
+  await expect(page.getByRole('radio', { name: /^Ming the/ })).toBeChecked()
   await expect(page.getByRole('button', { name: 'Continue' })).toHaveCount(0)
   await expect(page.getByText(/Step \d of/)).toHaveCount(0)
 })
@@ -90,5 +90,5 @@ test('opening settings before setup is finished should open setup', async ({ pag
   await page.goto('/settings')
 
   await expect(page).toHaveURL(/\/setup$/)
-  await expect(page.getByRole('heading', { name: 'Choose your companion' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Pick a Director' })).toBeVisible()
 })
