@@ -1,6 +1,7 @@
 import { lstat, readdir, readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { SETTINGS_FILE } from '../config'
+import { sameEntryName } from '../paths'
 import { readTasksAt, taskView, type TaskRecord, type TaskStatus } from '../tasks'
 import { parseRecords, RECORD_FILES, type BuildsOn, type ParsedRecords, type RecordError, type RecordTexts } from './parse-records'
 
@@ -60,7 +61,9 @@ export async function recordFolderOf(task: Pick<TaskRecord, 'id' | 'worktree'>):
   } catch {
     return null
   }
-  if (names.includes(task.id)) return { folder: join(root, task.id) }
+  // The folder may differ in case from the task id on a case-insensitive disk.
+  const named = names.find((name) => sameEntryName(name, task.id))
+  if (named) return { folder: join(root, named) }
   const withRecords = (
     await Promise.all(
       names.map(async (name) => {

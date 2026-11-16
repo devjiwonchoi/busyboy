@@ -136,6 +136,7 @@ test('a message sent while a Codex Director is answering should interrupt it', a
 })
 
 test('stopping a Codex Director that ignores SIGTERM should still end the processes it started', async ({ page }) => {
+  test.skip(process.platform === 'win32', 'The fake Codex child processes use POSIX process groups.')
   rmSync(fakeCodexPidFile, { force: true })
   await sendToCodexDirector(page, START_CHILDREN_PROMPT)
 

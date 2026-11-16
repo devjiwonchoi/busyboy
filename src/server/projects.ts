@@ -1,9 +1,9 @@
 import { execFile } from 'node:child_process'
 import { realpath, stat } from 'node:fs/promises'
-import { homedir } from 'node:os'
-import { basename, isAbsolute, join, resolve } from 'node:path'
+import { basename, isAbsolute, resolve } from 'node:path'
 import { promisify } from 'node:util'
 import { readSettings, updateSettings, type ProjectEntry } from './config'
+import { expandHome, samePath } from './paths'
 
 // A project is a name plus one folder that is a git repository. Projects live
 // in the settings file; removing one only forgets it and never touches files.
@@ -55,12 +55,6 @@ function sameName(a: string, b: string) {
   return a.toLowerCase() === b.toLowerCase()
 }
 
-function expandHome(path: string) {
-  if (path === '~') return homedir()
-  if (path.startsWith('~/')) return join(homedir(), path.slice(2))
-  return path
-}
-
 /** Returns the real path of the repository's top-level folder, or throws a message for the user. */
 async function checkRepository(input: string) {
   const typed = input.trim()
@@ -84,9 +78,8 @@ async function checkRepository(input: string) {
     }
     throw new ProjectError(`${folder} is not a git repository. Run git init there, or choose another folder.`)
   }
-  // macOS and Windows folders are usually case-insensitive, and git may report a different case.
-  const same = process.platform === 'linux' ? topLevel === real : topLevel.toLowerCase() === real.toLowerCase()
-  if (!same) {
+  // git may report another case or another slash. macOS and Windows still mean the same folder.
+  if (!samePath(topLevel, real)) {
     throw new ProjectError(`${folder} is inside the git repository at ${topLevel}. Add that folder instead.`)
   }
   return topLevel
@@ -108,7 +101,7 @@ export async function addProject(folder: string, name?: string): Promise<Project
   const path = await checkRepository(folder)
   const requested = name?.trim() ? checkName(name) : undefined
   return updateSettings((settings) => {
-    const existing = settings.projects.find((project) => project.path === path)
+    const existing = settings.projects.find((project) => samePath(project.path, path))
     if (existing) throw new ProjectError(`This folder is already added as ${existing.name}.`)
     if (requested && settings.projects.some((project) => sameName(project.name, requested))) {
       throw new ProjectError(`A project named ${requested} already exists.`)

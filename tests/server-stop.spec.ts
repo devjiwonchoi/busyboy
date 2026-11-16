@@ -27,6 +27,7 @@ function isRunning(pid: number) {
 }
 
 test('stopping the server should end the processes its agents started', async ({ browser }) => {
+  test.skip(process.platform === 'win32', 'The fake Claude CLI is a POSIX process-group script.')
   // Its own server with the real Claude adapter over the fake CLI, so stopping it leaves the shared ones running.
   const port = await freePort()
   const home = createTempFolder('stop-home')
