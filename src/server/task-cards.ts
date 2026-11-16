@@ -1,39 +1,15 @@
-import { readFile } from 'node:fs/promises'
-import { join } from 'node:path'
+import { readDraftPlan } from './cards/plan'
+import { optionLetter, type CardQuestion, type TaskCard } from './cards/model'
 import { answerAgent, getAgent, sendMessage, stopAgent, subscribeToAgent } from './runner/agent-runner'
 import type { AgentAnswer, AgentEvent, Question } from './runner/contract'
 
-// Cards are how a task agent reaches the user: a choice card for a question or
-// an approval, and an Align card for a plan that waits for approval. They live
-// only while the agent waits; the Director chat pins open ones above the
-// composer and writes each one to its transcript once it closes.
+export type { CardOption, CardQuestion, TaskCard } from './cards/model'
 
-export type CardOption = { label: string; description: string | undefined; recommended: boolean }
-
-export type CardQuestion = { question: string; header: string | undefined; options: CardOption[]; multiSelect: boolean }
-
-/** `chat`: the manager whose chat shows the card; null for the Director's. */
-type CardSource = { id: string; taskId: string; chat: string | null; project: string; taskTitle: string; openedAt: string }
-
-export type TaskCard = CardSource &
-  (
-    | {
-        kind: 'choice'
-        /** An approval card offers Allow / Allow for this session / Deny as its one question. */
-        approval: boolean
-        /** Extra context for an approval, such as the full command. */
-        detail: string | undefined
-        questions: CardQuestion[]
-      }
-    | {
-        kind: 'align'
-        title: string
-        /** Two or three sentences on the goal and end state. */
-        summary: string
-        /** The whole ALIGN.md, for View details. */
-        plan: string
-      }
-  )
+// Cards are how a task agent reaches the user: a question, an approval, or a
+// plan that waits for approval. They live only while the agent waits. The
+// Director chat shows open ones in the timeline and writes each one to its
+// transcript once it closes. Progress, done, and pull-request cards use the
+// same store through presentCard.
 
 export type CardUpdate = { type: 'open'; card: TaskCard } | { type: 'close'; card: TaskCard; outcome: string }
 
@@ -46,12 +22,6 @@ export const APPROVE_MESSAGE = 'Approved.'
 export const ALLOW = 'Allow'
 export const ALLOW_FOR_SESSION = 'Allow for this session'
 export const DENY = 'Deny'
-
-/**
- * The plan's own status, at the start of a line or after `Version: <n> ·` as the
- * align template writes it, so prose that mentions an approval never counts.
- */
-const APPROVED = /^(?:\W*Version:[^·\n]*·)?\W*Status:\s*approved\b/im
 
 /** Agents mark the option they recommend this way (AskUserQuestion's own convention). */
 const RECOMMENDED = /\s*\(recommended\)\s*$/i
@@ -119,63 +89,17 @@ function requestCard(task: CardTask, event: Extract<AgentEvent, { type: 'approva
     openedAt: new Date().toISOString(),
   }
   if (event.type === 'question') {
-    return { ...source, kind: 'choice', approval: false, detail: undefined, questions: event.questions.map(toCardQuestion) }
+    return { ...source, kind: 'question', questions: event.questions.map(toCardQuestion) }
   }
 
   const labels = event.canAllowForSession ? [ALLOW, event.allowForSessionLabel ?? ALLOW_FOR_SESSION, DENY] : [ALLOW, DENY]
   const options = labels.map((label) => ({ label, description: undefined, recommended: false }))
   return {
     ...source,
-    kind: 'choice',
-    approval: true,
+    kind: 'approval',
     detail: event.detail,
     questions: [{ question: event.title, header: undefined, options, multiSelect: false }],
   }
-}
-
-/**
- * The body of a top-level `# <name>` section, up to the next top-level heading.
- * Code fences are not tracked, so a `# comment` line in a fence ends the
- * section early; that only shortens the card's summary, and View details shows the whole plan.
- */
-function topSection(text: string, name: string) {
-  const match = new RegExp(`^#\\s+${name}\\s*$([\\s\\S]*?)(?=^#\\s|(?![\\s\\S]))`, 'im').exec(text)
-  return match?.[1] ?? ''
-}
-
-/**
- * Two or three sentences for the Align card: the Goal's prose and the
- * Summary's "What" line, which the align template states in both forms.
- */
-export function alignSummary(plan: string) {
-  const goal = topSection(plan, 'Goal')
-    .split(/\n\s*\n/)
-    .map((paragraph) => paragraph.replace(/\s+/g, ' ').trim())
-    .filter((paragraph) => paragraph && !/^(intention:|---)/i.test(paragraph))
-    .join(' ')
-  const what = /^\s*-\s*What:\s*(.+)$/im.exec(topSection(plan, 'Summary'))?.[1].trim()
-  const sentences = [goal, what ? `When done: ${what}` : '']
-    .join(' ')
-    .split(/(?<=[.!?])\s+/)
-    .filter(Boolean)
-  const summary = sentences.slice(0, 3).join(' ')
-  return /[.!?]$/.test(summary) || !summary ? summary : `${summary}.`
-}
-
-/** A draft plan waiting for approval, read when the agent ends a turn. Null when there is none. */
-async function draftPlan(task: CardTask) {
-  const plan = await readFile(join(task.worktree, '.jwn', task.id, 'ALIGN.md'), 'utf8').catch((error: NodeJS.ErrnoException) => {
-    if (error.code === 'ENOENT') {
-      return null
-    }
-    throw error
-  })
-  if (plan === null || APPROVED.test(plan)) {
-    return null
-  }
-
-  const title = /^#\s+ALIGN:\s*(.+?)\s*$/m.exec(plan)?.[1] ?? task.title
-  return { title, plan, summary: alignSummary(plan) }
 }
 
 /** Opens and closes the cards of one task agent for as long as it runs; `onChange` follows each open and close. */
@@ -209,7 +133,7 @@ export function trackTaskCards({ folder, task, onChange }: { folder: string; tas
         if (event.more) {
           break
         }
-        void draftPlan(task)
+        void readDraftPlan(task)
           .then((draft) => {
             // Only while the agent still waits on this turn: a message or stop since then moved on.
             if (!draft || latestSeq !== seq || getAgent(task.agentId)?.status !== 'idle') {
@@ -222,7 +146,7 @@ export function trackTaskCards({ folder, task, onChange }: { folder: string; tas
               project: task.project,
               taskTitle: task.title,
               openedAt: new Date().toISOString(),
-              kind: 'align',
+              kind: 'plan',
               ...draft,
             }
             openCard(store, { card, agentId: task.agentId, requestId: null })
@@ -235,6 +159,35 @@ export function trackTaskCards({ folder, task, onChange }: { folder: string; tas
 
 export function openCards(folder: string) {
   return [...storeFor(folder).open.values()].map(({ card }) => card)
+}
+
+/**
+ * Puts a card on the timeline. Sending the same id again replaces that card;
+ * keep `openedAt` to leave it where it is. Question, approval, and plan cards
+ * are opened by trackTaskCards. Progress, done, and pull-request cards use this.
+ * `agentId` is the task agent the card belongs to, so stopping that agent closes it.
+ */
+export function presentCard({
+  folder,
+  card,
+  agentId,
+  requestId = null,
+}: {
+  folder: string
+  card: TaskCard
+  agentId: string
+  requestId?: string | null
+}) {
+  openCard(storeFor(folder), { card, agentId, requestId })
+}
+
+/** Closes a card with `outcome`, the same path as answering one. */
+export function settleCard({ folder, cardId, outcome }: { folder: string; cardId: string; outcome: string }) {
+  const store = storeFor(folder)
+  if (!store.open.has(cardId)) {
+    throw new CardError('This card was already answered.')
+  }
+  withOutcome(store, cardId, outcome, () => closeCard(store, cardId))
 }
 
 export function subscribeToCards(folder: string, listener: (update: CardUpdate) => void) {
@@ -274,19 +227,14 @@ function getOpen(folder: string, cardId: string) {
   return { store, entry }
 }
 
-/** Letters the options of a question: A, B, C… */
-export function optionLetter(index: number) {
-  return String.fromCharCode(65 + index)
-}
-
 /**
- * Answers a choice card with the chosen labels for each of its questions, by
- * question index: two questions of one request may share their text.
+ * Answers a question or approval card with the chosen labels for each of its
+ * questions, by question index: two questions of one request may share their text.
  */
 export function answerCard({ folder, cardId, choices }: { folder: string; cardId: string; choices: string[][] }) {
   const { store, entry } = getOpen(folder, cardId)
   const { card } = entry
-  if (card.kind !== 'choice' || !entry.requestId) {
+  if ((card.kind !== 'question' && card.kind !== 'approval') || !entry.requestId) {
     throw new CardError('Only a question or approval card takes a choice.')
   }
 
@@ -300,7 +248,7 @@ export function answerCard({ folder, cardId, choices }: { folder: string; cardId
   })
 
   let answer: AgentAnswer
-  if (card.approval) {
+  if (card.kind === 'approval') {
     const [label] = picked[0].labels
     // The middle option remembers the allow, whatever the request named it.
     answer = { kind: 'approval', allow: label !== DENY, forSession: label !== ALLOW && label !== DENY }
@@ -317,10 +265,10 @@ export function answerCard({ folder, cardId, choices }: { folder: string; cardId
   withOutcome(store, cardId, outcome, () => answerAgent(agentId, requestId, answer))
 }
 
-/** Approves the plan of an Align card, so the task agent carries on with it. */
+/** Approves the plan, so the task agent carries on with it. */
 export function approveCard({ folder, cardId }: { folder: string; cardId: string }) {
   const { store, entry } = getOpen(folder, cardId)
-  if (entry.card.kind !== 'align') {
+  if (entry.card.kind !== 'plan') {
     throw new CardError('Only a plan card can be approved.')
   }
   withOutcome(store, cardId, 'Approved', () => sendMessage(entry.agentId, APPROVE_MESSAGE))
@@ -333,16 +281,20 @@ export function approveCard({ folder, cardId }: { folder: string; cardId: string
 export function replyToCard({ folder, cardId, text }: { folder: string; cardId: string; text: string }) {
   const { store, entry } = getOpen(folder, cardId)
   const { card } = entry
-  if (card.kind === 'align') {
+  if (card.kind === 'plan') {
     withOutcome(store, cardId, 'Changes requested', () => sendMessage(entry.agentId, text))
     return
   }
+  if (card.kind !== 'question' && card.kind !== 'approval') {
+    throw new CardError('This card does not take a reply.')
+  }
 
-  const answer: AgentAnswer = card.approval
-    ? { kind: 'approval', allow: false, message: text }
-    : { kind: 'question', answers: Object.fromEntries(card.questions.map(({ question }) => [question, text])) }
+  const answer: AgentAnswer =
+    card.kind === 'approval'
+      ? { kind: 'approval', allow: false, message: text }
+      : { kind: 'question', answers: Object.fromEntries(card.questions.map(({ question }) => [question, text])) }
   const { agentId, requestId } = entry
-  withOutcome(store, cardId, card.approval ? 'Denied with a reply' : 'Answered with a reply', () =>
+  withOutcome(store, cardId, card.kind === 'approval' ? 'Denied with a reply' : 'Answered with a reply', () =>
     requestId ? answerAgent(agentId, requestId, answer) : false,
   )
 }

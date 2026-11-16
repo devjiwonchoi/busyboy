@@ -31,8 +31,10 @@ async function openChat(page: Page) {
   await expect(page.getByRole('log', { name: 'Transcript' })).toHaveAttribute('data-connected', 'true')
 }
 
-const pinned = (page: Page) => page.getByRole('region', { name: 'Waiting for you' })
 const transcript = (page: Page) => page.getByRole('log', { name: 'Transcript' })
+const openCard = (page: Page, name: string) => transcript(page).getByRole('group', { name })
+const openCards = (page: Page) =>
+  transcript(page).getByRole('group', { name: /^(Question|Approval|Plan|Progress|Done|Pull requests) from / })
 
 let home: string
 
@@ -45,17 +47,18 @@ test.describe('Claude task agents', () => {
     await openChat(page)
     await createTask(context.request, 'Add a license', QUESTION_REQUEST)
 
-    const card = pinned(page).getByRole('group', { name: 'Question from web · Add a license' })
+    const card = openCard(page, 'Question from web · Add a license')
     await expect(card).toContainText('License: Which license should the project use?')
     await expect(card.getByRole('button', { name: 'A. MIT (Recommended)' })).toContainText('Recommended')
     await expect(card.getByRole('button', { name: 'B. Apache-2.0' })).toBeVisible()
     await expect(transcript(page).getByLabel('web · Add a license', { exact: true })).toContainText('Needs you')
 
-    // Unanswered cards stay pinned, also after the page loads again.
+    // Unanswered cards stay in the timeline, also after the page loads again.
+    await expect(page.getByRole('region', { name: 'Waiting for you' })).toHaveCount(0)
     await page.reload()
     await card.getByRole('button', { name: 'A. MIT (Recommended)' }).click()
 
-    await expect(pinned(page)).toHaveCount(0)
+    await expect(openCards(page)).toHaveCount(0)
     const record = transcript(page).getByRole('group', { name: 'Card from web · Add a license' })
     await expect(record).toContainText('Which license should the project use?')
     await expect(record).toContainText('A · MIT')
@@ -66,14 +69,14 @@ test.describe('Claude task agents', () => {
     await openChat(page)
     await createTask(context.request, 'Clean up dist', APPROVAL_REQUEST)
 
-    const card = pinned(page).getByRole('group', { name: 'Approval from web · Clean up dist' })
+    const card = openCard(page, 'Approval from web · Clean up dist')
     await expect(card).toContainText('Bash: rm -rf dist')
     // A reply to an approval denies it, so the composer stays with the Director until the user picks Reply.
     await expect(page.getByRole('textbox', { name: 'Message' })).toHaveAttribute('aria-placeholder', 'Message BusyBoy')
     await expect(card.getByRole('button', { name: /^[A-C]\. / })).toHaveText(['AAllow', 'BAllow for this session', 'CDeny'])
     await card.getByRole('button', { name: 'B. Allow for this session' }).click()
 
-    await expect(pinned(page)).toHaveCount(0)
+    await expect(openCards(page)).toHaveCount(0)
     await expect(transcript(page).getByRole('group', { name: 'Card from web · Clean up dist' })).toContainText('B · Allow for this session')
     await expect(transcript(page).getByLabel('web · Clean up dist', { exact: true })).toContainText('Idle')
   })
@@ -82,7 +85,7 @@ test.describe('Claude task agents', () => {
     await openChat(page)
     const task = await createTask(context.request, 'Add a footer', PLAN_REQUEST)
 
-    const card = pinned(page).getByRole('group', { name: 'Plan from web · Add a footer' })
+    const card = openCard(page, 'Plan from web · Add a footer')
     await expect(card).toContainText(
       'Every page of the web app ends with a footer that shows the project name. The footer sits below the main content and uses the app\'s muted text color. When done: a footer with the project name on every page.',
     )
@@ -94,19 +97,19 @@ test.describe('Claude task agents', () => {
     await page.keyboard.press('Escape')
     await card.getByRole('button', { name: 'Approve' }).click()
 
-    await expect(pinned(page)).toHaveCount(0)
+    await expect(openCards(page)).toHaveCount(0)
     await expect(transcript(page).getByRole('group', { name: 'Card from web · Add a footer' })).toContainText('Approved')
     // The agent got the approval and saved the plan as approved.
     await expect.poll(() => readFileSync(join(task.worktree, '.jwn', task.id, 'ALIGN.md'), 'utf8')).toContain('Status: approved')
     // Its turn ended with the approved plan, which asks for nothing more.
     await expect(transcript(page).getByLabel('web · Add a footer', { exact: true })).toContainText('Idle')
-    await expect(pinned(page)).toHaveCount(0)
+    await expect(openCards(page)).toHaveCount(0)
   })
 
   test('clicking Reply on an Align card and sending should send the change to its task agent', async ({ page, context }) => {
     await openChat(page)
     await createTask(context.request, 'Add a footer', PLAN_REQUEST)
-    const card = pinned(page).getByRole('group', { name: 'Plan from web · Add a footer' })
+    const card = openCard(page, 'Plan from web · Add a footer')
     await expect(card).toBeVisible()
 
     const composer = page.getByRole('textbox', { name: 'Message' })
@@ -124,7 +127,7 @@ test.describe('Claude task agents', () => {
       'Card from web · Add a footer',
     )
     // The agent revised its draft, so a new plan card asks again.
-    await expect(pinned(page).getByRole('group', { name: 'Plan from web · Add a footer' })).toContainText(
+    await expect(openCard(page, 'Plan from web · Add a footer')).toContainText(
       'When done: a footer with the project name on every page and the current year.',
     )
     // Nothing went to the Director, and the reply target ended with the card it answered.
@@ -140,13 +143,13 @@ test.describe('Claude task agents', () => {
   test('a card closing before a reply is sent should not send the reply to the Director', async ({ page, context }) => {
     await openChat(page)
     await createTask(context.request, 'Add a footer', PLAN_REQUEST)
-    const card = pinned(page).getByRole('group', { name: 'Plan from web · Add a footer' })
+    const card = openCard(page, 'Plan from web · Add a footer')
     await card.getByRole('button', { name: 'Reply' }).click()
     const composer = page.getByRole('textbox', { name: 'Message' })
     await composer.fill('Yes, go ahead.')
 
     await transcript(page).getByRole('button', { name: 'Stop web · Add a footer' }).click()
-    await expect(pinned(page)).toHaveCount(0)
+    await expect(openCards(page)).toHaveCount(0)
     await page.getByRole('button', { name: 'Send' }).click()
 
     await expect(page.getByRole('alert').filter({ hasText: 'The card you were replying to closed' })).toContainText('Send again to message BusyBoy.')
@@ -160,7 +163,7 @@ test.describe('Claude task agents', () => {
     await composer.fill('What is running right now?')
 
     await createTask(context.request, 'Add a license', QUESTION_REQUEST)
-    await expect(pinned(page).getByRole('group', { name: 'Question from web · Add a license' })).toBeVisible()
+    await expect(openCard(page, 'Question from web · Add a license')).toBeVisible()
 
     await expect(composer).toHaveText('What is running right now?')
     await expect(page.getByText(/^Replying to /)).toHaveCount(0)
@@ -172,7 +175,7 @@ test.describe('Claude task agents', () => {
     await openChat(page)
     await createTask(context.request, 'Pick colors', TWIN_QUESTIONS_REQUEST)
 
-    const card = pinned(page).getByRole('group', { name: 'Question from web · Pick colors' })
+    const card = openCard(page, 'Question from web · Pick colors')
     const [first, second] = [card.getByRole('group').nth(0), card.getByRole('group').nth(1)]
     await first.getByRole('button', { name: 'A. Red' }).click()
     await second.getByRole('button', { name: 'B. Blue' }).click()
@@ -188,9 +191,9 @@ test.describe('Claude task agents', () => {
     await openChat(page)
     await createTask(context.request, 'Clean up dist', APPROVAL_REQUEST)
 
-    await pinned(page).getByRole('group', { name: 'Approval from web · Clean up dist' }).getByRole('button', { name: 'Stop task' }).click()
+    await openCard(page, 'Approval from web · Clean up dist').getByRole('button', { name: 'Stop task' }).click()
 
-    await expect(pinned(page)).toHaveCount(0)
+    await expect(openCards(page)).toHaveCount(0)
     await expect(transcript(page).getByRole('group', { name: 'Card from web · Clean up dist' })).toContainText('Stopped')
     await expect(transcript(page).getByLabel('web · Clean up dist', { exact: true })).toContainText('Stopped')
   })
@@ -198,12 +201,12 @@ test.describe('Claude task agents', () => {
   test('clicking Stop in the task group should stop the task and close its card', async ({ page, context }) => {
     await openChat(page)
     await createTask(context.request, 'Add a footer', PLAN_REQUEST)
-    await expect(pinned(page).getByRole('group', { name: 'Plan from web · Add a footer' })).toBeVisible()
+    await expect(openCard(page, 'Plan from web · Add a footer')).toBeVisible()
 
     await transcript(page).getByRole('button', { name: 'Stop web · Add a footer' }).click()
 
     await expect(transcript(page).getByLabel('web · Add a footer', { exact: true })).toContainText('Stopped')
-    await expect(pinned(page)).toHaveCount(0)
+    await expect(openCards(page)).toHaveCount(0)
     await expect(transcript(page).getByRole('group', { name: 'Card from web · Add a footer' })).toContainText('Stopped')
   })
 })
@@ -218,11 +221,11 @@ test.describe('Codex task agents', () => {
     await openChat(page)
     await createTask(context.request, 'Create notes', CODEX_APPROVAL_REQUEST)
 
-    const card = pinned(page).getByRole('group', { name: 'Approval from web · Create notes' })
+    const card = openCard(page, 'Approval from web · Create notes')
     await expect(card.getByRole('button', { name: /^[A-C]\. / })).toHaveText(['AAllow', 'BDeny'])
     await card.getByRole('button', { name: 'A. Allow' }).click()
 
-    await expect(pinned(page)).toHaveCount(0)
+    await expect(openCards(page)).toHaveCount(0)
     await expect(transcript(page).getByRole('group', { name: 'Card from web · Create notes' })).toContainText('A · Allow')
     await expect(transcript(page).getByLabel('web · Create notes', { exact: true })).toContainText('Idle')
   })
