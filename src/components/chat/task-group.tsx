@@ -1,0 +1,55 @@
+import { Badge } from '@/components/ui/badge'
+import { Bubble, BubbleContent } from '@/components/ui/bubble'
+import { Message, MessageContent } from '@/components/ui/message'
+import type { TaskStatus, TaskView } from '@/server/tasks'
+
+// Status colors follow the app's scheme (amber needs you, blue running, gray
+// idle, red stopped). Badge has no amber or blue variant, so those two add
+// their color through className on the outline variant.
+const STATUS: Record<TaskStatus, { label: string; variant: 'outline' | 'destructive'; className?: string }> = {
+  running: { label: 'Running', variant: 'outline', className: 'border-blue-500/40 bg-blue-500/10 text-blue-700 dark:text-blue-300' },
+  'needs-you': {
+    label: 'Needs you',
+    variant: 'outline',
+    className: 'border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300',
+  },
+  idle: { label: 'Idle', variant: 'outline' },
+  stopped: { label: 'Stopped', variant: 'destructive' },
+}
+
+/** The tasks the Director created in one turn, one `project · task` line each. */
+export function TaskGroup({ taskIds, tasks }: { taskIds: string[]; tasks: Map<string, TaskView> }) {
+  return (
+    <Message>
+      <MessageContent>
+        <Bubble variant="outline" role="group" aria-label="Tasks" className="w-full max-w-[80%]">
+          <BubbleContent className="w-full">
+            <ul className="space-y-1">
+              {taskIds.map((id) => {
+                const task = tasks.get(id)
+                const status = task ? STATUS[task.status] : undefined
+                return (
+                  <li
+                    key={id}
+                    aria-label={task ? `${task.project} · ${task.title}` : id}
+                    className="flex items-center gap-3"
+                  >
+                    <span className="min-w-0 flex-1 truncate">
+                      <span className="text-muted-foreground">{task?.project ?? '…'} · </span>
+                      <span>{task?.title ?? id}</span>
+                    </span>
+                    {status && (
+                      <Badge variant={status.variant} className={status.className} data-status={task?.status}>
+                        {status.label}
+                      </Badge>
+                    )}
+                  </li>
+                )
+              })}
+            </ul>
+          </BubbleContent>
+        </Bubble>
+      </MessageContent>
+    </Message>
+  )
+}

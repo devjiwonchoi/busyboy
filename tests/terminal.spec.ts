@@ -65,7 +65,8 @@ test('typing a command should show its output', async ({ page }) => {
 test('exiting the shell should offer a new terminal', async ({ page }) => {
   const terminal = await openTerminal(page)
   await run(page, 'exit 3')
-  const status = page.getByRole('status')
+  // Scoped to the panel: the chat's message box has a status region of its own.
+  const status = page.getByRole('region', { name: 'Bottom panel' }).getByRole('status')
   await expect(status).toContainText('The shell exited with code 3.')
 
   await status.getByRole('button', { name: 'New terminal' }).click()

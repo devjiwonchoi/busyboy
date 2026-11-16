@@ -1,0 +1,17 @@
+{
+  "provider": "claude",
+  "description": "Hand-written: a reply long enough to pass the compaction threshold the journeys use.",
+  "turns": [
+    {
+      "prompt": "Tell me everything about lighthouses.",
+      "steps": [
+        {
+          "event": {
+            "type": "text",
+            "text": "1. Lighthouses guide ships along dangerous coasts with a bright, rotating light that sailors can see from far away at night.\n2. Lighthouses guide ships along dangerous coasts with a bright, rotating light that sailors can see from far away at night.\n3. Lighthouses guide ships along dangerous coasts with a bright, rotating light that sailors can see from far away at night.\n4. Lighthouses guide ships along dangerous coasts with a bright, rotating light that sailors can see from far away at night.\n5. Lighthouses guide ships along dangerous coasts with a bright, rotating light that sailors can see from far away at night.\n6. Lighthouses guide ships along dangerous coasts with a bright, rotating light that sailors can see from far away at night.\n7. Lighthouses guide ships along dangerous coasts with a bright, rotating light that sailors can see from far away at night.\n8. Lighthouses guide ships along dangerous coasts with a bright, rotating light that sailors can see from far away at night.\n9. Lighthouses guide ships along dangerous coasts with a bright, rotating light that sailors can see from far away at night.\n10. Lighthouses guide ships along dangerous coasts with a bright, rotating light that sailors can see from far away at night.\n11. Lighthouses guide ships along dangerous coasts with a bright, rotating light that sailors can see from far away at night.\n12. Lighthouses guide ships along dangerous coasts with a bright, rotating light that sailors can see from far away at night."
+          }
+        }
+      ]
+    }
+  ]
+}

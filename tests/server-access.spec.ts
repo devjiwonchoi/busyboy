@@ -1,4 +1,5 @@
 import { spawn, type ChildProcess } from 'node:child_process'
+import { createHmac } from 'node:crypto'
 import { request as httpRequest } from 'node:http'
 import { createServer } from 'node:net'
 import { join } from 'node:path'
@@ -11,14 +12,14 @@ const testPort = Number(process.env.PLAYWRIGHT_PORT ?? 3100)
 type Reply = { status: number; headers: Record<string, string | string[] | undefined> }
 
 /** Sends a raw HTTP request so the Host and Origin headers can be set freely. */
-function get(port: number, headers: Record<string, string>): Promise<Reply> {
+function get(port: number, headers: Record<string, string>, path = '/', method = 'GET', body?: string): Promise<Reply> {
   return new Promise((resolve, reject) => {
-    const req = httpRequest({ host: '127.0.0.1', port, path: '/', method: 'GET', headers }, (res) => {
+    const req = httpRequest({ host: '127.0.0.1', port, path, method, headers }, (res) => {
       res.resume()
       res.on('end', () => resolve({ status: res.statusCode ?? 0, headers: res.headers }))
     })
     req.on('error', reject)
-    req.end()
+    req.end(body)
   })
 }
 
@@ -104,6 +105,25 @@ test('a request with the server token should be served outside test mode', async
     expect((await get(port, { host, 'x-busyboy-token': 'wrong-token-value' })).status).toBe(403)
     expect((await get(port, { host, 'x-busyboy-token': token })).status).toBe(200)
     expect((await get(port, { host, cookie: `busyboy-token=${token}` })).status).toBe(200)
+  } finally {
+    child.kill()
+  }
+})
+
+test('the MCP token should open only the MCP endpoint', async () => {
+  const token = 'journey-token'
+  const mcpToken = createHmac('sha256', token).update('busyboy-mcp-endpoint').digest('hex')
+  const { port, child } = await startServer({ BUSYBOY_TOKEN: token })
+  try {
+    const host = `127.0.0.1:${port}`
+    const call = (headers: Record<string, string>) =>
+      get(port, { host, 'content-type': 'application/json', ...headers }, '/api/mcp', 'POST', '{"jsonrpc":"2.0","id":1,"method":"tools/list"}')
+    expect((await call({})).status).toBe(403)
+    expect((await call({ 'x-busyboy-mcp-token': 'wrong-token-value' })).status).toBe(403)
+    expect((await call({ 'x-busyboy-mcp-token': mcpToken })).status).toBe(200)
+    // The MCP token is not the server token: every other route stays closed.
+    expect((await get(port, { host, 'x-busyboy-mcp-token': mcpToken })).status).toBe(403)
+    expect((await get(port, { host, 'x-busyboy-mcp-token': mcpToken }, '/api/companion-image')).status).toBe(403)
   } finally {
     child.kill()
   }

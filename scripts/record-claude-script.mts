@@ -7,7 +7,13 @@
 //   node scripts/record-claude-script.mts tests/provider-scripts/name.json \
 //     --description "What the run shows" [--ask "Bash(touch:*)"] [--answer Blue] \
 //     "first prompt" ["second prompt" ...]
+//
+// With --director, the run gets the Director's instructions and a stand-in for
+// busyboy's MCP tools that knows the projects given by --project; replays
+// call the real tools (see `mcpCalls` in server/runner/scripted-provider.ts).
 import { execFileSync } from 'node:child_process'
+import { createServer } from 'node:http'
+import type { AddressInfo } from 'node:net'
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { delimiter, join } from 'node:path'
@@ -20,6 +26,8 @@ const { values, positionals } = parseArgs({
     description: { type: 'string' },
     ask: { type: 'string', multiple: true },
     answer: { type: 'string' },
+    director: { type: 'boolean' },
+    project: { type: 'string', multiple: true },
   },
 })
 const [output, ...prompts] = positionals
@@ -92,6 +100,63 @@ async function* input(): AsyncGenerator<SDKUserMessage> {
   }
 }
 
+/** A stand-in for busyboy's MCP endpoint with the same tools, for recording the Director. */
+async function startToolStandIn(projects: string[]) {
+  const tools = [
+    { name: 'list_projects', description: 'List the projects busyboy can create tasks in, with the folder of each.', inputSchema: { type: 'object', properties: {}, required: [] } },
+    {
+      name: 'create_task',
+      description:
+        'Start a task agent for one project. It gets its own git worktree and branch from the project HEAD, plans with the align skill, and does the work. Create one task per project.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          project: { type: 'string', description: 'The project name, as list_projects returns it.' },
+          title: { type: 'string', description: 'A short title, a few words.' },
+          request: { type: 'string', description: "The user's request for this project, complete and in the user's words." },
+        },
+        required: ['project', 'title', 'request'],
+      },
+    },
+  ]
+  const call = (name: string, input: Record<string, string>) => {
+    if (name === 'list_projects') return JSON.stringify(projects.map((project) => ({ name: project, path: `/code/${project}` })))
+    const id = `${input.title.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-a1b2c3`
+    return `Created task ${id} in ${input.project} on branch busyboy/${id}. Its agent is planning the work now.`
+  }
+  const server = createServer(async (request, response) => {
+    if (request.method !== 'POST') return response.writeHead(405).end()
+    let body = ''
+    for await (const chunk of request) body += chunk
+    const message = JSON.parse(body) as { id?: number; method: string; params?: { name?: string; arguments?: Record<string, string> } }
+    if (message.id === undefined) return response.writeHead(202).end()
+    const result =
+      message.method === 'initialize'
+        ? { protocolVersion: '2025-06-18', capabilities: { tools: {} }, serverInfo: { name: 'busyboy', version: '0.0.0' } }
+        : message.method === 'tools/list'
+          ? { tools }
+          : message.method === 'tools/call'
+            ? { content: [{ type: 'text', text: call(message.params!.name!, message.params!.arguments ?? {}) }] }
+            : {}
+    response.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({ jsonrpc: '2.0', id: message.id, result }))
+  })
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
+  return { server, url: `http://127.0.0.1:${(server.address() as AddressInfo).port}/api/mcp` }
+}
+
+const standIn = values.director ? await startToolStandIn(values.project ?? []) : undefined
+const directorOptions = standIn
+  ? {
+      systemPrompt: {
+        type: 'preset' as const,
+        preset: 'claude_code' as const,
+        append: (await import('../src/server/director/context.ts')).DIRECTOR_INSTRUCTIONS,
+      },
+      mcpServers: { busyboy: { type: 'http' as const, url: standIn.url, alwaysLoad: true } },
+      allowedTools: ['mcp__busyboy'],
+    }
+  : {}
+
 try {
   const run = query({
     prompt: input(),
@@ -100,6 +165,7 @@ try {
       pathToClaudeCodeExecutable: claude,
       permissionMode: 'auto',
       includePartialMessages: true,
+      ...directorOptions,
       ...(values.ask ? { settings: { permissions: { ask: values.ask } } } : {}),
       canUseTool: async (toolName, toolInput, { title, description, suggestions, suppressAlwaysAllowRule }) => {
         // Suggestions that would grant more than the request do not count (see claude-adapter.ts).
@@ -126,5 +192,6 @@ try {
   writeFileSync(output, `${JSON.stringify(script, null, 2)}\n`)
   console.log(`Recorded ${turns.length} turn(s) to ${output}`)
 } finally {
+  standIn?.server.close()
   rmSync(cwd, { recursive: true, force: true })
 }
