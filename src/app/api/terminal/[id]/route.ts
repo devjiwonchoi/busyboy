@@ -5,10 +5,6 @@ type Context = { params: Promise<{ id: string }> }
 
 const notFound = () => Response.json({ error: 'No such terminal.' }, { status: 404 })
 
-/**
- * Streams the terminal's output as newline-delimited JSON events. The stream
- * stays open until the shell exits or the client goes away.
- */
 export async function GET(request: Request, { params }: Context) {
   await connection()
   const { id } = await params
@@ -22,7 +18,6 @@ export async function GET(request: Request, { params }: Context) {
           controller.enqueue(encoder.encode(`${JSON.stringify(event)}\n`))
           if (event.type === 'exit') controller.close()
         } catch {
-          // The client already went away; stop following.
           detach?.()
         }
       }
@@ -49,7 +44,6 @@ export async function GET(request: Request, { params }: Context) {
 
 type UpdateRequest = { input?: string; cols?: number; rows?: number }
 
-/** Sends keyboard input and/or a new size to the terminal. */
 export async function POST(request: Request, { params }: Context) {
   const { id } = await params
   const body = (await request.json().catch(() => null)) as UpdateRequest | null
@@ -61,7 +55,6 @@ export async function POST(request: Request, { params }: Context) {
   return new Response(null, { status: 204 })
 }
 
-/** Kills the terminal's shell. */
 export async function DELETE(_request: Request, { params }: Context) {
   const { id } = await params
   return killTerminal(id) ? new Response(null, { status: 204 }) : notFound()

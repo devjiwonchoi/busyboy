@@ -3,28 +3,17 @@ import type { SpawnedProcess, SpawnOptions } from '@anthropic-ai/claude-agent-sd
 
 /** Seconds the group has to exit after SIGTERM before it is killed. */
 const GRACE_SECONDS = 5
-/** Characters of stderr kept to explain a CLI that fails. */
 const STDERR_TAIL = 2000
 
-// Runs as the leader of a new process group, so the CLI and what it starts in
-// the group (MCP servers, for example) share one group id. A watcher in the
-// group blocks on fd 3, a pipe whose other end only this server holds. When the
-// server exits for any reason, crashes included, the pipe closes, the read
-// returns, and the watcher ends the whole group. `exec` keeps the group leader's
-// pid for the CLI, and the CLI does not inherit fd 3.
+// When the server exits, even by a crash, the pipe closes and the watcher ends the CLI's process group.
 const WATCH_SCRIPT = [
   `{ trap '' TERM; read -r _ <&3; kill -TERM 0; sleep ${GRACE_SECONDS}; kill -KILL 0; } </dev/null >/dev/null 2>&1 &`,
   'exec "$@" 3<&-',
 ].join('\n')
 
 export type ClaudeProcess = SpawnedProcess & {
-  /**
-   * Ends the CLI and everything it started. Resolves once the commands it
-   * detached have been found and signaled; call it before closing the CLI's
-   * input, because once the CLI exits they are no longer its descendants.
-   */
+  // Call this before closing the CLI's input: once the CLI exits, detached commands are no longer its descendants.
   stop(): Promise<void>
-  /** The end of what the CLI wrote to stderr. */
   stderrTail(): string
 }
 
@@ -36,12 +25,7 @@ function signal(target: number, name: NodeJS.Signals) {
   }
 }
 
-/**
- * Processes below `root` that lead their own group. Claude Code starts its Bash
- * commands, hooks, and background shells detached, in a session of their own,
- * so the CLI's group does not include them; while the CLI runs they are still
- * its descendants.
- */
+// Claude Code starts Bash commands detached, in a session of their own, so the CLI's group does not include them.
 function detachedDescendants(root: number): Promise<number[]> {
   return new Promise((resolve) => {
     execFile('ps', ['-A', '-o', 'pid=,ppid=,pgid='], { timeout: 2000 }, (error, stdout) => {
@@ -65,20 +49,8 @@ function detachedDescendants(root: number): Promise<number[]> {
   })
 }
 
-/**
- * Spawns the Claude CLI for the Agent SDK's `spawnClaudeCodeProcess`. On macOS
- * and Linux the CLI leads its own process group:
- * - When the CLI exits, its group is killed.
- * - `stop` first ends the groups the CLI detached (Bash commands, background
- *   shells), then its own group.
- * - When this server exits or crashes, the watcher ends the CLI's group. The
- *   CLI then ends the commands it detached itself; if it is killed before it
- *   can, those can survive.
- * Windows has no process groups; there the CLI is spawned directly. stderr is
- * always read, so a chatty CLI never blocks on a full pipe.
- */
+// Windows has no process groups. A killed CLI can leave the commands it detached.
 export function spawnClaudeProcess(options: SpawnOptions): ClaudeProcess {
-  // Node types `env` without undefined values; the SDK's may hold them, and Node skips them.
   const env = options.env as NodeJS.ProcessEnv
   let tail = ''
   const readStderr = (child: ChildProcess) =>
@@ -107,13 +79,10 @@ export function spawnClaudeProcess(options: SpawnOptions): ClaudeProcess {
   readStderr(child)
   let exited = false
   let stopping: Promise<void> | undefined
-  // Once the CLI has exited its pid can be reused, so its group is killed only
-  // here, while the watcher still holds the group id.
   child.once('exit', () => {
     exited = true
     if (child.pid) signal(-child.pid, 'SIGKILL')
   })
-  // A second stop waits for the first one's sweep instead of racing past it.
   const stop = () => (stopping ??= sweep())
   const sweep = async () => {
     if (exited || !child.pid) return
@@ -126,6 +95,5 @@ export function spawnClaudeProcess(options: SpawnOptions): ClaudeProcess {
       if (!exited) signal(-pid, 'SIGKILL')
     }, GRACE_SECONDS * 1000).unref()
   }
-  // With four stdio entries Node types stdin and stdout as nullable; both are pipes.
   return Object.assign(child as ChildProcess & SpawnedProcess, { stop, stderrTail })
 }

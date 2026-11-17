@@ -33,9 +33,7 @@ import { neighborSteps, parseStep, stepHref, STEPS, type StepId } from './steps'
 
 export const metadata: Metadata = { title: 'Setup · BusyBoy' }
 
-// First-run setup, one step at a time. After setup the title bar opens
-// settings instead (src/app/settings). Steps read local state at request time, so they render inside Suspense
-// (Cache Components would otherwise try to prerender them at build time).
+// Steps read local state, which Cache Components would otherwise prerender at build time.
 export default function SetupPage({ searchParams }: PageProps<'/setup'>) {
   return (
     <div className="flex min-h-dvh flex-col">
@@ -54,7 +52,6 @@ export default function SetupPage({ searchParams }: PageProps<'/setup'>) {
   )
 }
 
-/** Opened later from the title bar: the way back never waits for a sign-in probe. */
 async function BackToChat() {
   await connection()
   if (!isSetupComplete(await readSettings())) return null
@@ -116,14 +113,12 @@ async function CurrentStep({ searchParams }: Pick<PageProps<'/setup'>, 'searchPa
   )
 }
 
-// ---- Companion --------------------------------------------------------------
 
 async function CompanionPage() {
   const [companion, imageUrl] = await Promise.all([currentCompanion(), companionImageUrl()])
   return <CompanionStep companions={COMPANIONS} selected={companion?.id} defaultId={DEFAULT_COMPANION_ID} imageUrl={imageUrl} />
 }
 
-// ---- Agents -----------------------------------------------------------------
 
 const STATUS_TEXT: Record<SignInStatus['state'], string> = {
   'signed-in': 'Signed in',
@@ -198,7 +193,6 @@ async function AgentsPage() {
   )
 }
 
-/** Name and status badge inside an item. */
 function Row({ name, status }: { name: string; status: string }) {
   return (
     <>
@@ -212,14 +206,12 @@ function Row({ name, status }: { name: string; status: string }) {
   )
 }
 
-// ---- Skills -----------------------------------------------------------------
 
 async function SkillsPage() {
   const { previous, next } = neighborSteps('skills')
   const rows = await Promise.all(
     PROVIDERS.map(async ({ id, name }) => {
       const state = await providerState(id)
-      // Only agents BusyBoy can run are listed.
       if (state.state === 'not-installed') return null
       return { id, name, skills: await skillsState(id) }
     }),
@@ -252,7 +244,6 @@ async function SkillsPage() {
   )
 }
 
-// ---- Approvals --------------------------------------------------------------
 
 const APPROVALS_FORM = 'approvals-form'
 
@@ -280,7 +271,6 @@ async function ApprovalsPage() {
   )
 }
 
-// ---- Start ------------------------------------------------------------------
 
 async function StartPage() {
   const { previous } = neighborSteps('start')

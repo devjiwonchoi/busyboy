@@ -3,9 +3,6 @@ import { join } from 'node:path'
 import { expect, test, type Page } from '@playwright/test'
 import { useProjectsHome } from './support/projects-home'
 
-// Hand-written scripts in tests/provider-scripts/memory.json. The task request
-// "Set up the package manager." makes the task agent write its prompt to
-// PROMPT_FILE in its worktree, so the journey sees what memory reached it.
 const REMEMBER = 'Remember that I prefer pnpm over npm.'
 const WORK = 'In @web, set up the package manager.'
 const PROMPT_FILE = 'busyboy-prompt.txt'
@@ -20,7 +17,6 @@ async function send(page: Page, text: string) {
   await page.getByRole('button', { name: 'Send' }).click()
 }
 
-/** Waits until the Director finished answering `count` messages in all. */
 async function waitForReplies(page: Page, count: number) {
   const transcript = page.getByRole('log', { name: 'Transcript' })
   await expect(transcript.getByLabel('Reply', { exact: true })).toHaveCount(count)
@@ -51,7 +47,6 @@ test('a saved preference should reach the next task', async ({ page, context, ba
   await expect(line).toBeVisible()
   const [task] = (JSON.parse(readFileSync(join(home, 'task-list.json'), 'utf8')) as { tasks: { worktree: string }[] }).tasks
   const promptFile = join(task.worktree, PROMPT_FILE)
-  // Poll the content, not the file: it exists, empty, before it is written.
   const readPrompt = () => (existsSync(promptFile) ? readFileSync(promptFile, 'utf8') : '')
   await expect.poll(readPrompt).toContain('# Memory')
   const prompt = readPrompt()

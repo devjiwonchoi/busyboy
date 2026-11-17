@@ -1,13 +1,9 @@
 import { expect, test } from '@playwright/test'
 import { useProjectsHome } from './support/projects-home'
 
-// The window opening on the item a tray entry or notification points at
-// (src/components/shell/focus-handler.tsx). A task target used to open the
-// project graph; that panel is gone, so only the Director target remains.
 
 test('opening the Director from the desktop bridge should focus the message box', async ({ page, context, baseURL }) => {
   await useProjectsHome(context, baseURL!, [])
-  // Stands in for electron/preload.ts: the test calls the listener the way the main process does.
   await page.addInitScript(() => {
     const listeners: ((target: string) => void)[] = []
     ;(window as unknown as Record<string, unknown>).busyboyDesktop = {

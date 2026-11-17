@@ -28,12 +28,7 @@ function subscribeNothing() {
   return () => {}
 }
 
-/**
- * Keys the terminal passes to the app instead of the shell, matched exactly
- * as the app matches them. Cmd+J toggles the panel on macOS; elsewhere Ctrl+J
- * is the shell's line feed, so it stays with the shell and Ctrl+` toggles the
- * panel from inside the terminal so the keyboard is never trapped there.
- */
+// Off macOS, Ctrl+J is the shell's line feed, so the panel toggle from inside the terminal is Ctrl+`.
 function isAppShortcut(event: KeyboardEvent) {
   const mac = isMacPlatform()
   if (matchesShortcut(COMMAND_PALETTE_KEYS, event, mac)) return true
@@ -44,21 +39,7 @@ function isAppShortcut(event: KeyboardEvent) {
   return mac && matchesShortcut(TOGGLE_PANEL_KEYS, event, mac)
 }
 
-/**
- * The bottom panel's terminal. A shell starts the first time the panel opens
- * and lives on while the panel is hidden. Closing the terminal kills it and
- * the next open starts a fresh one. When the shell exits or cannot start, the
- * panel says so and offers a new terminal.
- *
- * Each shell starts in the worktree of the task selected at that moment (home
- * with none). Selecting another task never replaces a running shell: it may
- * be running a command or hold the user's history and variables, and selecting
- * another task should not throw that away. The header keeps naming the
- * shell's own task, and a "New terminal" button appears while the selection
- * differs; it, or closing the terminal (its X) and opening it again, starts a
- * shell in the selected task. Cmd/Ctrl+J only hides the panel, so it keeps
- * the shell like any other hide.
- */
+// Selecting another task must not replace a running shell: it may be mid-command or hold the user's history.
 export function TerminalPanel() {
   const { panelOpen, setPanelOpen, togglePanel } = useShellState()
   useShortcut({ id: 'toggle-panel-from-terminal', label: 'Toggle bottom panel', ...toggleFromTerminalKeys, run: togglePanel })
@@ -67,7 +48,6 @@ export function TerminalPanel() {
   const [shell, setShell] = useState<Pick<StartedTerminal, 'cwd' | 'task'> | null>(null)
   const { selectedTask } = useTaskSelection()
   const bridge = useSyncExternalStore(subscribeNothing, desktopBridge, () => undefined)
-  // Until the shell reports where it started it is already on its way to the selected task.
   const selectionDiffers = shell !== null && (selectedTask?.id ?? null) !== (shell.task?.id ?? null)
   const [ended, setEnded] = useState<string | null>(null)
 
@@ -163,10 +143,8 @@ function TerminalView({
   onEnd,
 }: {
   active: boolean
-  /** Read once: a later selection does not move this shell (see TerminalPanel). */
   taskId: string | null
   onStart: (shell: Pick<StartedTerminal, 'cwd' | 'task'>) => void
-  /** Called once with a short line for the user when the shell is gone. */
   onEnd: (message: string) => void
 }) {
   const hostRef = useRef<HTMLDivElement>(null)
@@ -229,7 +207,6 @@ function TerminalView({
       callbacks.current.onEnd(message)
     }
 
-    // Keys typed while the shell starts are held and sent once it is up.
     let send: ((data: string) => void) | null = null
     let early = ''
     term.onData((data) => {
@@ -249,7 +226,6 @@ function TerminalView({
         send = createInputSender(started.id)
         if (early) send(early)
         early = ''
-        // The panel may have been resized while the shell started.
         resizeTerminal(started.id, term.cols, term.rows)
         let exited = false
         await followTerminal(started.id, abort.signal, (event) => {

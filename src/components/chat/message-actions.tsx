@@ -11,11 +11,6 @@ function formatMessageTime(at: string) {
   return new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' }).format(date)
 }
 
-/**
- * Copy, edit, and retry for one message. Message and Bubble have no actions
- * slot, so this sits on the bubble's corner and shows while the message is
- * hovered or focused. The time uses the same reveal.
- */
 export function MessageActions({
   text,
   at,

@@ -5,7 +5,6 @@ import { setCompanionAction } from '@/app/settings/actions'
 import { CharacterNote, CompanionChoices } from '@/components/setup/companion-step'
 import type { Companion } from '@/server/companions'
 
-/** The character row, saved the moment one is chosen, with that character's name and speech. */
 export function CompanionSettings({ companions, selected, imageUrl }: { companions: Companion[]; selected?: string; imageUrl?: string }) {
   const [value, setValue] = useOptimistic(selected)
   const [, startTransition] = useTransition()

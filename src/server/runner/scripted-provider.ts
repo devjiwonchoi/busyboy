@@ -1,8 +1,3 @@
-// Replays recorded provider runs with no model call. When
-// BUSYBOY_PROVIDER_SCRIPTS points at a folder of `*.json` scripts (tests do
-// this), it replaces each provider that has at least one script there; other
-// providers keep their real adapter (for example one pointed at a fake CLI).
-// See `ProviderScript` for the format.
 import { randomUUID } from 'node:crypto'
 import { mkdirSync, readdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { mkdir, writeFile } from 'node:fs/promises'
@@ -30,30 +25,9 @@ import { harnessReceipt, type UserTurn } from './user-turn'
 
 export const SCRIPTS_ENV = 'BUSYBOY_PROVIDER_SCRIPTS'
 
-/** Resuming a session id with this prefix fails, like a session the provider no longer has. */
 export const MISSING_SESSION_PREFIX = 'missing-'
 
-/**
- * One step of a scripted turn.
- * - `event`: a normalized contract event, emitted as is.
- * - `repeat`: emit `event` `count` times (1 to 20000). `{{n}}` in the event's
- *   JSON is replaced with the zero-based index, so a journey can fill a buffer.
- * - `raw`: a message in the script provider's own format, mapped by that provider's
- *   mapper in `RAW_MAPPERS` (a new provider adds its mapper there).
- *   A Claude `tool_use` block named `mcp__<server>__<tool>`, where `<server>` is one of the
- *   session's HTTP `mcpServers`, really calls that tool, so a replay runs busyboy's own tool code.
- * - `canUseTool`: a recorded Claude permission request, mapped to an approval or question
- *   (Claude scripts only).
- * - `delayMs`: wait before the next step.
- * - `echoInstructions`: reply with the instructions the agent was started with, so a
- *   journey can check what reached the prompt (for example memory).
- * - `echoAttachments`: reply with the image blocks and file paths this turn carried.
- * - `writeInstructions`: write those instructions to this file in the agent's working
- *   folder, for an agent whose replies no screen shows yet (a task agent).
- * An approval or question (from `event` or `canUseTool`) pauses the replay until it is
- * answered. With `then`, the branch named by the answer replaces the rest of the turn:
- * `allow` or `deny` for an approval, the chosen label of the first question for a question.
- */
+// A Claude tool_use named mcp__<server>__<tool> really calls that tool, so a replay runs BusyBoy's own tool code.
 export type ScriptStep =
   | { event: AgentEvent; then?: Record<string, ScriptStep[]> }
   | { raw: unknown }
@@ -67,26 +41,18 @@ export type ScriptStep =
   | { repeat: { count: number; event: AgentEvent } }
 
 export type ScriptTurn = {
-  /** The user message that plays this turn, matched exactly after trimming. */
   prompt: string
-  /**
-   * Plays only when an earlier user message in the same session contains this
-   * text, so a replay can show that a resumed or forked session kept its history.
-   * A turn with a context wins over one with the same prompt and none.
-   */
   context?: string
   steps: ScriptStep[]
 }
 
 export type ProviderScript = {
-  /** The provider this script replaces, and whose format its `raw` steps use. */
   provider: ProviderId
   description: string
   recordedAt?: string
   turns: ScriptTurn[]
 }
 
-/** Maps one conversation's raw messages to events, as the live adapter does. */
 type RawMapper = { push(raw: unknown): void; flush(): void; dispose(): void }
 
 const RAW_MAPPERS: Partial<Record<ProviderId, (emit: (event: AgentEvent) => void) => RawMapper>> = {
@@ -107,15 +73,10 @@ function readScripts(folder: string) {
     .map((file) => ({ file, script: JSON.parse(readFileSync(join(folder, file), 'utf8')) as ProviderScript }))
 }
 
-/** Whether the folder has a script for this provider, so the replay should replace it. */
 export function hasScripts(folder: string, provider: ProviderId) {
   return readScripts(folder).some(({ script }) => script.provider === provider)
 }
 
-/**
- * The provider's turn for this message given the session's earlier messages.
- * Two scripts may not record the same prompt with the same context.
- */
 function findTurn(folder: string, provider: ProviderId, text: string, history: readonly string[]) {
   const prompt = text.trim()
   const seen = new Map<string, string>()
@@ -136,17 +97,12 @@ function findTurn(folder: string, provider: ProviderId, text: string, history: r
   return withContext ?? plain
 }
 
-// The user messages of each scripted session by session id, so resuming or
-// forking one carries its history like a real provider. On globalThis for the
-// same reason as the runner's registry, and saved under the system temp folder
-// so a session survives a server restart the way a provider's own session
-// files do (the restart journeys resume through it).
+// Saved under the system temp folder so a session survives a restart the way a provider's own session files do.
 const HISTORIES_KEY = Symbol.for('busyboy.scripted-histories')
 const globalStore = globalThis as typeof globalThis & { [HISTORIES_KEY]?: Map<string, string[]> }
 const histories = (globalStore[HISTORIES_KEY] ??= new Map())
 const HISTORY_FOLDER = join(tmpdir(), 'busyboy-scripted-sessions')
 
-/** Where a scripted session's history is saved; null for an id that is not a plain scripted one. */
 export function scriptedHistoryFile(sessionId: string) {
   return /^scripted-[0-9a-f-]+$/.test(sessionId) ? join(HISTORY_FOLDER, `${sessionId}.json`) : null
 }
@@ -169,18 +125,14 @@ function saveHistory(sessionId: string, history: string[]) {
   const file = scriptedHistoryFile(sessionId)
   if (!file || histories.get(sessionId) !== history) return
   mkdirSync(HISTORY_FOLDER, { recursive: true })
-  // Replace the file in one step. Writing in place empties it first, and a reader
-  // in that gap sees an empty file and fails to parse the history.
+  // Writing in place empties the file first, and a reader in that gap fails to parse the history.
   const temporary = `${file}.${process.pid}.tmp`
   writeFileSync(temporary, JSON.stringify(history))
   renameSync(temporary, file)
 }
 
-/** Continues, branches, or starts a session's history, and returns its session id. */
 function openHistory({ resumeSessionId, forkSessionId }: ProviderStartOptions) {
   if (resumeSessionId) return { sessionId: resumeSessionId, history: loadHistory(resumeSessionId) }
-  // A branch copies the original's history and, like a real fork that is not
-  // kept, is never stored, so nothing reaches the original.
   if (forkSessionId) return { sessionId: `scripted-${randomUUID()}`, history: [...loadHistory(forkSessionId)] }
   const sessionId = `scripted-${randomUUID()}`
   const history: string[] = []
@@ -197,7 +149,6 @@ class Cancelled extends Error {}
 
 type McpCall = { url: string; headers?: Record<string, string>; tool: string; input: Record<string, unknown> }
 
-/** The calls to the session's HTTP MCP servers in a recorded Claude assistant message. */
 function mcpCalls(message: ClaudeRawMessage, servers: Record<string, McpServer> = {}): McpCall[] {
   if (message.type !== 'assistant' || !Array.isArray(message.message?.content)) return []
   return (message.message.content as { type?: string; name?: string; input?: Record<string, unknown> }[]).flatMap(
@@ -210,7 +161,6 @@ function mcpCalls(message: ClaudeRawMessage, servers: Record<string, McpServer> 
   )
 }
 
-/** Calls one tool with a plain JSON-RPC `tools/call` request and returns its text. */
 async function callMcpTool({ url, headers, tool, input }: McpCall) {
   const response = await fetch(url, {
     method: 'POST',
@@ -234,18 +184,14 @@ function startScripted(folder: string, options: ProviderStartOptions): ProviderS
   const { sessionId, history } = lost ? { sessionId: lost, history: [] } : openHistory(options)
   let turnDone = false
   const emit = (event: AgentEvent) => {
-    // Like a real provider, nothing follows `stopped`, even when a listener stops the
-    // session in the middle of a step and the script has steps left.
     if (stopped && event.type !== 'stopped') return
     if (event.type === 'turn-done') turnDone = true
     options.emit(event)
   }
-  // The scripted session reports its own session id, so a recorded one is dropped.
   const mapper = RAW_MAPPERS[provider]?.((event) => {
     if (event.type !== 'session') emit(event)
   })
   const queue: UserTurn[] = []
-  /** The turn whose steps are playing, so `echoAttachments` can report it. */
   let received: UserTurn = { text: '', note: '', images: [] }
   const answers = new Map<string, (answer: AgentAnswer) => void>()
   let cancelTurn: (() => void) | undefined
@@ -283,7 +229,6 @@ function startScripted(folder: string, options: ProviderStartOptions): ProviderS
         const template = JSON.stringify(event)
         for (let index = 0; index < count; index += 1) {
           emit(JSON.parse(template.replaceAll('{{n}}', String(index))) as AgentEvent)
-          // Let the event loop flush listeners, so a long replay does not stall the server.
           if (index % 500 === 499) await cancellable(new Promise((resolve) => setImmediate(resolve)))
         }
         continue
@@ -312,7 +257,6 @@ function startScripted(folder: string, options: ProviderStartOptions): ProviderS
       if ('toolCall' in step) {
         const { name, input } = step.toolCall
         let key = 'allow'
-        // The scripted replay stands in for Claude's hook: the same rule check, then the same card.
         const userRule = await checkUserRules({ rulesFolder: options.rulesFolder, toolName: name, input, cwd: options.cwd })
         if (userRule.ask) {
           const remembered = { toolName: name, input, rule: userRule.ruleKey, cwd: options.cwd }
@@ -367,7 +311,6 @@ function startScripted(folder: string, options: ProviderStartOptions): ProviderS
       }
       for (const event of events) {
         if (event.type === 'approval' || event.type === 'question') {
-          // Pause first: `then?.[await pause()]` would skip the pause when there is no `then`.
           const key = answerKey(await pause(event))
           const branch = then?.[key]
           if (branch) return playSteps(branch)
@@ -395,7 +338,6 @@ function startScripted(folder: string, options: ProviderStartOptions): ProviderS
           await playSteps(turn.steps)
         }
         mapper?.flush()
-        // Recorded turns end with the provider's own turn-done; hand-written ones may not.
         if (!turnDone) emit({ type: 'turn-done' })
       } catch (error) {
         mapper?.flush()
@@ -404,7 +346,6 @@ function startScripted(folder: string, options: ProviderStartOptions): ProviderS
         } else if (error instanceof Cancelled) {
           emit({ type: 'turn-done' })
         } else {
-          // A broken script must end the turn with an error, not hang the agent.
           emit({ type: 'error', code: 'no-script', message: error instanceof Error ? error.message : String(error) })
           emit({ type: 'turn-done' })
         }
@@ -416,11 +357,9 @@ function startScripted(folder: string, options: ProviderStartOptions): ProviderS
   }
 
   if (lost) {
-    // Resuming fails the way it does for a session the provider no longer has.
     queueMicrotask(() => {
       if (stopped) return
       emit({ type: 'error', code: 'provider', message: `No conversation found with session ID: ${lost}` })
-      // A listener may have stopped the session on the error already.
       if (stopped) return
       stopped = true
       emit({ type: 'stopped', finished: false })
@@ -436,8 +375,6 @@ function startScripted(folder: string, options: ProviderStartOptions): ProviderS
       cancelTurn?.()
     },
     async compact() {
-      // The history is kept: unlike a real provider's summary, it still holds
-      // every earlier message, so `context` turns keep matching after a compaction.
       emit({ type: 'turn-done' })
     },
     answer(requestId, answer) {
@@ -454,7 +391,6 @@ function startScripted(folder: string, options: ProviderStartOptions): ProviderS
   }
 }
 
-/** A script path `.jwn/<task>/<file>` is written in the task's home record folder, not the worktree. */
 function scriptedRecordFile(recordFolder: string | undefined, relative: string): string | null {
   const normalized = relative.replaceAll('\\', '/')
   if (!recordFolder || !normalized.startsWith('.jwn/')) return null

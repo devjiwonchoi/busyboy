@@ -4,8 +4,6 @@ import { expect as baseExpect, test, type Page } from '@playwright/test'
 import { fakeGrokURL } from './fake-grok/fake-grok'
 import { useProjectsHome } from './support/projects-home'
 
-// The real Grok adapter on the fake ACP process. Settings offers Grok, including
-// when it is signed out, and a saved choice is what the next reply runs on.
 const PLAIN_PROMPT = 'Reply with exactly this sentence and nothing else: Hello from busyboy.'
 const expect = baseExpect.configure({ timeout: 15_000 })
 

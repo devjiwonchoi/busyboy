@@ -12,10 +12,7 @@ import type { TaskStatus } from '../tasks'
 import type { CardKind, ProgressStep, ProgressStepState, PullRequestCheck, PullRequestRow, TaskCard } from './model'
 import { linkTaskArtifacts } from './task-artifact'
 
-// Progress, done, and pull-request cards. Question, approval, and plan cards are
-// opened by trackTaskCards. These three come from the task's records: STATUS.md
-// says how far the todos got and, once pull requests exist, lists them. Nothing
-// here merges a pull request; mergePullRequests runs only when the user clicks.
+// Nothing here merges a pull request. That runs only when the user clicks.
 
 const run = promisify(execFile)
 
@@ -33,10 +30,8 @@ const progressId = (taskId: string) => `progress:${taskId}`
 const doneId = (taskId: string) => `done:${taskId}`
 const prId = (taskId: string) => `pr:${taskId}`
 
-/** Follows one task agent and keeps its progress, done, and pull-request cards in step with its records. */
 export function trackWorkCards({ folder, task }: { folder: string; task: WorkTask }) {
   if (task.kind === 'subagent') return
-  // A newer turn, or a stop, invalidates a sync that is still reading the records.
   let epoch = 0
   subscribeToAgent(task.agentId, 0, ({ event }) => {
     if (event.type === 'stopped') {
@@ -76,7 +71,6 @@ async function syncWorkCards(folder: string, task: WorkTask, fresh: () => boolea
   if (!fresh()) return
 
   if (finished) {
-    // Replace the progress card in place. Settling it would also write a second closed card.
     const progress = openCards(folder).find((card) => card.id === progressId(task.id))
     const report = await readEndStateAchievement(folder).catch(() => null)
     if (!fresh()) return
@@ -85,7 +79,6 @@ async function syncWorkCards(folder: string, task: WorkTask, fresh: () => boolea
       ...source(task, progress?.id ?? doneId(task.id), progress?.openedAt ?? now),
       kind: 'done',
       title: task.title,
-      // The share of agreed end-state items met on main. Null keeps the line as check, name, and Done.
       achievement: found ? { met: found.met, agreed: found.agreed } : null,
       phase,
       pendingChecks,
@@ -120,7 +113,6 @@ function source(task: WorkTask, id: string, openedAt: string) {
   }
 }
 
-/** Replacing a card keeps its `openedAt`, so an update does not jump it in the timeline. */
 function show(folder: string, task: WorkTask, card: TaskCard) {
   const current = openCards(folder).find((item) => item.id === card.id)
   const next: TaskCard = current ? { ...card, openedAt: current.openedAt } : card
@@ -148,10 +140,6 @@ function stepState(result: TodoResult): ProgressStepState {
   return 'pending'
 }
 
-/**
- * Todo results become the progress card's steps. When work has started and no
- * todo is marked running, the first one still waiting is the running step.
- */
 function stepsFrom(todos: { id: string; title: string; result: TodoResult }[]): ProgressStep[] {
   const steps: ProgressStep[] = todos.map((todo) => ({ id: todo.id, label: todo.title, state: stepState(todo.result) }))
   if (steps.some((step) => step.state === 'running') || steps.every((step) => step.state === 'done')) return steps
@@ -167,10 +155,8 @@ async function readWorkRecords(dataFolder: string, task: Pick<WorkTask, 'id' | '
   const texts: RecordTexts = {}
   let status = ''
   for (const file of ['ALIGN.md', 'STATUS.md'] as const) {
-    // The record folder is the task's worktree, outside this project. The ignore keeps the build from tracing every file.
     const path = join(/*turbopackIgnore: true*/ located.folder, file)
     try {
-      // A linked record could point anywhere on the machine, same as the project graph.
       if ((await lstat(/*turbopackIgnore: true*/ path)).isSymbolicLink()) continue
       const text = await readFile(/*turbopackIgnore: true*/ path, 'utf8')
       texts[file] = text
@@ -182,7 +168,6 @@ async function readWorkRecords(dataFolder: string, task: Pick<WorkTask, 'id' | '
   return { records: parseRecords(texts), pulls: parsePullRequests(status) }
 }
 
-// ---- Pull requests -----------------------------------------------------------
 
 const CHECK_WORD: [RegExp, PullRequestCheck][] = [
   [/^(pass|passed|passing|ok|success|green)\b/i, 'passing'],
@@ -207,7 +192,6 @@ function tableCells(line: string) {
 
 const isSeparator = (cells: string[]) => cells.every((cell) => /^:?-{3,}:?$/.test(cell))
 
-/** The lines of a top-level `# <name>` section, skipping fenced code. */
 function sectionLines(text: string, name: string) {
   let fenced = false
   const lines: string[] = []
@@ -245,11 +229,7 @@ function pullUrl(value: string) {
   return url
 }
 
-/**
- * The `# Pull requests` table in STATUS.md. Rows stay in the order written,
- * which is stack order: the base of the stack is first and is merged first.
- * A row without a pull number and an http(s) URL is skipped.
- */
+// Rows stay in stack order: the base of the stack is first and is merged first.
 export function parsePullRequests(status: string): PullRequestRow[] {
   const lines = sectionLines(status, 'Pull requests')
   let header: string[] | null = null
@@ -283,11 +263,9 @@ export function parsePullRequests(status: string): PullRequestRow[] {
 export type TaskPlan = {
   title: string
   plan: string
-  /** VERIFY.md as written, or null when the task has none. Local files are addressed for this app. */
   verify: string | null
 }
 
-/** The task's ALIGN.md and VERIFY.md, for the done card's View plan link. Null when the task has no plan. */
 export async function readTaskPlan({ folder, taskId }: { folder: string; taskId: string }): Promise<TaskPlan | null> {
   const { readTasksAt } = await import('../tasks')
   const task = (await readTasksAt(folder)).find((item) => item.id === taskId)
@@ -307,7 +285,6 @@ export async function readTaskPlan({ folder, taskId }: { folder: string; taskId:
   }
 }
 
-/** VERIFY.md beside the plan. A missing file or a symbolic link is no note, not an error. */
 async function readVerify(recordFolder: string, task: { id: string; worktree: string }) {
   const path = join(/*turbopackIgnore: true*/ recordFolder, 'VERIFY.md')
   try {
@@ -325,10 +302,7 @@ function githubCli() {
   return process.env.BUSYBOY_GH_PATH || findExecutable('gh')
 }
 
-/**
- * Merges the open card's pull requests one at a time, base of the stack first.
- * Called only from the Merge button. Opening the card, or any other sync, does not merge.
- */
+// Opening the card does not merge. Only the Merge button does.
 export async function mergePullRequests({ folder, cardId }: { folder: string; cardId: string }) {
   const card = openCards(folder).find((item) => item.id === cardId)
   if (!card || card.kind !== 'pr') throw new CardError('Only a pull request card can be merged.')
@@ -338,13 +312,11 @@ export async function mergePullRequests({ folder, cardId }: { folder: string; ca
   const { readTasksAt } = await import('../tasks')
   const task = (await readTasksAt(folder)).find((item) => item.id === card.taskId)
   if (!task) throw new CardError('The task for this card is gone.')
-  // Read again at the click: the card may have closed while the action was queued.
   if (!openCards(folder).some((item) => item.id === cardId && item.kind === 'pr')) {
     throw new CardError('This card was already answered.')
   }
   for (const pull of card.pulls) {
     try {
-      // `--merge` picks a merge commit. It is not `--auto`, which would merge later without another click.
       await run(gh, ['pr', 'merge', String(pull.number), '--merge'], { cwd: task.worktree, timeout: 120_000 })
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error)
@@ -352,7 +324,6 @@ export async function mergePullRequests({ folder, cardId }: { folder: string; ca
     }
   }
   settleCard({ folder, cardId, outcome: 'Merged in order' })
-  // The pull-request card is closed, so the done line drops the pending-check phrase.
   const done = openCards(folder).find((item) => item.taskId === card.taskId && item.kind === 'done')
   if (done?.kind === 'done' && done.phase === 'pr') {
     presentCard({ folder, card: { ...done, phase: 'done', pendingChecks: 0 }, agentId: task.agentId })

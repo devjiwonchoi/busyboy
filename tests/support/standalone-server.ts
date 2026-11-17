@@ -16,11 +16,6 @@ export function freePort(): Promise<number> {
   })
 }
 
-/**
- * A built standalone server of its own, in test mode, for journeys that stop
- * or restart it without touching the shared ones. `restart` starts it again
- * on the same port and data folder, so a browser context's cookies still apply.
- */
 export async function startStandaloneServer(env: Record<string, string> = {}) {
   const port = await freePort()
   const home = createTempFolder('standalone-home')
@@ -56,14 +51,11 @@ export async function startStandaloneServer(env: Record<string, string> = {}) {
   await start()
   return {
     baseURL,
-    /** Sends `signal` and waits until the process has exited. */
     async stop(signal: NodeJS.Signals = 'SIGKILL') {
       child.kill(signal)
       await exited
     },
-    /** Sends `signal` without waiting, for a server that is expected to stay up for a while. */
     signal: (signal: NodeJS.Signals) => child.kill(signal),
-    /** Starts it again, with `override` on top of the first start's environment. */
     restart: (override?: Record<string, string>) => start(override),
     async dispose() {
       child.kill('SIGKILL')

@@ -3,37 +3,21 @@ import { join } from 'node:path'
 import { MAX_IMAGE_BYTES, MAX_IMAGE_TEXT } from '@/lib/companion-limits'
 import { dataFolder, readSettings, updateSettings } from './config'
 
-// BusyBoy's companions: the face and voice of the Director, the agent the user chats with. The user picks
-// one in setup; its voice is appended to the Director's instructions, so it
-// must stay the same for a given companion (no dynamic values) to keep the
-// provider's prompt cache warm.
+// The voice is appended to the Director's instructions and stays free of per-turn values so the prompt cache holds.
 
 export type Companion = {
   id: string
   name: string
   animal: string
-  /** Emoji-level art until real artwork exists. */
   emoji: string
-  /**
-   * Circle behind the emoji. A full class string so Tailwind can see it.
-   * The colors follow the character picker: a dark cat, a cream hamster,
-   * a pink seal, a yellow elephant, a lilac squirrel.
-   */
+  // Full class strings so Tailwind can see them.
   tone: string
-  /** How this character speaks, shown next to the name in settings. */
   speech: string
-  /** One line kept with the character. */
   personality: string
-  /** How the Director talks. Appended to its instructions. */
   voice: string
-  /** The first message on the main screen, in the companion's voice. */
   greeting: string
 }
 
-/**
- * The Director roster. The first character is the one setup offers until the
- * user picks another. Names are the English forms of the roster in the picker.
- */
 export const COMPANIONS: Companion[] = [
   {
     id: 'jota',
@@ -92,17 +76,12 @@ export const COMPANIONS: Companion[] = [
   },
 ]
 
-/** The character setup selects until the user picks another. */
 export const DEFAULT_COMPANION_ID = COMPANIONS[0].id
 
 export function findCompanion(id: string | null | undefined) {
   return COMPANIONS.find((companion) => companion.id === id)
 }
 
-/**
- * Appended to the Director's instructions: the companion's voice, and what to do
- * when a task needs a project and none fits (setup lets the user start without one).
- */
 export function companionInstructions(companion: Companion | undefined) {
   const lines = [
     'When a request needs a project folder and the user has none, or none that fits, ask the user to add the project folder first; do not guess a path.',
@@ -113,12 +92,10 @@ export function companionInstructions(companion: Companion | undefined) {
   return lines.join('\n')
 }
 
-/** The companion the user chose, if any. */
 export async function currentCompanion() {
   return findCompanion((await readSettings()).companion)
 }
 
-/** Who the Director appears as: the chosen companion with the user's picture, or BusyBoy itself before one is chosen. */
 export async function directorPersona(): Promise<{ name: string; mark?: string; imageUrl?: string; tone?: string }> {
   const [companion, imageUrl] = await Promise.all([currentCompanion(), companionImageUrl()])
   return companion ? { name: companion.name, mark: companion.emoji, imageUrl, tone: companion.tone } : { name: 'BusyBoy' }
@@ -131,7 +108,6 @@ export async function chooseCompanion(id: string) {
   })
 }
 
-// ---- Custom picture ---------------------------------------------------------
 
 const IMAGE_TYPES: Record<string, string> = {
   'image/png': 'png',
@@ -143,11 +119,7 @@ const CONTENT_TYPES = Object.fromEntries(Object.entries(IMAGE_TYPES).map(([type,
 
 const IMAGE_PREFIX = 'app-companion-image.'
 
-/**
- * The extension of a picture file BusyBoy created, or undefined. The name in
- * settings is checked against the names BusyBoy writes, so an edited settings
- * file can never point reads or deletes at another file in the data folder.
- */
+// The name in settings is checked against names BusyBoy writes, so an edited settings file cannot point at another file.
 function imageExtension(fileName: string | null) {
   if (!fileName?.startsWith(IMAGE_PREFIX)) return undefined
   const extension = fileName.slice(IMAGE_PREFIX.length)
@@ -177,18 +149,15 @@ function hasSignature(bytes: Uint8Array, extension: string) {
   }
 }
 
-/** Saves the picture into the data folder as `app-companion-image.<ext>`, replacing an earlier one. */
 export async function saveCompanionImage(file: File) {
   const extension = IMAGE_TYPES[file.type]
   if (!extension) throw new CompanionImageError(UNSUPPORTED_IMAGE)
   if (file.size > MAX_IMAGE_BYTES) throw new CompanionImageError(`Choose a picture under ${MAX_IMAGE_TEXT}.`)
   const bytes = new Uint8Array(await file.arrayBuffer())
-  // The declared type comes from the browser; the file's own signature must agree.
   if (!hasSignature(bytes, extension)) throw new CompanionImageError(UNSUPPORTED_IMAGE)
   const folder = await dataFolder()
   const fileName = `${IMAGE_PREFIX}${extension}`
   await updateSettings(async (settings) => {
-    // Inside the settings queue, so two uploads never race on the same file.
     await mkdir(folder, { recursive: true })
     const temporary = join(folder, `${fileName}.${process.pid}.tmp`)
     const handle = await open(temporary, 'w')
@@ -213,7 +182,6 @@ export async function removeCompanionImage() {
   })
 }
 
-/** The saved picture and its content type, or undefined. */
 export async function readCompanionImage() {
   const { companionImage } = await readSettings()
   const extension = imageExtension(companionImage)
@@ -226,7 +194,6 @@ export async function readCompanionImage() {
   }
 }
 
-/** Where the page loads the picture from, or undefined. The version changes with the file, so a new picture is never served from cache. */
 export async function companionImageUrl() {
   const { companionImage } = await readSettings()
   if (!imageExtension(companionImage)) return undefined

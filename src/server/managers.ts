@@ -3,13 +3,7 @@ import { dataFolder, readSettingsAt, updateSettings, type ManagerEntry } from '.
 import { pathKey } from './paths'
 import { addProject, getProject, ProjectError } from './projects'
 
-// A manager is a chat of its own that looks after one project: the user talks
-// to it like the Director, and it creates tasks only in that project. Managers
-// live in the settings file. A project has at most one manager, so a task's
-// cards and results always have one chat to show in.
-//
-// The Director stays above them: it spans every project, and it shows whatever
-// no manager owns.
+// A project has at most one manager, so a task's cards always have one chat to show in.
 
 export type Manager = ManagerEntry
 
@@ -23,7 +17,6 @@ type Store = { listeners: Map<string, Set<() => void>>; known: Map<string, Set<s
 const globalStore = globalThis as typeof globalThis & { [STORE_KEY]?: Store }
 const store = (globalStore[STORE_KEY] ??= { listeners: new Map(), known: new Map() })
 
-/** The managers whose project still exists, oldest first. A manager of a removed project is hidden, not deleted. */
 export async function listManagersAt(folder: string): Promise<Manager[]> {
   const { managers, projects } = await readSettingsAt(folder)
   const names = new Set(projects.map(({ name }) => name.toLowerCase()))
@@ -40,17 +33,10 @@ export async function getManagerAt(folder: string, id: string) {
   return (await listManagersAt(folder)).find((manager) => manager.id === id)
 }
 
-/**
- * Whether `id` is a manager in the list as it was last read. A task or an open
- * card can still name a manager that was removed, or whose project was; those
- * show in the Director's chat. True until the list is first read, which
- * whatever shows chats does at once.
- */
 export function isListedManager(folder: string, id: string) {
   return store.known.get(pathKey(folder))?.has(id) ?? true
 }
 
-/** Calls `listener` whenever a manager in `folder` is created or removed. */
 export function subscribeToManagers(folder: string, listener: () => void) {
   const key = pathKey(folder)
   let set = store.listeners.get(key)
@@ -63,10 +49,6 @@ function notify(folder: string) {
   for (const listener of store.listeners.get(pathKey(folder)) ?? []) listener()
 }
 
-/**
- * Creates the manager of a project: one BusyBoy already knows (`project`), or a
- * git repository added now (`folder`). The name defaults to the project's.
- */
 export async function createManager(input: { name?: string; project?: string; folder?: string }): Promise<Manager> {
   const name = input.name?.trim() ?? ''
   if (name.length > MAX_NAME_LENGTH) throw new ManagerError(`Use at most ${MAX_NAME_LENGTH} characters for the name.`)
@@ -100,7 +82,6 @@ export async function createManager(input: { name?: string; project?: string; fo
   return manager
 }
 
-/** Forgets the manager. Its project, its tasks, and its saved conversation stay. */
 export async function removeManager(id: string) {
   const folder = await dataFolder()
   await updateSettings((settings) => {

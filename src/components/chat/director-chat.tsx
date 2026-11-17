@@ -32,7 +32,6 @@ import { TaskGroup } from './task-group'
 type View = {
   entries: ChatEntry[]
   tasks: Map<string, TaskView>
-  /** Open task agent cards, oldest first. */
   cards: TaskCard[]
   status: DirectorStatus
   draft: string
@@ -46,7 +45,6 @@ const initialView: View = { entries: [], tasks: new Map(), cards: [], status: 'i
 type UserEntry = Extract<ChatEntry, { kind: 'user' }>
 type DirectorReply = Extract<ChatEntry, { kind: 'director' }>
 
-/** The latest message sent to this chat, and whether its turn failed or was interrupted. */
 function latestTurn(entries: ChatEntry[]): { user: UserEntry; reply?: DirectorReply; retry: boolean } | null {
   let userIndex = -1
   for (let index = entries.length - 1; index >= 0; index--) {
@@ -67,7 +65,6 @@ function latestTurn(entries: ChatEntry[]): { user: UserEntry; reply?: DirectorRe
   return { user, reply, retry: Boolean((reply && reply.interrupted) || (!reply && failed)) }
 }
 
-/** Escape stops this chat. A repeated key is the hold, not a second stop. */
 function directorHandlesEscape(event: KeyboardEvent) {
   return !event.repeat
 }
@@ -108,11 +105,6 @@ function apply(view: View, update: DirectorUpdate): View {
   }
 }
 
-/**
- * A chat with the Director, or with the manager `chat`: the greeting, the
- * transcript, the reply being written, and the composer. The page gives each
- * chat its own key, so switching chats starts this component over.
- */
 export function DirectorChat({
   projects,
   persona,
@@ -123,18 +115,13 @@ export function DirectorChat({
 }: {
   projects: string[]
   persona: Persona
-  /** The manager's id; null for the Director. */
   chat?: string | null
-  /** Set for a manager: `@` lists that project's files instead of every project. */
   managedProject?: string | null
-  /** Shown above the greeting in place of the name. */
   header?: string
   greeting: string
 }) {
   const [view, setView] = useState(initialView)
-  // The card the composer replies to, picked only by the user with a card's Reply. A card
-  // never takes the composer by itself: a message typed for the Director must not reach a
-  // task agent because a card opened meanwhile. The choice ends when its card closes.
+  // A card never takes the composer by itself, so a message typed for the Director cannot reach a task agent.
   const [replyChoice, setReplyChoice] = useState<string | null>(null)
   // Set when the chosen card closed before the reply was sent. The reply is then refused, not sent
   // to the Director: "yes, delete it" meant for a task agent must not become a Director prompt.
@@ -143,11 +130,7 @@ export function DirectorChat({
   useEffect(() => {
     choice.current = replyChoice
   }, [replyChoice])
-  // The task the composer messages, picked only by the user with a task's Message, for one message.
-  // Like a card, a task never takes the composer by itself.
   const [messageChoice, setMessageChoice] = useState<string | null>(null)
-  // Set when the chosen task stopped taking messages (it opened a card, or was archived) before
-  // the message was sent. Like a lost card reply, that message is refused, not sent to the Director.
   const [messageLost, setMessageLost] = useState(false)
   const [seed, setSeed] = useState<{ token: number; text: string } | null>(null)
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -188,9 +171,7 @@ export function DirectorChat({
     return () => window.removeEventListener('hashchange', read)
   }, [])
 
-  // Keep the newest message in view, unless a command-palette hit asked for a line.
-  // Set scrollTop directly (scrollIntoView returns a Promise in this Chromium,
-  // which an effect must not return).
+  // scrollIntoView returns a Promise in this Chromium, which an effect must not return.
   useLayoutEffect(() => {
     const element = scroller.current
     if (!element) return
@@ -200,7 +181,6 @@ export function DirectorChat({
       honoredJump.current = jumpId
       return
     }
-    // Stay on a hit. A cleared hash (the next message) follows the bottom again.
     if (jumpId && target) return
     element.scrollTop = element.scrollHeight
   }, [view.entries, view.draft, view.tasks, view.cards, jumpId])
@@ -252,7 +232,6 @@ export function DirectorChat({
   const thinking = view.status === 'answering' && !view.draft
   const replyCard = view.cards.find(({ id }) => id === replyChoice)
   const replyCardId = replyCard?.id ?? null
-  // A task that started waiting on a card is answered on that card, so the choice no longer applies.
   const chosenTask = messageChoice && !replyCard ? view.tasks.get(messageChoice) : undefined
   const messageTask =
     chosenTask && !chosenTask.subagent && !chosenTask.archived && chosenTask.status !== 'needs-you' ? chosenTask : undefined
@@ -285,7 +264,6 @@ export function DirectorChat({
       }))
       return Promise.reject(new Error('The reply card closed.'))
     }
-    // Also when the choice ended in this very render, before the effect above ran.
     if (messageLost || choiceEnded) {
       setMessageLost(false)
       setMessageChoice(null)
@@ -321,7 +299,6 @@ export function DirectorChat({
             : sendToDirectorAction(message.text, chat, message.attachments).then(({ error }) => {
                 if (error) report(error)
               })
-    // A rejection with no message of its own still tells the user to try again.
     return sent.catch((error: unknown) => {
       if (error instanceof Error && error.message) throw error
       report('The message could not be sent. Try again.')
@@ -392,7 +369,6 @@ export function DirectorChat({
                 onRetry={retry}
                 currentJump={jumpId}
                 onMessage={(taskId) => {
-                  // One target at a time: a task replaces a card reply.
                   choice.current = null
                   setReplyChoice(null)
                   setReplyLost(false)
@@ -489,7 +465,6 @@ export function DirectorChat({
   )
 }
 
-/** A message from the Director or a manager, shown with its picture and name. */
 export function DirectorMessage({ persona, header, children }: { persona: Persona; header?: string; children: React.ReactNode }) {
   return (
     <Message>

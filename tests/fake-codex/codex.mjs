@@ -1,31 +1,5 @@
-// A fake `codex app-server` for journeys. The real Codex adapter starts it
-// (BUSYBOY_CODEX_PATH points here) and talks newline-delimited JSON-RPC to it,
-// so tests exercise the adapter itself. It replays the recorded runs in
-// tests/provider-scripts/codex/: a `turn/start` whose text matches a recorded
-// prompt plays that turn's raw app-server messages. A recorded server request
-// waits for the adapter's reply; a recorded question in an agent message
-// waits for `turn/steer`. As in Codex, `cancel` ends the turn, while
-// `decline` refuses only that action: the recording assumed it was accepted,
-// so the turn then stays open with no more output until `turn/interrupt`. An
-// MCP form's reply, declined or not, only goes to its server: the turn goes on.
-// A step with `echoReply` then writes the reply's action and content as an agent message.
-// A step with `echoDecision` writes the command decision Codex was sent, so a journey
-// can see that an allow, a denial, or an execpolicy object actually arrived.
-// A `delayMs` step waits, unless the turn ends first (an interrupt or a stop).
-// `thread/resume` fails as Codex does for ids starting with `missing-`.
-// `thread/fork` answers like `thread/start`, and an `echoThread` step writes
-// what the branch was started with, so journeys can check a side question's
-// thread. `config/read` lists no MCP servers.
-// Hooks: `thread/start` with `ephemeral` answers with a probe thread whose
-// PreToolUse hooks `hooks/list` reports, with a fake hash of each command. A
-// later thread runs only the hooks its config trusts with that hash in
-// `hooks.state.<key>.trusted_hash`, as Codex does. A `preToolUse` step runs
-// them with the tool call on stdin and plays its `then.deny` steps when one
-// denies, else `then.allow`.
-// The prompt in START_CHILDREN_PROMPT starts two long-running children (one in
-// this process group, one detached into a session of its own, as Codex runs
-// commands), writes their pids to $FAKE_CODEX_PID_FILE, and from then on
-// ignores SIGTERM and the end of its input, so only a forced kill ends it. No model is called.
+// Codex: cancel ends the turn, decline refuses only that action, and thread/resume fails for ids starting with missing-.
+// Hooks run only when the thread config trusts them with the hash hooks/list reported.
 import { spawn } from 'node:child_process'
 import { createHash, randomUUID } from 'node:crypto'
 import { readdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
@@ -42,22 +16,15 @@ for (const file of readdirSync(scriptsFolder).filter((name) => name.endsWith('.j
 }
 
 let threadId = randomUUID()
-/** How a branch was started: the thread it came from and its settings. */
 let fork
-/** Set once START_CHILDREN_PROMPT ran: the fake then only ends when killed. */
 let stubborn = false
 let nextRequestId = 0
-/** Replies the replay waits for, by server request id. */
 const waitingReplies = new Map()
-/** The running turn: its id, a way to end it early, and a waiting question to resolve. */
 let current
-/** PreToolUse hooks of probe threads, by thread id. */
 const probeHooks = new Map()
-/** The PreToolUse hooks of the thread as `hooks/list` reports them, and its folder. */
 let threadHooks = []
 let threadCwd = process.cwd()
 
-/** Each PreToolUse hook in a thread config, with the key and hash Codex lists it under. */
 function listHooks(hooks) {
   return (hooks?.PreToolUse ?? []).flatMap((group, groupIndex) =>
     group.hooks.map((handler, handlerIndex) => ({
@@ -70,7 +37,6 @@ function listHooks(hooks) {
   )
 }
 
-/** Runs the trusted hooks for a tool call; true when one of them denies it. */
 async function hooksDeny(call) {
   const trusted = threadHooks.filter(({ trustStatus }) => trustStatus === 'trusted').map(({ command }) => command)
   for (const command of trusted) {
@@ -87,7 +53,6 @@ async function hooksDeny(call) {
 const send = (message) => process.stdout.write(`${JSON.stringify(message)}\n`)
 const notify = (method, params) => send({ method, params: { threadId, ...(current ? { turnId: current.id } : {}), ...params } })
 
-/** The reply as a command decision: permissions granted nothing, or an elicitation declined, count as a decline. */
 function replyDecision(result) {
   if (!result || typeof result !== 'object') return 'accept'
   if ('decision' in result) return decisionName(result.decision)
@@ -96,7 +61,6 @@ function replyDecision(result) {
   return 'accept'
 }
 
-/** A string decision, or the one key of an externally tagged object such as `acceptWithExecpolicyAmendment`. */
 function decisionName(decision) {
   if (typeof decision === 'string') return decision
   if (!decision || typeof decision !== 'object') return 'accept'
@@ -108,7 +72,6 @@ function decisionName(decision) {
   return name || 'accept'
 }
 
-/** What a journey reads back: the decision string, or the object Codex was sent. */
 function decisionText(decision) {
   if (typeof decision === 'string') return decision
   if (decision && typeof decision === 'object') return JSON.stringify(decision)
@@ -142,7 +105,6 @@ function startChildren() {
   stubborn = true
 }
 
-/** Writes `text` as one agent message of the running turn. */
 function say(text) {
   const itemId = randomUUID()
   notify('item/agentMessage/delta', { itemId, delta: text })
@@ -186,14 +148,12 @@ async function playTurn(turn) {
       if (own.ended) return
       if (echoDecision) say(`Codex received ${decisionText(result?.decision)}`)
       if (echoReply) say(`Reply ${result?.action ?? ''}: ${JSON.stringify(result?.content ?? null)}`)
-      // An MCP form's answer, declined or not, goes to its server and the turn goes on.
       if (result && typeof result === 'object' && 'action' in result) continue
       const decision = replyDecision(result)
       if (decision === 'cancel') {
         completeTurn('interrupted')
         return
       }
-      // The rest of the recording assumed an accept; after a decline the turn waits for an interrupt.
       if (decision !== 'accept' && typeof decision === 'string' && !decision.startsWith('accept')) {
         await new Promise((resolve) => (own.wake = resolve))
         return
@@ -204,7 +164,6 @@ async function playTurn(turn) {
     const questions = raw.method === 'item/completed' && raw.params.item.questions
     if (questions?.length) await new Promise((resolve) => (own.wake = resolve))
   }
-  // A recording always ends with turn/completed; a cut-off one still ends its turn.
   if (!own.ended) completeTurn('completed')
 }
 
@@ -249,7 +208,6 @@ function handle(message) {
         ...hook,
         trustStatus: params.config?.hooks?.state?.[hook.key]?.trusted_hash === hook.currentHash ? 'trusted' : 'untrusted',
       }))
-    // falls through
     case 'thread/resume':
       if (method === 'thread/resume' && params.threadId.startsWith('missing-')) {
         return send({ id, error: { code: -32600, message: `no rollout found for thread id ${params.threadId}` } })

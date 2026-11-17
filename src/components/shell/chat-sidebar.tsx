@@ -32,20 +32,11 @@ import type { ChatSummary } from '@/server/director/chat'
 import type { TaskProgress } from '@/server/records/progress'
 import type { Room } from '@/server/rooms'
 
-/** The radio value for a repository BusyBoy does not know yet. */
 const NEW_FOLDER = '\0new-folder'
-/** The radio value for a row that covers several projects. */
 const ROOM = '\0room'
 
 const managerHref = (id: string) => `/?manager=${encodeURIComponent(id)}`
 
-/**
- * The chat list on the left, in the shape of the dark sidebar mockup: search
- * and new at the top right, the Director pinned under them, then one row per
- * project and per room, and the user at the bottom left. Rows are plain
- * links rather than Item, so the 40px circles, 15/13 type, and #161617 panel
- * match that mockup. The list follows /api/chats/events.
- */
 export function ChatSidebar({
   director,
   projects,
@@ -141,7 +132,6 @@ function matches(needle: string, ...parts: Array<string | null | undefined>) {
   return parts.some((part) => part?.toLowerCase().includes(needle))
 }
 
-/** One muted line: work waiting, a reply in progress, or the latest message. */
 function statusLine(chat: ChatSummary | undefined, fallback: string) {
   const waiting = chat?.waiting ?? 0
   if (waiting > 0) return waiting === 1 ? '1 thing waiting for you' : `${waiting} things waiting for you`
@@ -155,7 +145,6 @@ function progressOf(projects: ProjectProgress[], name: string | null) {
   return projects.find((project) => project.name.toLowerCase() === key)?.progress
 }
 
-// Badge and PhaseMark always add a chip or a phase word. The row is an icon and a muted count.
 type ProgressMark = 'complete' | 'at-risk' | 'decision'
 
 const MARK: Record<ProgressMark, { icon: typeof CircleCheck; label: string; className: string }> = {
@@ -164,7 +153,6 @@ const MARK: Record<ProgressMark, { icon: typeof CircleCheck; label: string; clas
   decision: { icon: CircleHelp, label: 'Needs a decision', className: 'text-warning-foreground' },
 }
 
-/** One icon per attention state, or a check when every aligned item is verified and nothing needs attention. */
 function directorMarks(total: TaskProgress, projects: ProjectProgress[]): ProgressMark[] {
   const states = new Set(projects.filter((project) => project.progress.total > 0).map((project) => project.progress.state))
   const marks: ProgressMark[] = []
@@ -174,7 +162,6 @@ function directorMarks(total: TaskProgress, projects: ProjectProgress[]): Progre
   return marks
 }
 
-/** A check only when the project is fully verified. Unfinished calm work is just the count. */
 function projectMark(progress: TaskProgress): ProgressMark | null {
   if (progress.total === 0) return null
   if (progress.state === 'at-risk') return 'at-risk'
@@ -286,7 +273,6 @@ function ManagerItem({ manager, active, progress }: { manager: ChatSummary; acti
   )
 }
 
-/** A room covers several projects, so their letter avatars overlap. */
 function RoomItem({ room, managers }: { room: Room; managers: ChatSummary[] }) {
   const names = room.projects.map((project) => managers.find((manager) => manager.project?.toLowerCase() === project.toLowerCase())?.name ?? project)
   return (
@@ -338,7 +324,6 @@ function subscribeNothing() {
   return () => {}
 }
 
-/** The + button and its form: one project, a new folder, or a room for several projects. */
 function NewManager({ projects, taken }: { projects: string[]; taken: Set<string | undefined> }) {
   const router = useRouter()
   const [open, setOpen] = useState(false)
@@ -346,18 +331,15 @@ function NewManager({ projects, taken }: { projects: string[]; taken: Set<string
     const result = await createManagerAction(previous, form)
     if (result.id) {
       setOpen(false)
-      // The next manager starts from an empty form, not this one's project.
       setProject(null)
       setFolder('')
       setRoomProjects([])
-      // A room stays in the list; a manager opens its chat. Refreshed too, so a new folder is offered next time.
       if (result.kind !== 'room') router.push(managerHref(result.id))
       router.refresh()
     }
     return result
   }, {})
   const free = projects.filter((name) => !taken.has(name.toLowerCase()))
-  // With no project left to pick, the form asks for a folder at once.
   const [project, setProject] = useState<string | null>(null)
   const choice = project ?? (free.length === 0 && projects.length < 2 ? NEW_FOLDER : null)
   const [folder, setFolder] = useState('')

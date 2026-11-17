@@ -3,10 +3,8 @@ import { dirname, join } from 'node:path'
 import { expect, test, type Page } from '@playwright/test'
 import { createGitRepository, createTempFolder, removeFolder, useTestHome } from './support/test-home'
 
-// Recorded in tests/provider-scripts/claude-plain-reply.json.
 const PLAIN_PROMPT = 'Reply with exactly this sentence and nothing else: Hello from busyboy.'
 
-// A 1×1 PNG.
 const PNG = Buffer.from(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
   'base64',
@@ -23,7 +21,6 @@ function track(folder: string) {
   return folder
 }
 
-/** A repository lives in its own temporary parent folder; remove both. */
 function trackRepository(repository: string) {
   folders.push(dirname(repository))
   return repository
@@ -39,13 +36,11 @@ async function chooseCompanion(page: Page, name: string) {
   await expect(page.getByRole('heading', { name: 'Sign in to an agent' })).toBeVisible()
 }
 
-/** Skips the always-ask step with the list as it is. */
 async function skipApprovals(page: Page) {
   await expect(page.getByRole('heading', { name: 'Always ask before' })).toBeVisible()
   await page.getByRole('link', { name: 'Skip' }).click()
 }
 
-/** From the companion step to the start step, skipping skills and approvals. */
 async function goToStart(page: Page, companion = 'Rippu') {
   await page.goto('/setup')
   await chooseCompanion(page, companion)
@@ -200,7 +195,6 @@ test('choosing a default agent should save it', async ({ page, context, baseURL 
 test('choosing folders in the desktop picker should add them as projects', async ({ page, context, baseURL }) => {
   track(await useTestHome(context, baseURL!, { claude: 'signed-in' }))
   const picked = [trackRepository(createGitRepository('api')), trackRepository(createGitRepository('web'))]
-  // Stands in for electron/preload.ts: the native dialog returns these folders.
   await page.addInitScript((paths) => {
     Object.assign(window, { busyboyDesktop: { pickFolders: async () => paths, pathForFile: () => '' } })
   }, picked)
@@ -217,7 +211,6 @@ test('dropping folders should add them as projects', async ({ page, context, bas
   track(await useTestHome(context, baseURL!, { claude: 'signed-in' }))
   const repository = trackRepository(createGitRepository('mobile'))
   const plain = track(createTempFolder('plain'))
-  // Stands in for electron/preload.ts: Electron reports a dropped folder's path.
   await page.addInitScript((paths) => {
     Object.assign(window, {
       busyboyDesktop: { pickFolders: async () => [], pathForFile: (file: File) => paths[file.name] ?? '' },
@@ -285,8 +278,7 @@ test('opening the app after setup should skip setup', async ({ page, context, ba
   await page.getByRole('button', { name: 'Start chatting' }).click()
   await expect(page.getByRole('region', { name: 'Chat' })).toBeVisible()
 
-  // Closed first, as quitting would. Each open main screen holds the app's event streams, and two
-  // screens fill Chromium's six connections per host, which stalls the next navigation.
+  // Two open main screens fill Chromium's six connections per host, which stalls the next navigation.
   await page.close()
   const reopened = await context.newPage()
   await reopened.goto('/')

@@ -1,18 +1,9 @@
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { cn } from '@/lib/utils'
 
-/**
- * Who a chat's replies come from: the Director (the companion chosen in setup,
- * or BusyBoy itself before one is chosen) or a manager. `mark` is the emoji or
- * letter shown as the picture; without one no picture is shown. `tone` is the
- * circle behind it.
- */
 export type Persona = { name: string; mark?: string; imageUrl?: string; tone?: string }
 
-/**
- * Solid and gradient circles: a pink-to-violet letter,
- * then teal and orange. Full class strings so Tailwind can see them.
- */
+// Full class strings so Tailwind can see them.
 const LETTER_TONES = [
   'bg-gradient-to-br from-fuchsia-400 to-violet-500 text-white',
   'bg-teal-400 text-white',
@@ -28,23 +19,19 @@ function hashName(name: string) {
   return hash
 }
 
-/** The letter on a project avatar: the first character, uppercased when it is a letter. */
 export function letterOf(name: string) {
   const first = [...name.trim()][0] ?? '?'
   return first.toLocaleUpperCase()
 }
 
-/** The same color every time for a given name. */
 export function letterTone(name: string) {
   return LETTER_TONES[hashName(name.trim() || 'Manager') % LETTER_TONES.length]
 }
 
-/** A manager's picture: a colored letter, the same one every time for a given name. */
 export function managerPersona(name: string): Persona {
   return { name, mark: letterOf(name), tone: letterTone(name) }
 }
 
-/** A round colored letter, as on a project row. */
 export function LetterMark({ name, className }: { name: string; className?: string }) {
   const letter = letterOf(name)
   return (
@@ -57,10 +44,6 @@ export function LetterMark({ name, className }: { name: string; className?: stri
   )
 }
 
-/**
- * Two project letters overlapping on a diagonal, the way a room that covers
- * more than one project is drawn. Later marks sit at the bottom right.
- */
 export function LetterStack({ names, className }: { names: string[]; className?: string }) {
   const marks = names.slice(0, 2)
   return (
@@ -79,7 +62,6 @@ export function LetterStack({ names, className }: { names: string[]; className?:
   )
 }
 
-/** Decorative: the name is always shown next to it. */
 export function PersonaAvatar({ persona, className }: { persona: Persona; className?: string }) {
   return (
     <Avatar aria-hidden data-emoji={persona.mark} className={cn('size-8 text-base', className)}>

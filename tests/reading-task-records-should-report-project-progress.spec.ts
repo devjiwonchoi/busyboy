@@ -5,8 +5,6 @@ import { expect, test, type Page } from '@playwright/test'
 import { addRecordTask } from './support/record-tasks'
 import { useProjectsHome } from './support/projects-home'
 
-// Records live in the journey's stand-in for ~/.jwn/<owner>/<name>/<task>, never in the worktree.
-// web is acme/web. api is acme/api. A decoy contract in the worktree must not count.
 
 type Progress = { total: number; verified: number; state: 'calm' | 'decision' | 'at-risk' }
 type GraphTask = { id: string; progress: Progress }
@@ -146,7 +144,6 @@ test("reading task records should report each project's progress and the directo
     },
   })
 
-  // A contract in the worktree must not change the count. Nine items would, if they were read.
   const decoy = join(ship.worktree, '.jwn', SHIP)
   mkdirSync(decoy, { recursive: true })
   writeFileSync(join(decoy, 'ALIGN.approved.md'), align('Decoy', 'approved by ada on 2026-11-01', endState('## 1 · A\n\n## 2 · B\n\n## 3 · C\n\n## 4 · D\n\n## 5 · E\n\n## 6 · F\n\n## 7 · G\n\n## 8 · H\n\n## 9 · I')))

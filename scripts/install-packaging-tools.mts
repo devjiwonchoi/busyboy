@@ -1,7 +1,3 @@
-// Installs only electron and electron-builder, at the versions in the lockfile.
-// The release packaging jobs do not compile the Next app, so they do not need
-// the rest of the dependency tree. package.json and the lockfile are restored
-// afterwards: electron-builder copies package.json into the app.
 import { execFileSync } from 'node:child_process'
 import { readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'

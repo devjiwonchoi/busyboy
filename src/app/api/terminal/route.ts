@@ -7,7 +7,6 @@ type StartRequest = { cols?: unknown; rows?: unknown; cwd?: unknown; taskId?: un
 
 const stringOrNull = (value: unknown) => (typeof value === 'string' ? value : null)
 
-/** Starts a terminal in the selected task's worktree, or in the home folder when no task is selected. */
 export async function POST(request: Request) {
   await connection()
   const body = (await request.json().catch(() => ({}))) as StartRequest

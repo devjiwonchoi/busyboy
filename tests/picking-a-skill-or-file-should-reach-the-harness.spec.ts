@@ -3,8 +3,6 @@ import { join } from 'node:path'
 import { expect, test, type Page } from '@playwright/test'
 import { useProjectsHome } from './support/projects-home'
 
-// The `/` and `@` pickers. Claude scripts: tests/provider-scripts/composer-mentions.json.
-// Codex: tests/provider-scripts/codex/composer-skill.json, played by tests/fake-codex.
 
 const SKILLS = [
   ['align', 'Plan the task before changing files.'],

@@ -1,10 +1,4 @@
-// Packs the shared Next and Electron build for the release workflow.
-//
-//   node scripts/pack-desktop-bundle.mts
-//
-// macOS receives pnpm's symlinks, which the standalone server loads. Windows
-// cannot create those symlinks, so it receives a second archive of real
-// directories with each package's pnpm siblings nested inside it.
+// Windows cannot create pnpm's symlinks, so it gets real directories with siblings nested inside.
 import { execFileSync } from 'node:child_process'
 import { cpSync, existsSync, mkdtempSync, readdirSync, readlinkSync, realpathSync, rmSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'

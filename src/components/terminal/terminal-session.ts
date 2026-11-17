@@ -5,10 +5,7 @@ export type StartedTerminal = { id: string; cwd: string; shell: string; task: Wo
 
 const endpoint = (id: string) => `/api/terminal/${encodeURIComponent(id)}`
 
-/**
- * Starts a pty on the server in the worktree of `taskId`, or in the home
- * folder when it is null. The `cwd` override is only honored in test mode.
- */
+// The cwd override is only honored in test mode.
 export async function startTerminal(
   { cols, rows, taskId }: { cols: number; rows: number; taskId: string | null },
   signal: AbortSignal,
@@ -25,7 +22,6 @@ export async function startTerminal(
   return body
 }
 
-/** Reads the output stream until the shell exits or the signal aborts. */
 export async function followTerminal(id: string, signal: AbortSignal, onEvent: (event: TerminalEvent) => void) {
   const response = await fetch(endpoint(id), { signal, cache: 'no-store' })
   if (!response.ok || !response.body) throw new Error(`Could not follow the terminal: HTTP ${response.status}`)
@@ -45,10 +41,6 @@ export async function followTerminal(id: string, signal: AbortSignal, onEvent: (
   }
 }
 
-/**
- * Sends keystrokes in order. Input typed while a request is in flight is
- * batched into the next request, so fast typing does not reorder or flood.
- */
 export function createInputSender(id: string) {
   let queued = ''
   let sending = false
@@ -86,7 +78,6 @@ export function resizeTerminal(id: string, cols: number, rows: number) {
   }).catch(() => {})
 }
 
-/** Kills the shell; `keepalive` lets the request finish while the page unloads. */
 export function killTerminal(id: string) {
   void fetch(endpoint(id), { method: 'DELETE', keepalive: true }).catch(() => {})
 }

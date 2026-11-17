@@ -4,16 +4,6 @@ import type { ServerHandle } from './server-process'
 
 const RETRY_MS = 2_000
 
-/**
- * Follows the server's attention stream (src/app/api/attention/events) for the
- * tray and notifications, and connects again after a dropped connection while
- * the server runs. Returns the function that stops following.
- *
- * A new connection starts from the current state, so a change during a dropped
- * connection updates the tray but is not announced: announcing it would mean
- * keeping old state across connections, and a missed notification is better
- * than a replayed one.
- */
 export function followAttention(server: ServerHandle, onUpdate: (update: AttentionUpdate) => void) {
   let stopped = false
   let abort = new AbortController()
@@ -33,7 +23,6 @@ export function followAttention(server: ServerHandle, onUpdate: (update: Attenti
         const { value, done } = await reader.read()
         if (done) break
         pending += value
-        // One event per blank-line-separated block; keep-alive comments start with ':'.
         const blocks = pending.split('\n\n')
         pending = blocks.pop() ?? ''
         for (const block of blocks) {

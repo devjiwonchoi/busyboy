@@ -6,13 +6,10 @@ import { spawn, type IPty } from 'node-pty'
 import { onServerShutdown } from './shutdown'
 import { isTestMode } from './working-directory'
 
-/** Output kept per terminal so a reconnecting panel can redraw the screen. */
 const SCROLLBACK_LIMIT = 256 * 1024
-/** How long a terminal outlives its last output stream before it is killed. */
 const DETACHED_GRACE_MS = 15_000
 /** Waits between SIGHUP, SIGTERM, and SIGKILL when a shell will not exit. */
 const KILL_ESCALATION_MS = 1_000
-/** How long a server shutdown waits for shells to exit. */
 const STOP_ALL_TIMEOUT_MS = 3_000
 const MIN_SIZE = 2
 const MAX_SIZE = 1000
@@ -29,11 +26,9 @@ type Terminal = {
   cwd: string
   shell: string
   pty: IPty
-  /** Recent output chunks, whole, so replay never starts inside an escape sequence. */
   scrollback: string[]
   scrollbackLength: number
   exited: boolean
-  /** Set when the shell exited by itself; kept briefly so a late follower still sees it. */
   exit: Extract<TerminalEvent, { type: 'exit' }> | null
   listeners: Set<Listener>
   detachedTimer: ReturnType<typeof setTimeout> | null
@@ -41,7 +36,6 @@ type Terminal = {
 
 type Registry = {
   terminals: Map<string, Terminal>
-  /** Killed terminals whose process has not exited yet. */
   dying: Set<Terminal>
   exitHookInstalled: boolean
 }
@@ -56,17 +50,7 @@ const registry: Registry = ((globalThis as Record<symbol, unknown>)[registryKey]
 }
 ;(globalThis as Record<symbol, unknown>)[registryKey] = registry
 
-/**
- * node-pty 1.1.0 publishes `spawn-helper` without the executable bit, so
- * every spawn on macOS and Linux fails with `posix_spawnp failed`. Builds
- * install the package with the bit set (scripts/install-server-packages.mts);
- * this covers `next dev`, which loads the repository's own copy.
- *
- * Turbopack compiles `createRequire(import.meta.url).resolve()` into a module
- * id instead of a path, so resolve through the runtime's own module loader,
- * from the server's folder (the standalone server chdirs there; `next dev`
- * runs from the project root).
- */
+// node-pty 1.1.0 ships spawn-helper without the executable bit. Turbopack compiles createRequire().resolve() into a module id, not a path.
 let spawnHelperChecked = false
 function ensureSpawnHelperExecutable() {
   if (spawnHelperChecked || process.platform === 'win32') return
@@ -85,7 +69,6 @@ function ensureSpawnHelperExecutable() {
   }
 }
 
-/** The account's shell from the user database; `userInfo()` throws when the uid has no entry. */
 function accountShell() {
   try {
     return userInfo().shell
@@ -94,11 +77,7 @@ function accountShell() {
   }
 }
 
-/**
- * The user's login shell and its arguments. Journeys pin a plain shell with
- * BUSYBOY_TEST_SHELL (test mode only) so the developer's profile cannot
- * change what they see.
- */
+// Journeys pin a plain shell with BUSYBOY_TEST_SHELL so the developer's profile cannot change what they see.
 export function loginShell(): { file: string; args: string[] } {
   const testShell = process.env.BUSYBOY_TEST_SHELL
   if (testShell && isTestMode()) return { file: testShell, args: [] }
@@ -109,7 +88,6 @@ export function loginShell(): { file: string; args: string[] } {
   return { file, args: ['-l'] }
 }
 
-/** The shell sees the user's environment, not the variables that configure this server. */
 function shellEnvironment(cwd: string): Record<string, string> {
   const env: Record<string, string> = {}
   for (const [key, value] of Object.entries(process.env)) {
@@ -124,8 +102,7 @@ function shellEnvironment(cwd: string): Record<string, string> {
   env.TERM = 'xterm-256color'
   env.COLORTERM = 'truecolor'
   env.TERM_PROGRAM = 'busyboy'
-  // Without a matching PWD, shells print the resolved path (/private/var/...)
-  // instead of the folder they were opened in.
+  // Without a matching PWD, shells print the resolved path (/private/var/...) instead of the folder they were opened in.
   env.PWD = cwd
   return env
 }
@@ -143,25 +120,19 @@ function installExitHook() {
   if (registry.exitHookInstalled) return
   registry.exitHookInstalled = true
   process.once('exit', () => {
-    // Shells already past their hangup get forced; the rest get the hangup
-    // now, so they can still pass it on to their jobs.
     const stubborn = [...registry.dying]
     killAllTerminals()
     for (const terminal of stubborn) signal(terminal, 'SIGKILL')
   })
-  // On SIGTERM and SIGINT the Next server stops accepting connections and
-  // waits for open requests before it exits. Output streams stay open while
-  // their shell lives, so end the shells first or the server never exits.
+  // Output streams stay open while their shell lives, so the shells have to end or the Next server never exits.
   process.once('SIGTERM', killAllTerminals)
   process.once('SIGINT', killAllTerminals)
-  // The desktop app asks before it stops the server (on Windows it then
-  // terminates the process, which runs none of the hooks above).
+  // On Windows the desktop app then terminates the process, which runs none of the signal hooks.
   onServerShutdown(stopAllTerminals)
 }
 
 export type StartTerminalOptions = { cwd: string; cols: number; rows: number }
 
-/** Starts the user's login shell in a pty. */
 export function startTerminal({ cwd, cols, rows }: StartTerminalOptions) {
   ensureSpawnHelperExecutable()
   const shell = loginShell()
@@ -200,19 +171,14 @@ export function startTerminal({ cwd, cols, rows }: StartTerminalOptions) {
   process_.onExit(({ exitCode, signal }) => {
     terminal.exited = true
     registry.dying.delete(terminal)
-    // A killed terminal already left the registry and ended its streams.
     if (registry.terminals.get(id) !== terminal) return
     terminal.exit = { type: 'exit', exitCode, signal }
     emit(terminal, terminal.exit)
     terminal.listeners.clear()
-    // Keep the output and exit status for a while: a shell that fails right
-    // away (a bad $SHELL, a profile that exits) can do so before the panel
-    // attaches, and the panel should still show what it printed and its code.
     if (terminal.detachedTimer) clearTimeout(terminal.detachedTimer)
     terminal.detachedTimer = setTimeout(() => forget(terminal), DETACHED_GRACE_MS)
   })
 
-  // Nobody is listening yet; do not keep a shell nobody ever attaches to.
   scheduleDetachedKill(terminal)
   return { id, cwd, shell: shell.file, pid: process_.pid }
 }
@@ -224,18 +190,12 @@ function scheduleDetachedKill(terminal: Terminal) {
   }, DETACHED_GRACE_MS)
 }
 
-/**
- * Follows a terminal's output. The listener first receives the scrollback so
- * a reconnecting panel can redraw. Returns a function that stops following;
- * when the last follower leaves, the terminal is killed after a grace period.
- */
 export function attachTerminal(id: string, listener: Listener): (() => void) | null {
   const terminal = registry.terminals.get(id)
   if (!terminal) return null
   const replay = () => {
     if (terminal.scrollback.length > 0) listener({ type: 'data', data: terminal.scrollback.join('') })
   }
-  // An exited terminal replays and keeps its expiry; nothing is left to follow.
   if (terminal.exit) {
     replay()
     listener(terminal.exit)
@@ -253,7 +213,6 @@ export function attachTerminal(id: string, listener: Listener): (() => void) | n
   }
 }
 
-/** Runs `action` on a live pty; false when the terminal is gone or its pty just closed. */
 function withLivePty(id: string, action: (pty: IPty) => void) {
   const terminal = registry.terminals.get(id)
   if (!terminal || terminal.exited) return false
@@ -279,7 +238,6 @@ function forget(terminal: Terminal) {
   if (registry.terminals.get(terminal.id) === terminal) registry.terminals.delete(terminal.id)
 }
 
-/** Removes the terminal and ends every output stream with its exit event. */
 function finish(terminal: Terminal, event: Extract<TerminalEvent, { type: 'exit' }>) {
   forget(terminal)
   emit(terminal, event)
@@ -289,18 +247,14 @@ function finish(terminal: Terminal, event: Extract<TerminalEvent, { type: 'exit'
 function signal(terminal: Terminal, name?: 'SIGHUP' | 'SIGTERM' | 'SIGKILL') {
   if (terminal.exited) return
   try {
-    // node-pty on Windows takes no signal; its kill ends the console's process tree.
+    // node-pty on Windows takes no signal. Its kill ends the console's process tree.
     terminal.pty.kill(process.platform === 'win32' ? undefined : name)
   } catch {
     // Already gone.
   }
 }
 
-/**
- * Hangs up the shell like a closed terminal window (the shell passes SIGHUP
- * on to its jobs), then escalates to SIGTERM and SIGKILL if it keeps running.
- * Output streams end right away so nothing waits on a stubborn process.
- */
+// SIGHUP is what a closed terminal window sends, and the shell passes it on to its jobs.
 export function killTerminal(id: string) {
   const terminal = registry.terminals.get(id)
   if (!terminal) return false
@@ -331,7 +285,6 @@ export function killAllTerminals() {
   }
 }
 
-/** Kills every terminal and waits, up to a limit, for their processes to exit. */
 async function stopAllTerminals() {
   killAllTerminals()
   const deadline = Date.now() + STOP_ALL_TIMEOUT_MS

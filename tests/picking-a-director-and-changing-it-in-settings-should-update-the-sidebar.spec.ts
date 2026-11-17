@@ -4,9 +4,6 @@ import { dirname, join } from 'node:path'
 import { expect, test, type Page } from '@playwright/test'
 import { createGitRepository, removeFolder, useTestHome } from './support/test-home'
 
-// The Director is a character picked in setup (Jota is offered first) and changed later in
-// settings. The left chat list pins that character, then project rows with letter
-// avatars and a room whose letters overlap.
 
 const folders: string[] = []
 

@@ -9,7 +9,6 @@ import { SERVER_TOKEN_ENV, SERVER_TOKEN_HEADER } from '../src/lib/server-token'
 const LOOPBACK = '127.0.0.1'
 const READY_TIMEOUT_MS = 30_000
 const STOP_TIMEOUT_MS = 5_000
-/** How long the server gets to end its child processes before it is killed. */
 const SHUTDOWN_TIMEOUT_MS = 4_000
 const START_ATTEMPTS = 3
 const PROBE_TIMEOUT_MS = 2_000
@@ -18,7 +17,6 @@ export type ServerHandle = {
   url: string
   token: string
   isRunning: () => boolean
-  /** Resolves with whether the server answered the shutdown message after running its shutdown handlers. */
   stop: () => Promise<{ acknowledged: boolean }>
 }
 
@@ -114,8 +112,6 @@ async function startOnFreePort(entry: string): Promise<Attempt> {
       isRunning: () => running,
       stop: async () => {
         if (!running) return { acknowledged: false }
-        // Let the server end its terminals first: on Windows `kill()` terminates
-        // the process outright and no exit hook in it runs.
         let acknowledged = false
         let onMessage: (message: { type?: string } | null) => void = () => {}
         const shutdownDone = new Promise<void>((resolve) => {
@@ -127,6 +123,7 @@ async function startOnFreePort(entry: string): Promise<Attempt> {
           child.on('message', onMessage)
         })
         let timer: ReturnType<typeof setTimeout> | undefined
+        // On Windows kill() terminates the process outright and no exit hook runs.
         child.postMessage({ type: SHUTDOWN_MESSAGE })
         await Promise.race([
           shutdownDone,
@@ -146,11 +143,6 @@ async function startOnFreePort(entry: string): Promise<Attempt> {
   }
 }
 
-/**
- * Starts the standalone Next server on a free loopback port behind a per-launch
- * token. Another process can take the port between the probe and the server's
- * listen, so an early exit is retried on a new port.
- */
 export async function startServer(): Promise<ServerHandle> {
   const entry = serverEntry()
   const triedPorts: number[] = []

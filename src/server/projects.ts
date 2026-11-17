@@ -5,8 +5,7 @@ import { promisify } from 'node:util'
 import { readSettings, updateSettings, type ProjectEntry } from './config'
 import { expandHome, samePath } from './paths'
 
-// A project is a name plus one folder that is a git repository. Projects live
-// in the settings file; removing one only forgets it and never touches files.
+// Removing a project only forgets it and never touches files.
 
 export type Project = ProjectEntry
 
@@ -23,12 +22,9 @@ export async function getProject(name: string): Promise<Project | undefined> {
   return (await listProjects()).find((project) => sameName(project.name, name))
 }
 
-// Names are used as folder names by later features, so they must be valid
-// file names on macOS and Windows. `@` starts a project mention in the chat.
 const INVALID_CHARACTERS = /[/\\:<>"|?*\u0000-\u001f]/g
 const RESERVED_NAMES = /^(con|prn|aux|nul|com[0-9]|lpt[0-9])(\..*)?$/i
 
-/** Checks the name and returns it trimmed. */
 function checkName(name: string) {
   const trimmed = name.trim()
   if (!trimmed) throw new ProjectError('Enter a project name.')
@@ -42,7 +38,6 @@ function checkName(name: string) {
   return trimmed
 }
 
-/** A valid name made from a folder name, for example `@scope` becomes `scope`. */
 function nameFromFolder(folder: string) {
   let name = folder.replace(INVALID_CHARACTERS, '-').replace(/^[@\s]+/, '')
   name = name.slice(0, MAX_NAME_LENGTH).replace(/[.\s]+$/, '').trim()
@@ -55,7 +50,6 @@ function sameName(a: string, b: string) {
   return a.toLowerCase() === b.toLowerCase()
 }
 
-/** Returns the real path of the repository's top-level folder, or throws a message for the user. */
 async function checkRepository(input: string) {
   const typed = input.trim()
   if (!typed) throw new ProjectError('Enter the path of a folder.')
@@ -78,14 +72,12 @@ async function checkRepository(input: string) {
     }
     throw new ProjectError(`${folder} is not a git repository. Run git init there, or choose another folder.`)
   }
-  // git may report another case or another slash. macOS and Windows still mean the same folder.
   if (!samePath(topLevel, real)) {
     throw new ProjectError(`${folder} is inside the git repository at ${topLevel}. Add that folder instead.`)
   }
   return topLevel
 }
 
-/** Names are unique ignoring case, since folders on macOS and Windows usually are. */
 function uniqueName(base: string, projects: Project[]) {
   const taken = new Set(projects.map((project) => project.name.toLowerCase()))
   if (!taken.has(base.toLowerCase())) return base
@@ -96,7 +88,6 @@ function uniqueName(base: string, projects: Project[]) {
   }
 }
 
-/** Adds a git repository. The name defaults to the folder name and is made unique. */
 export async function addProject(folder: string, name?: string): Promise<Project> {
   const path = await checkRepository(folder)
   const requested = name?.trim() ? checkName(name) : undefined
@@ -129,7 +120,6 @@ export async function renameProject(name: string, newName: string): Promise<Proj
   })
 }
 
-/** Forgets the project. Its folder and files stay as they are. */
 export async function removeProject(name: string): Promise<void> {
   await updateSettings((settings) => {
     settings.projects = settings.projects.filter((project) => !sameName(project.name, name))

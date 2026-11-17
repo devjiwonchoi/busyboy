@@ -3,12 +3,7 @@ import { serverExternalPackages } from './src/lib/server-external-packages'
 
 const isDev = process.env.NODE_ENV === 'development'
 
-// Pages may load only from the app's own origin. With Cache Components the
-// shell is prerendered at build time, and Next's inline bootstrap scripts in
-// that HTML cannot carry a per-request nonce (nonces need every page rendered
-// dynamically and do not work with Partial Prerendering), so scripts and
-// styles allow 'unsafe-inline'. Dev also needs eval for React's debugging and
-// a websocket for hot reload, both on the same origin.
+// Cache Components prerenders the shell, and Next cannot put a per-request nonce on those inline scripts.
 const contentSecurityPolicy = [
   "default-src 'self'",
   `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ''}`,
@@ -25,29 +20,18 @@ const contentSecurityPolicy = [
 
 const nextConfig: NextConfig = {
   cacheComponents: true,
-  // Image attachments travel in the server action body as base64. Four megabytes
-  // of image bytes is about five and a half of base64, so the default 1 MB cap
-  // would refuse an ordinary screenshot.
+  // Four megabytes of image bytes is about five and a half of base64, past the default 1 MB action body.
   experimental: { serverActions: { bodySizeLimit: '12mb' } },
   // Next warns when Cache Components is on without this; new apps should enable both.
   partialPrefetching: true,
-  // The desktop app runs .next/standalone/server.js inside Electron.
   output: 'standalone',
-  // The server reads files by paths built at run time, so file tracing cannot tell which
-  // project files it needs and copies some of everything into the standalone server:
-  // tests, an earlier packaged app under release/, and in a plain checkout the whole .git
-  // folder. None of it is used at run time, and the release build cannot sign it.
+  // File tracing copies a checkout's .git into the standalone server, and codesign cannot sign it.
   outputFileTracingExcludes: {
     '*': ['.git', '.git/**', 'tests/**', 'test-results/**', 'release/**', 'dist-electron/**', 'electron/**', 'scripts/**', '.github/**', '*.md'],
   },
-  // Packages that load files by computed paths, so packaging installs them
-  // whole instead of using traced files (see src/lib/server-external-packages.ts).
   serverExternalPackages,
-  // 'use cache' already defaults to memory. The cache for ISR, route handlers,
-  // fetch, and images defaults to files under .next, inside the packaged app,
-  // so it is kept in memory too (see src/lib/memory-cache-handler.mjs).
+  // The file cache writes under .next, inside the signed app bundle.
   cacheHandler: require.resolve('./src/lib/memory-cache-handler.mjs'),
-  // Without this, optimized images still go to the file cache under .next.
   images: { customCacheHandler: true },
   async headers() {
     return [

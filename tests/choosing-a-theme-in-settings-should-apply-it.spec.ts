@@ -17,7 +17,6 @@ test('choosing a theme in settings should apply it', async ({ page, context, bas
   await page.emulateMedia({ colorScheme: 'light' })
   await page.goto('/')
   const html = page.locator('html')
-  // Dark is the default, including when the device is light and nothing is saved yet.
   await expect(html).toHaveClass(/dark/)
   await expect(html).toHaveAttribute('data-theme', 'dark')
 

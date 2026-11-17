@@ -2,7 +2,6 @@ import Link from 'next/link'
 import { stepHref, type StepId } from '@/app/setup/steps'
 import { Button, buttonVariants } from '@/components/ui/button'
 
-/** Back and the step's forward actions, at the bottom of every step. */
 export function StepFooter({
   previous,
   hint,

@@ -5,9 +5,6 @@ import { join } from 'node:path'
 import { expect as baseExpect, test, type Page } from '@playwright/test'
 import { useProjectsHome } from './support/projects-home'
 
-// The harness config the test server reads (playwright.config.ts). A fake HTTP
-// MCP server stands in for Slack and notes. A fake stdio server, built with the
-// MCP SDK, stands in for a local connector.
 const port = process.env.PLAYWRIGHT_PORT ?? '3100'
 const harnessHome = join(tmpdir(), `busyboy-e2e-default-home-${port}`)
 const claudeConfig = join(harnessHome, 'claude-config')

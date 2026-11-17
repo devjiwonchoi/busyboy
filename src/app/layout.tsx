@@ -4,9 +4,7 @@ import { ThemeSync } from '@/components/theme/theme-sync'
 import { THEME_BOOT } from '@/lib/theme'
 import './globals.css'
 
-// No web font: `shadcn init` adds next/font/google, which downloads the font
-// during `next build` and fails offline builds. The theme uses the system
-// font stack instead.
+// next/font/google downloads the font during next build and fails offline.
 export const metadata: Metadata = {
   title: 'BusyBoy',
   description: 'Run coding tasks across projects with your installed agent CLIs.',

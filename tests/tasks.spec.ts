@@ -4,7 +4,6 @@ import { join } from 'node:path'
 import { expect, test, type APIRequestContext } from '@playwright/test'
 import { useProjectsHome } from './support/projects-home'
 
-// A request the task-agents script answers (tests/provider-scripts/task-agents.json).
 const REQUEST = 'Add a CONTRIBUTING.md that explains how to run the project.'
 
 type StoredTask = { id: string; project: string; title: string; worktree: string; branch: string; sessionId: string | null }
@@ -16,7 +15,6 @@ function storedTasks(home: string): StoredTask[] {
 
 const git = (cwd: string, ...args: string[]) => execFileSync('git', ['-C', cwd, ...args], { encoding: 'utf8' }).trim()
 
-/** Calls a busyboy MCP tool the way an agent does, with this context's data folder cookie. */
 async function callTool(request: APIRequestContext, name: string, args: Record<string, string>) {
   const response = await request.post('/api/mcp', {
     data: { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name, arguments: args } },
@@ -38,7 +36,6 @@ test('calling create_task should create a worktree and start a task agent', asyn
   expect(task.worktree).toBe(join(home, 'task-worktrees', 'web', task.id))
   expect(git(task.worktree, 'rev-parse', '--abbrev-ref', 'HEAD')).toBe(task.branch)
   expect(git(task.worktree, 'rev-parse', 'HEAD')).toBe(git(projects.web, 'rev-parse', 'HEAD'))
-  // The task agent started and its session id was saved for resume.
   await expect.poll(() => storedTasks(home)[0]?.sessionId).toMatch(/^scripted-/)
 })
 

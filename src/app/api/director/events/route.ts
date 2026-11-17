@@ -5,7 +5,6 @@ import { getManagerAt } from '@/server/managers'
 
 const HEARTBEAT_MS = 15_000
 
-/** Server-sent events for the Director chat, or the manager chat `?chat=<id>`: a `reset` with the whole chat, then every change. */
 export async function GET(request: Request) {
   await connection()
   const folder = await dataFolder()

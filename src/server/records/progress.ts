@@ -1,16 +1,10 @@
 import { localIsoDate } from './remember-record'
 
-// Progress against the aligned end state. `total` is how many end-state items
-// the contract names. `verified` is how many of those VERIFY.md records as
-// passing. The state is calm, decision (an open question only the owner can
-// answer), or at-risk (a verify failed, or a deadline has passed). at-risk wins.
 
 export type ProgressState = 'calm' | 'decision' | 'at-risk'
 
 export type TaskProgress = {
-  /** End-state items in the approved contract. Zero when the task is not aligned. */
   total: number
-  /** Those items VERIFY.md records as passing. */
   verified: number
   state: ProgressState
 }
@@ -61,7 +55,6 @@ function section(lines: Line[], name: string) {
   return end === -1 ? rest : rest.slice(0, end)
 }
 
-/** Numbered `## n ·` headings. `## E2E workflow` has no number, so it is not an item. */
 function numberedHeadings(lines: Line[]): Item[] {
   const items: Item[] = []
   for (const line of lines) {
@@ -96,11 +89,7 @@ function doneWhen(lines: Line[]): Item[] {
   return items
 }
 
-/**
- * End-state items. Numbered headings under `# End state` win. Otherwise the
- * `# Success criteria` headings, otherwise each `- Done when:` line.
- * `# Later` and `# Criteria` sit outside `# End state`, so they are not items.
- */
+// # Later and # Criteria sit outside # End state, so they are not items.
 export function endStateItems(align: string): Item[] {
   const lines = toLines(align)
   const endState = section(lines, 'end state')
@@ -115,7 +104,6 @@ function isDraft(text: string) {
   return DRAFT.test(text)
 }
 
-/** The contract: ALIGN.approved.md when that file exists, otherwise ALIGN.md. A draft is not aligned. */
 export function contractText(approved: string | null, align: string | null): string | null {
   if (approved !== null) return isDraft(approved) ? null : approved
   if (align !== null && !isDraft(align)) return align
@@ -169,11 +157,6 @@ function tableCells(text: string) {
 
 const isSeparator = (cells: string[]) => cells.every((cell) => /^:?-{3,}:?$/.test(cell))
 
-/**
- * Passing and failing results for the aligned items. The last result for an
- * item wins. A fail that names no item still counts as a failed verify.
- * A diagram node line (`- <node-id>: fail`) is a failed verify and not an item.
- */
 export function verifyOutcome(verify: string | null, items: Item[]): { verified: number; failed: boolean } {
   const results = new Map<number, Verdict>()
   let unmatchedFail = false
@@ -246,11 +229,6 @@ function structuredOwnerQuestion(line: string): boolean | null {
 
 const closedOrTwoWay = (text: string) => /\b(resolved|answered|closed|covered|done|two-way)\b/i.test(text)
 
-/**
- * An open question only the owner can answer. The incoming form is a `## Pending`
- * line `Root: … · one-way · open · …`. A two-way line, or one covered by rules.md,
- * is not. A bullet under that heading, or a `- Pending:` line, is the current form.
- */
 export function ownerDecision(status: string | null): boolean {
   if (!status) return false
   const lines = toLines(status)
@@ -274,7 +252,6 @@ export function ownerDecision(status: string | null): boolean {
   return false
 }
 
-/** A `Deadline: YYYY-MM-DD` line whose date is before today. Today has not passed. */
 export function deadlinePassed(texts: (string | null)[], today = localIsoDate()): boolean {
   for (const text of texts) {
     if (!text) continue

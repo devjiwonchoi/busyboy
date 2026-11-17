@@ -53,13 +53,11 @@ test('the composer should show only attach and send, and Settings should change 
       paddingLeft: Number.parseFloat(getComputedStyle(element).paddingLeft),
     }
   })
-  // The placeholder sits at the text's left padding, near the box's left edge, and at the top of the field.
   expect(placeholder.x - box.x).toBeGreaterThanOrEqual(0)
   expect(placeholder.x - box.x).toBeLessThanOrEqual(16)
   expect(Math.abs(placeholder.x - (field.x + placeholder.paddingLeft))).toBeLessThanOrEqual(1)
   expect(placeholder.y - field.y).toBeLessThanOrEqual(12)
 
-  // Attach and send share the row under the text, with send on the right.
   expect(plus.y).toBeGreaterThanOrEqual(field.y + field.height - 1)
   expect(Math.abs(plus.y - submit.y)).toBeLessThanOrEqual(4)
   expect(plus.x - box.x).toBeLessThanOrEqual(16)

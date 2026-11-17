@@ -11,7 +11,6 @@ const testPort = Number(process.env.PLAYWRIGHT_PORT ?? 3100)
 
 type Reply = { status: number; headers: Record<string, string | string[] | undefined>; body: string }
 
-/** Sends a raw HTTP request so the Host and Origin headers can be set freely. */
 function get(port: number, headers: Record<string, string>, path = '/', method = 'GET', body?: string): Promise<Reply> {
   return new Promise((resolve, reject) => {
     const req = httpRequest({ host: '127.0.0.1', port, path, method, headers }, (res) => {
@@ -36,10 +35,7 @@ function freePort(): Promise<number> {
   })
 }
 
-/**
- * Starts the built standalone server the way `pnpm start` does, outside test mode.
- * It gets its own data folder with setup complete, so it never reads the real ~/.busyboy.
- */
+// Outside test mode, with its own data folder, so it never reads the real ~/.busyboy.
 async function startServer(env: Record<string, string>): Promise<{ port: number; child: ChildProcess }> {
   const port = await freePort()
   const home = createTempFolder('server-home')
@@ -123,7 +119,6 @@ test('the MCP token should open only the MCP endpoint', async () => {
     expect((await call({})).status).toBe(403)
     expect((await call({ 'x-busyboy-mcp-token': 'wrong-token-value' })).status).toBe(403)
     expect((await call({ 'x-busyboy-mcp-token': mcpToken })).status).toBe(200)
-    // The MCP token is not the server token: every other route stays closed.
     expect((await get(port, { host, 'x-busyboy-mcp-token': mcpToken })).status).toBe(403)
     expect((await get(port, { host, 'x-busyboy-mcp-token': mcpToken }, '/api/companion-image')).status).toBe(403)
   } finally {
@@ -142,7 +137,6 @@ test("a task agent's MCP token should open only its own project's endpoint", asy
     const own = await call('/api/mcp?project=web')
     expect(own.status).toBe(200)
     expect(JSON.parse(own.body).result.tools.map(({ name }: { name: string }) => name)).not.toContain('create_task')
-    // Not the Director's endpoint, and not another project's.
     expect((await call('/api/mcp')).status).toBe(403)
     expect((await call('/api/mcp?project=api')).status).toBe(403)
   } finally {

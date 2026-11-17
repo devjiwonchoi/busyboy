@@ -1,15 +1,10 @@
 import type { TaskPhase } from '../records/task-phase'
 
-// The timeline card. Question, approval, and plan cards are opened by a task
-// agent (task-cards.ts). Progress, done, and pull-request cards are opened by
-// later work through presentCard; their fields are fixed here so that work
-// does not have to change this union.
 
 export const CARD_KINDS = ['plan', 'progress', 'done', 'pr', 'question', 'approval'] as const
 
 export type CardKind = (typeof CARD_KINDS)[number]
 
-/** Kinds written into transcripts before this model. Still readable, never written. */
 export const LEGACY_CARD_KINDS = ['choice', 'align'] as const
 
 export type StoredCardKind = CardKind | (typeof LEGACY_CARD_KINDS)[number]
@@ -24,7 +19,6 @@ export type CardOption = { label: string; description: string | undefined; recom
 
 export type CardQuestion = { question: string; header: string | undefined; options: CardOption[]; multiSelect: boolean }
 
-/** `chat`: the manager whose chat shows the card; null for the Director's. */
 type CardBase = {
   id: string
   taskId: string
@@ -32,7 +26,6 @@ type CardBase = {
   project: string
   taskTitle: string
   openedAt: string
-  /** Set when the card is not a task's, so the timeline does not offer Stop task. */
   stopsTask?: false
 }
 
@@ -40,7 +33,6 @@ export type ProgressStepState = 'done' | 'running' | 'pending'
 
 export type ProgressStep = { id: string; label: string; state: ProgressStepState }
 
-/** CI for one pull request row. `none` draws no dot. */
 export type PullRequestCheck = 'passing' | 'failing' | 'pending' | 'none'
 
 export type PullRequestRow = {
@@ -48,7 +40,6 @@ export type PullRequestRow = {
   title: string
   url: string
   check: PullRequestCheck
-  /** Review status, on the right of the row. */
   review: string
 }
 
@@ -57,35 +48,22 @@ export type TaskCard = CardBase &
     | { kind: 'question'; questions: CardQuestion[] }
     | {
         kind: 'approval'
-        /** Extra context, such as the full command. */
         detail: string | undefined
         questions: CardQuestion[]
       }
     | {
         kind: 'plan'
         title: string
-        /** Two or three sentences on the goal and end state. */
         summary: string
-        /** The whole ALIGN.md, shown in the details dialog. */
         plan: string
-        /**
-         * End-state lines. Empty until the plan follow-up fills them from ALIGN.md;
-         * the card shows `summary` until then.
-         */
         criteria: string[]
       }
     | { kind: 'progress'; title: string; steps: ProgressStep[]; phase: TaskPhase }
     | {
         kind: 'done'
         title: string
-        /**
-         * Share of agreed end-state items met (records on main). Null when this
-         * task has no agreed end state there.
-         */
         achievement: { met: number; agreed: number } | null
-        /** Where the task is. `pr` while its pull-request card is open. */
         phase: TaskPhase
-        /** Pull requests whose check is still pending. Zero when none are, or the phase is not `pr`. */
         pendingChecks: number
       }
     | { kind: 'pr'; title: string; note?: string; pulls: PullRequestRow[] }
@@ -107,12 +85,10 @@ const KIND_LABEL: Record<CardKind, string> = {
   approval: 'Approval',
 }
 
-/** The accessible name of an open card: "Plan from web · Add a footer". */
 export function cardGroupLabel(card: TaskCard) {
   return `${KIND_LABEL[card.kind]} from ${card.project} · ${card.taskTitle}`
 }
 
-/** The title stored on the transcript line when a card closes. */
 export function cardRecordTitle(card: TaskCard) {
   switch (card.kind) {
     case 'plan':
@@ -131,7 +107,6 @@ export function cardRecordTitle(card: TaskCard) {
   }
 }
 
-/** Letters the options of a question: A, B, C… */
 export function optionLetter(index: number) {
   return String.fromCharCode(65 + index)
 }

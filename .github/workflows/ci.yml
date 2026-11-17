@@ -1,8 +1,6 @@
 name: CI
 
 on:
-  # A PR targets main, or v2 and the v2-* branches stacked on it until v2 is merged into main.
-  # A stack whose base is a cursor/* branch gets the same checks.
   pull_request:
     branches: [main, v2, 'v2-*', 'cursor/**']
   push:
@@ -46,7 +44,6 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec playwright install --with-deps chromium
-      # Playwright's web server runs `pnpm build` and then serves the standalone build.
       - run: pnpm test:e2e
       - if: failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

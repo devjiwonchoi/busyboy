@@ -17,7 +17,6 @@ import { formatShortcut, isMacPlatform, ShortcutRegistryProvider, TOGGLE_PANEL_K
 
 type AppShellProps = {
   children: React.ReactNode
-  /** The chat list on the left. */
   chats: React.ReactNode
   panel: React.ReactNode
 }
@@ -37,10 +36,6 @@ export function AppShell(props: AppShellProps) {
 const PANEL_DEFAULT_SIZE = 288
 const PANEL_MIN_SIZE = 120
 
-/**
- * Keeps the collapsible bottom panel in step with the shell state: the toggle
- * and shortcut expand or collapse it, and dragging it shut closes it.
- */
 function useBottomPanel(panelOpen: boolean, setPanelOpen: (open: boolean) => void) {
   const panelRef = usePanelRef()
   const lastSize = useRef(PANEL_DEFAULT_SIZE)
@@ -58,8 +53,6 @@ function useBottomPanel(panelOpen: boolean, setPanelOpen: (open: boolean) => voi
   return { panelRef, onResize }
 }
 
-// The title bar is a layout region rather than a control, so it stays a plain
-// element around library parts.
 function ShellLayout({ children, chats, panel }: AppShellProps) {
   const { panelOpen, setPanelOpen, togglePanel } = useShellState()
   const bottomPanel = useBottomPanel(panelOpen, setPanelOpen)

@@ -3,8 +3,6 @@ import { join } from 'node:path'
 import { expect, test, type Page } from '@playwright/test'
 import { useProjectsHome } from './support/projects-home'
 
-// A 1x1 PNG. The harness receipt reports the decoded byte length, so the
-// journey can tell an image block from the base64 text.
 const PNG_BASE64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='
 const PNG_BYTES = Buffer.from(PNG_BASE64, 'base64')
 

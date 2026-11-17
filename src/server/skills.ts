@@ -5,21 +5,16 @@ import { isTestMode, dataFolder } from './config'
 import { getProject } from './projects'
 import type { ProviderId } from './runner/contract'
 
-// Skills the chat can offer. Claude Code reads `SKILL.md` folders from installed
-// plugins and `~/.claude/skills`. Codex reads the same kind of folder from
-// `~/.codex/skills`, `~/.agents/skills`, and a project's `.agents/skills`.
-// A skill is invoked as `/name` in a Claude message and `$name` in a Codex message.
+// A skill is invoked as /name in a Claude message and $name in a Codex message.
 
 export type ComposerSkill = {
   name: string
   description: string
-  /** The text a message sends so the signed-in harness runs the skill. */
   invocation: string
 }
 
 const SKILL_FILE = 'SKILL.md'
 
-/** Claude `/name`. Codex `$name` (a slash is not a Codex skill). */
 export function skillInvocation(provider: ProviderId | null, name: string) {
   return provider === 'codex' ? `$${name}` : `/${name}`
 }
@@ -38,7 +33,6 @@ function skillSlug(raw: string) {
     .slice(0, 64)
 }
 
-/** The `name` and `description` at the top of a SKILL.md file. */
 function frontmatter(text: string) {
   const result: { name?: string; description?: string } = {}
   if (!text.startsWith('---')) return result
@@ -68,7 +62,6 @@ function frontmatter(text: string) {
   return result
 }
 
-/** Skills whose folder sits directly in `root` (`root/<name>/SKILL.md`). */
 async function skillsIn(root: string) {
   const entries = await readdir(root, { withFileTypes: true }).catch(() => [])
   const found: { name: string; description: string }[] = []
@@ -84,7 +77,6 @@ async function skillsIn(root: string) {
   return found
 }
 
-/** A plugin install and a bare skills folder: `skills/<name>` and `<name>` itself. */
 async function skillsUnder(root: string) {
   const [nested, direct] = await Promise.all([skillsIn(join(root, 'skills')), skillsIn(root)])
   return [...nested, ...direct]
@@ -115,10 +107,6 @@ async function codexRoots() {
   return [join(codexHome, 'skills'), join(homedir(), '.agents', 'skills')]
 }
 
-/**
- * Skills the signed-in harnesses can run. `project` adds that repository's
- * own skill folders. Later copies of the same name are dropped.
- */
 export async function listSkills(project?: string): Promise<{ name: string; description: string }[]> {
   const projectPath = project ? (await getProject(project))?.path : undefined
   const roots = [

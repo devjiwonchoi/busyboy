@@ -4,7 +4,6 @@
 /* Tailwind does not scan node_modules; Streamdown's markup uses its classes. */
 @source '../../node_modules/streamdown/dist/*.js';
 
-/* Dark mode follows the `dark` class on <html>. Settings chooses system, dark, or light. */
 @custom-variant dark (&:is(.dark *));
 
 :root {
@@ -49,7 +48,6 @@
   --chart-4: oklch(0.371 0 0);
   --chart-5: oklch(0.269 0 0);
 
-  /* Status colors shared by the graph, cards, and badges. */
   --status-waiting: oklch(0.77 0.16 70);
   --status-running: oklch(0.62 0.19 255);
   --status-done: oklch(0.65 0.13 175);

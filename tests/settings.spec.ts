@@ -4,8 +4,6 @@ import { expect, test, type Page } from '@playwright/test'
 import { useProjectsHome } from './support/projects-home'
 import { removeFolder, useTestHome } from './support/test-home'
 
-// Settings is one page with a section list, opened from the title bar after setup. Every change
-// saves where it is made, with no steps to walk through.
 
 const folders: string[] = []
 
@@ -40,7 +38,6 @@ test('saving the always-ask list in settings should keep the page open and save 
   await openSettings(page)
   await page.getByRole('navigation', { name: 'Settings sections' }).getByRole('link', { name: 'Approvals' }).click()
   const list = page.getByRole('textbox', { name: 'Always-ask list' })
-  // Hydrating the controlled textarea sets its value again, which drops anything filled earlier.
   await expect.poll(() => list.evaluate((element) => Object.keys(element).some((key) => key.startsWith('__reactProps$')))).toBe(true)
 
   await list.fill('Bash(vercel deploy*)')

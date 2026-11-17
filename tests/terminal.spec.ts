@@ -5,13 +5,11 @@ import { expect, test, type Page } from '@playwright/test'
 import { useProjectsHome } from './support/projects-home'
 import { addRecordTask } from './support/record-tasks'
 
-// The journeys type POSIX shell commands into the pinned test shell (/bin/sh).
 test.skip(process.platform === 'win32', 'The terminal journeys need a POSIX shell.')
 
 let worktree: string
 
 test.beforeEach(() => {
-  // A folder of its own, passed with ?cwd= (honored only in test mode).
   worktree = realpathSync(mkdtempSync(join(tmpdir(), 'busyboy-terminal-')))
 })
 
@@ -26,7 +24,6 @@ async function openTerminal(page: Page) {
   return terminal
 }
 
-/** Opens the bottom panel on the page as it is and waits for the terminal. */
 async function pressOpen(page: Page) {
   const panel = page.getByRole('region', { name: 'Bottom panel' })
   await expect(panel).toBeHidden()
@@ -51,7 +48,6 @@ test('pressing Cmd+J should open a terminal in the task worktree', async ({ page
   await run(page, 'pwd')
   await expect(terminal.locator('.xterm-rows')).toContainText(worktree)
 
-  // Outside the terminal the shortcut closes the panel again.
   await page.getByRole('region', { name: 'Chat' }).click()
   await page.keyboard.press('ControlOrMeta+j')
   await expect(page.getByRole('region', { name: 'Bottom panel' })).toBeHidden()
@@ -59,7 +55,6 @@ test('pressing Cmd+J should open a terminal in the task worktree', async ({ page
 
 test('pressing Ctrl+` in the terminal should close the panel', async ({ page }) => {
   await openTerminal(page)
-  // Off macOS Ctrl+J belongs to the shell here, so Ctrl+` (Cmd+` on macOS) is the way out.
   await page.keyboard.press('ControlOrMeta+Backquote')
   await expect(page.getByRole('region', { name: 'Bottom panel' })).toBeHidden()
 })
@@ -73,7 +68,6 @@ test('typing a command should show its output', async ({ page }) => {
 test('exiting the shell should offer a new terminal', async ({ page }) => {
   const terminal = await openTerminal(page)
   await run(page, 'exit 3')
-  // Scoped to the panel: the chat's message box has a status region of its own.
   const status = page.getByRole('region', { name: 'Bottom panel' }).getByRole('status')
   await expect(status).toContainText('The shell exited with code 3.')
 
@@ -85,7 +79,6 @@ test('exiting the shell should offer a new terminal', async ({ page }) => {
   await expect(terminal.locator('.xterm-rows')).toContainText('again-2')
 })
 
-// ---- The selected task's worktree ----------------------------------------------
 
 const HEALTH = { id: 'add-health-endpoint-d4e5f6', title: 'Add a health endpoint' }
 const FOOTER = { id: 'show-health-footer-a1b2c3', title: 'Show API health in the footer' }
@@ -123,7 +116,6 @@ test('selecting another task should keep the open shell and offer a new terminal
 
   await web.click()
 
-  // The running shell stays where it is until the user asks for a new one.
   const panel = page.getByRole('region', { name: 'Bottom panel' })
   await expect(page.getByLabel('Task', { exact: true })).toHaveText('api · Add /health endpoint')
   await terminal.click()
@@ -148,7 +140,6 @@ test('pressing the selected task again should open the next terminal in the home
   await expect(toggle).toHaveAttribute('aria-pressed', 'false')
 
   await pressOpen(page)
-  // The server and the test run as the same user with the same HOME.
   await expect(page.getByLabel('Working directory')).toHaveText(homedir())
   await expect(page.getByLabel('Task', { exact: true })).toHaveCount(0)
 })
@@ -157,7 +148,6 @@ test('selecting a task in the chat should open the terminal in its worktree', as
   const { home } = await useProjectsHome(context, baseURL!, ['web', 'api'])
   await page.goto('/')
   await expect(page.getByRole('log', { name: 'Transcript' })).toHaveAttribute('data-connected', 'true')
-  // The recorded Director script (tests/provider-scripts/director-one-task.json) creates one task in web.
   await page.getByRole('textbox', { name: 'Message' }).fill('In @web, add a CONTRIBUTING.md that explains how to run the project.')
   await page.getByRole('button', { name: 'Send' }).click()
   const select = page.getByRole('group', { name: 'Tasks' }).getByRole('button', { name: 'Select web · Add CONTRIBUTING.md' })
@@ -175,7 +165,6 @@ test('starting a terminal in a folder that is not a task worktree should be refu
   const { home, projects } = await useProjectsHome(context, baseURL!, ['api'])
   const elsewhere = join(home, 'elsewhere')
   mkdirSync(elsewhere)
-  // A task list edited to point a task at another folder, before any task worktree exists.
   const file = join(home, 'task-list.json')
   const task = { id: HEALTH.id, project: 'api', title: HEALTH.title, worktree: elsewhere }
   writeFileSync(file, JSON.stringify({ version: 1, tasks: [task] }))
@@ -187,11 +176,9 @@ test('starting a terminal in a folder that is not a task worktree should be refu
 
   expect(await start()).toEqual(refused)
 
-  // A folder elsewhere, with real task worktrees next to it.
   await addRecordTask(home, { project: 'api', projectPath: projects.api, ...FOOTER })
   expect(await start()).toEqual(refused)
 
-  // A link in the task's own place that leads out of the worktrees folder.
   const link = join(home, 'task-worktrees', 'api', HEALTH.id)
   symlinkSync(elsewhere, link)
   writeFileSync(file, JSON.stringify({ version: 1, tasks: [{ ...task, worktree: link }] }))

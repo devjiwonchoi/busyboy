@@ -1,7 +1,6 @@
 import { expect as baseExpect, test, type APIRequestContext, type Page } from '@playwright/test'
 import { useProjectsHome } from './support/projects-home'
 
-// The two turns are tests/provider-scripts/work-cards.json. One check is still pending.
 const REQUEST = 'Build the site footer and report each step.'
 const SHIP = 'Ship the footer.'
 

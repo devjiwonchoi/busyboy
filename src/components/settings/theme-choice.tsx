@@ -12,7 +12,6 @@ const CHOICES: { id: ThemeName; title: string; description: string }[] = [
   { id: 'light', title: 'Light', description: 'A light background.' },
 ]
 
-/** System, dark, or light. Dark is the default. The class changes before the save returns. */
 export function ThemeChoice({ selected }: { selected: ThemeName }) {
   const [value, setValue] = useOptimistic(selected)
   const [, startTransition] = useTransition()

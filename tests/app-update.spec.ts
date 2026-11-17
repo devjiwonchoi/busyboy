@@ -1,7 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
 
-// The update button, driven through a stand-in for the desktop app's preload bridge
-// (electron/preload.ts). The download itself is electron-updater's and runs only in a release build.
 
 type FakeBridge = { ready: string | null; listeners: ((version: string) => void)[]; installs: number }
 

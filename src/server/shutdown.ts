@@ -17,20 +17,13 @@ const state: State = ((globalThis as Record<symbol, unknown>)[stateKey] as State
 }
 ;(globalThis as Record<symbol, unknown>)[stateKey] = state
 
-/**
- * Runs `handler` before the desktop app stops the server. On Windows the app
- * terminates the server process outright, so signal and exit hooks never run;
- * this is the one place that can still end child processes in time.
- */
+// On Windows the app terminates the server outright, so signal and exit hooks never run.
 export function onServerShutdown(handler: Handler) {
   state.handlers.add(handler)
   return () => state.handlers.delete(handler)
 }
 
-/**
- * Answers the desktop app's shutdown message. Only an Electron utility
- * process has `process.parentPort`; elsewhere this does nothing.
- */
+// Only an Electron utility process has process.parentPort.
 export function listenForShutdown() {
   const port = (process as { parentPort?: ParentPort }).parentPort
   if (!port || state.listening) return

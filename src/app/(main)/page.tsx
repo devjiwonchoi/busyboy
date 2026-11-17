@@ -9,7 +9,6 @@ import { listProjects } from '@/server/projects'
 
 type Search = Promise<{ manager?: string | string[] }>
 
-// Chat area slot: the Director's chat, or the chat of the manager `?manager=<id>`.
 export default function ChatPage({ searchParams }: { searchParams: Search }) {
   return (
     <Suspense>
@@ -36,13 +35,11 @@ async function Chat({ searchParams }: { searchParams: Search }) {
 
 async function ManagerChat({ id }: { id: string }) {
   const manager = await listManagers().then((managers) => managers.find((entry) => entry.id === id))
-  // A removed manager, or a link from before its project was removed.
   if (!manager) redirect('/')
   return (
     <DirectorChat
       key={manager.id}
       chat={manager.id}
-      // A manager works in one project, so `@` offers that project's files.
       projects={[]}
       managedProject={manager.project}
       persona={managerPersona(manager.name)}

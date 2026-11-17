@@ -24,7 +24,6 @@ for (const colorScheme of ['light', 'dark'] as const) {
     await expect(panel).toBeHidden()
 
     const appliedScheme = await page.evaluate(() => getComputedStyle(document.documentElement).colorScheme)
-    // Dark is the default, including when this device is light. System is what follows the device.
     expect(appliedScheme).toBe('dark')
 
     await page.keyboard.press('ControlOrMeta+j')

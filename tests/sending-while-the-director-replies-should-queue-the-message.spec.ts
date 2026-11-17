@@ -60,7 +60,6 @@ test('stopping the reply should clear the queued message', async ({ page, contex
   await expect(queued).toHaveCount(0)
   await expect(transcript.getByLabel('Reply', { exact: true })).toHaveAttribute('data-interrupted', 'true')
   await expect(transcript).toHaveAttribute('data-status', 'idle')
-  // The queued text was dropped, so its reply must not arrive after the turn ends.
   await page.waitForTimeout(1500)
   await expect(transcript.getByText('Hi!')).toHaveCount(0)
   await expect(transcript).toHaveAttribute('data-status', 'idle')

@@ -3,13 +3,10 @@ import { join } from 'node:path'
 import { expect as baseExpect, test, type APIRequestContext, type Page } from '@playwright/test'
 import { useProjectsHome } from './support/projects-home'
 
-// The agent writes ALIGN.md, including one flowchart and one fence Mermaid cannot parse.
-// The script is tests/provider-scripts/plan-mermaid.json.
 const REQUEST = 'Add a footer and show the end-to-end workflow.'
 
 const expect = baseExpect.configure({ timeout: 15_000 })
 
-// The app follows the operating system's color scheme. The diagram uses that theme.
 test.use({ colorScheme: 'dark' })
 
 async function createTask(request: APIRequestContext, home: string, title: string, text: string) {
@@ -43,7 +40,6 @@ test('viewing plan details should render a mermaid diagram and keep an invalid d
 
   const card = openCard(page, 'Plan from web · Add a footer workflow')
   await expect(card).toContainText('When done: a footer with the project name on every page.')
-  // The card is the summary. The diagram stays in the plan text.
   await expect(card.locator('svg')).toHaveCount(0)
   await card.getByRole('button', { name: 'View details' }).click()
 

@@ -24,10 +24,8 @@ let server: ServerHandle | null = null
 let mainWindow: BrowserWindow | null = null
 let background: Background | null = null
 let updates: Updates | null = null
-/** Set once a quit starts; until then closing the window only hides it. */
 let quitting = false
 
-// Permissions the app's own pages may use; everything else is denied.
 const ALLOWED_PERMISSIONS = new Set(['clipboard-sanitized-write'])
 
 function isAppOrigin(url: string | undefined) {
@@ -47,7 +45,6 @@ function createWindow(url: string, show: boolean) {
   const window = new BrowserWindow({
     width: 1280,
     height: 820,
-    // The chat list hides below 768px; stay above it.
     minWidth: 800,
     minHeight: 480,
     show: false,
@@ -68,9 +65,6 @@ function createWindow(url: string, show: boolean) {
     })
   }
 
-  // Keep the window and its frames on the app; open other links in the default browser.
-  // will-frame-navigate also fires for the main frame, which will-navigate
-  // already handles, so it only guards subframes; this opens a link once.
   const guard = (event: Electron.Event<{ url: string; isMainFrame: boolean }>) => {
     if (isAppOrigin(event.url)) return
     event.preventDefault()
@@ -86,7 +80,6 @@ function createWindow(url: string, show: boolean) {
     return { action: 'deny' }
   })
 
-  // Closing the window leaves BusyBoy and its agents working in the tray; only Quit ends them.
   window.on('close', (event) => {
     if (quitting) return
     event.preventDefault()
@@ -104,7 +97,6 @@ function createWindow(url: string, show: boolean) {
   return window
 }
 
-/** The main screen URL, opened on `target` when given. */
 function screenUrl(base: string, target?: FocusTarget) {
   if (!target) return base
   const url = new URL(base)
@@ -112,7 +104,6 @@ function screenUrl(base: string, target?: FocusTarget) {
   return url.toString()
 }
 
-/** Brings the one window to the front (making it again if it is gone) and shows `target` in it. */
 function openWindow(target?: FocusTarget) {
   if (!server || quitting) return
   if (!mainWindow || mainWindow.isDestroyed()) {
@@ -122,7 +113,6 @@ function openWindow(target?: FocusTarget) {
   if (mainWindow.isMinimized()) mainWindow.restore()
   mainWindow.show()
   mainWindow.focus()
-  // The open page shows it in place, so a draft in the composer is kept.
   if (target) mainWindow.webContents.send(FOCUS_CHANNEL, formatFocusTarget(target))
 }
 
@@ -150,7 +140,6 @@ async function runSelfCheck(outputPath: string) {
   const check = createSelfCheck()
   const removeDataFolder = createSelfCheckDataFolder()
   let finished = false
-  // Write the result and exit exactly once, whether the check ends, fails, or hangs.
   const finish = () => {
     if (finished) return
     finished = true
@@ -174,7 +163,6 @@ async function runSelfCheck(outputPath: string) {
     await authorizeWindowSession(server)
     const window = (mainWindow = createWindow(server.url, false))
     await check.recordPage(window)
-    // No notifications: the check may run on the user's own machine.
     background = startBackground(server, { open: openWindow, quit: () => {}, installUpdate: () => {}, windowInFront, notify: false })
     await check.recordBackground(background, window, server)
     await check.recordTerminal(server)
@@ -209,9 +197,6 @@ async function launch() {
       background?.updateReady(version)
       if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send(UPDATE_READY_CHANNEL, version)
     },
-    // The updater closes the windows before it quits; from here that close is a real one.
-    // The server stops first, as in any quit, and tasks that were working resume when
-    // the new version starts.
     beforeInstall: async () => {
       quitting = true
       updates?.stop()
@@ -219,18 +204,14 @@ async function launch() {
       background = null
       await server?.stop()
     },
-    // No server, no tray, and windows that no longer reopen: start the same version again
-    // rather than leave an app the user cannot reach. The update stays downloaded.
     installFailed: () => {
       app.relaunch()
       app.exit(0)
     },
   })
-  // Clicking the dock icon brings back a window that was closed to the tray.
   app.on('activate', () => openWindow())
 }
 
-/** The native folder picker behind the preload bridge. Only app pages may open it. */
 function registerFolderPicker() {
   ipcMain.handle(PICK_FOLDERS_CHANNEL, async (event) => {
     if (!isAppOrigin(event.senderFrame?.url)) return []
@@ -245,7 +226,6 @@ function registerFolderPicker() {
   })
 }
 
-/** A folder the page may open: an absolute directory, nothing else. */
 function localFolder(value: unknown) {
   if (typeof value !== 'string' || !isAbsolute(value) || value.includes('\0')) return null
   const folder = normalize(value)
@@ -265,7 +245,6 @@ function editorCommand() {
   return findExecutable('cursor') || findExecutable('code') || findExecutable('codium') || findExecutable('subl')
 }
 
-/** Opens a task worktree in an editor, or reveals it in the file manager. Only app pages may ask. */
 function registerWorktreeActions() {
   ipcMain.handle(OPEN_IN_EDITOR_CHANNEL, (event, folder: unknown) => {
     if (!isAppOrigin(event.senderFrame?.url)) return
@@ -291,7 +270,6 @@ function registerWorktreeActions() {
   })
 }
 
-/** The update actions behind the preload bridge. Only app pages may use them. */
 function registerUpdateActions() {
   ipcMain.handle(UPDATE_STATE_CHANNEL, (event) => (isAppOrigin(event.senderFrame?.url) ? (updates?.readyVersion() ?? null) : null))
   ipcMain.handle(INSTALL_UPDATE_CHANNEL, (event) => {
@@ -299,16 +277,12 @@ function registerUpdateActions() {
   })
 }
 
-/** When the server stop began, or 0 before a quit. */
 let stopping = 0
-/** Longer than the server's own stop budget (shutdown message, then kill), so one slow stop is not cut short. */
 const STALLED_SHUTDOWN_MS = 12_000
 
 function registerAppEvents() {
   app.on('second-instance', () => openWindow())
 
-  // BusyBoy stays in the tray with no window open. Registering the listener
-  // keeps Electron from quitting when the last window closes.
   app.on('window-all-closed', () => {})
 
   app.on('browser-window-focus', () => background?.windowFocused())
@@ -318,12 +292,9 @@ function registerAppEvents() {
     quitting = true
   })
 
-  // Stop the server, which stops every agent and terminal, before the app exits.
   app.on('will-quit', (event) => {
     if (!server?.isRunning()) return
     event.preventDefault()
-    // Like T3 Code: a quit asked for again after a stalled shutdown is the
-    // user's only way out short of force quitting, so it exits at once.
     if (stopping) {
       if (Date.now() - stopping >= STALLED_SHUTDOWN_MS) app.exit(0)
       return
@@ -332,12 +303,9 @@ function registerAppEvents() {
     updates?.stop()
     background?.stop()
     background = null
-    // Exit rather than quit again: a server that did not stop in time must
-    // not leave a hidden app with no tray icon and no window.
     void server.stop().finally(() => app.exit(0))
   })
 
-  // `kill` or Ctrl+C in the terminal that started the app quits it the same way as the menu.
   for (const signal of ['SIGINT', 'SIGTERM'] as const) process.on(signal, () => app.quit())
 
   void app.whenReady().then(async () => {
@@ -351,7 +319,6 @@ function registerAppEvents() {
     try {
       await launch()
     } catch (error) {
-      // Apps opened from Finder have no visible output, so say why on screen.
       console.error(error)
       dialog.showErrorBox('BusyBoy could not start', error instanceof Error ? error.message : String(error))
       await server?.stop()
@@ -360,7 +327,6 @@ function registerAppEvents() {
   })
 }
 
-// A second copy hands focus to the first one and exits without starting anything.
 if (selfCheckPath || app.requestSingleInstanceLock()) {
   registerAppEvents()
 } else {

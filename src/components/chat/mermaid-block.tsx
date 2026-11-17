@@ -30,10 +30,7 @@ function enqueue<T>(task: () => Promise<T>) {
   return result
 }
 
-/**
- * A theme token as hex. `getComputedStyle` returns `lab()` for an oklch token,
- * and Mermaid's parser rejects that, so the color is read back from a canvas.
- */
+// getComputedStyle returns lab() for an oklch token, and Mermaid rejects that.
 function tokenColor(name: string) {
   const probe = document.createElement('span')
   probe.style.color = `var(${name})`
@@ -54,12 +51,7 @@ function tokenColor(name: string) {
 
 let nextDiagram = 0
 
-/**
- * Draws one fenced diagram. The theme is the app's: dark when the document is
- * dark, using the same color tokens as the rest of the UI. Mermaid's own
- * defaults would be a light cream diagram with a shifted hue. Labels stay SVG
- * text, so the result is the diagram rather than HTML inside it.
- */
+// Mermaid's defaults are a light cream diagram. Labels stay SVG text so the result is the diagram.
 async function drawDiagram(source: string, dark: boolean) {
   const text = source.trim()
   if (!text) throw new Error('The diagram is empty.')
@@ -126,10 +118,6 @@ function MermaidSource({ code, isIncomplete }: { code: string; isIncomplete: boo
   )
 }
 
-/**
- * A mermaid fence. The library parses it and the SVG replaces the fence.
- * Anything Mermaid cannot parse stays the code block, with no error chrome.
- */
 export function MermaidBlock({ code, isIncomplete }: CustomRendererProps) {
   const [svg, setSvg] = useState<string | null>(null)
   const [failed, setFailed] = useState(false)

@@ -1,7 +1,6 @@
 import { connection, type NextRequest } from 'next/server'
 import { readCompanionImage } from '@/server/companions'
 
-// The user's own companion picture, read from the data folder on each request.
 export async function GET(request: NextRequest) {
   // Without this, Cache Components would prerender the response at build time.
   await connection()

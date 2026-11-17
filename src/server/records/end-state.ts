@@ -5,11 +5,6 @@ import { containsPath, pathKey } from '../paths'
 import { rememberRoot } from './remember-root'
 import { repositoryDirectory, repoSegments } from './record-path'
 
-// End state achievement: the share of agreed end-state items that were met.
-// Agreed items are the numbered `## n ·` lines under `# End state` in an
-// approved ALIGN.md. Whether each one was met is read from REMEMBER.md and
-// STATUS.md. All three are read from the jwn record root, the same place the
-// skills write them.
 const APPROVED = /^(?:\W*Version:[^·\n]*·)?\W*Status:\s*approved\b/im
 const FENCE = /^\s*(```|~~~)/
 const NUMBERED = /^(\d+[a-z]?)\s*·\s*(.+)$/i
@@ -24,14 +19,11 @@ export type TaskAchievement = {
   title: string
   met: number
   agreed: number
-  /** When the task's records last changed on main, ISO 8601. */
   at: string
-  /** STATUS.md on main says the task is done. */
   done: boolean
 }
 
 export type WeekAchievement = {
-  /** Monday of the week, UTC, YYYY-MM-DD. */
   start: string
   label: string
   met: number
@@ -48,7 +40,6 @@ const CACHE_KEY = Symbol.for('busyboy.end-state')
 const globalStore = globalThis as typeof globalThis & { [CACHE_KEY]?: Cache }
 const cache: Cache = (globalStore[CACHE_KEY] ??= new Map())
 
-/** Monday (UTC) of the week containing `iso`, as YYYY-MM-DD. */
 export function weekStart(iso: string) {
   const date = new Date(iso)
   if (Number.isNaN(date.getTime())) return null
@@ -60,7 +51,6 @@ export function weekStart(iso: string) {
 
 const weekFormat = new Intl.DateTimeFormat('en', { month: 'short', day: 'numeric', timeZone: 'UTC' })
 
-/** "Nov 9 – Nov 15" for a Monday from `weekStart`. */
 export function weekLabel(start: string) {
   const [year, month, day] = start.split('-').map(Number)
   const monday = new Date(Date.UTC(year, month - 1, day))
@@ -126,7 +116,6 @@ function tableRows(lines: Line[]) {
 
 type Item = { id: string; title: string }
 
-/** Numbered end-state items. Bullets count only when the section has no numbered headings. */
 function endStateItems(text: string): Item[] {
   const lines = section(toLines(text), 'end state')
   if (!lines) return []
@@ -160,11 +149,6 @@ function verdictOf(text: string): 'met' | 'unmet' | null {
   return null
 }
 
-/**
- * Results for end-state items. REMEMBER.md counts item tables and `End state n:`
- * bullets. STATUS.md counts those bullets too, and a table whose first column
- * is the end state — not the todo table, whose ids would collide.
- */
 function readVerdicts(remember: string | null, status: string | null) {
   const verdicts = new Map<string, 'met' | 'unmet'>()
   const set = (id: string | null, verdict: 'met' | 'unmet' | null) => {
@@ -306,7 +290,6 @@ async function projectTasks(dataFolder: string, project: string, repo: string): 
   return { tasks, key: `${pathKey(repoDir)}\n${stamps.join('\n')}` }
 }
 
-/** End state achievement for every project, from the records in the jwn record root. */
 export async function readEndStateAchievement(folder: string): Promise<AchievementResult> {
   let projects: { name: string; path: string }[]
   try {

@@ -1,11 +1,4 @@
-// Confirms a downloaded desktop bundle can load the standalone server.
-//
-//   node scripts/check-shared-bundle.mts
-//
-// macOS and Linux keep pnpm's symlinks; losing them leaves the server unable
-// to resolve its packages. Windows receives real directories with each
-// package's siblings nested inside it. Either layout has to resolve next's
-// own dependencies and Turbopack's hashed external aliases.
+// macOS keeps pnpm's symlinks; Windows gets real directories. Either layout has to resolve Turbopack's hashed aliases.
 import { existsSync, readdirSync, readFileSync, realpathSync } from 'node:fs'
 import { basename, isAbsolute, join, relative } from 'node:path'
 import { serverExternalPackages } from '../src/lib/server-external-packages.ts'

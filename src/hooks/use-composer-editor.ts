@@ -231,7 +231,6 @@ export function useComposerEditor({
       document.removeEventListener("selectionchange", onSelectionChange);
   }, []);
 
-  // Check each commit, including edits the controlled owner rejects without changing value.
   useLayoutEffect(() => {
     const input = inputRef.current;
     if (!input || composing.current) return;

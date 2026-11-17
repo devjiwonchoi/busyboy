@@ -6,8 +6,6 @@ import { expect, test, type APIRequestContext, type Page } from '@playwright/tes
 import { localIsoDate, readRecordsForWeek, TEST_REMEMBER_ROOT } from '@/server/records/remember-record'
 import { useProjectsHome } from './support/projects-home'
 
-// A task that plans, is approved, takes one follow-up, then finishes.
-// Script: tests/provider-scripts/task-remember.json.
 const REQUEST = 'Add a health check that reports whether the service is up.'
 const FOLLOW_UP = 'Also include the service version in the health response.'
 // Vendored from devjiwonchoi/skills@f179d4d3 skills/utils/retro/delegation-rate.
@@ -57,7 +55,6 @@ test('finishing a task should write REMEMBER.md the delegation rate accepts', as
   await openChat(page)
   await callTool(context.request, 'create_task', { project: 'web', title: 'Add a health check', request: REQUEST })
 
-  // Open cards sit in the timeline. The closed record uses a different name.
   const card = transcript(page).getByRole('group', { name: 'Plan from web · Add a health check' })
   await expect(card).toContainText('When done: a health check that reports whether the service is up')
   await card.getByRole('button', { name: 'Approve' }).click()
@@ -72,7 +69,6 @@ test('finishing a task should write REMEMBER.md the delegation rate accepts', as
   const task = storedTasks(home).find((item) => item.title === 'Add a health check')!
   const root = join(home, TEST_REMEMBER_ROOT)
   const recordPath = join(root, 'example', 'health-app', task.id, 'REMEMBER.md')
-  // A missing file throws, and poll only retries a failed match, so report absence as empty text.
   await expect.poll(() => {
     try {
       return readFileSync(recordPath, 'utf8')
@@ -81,7 +77,6 @@ test('finishing a task should write REMEMBER.md the delegation rate accepts', as
     }
   }, { timeout: 20_000 }).toContain('delegated: false')
 
-  // The same finished turn opens the done card from STATUS.md.
   await expect(transcript(page).getByRole('group', { name: 'Done from web · Add a health check' })).toContainText('Add a health check · Done')
 
   const text = readFileSync(recordPath, 'utf8')

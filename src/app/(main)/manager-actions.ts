@@ -8,11 +8,7 @@ import { releaseTasksOf } from '@/server/tasks'
 
 export type CreateManagerResult = { error?: string; id?: string; kind?: 'manager' | 'room' }
 
-/**
- * Creates a manager for a project BusyBoy knows (`project`) or for a git
- * repository added now (`folder`). A refusal the user can act on comes back as
- * `error`: a thrown error's message does not reach the window in a production build.
- */
+// A thrown server-action error's message does not reach the window in a production build.
 export async function createManagerAction(_previous: CreateManagerResult, form: FormData): Promise<CreateManagerResult> {
   const value = (key: string) => {
     const entry = form.get(key)
@@ -37,9 +33,7 @@ export async function createManagerAction(_previous: CreateManagerResult, form: 
   }
 }
 
-/** Removes a manager: its agent ends and its tasks show in the Director's chat from now on. */
 export async function removeManagerAction(id: string) {
-  // Server actions are public endpoints, so the argument is checked at runtime.
   if (typeof id !== 'string' || !id || id.length > 100) throw new Error('The manager must be a non-empty id.')
   const folder = await dataFolder()
   await removeManager(id)

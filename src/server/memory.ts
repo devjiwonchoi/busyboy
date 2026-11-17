@@ -5,37 +5,19 @@ import { dataFolder } from './config'
 import { pathKey } from './paths'
 import { getProject, listProjects } from './projects'
 
-// Memory is plain files that agents and the user both read and write.
-//
-//   <data>/memory/<id>.md                         a global core fact (one per file)
-//   <data>/memory/MEMORY.md                       index of the global facts, rewritten on every change
-//   <data>/memory/log/YYYY-MM-DD.md               the global work log, one line per entry
-//   <data>/memory/projects/<name>/...             the same three for one project
-//
-// Core facts are injected into every agent's prompt; the work log is only
-// searched. Scratch notes stay in the provider session and are never saved here.
-//
-// Project memory lives under `memory/projects/` rather than `<data>/projects/`
-// because the legacy app keeps the user's own repositories in `<data>/projects/`,
-// and busyboy never writes into folders it did not create.
+// Project memory is not under projects/, because the legacy app keeps repositories there.
 
 export const MEMORY_FOLDER = 'memory'
 const PROJECTS_FOLDER = 'projects'
 const LOG_FOLDER = 'log'
 const INDEX_FILE = 'MEMORY.md'
 
-/**
- * Most characters the memory section may add to a prompt, everything counted:
- * intro, headings, facts in full, facts listed by title, and the Director's
- * project lines. What does not fit is left to memory_search.
- */
+// What does not fit in the prompt is left to memory_search.
 const PROMPT_BUDGET = 12_000
-/** Kept back for each "N more" line, so those lines always fit too. */
 const MORE_LINE_RESERVE = 80
 
 export type MemoryFact = {
   id: string
-  /** null for a global fact. */
   project: string | null
   title: string
   text: string
@@ -48,7 +30,6 @@ export type MemorySearchHit = { project: string | null; source: string; text: st
 
 export class MemoryError extends Error {}
 
-// ---- Folders and validation ------------------------------------------------------
 
 function scopeFolder(folder: string, project: string | null) {
   return project === null ? join(folder, MEMORY_FOLDER) : join(folder, MEMORY_FOLDER, PROJECTS_FOLDER, project)
@@ -68,11 +49,7 @@ function checkId(id: string) {
   return id
 }
 
-/**
- * A new fact's id from its title. Titles that are not plain ASCII (Korean,
- * for one) keep only part of their text in the slug, so a short hash of the
- * whole title keeps two such facts from sharing an id.
- */
+// A non-ASCII title keeps only part of its slug, so a short hash stops two facts sharing an id.
 function idFromTitle(title: string) {
   const slug = title
     .toLowerCase()
@@ -87,20 +64,11 @@ function idFromTitle(title: string) {
   return slug ? `${slug}-${hash}` : `fact-${hash}`
 }
 
-/** A project folder name busyboy could have created (never a path). */
 function isProjectFolderName(name: string) {
   return Boolean(name) && !/[/\\]/.test(name) && name !== '.' && name !== '..'
 }
 
-/**
- * The project's stored name, or null for global memory. A project that was
- * renamed or removed keeps its memory folder; that folder can still be
- * edited, deleted from, and searched.
- *
- * Known limitation: memory is keyed by the project's name, not a stable id,
- * so after a rename the project's agents start from an empty memory folder
- * and the old facts sit under the old name until the user moves them.
- */
+// Memory is keyed by project name, so a rename starts an empty folder and leaves the old facts behind.
 async function resolveProject(folder: string, project: string | null | undefined) {
   const name = project?.trim().replace(/^@/, '')
   if (!name) return null
@@ -110,7 +78,6 @@ async function resolveProject(folder: string, project: string | null | undefined
   throw new MemoryError(`There is no project named "${name}".`)
 }
 
-/** Project names that have a memory folder, sorted. */
 async function projectsWithMemory(folder: string) {
   return (await readdir(join(folder, MEMORY_FOLDER, PROJECTS_FOLDER), { withFileTypes: true }).catch(() => []))
     .filter((entry) => entry.isDirectory() && isProjectFolderName(entry.name))
@@ -118,7 +85,6 @@ async function projectsWithMemory(folder: string) {
     .sort((a, b) => a.localeCompare(b))
 }
 
-// ---- Change listeners and write queue ----------------------------------------------
 
 const QUEUE_KEY = Symbol.for('busyboy.memory-writes')
 const globalStore = globalThis as typeof globalThis & {
@@ -126,7 +92,6 @@ const globalStore = globalThis as typeof globalThis & {
 }
 const writeQueues = (globalStore[QUEUE_KEY] ??= new Map())
 
-/** Runs memory writes for one data folder one at a time. */
 function queueWrite<T>(folder: string, write: () => Promise<T>): Promise<T> {
   const key = pathKey(folder)
   const next = (writeQueues.get(key) ?? Promise.resolve()).catch(() => {}).then(write)
@@ -140,7 +105,6 @@ async function writeAtomically(file: string, content: string) {
   await rename(temporary, file)
 }
 
-// ---- Facts -------------------------------------------------------------------------
 
 function factFile(fact: Pick<MemoryFact, 'title' | 'text'>) {
   return `# ${fact.title}\n\n${fact.text}\n`
@@ -169,7 +133,6 @@ async function readFacts(folder: string, project: string | null): Promise<Memory
   return facts.filter((fact) => fact !== null)
 }
 
-/** Rewrites the scope's index from its facts. Agents read it to see what exists without opening every file. */
 async function writeIndex(folder: string, project: string | null) {
   const facts = await readFacts(folder, project)
   const dir = scopeFolder(folder, project)
@@ -186,7 +149,6 @@ function oneLine(text: string, max: number) {
   return line.length > max ? `${line.slice(0, max - 1)}…` : line
 }
 
-/** Every scope with its facts: global first, then each project that has any. */
 export async function listMemoryAt(folder: string): Promise<MemoryScope[]> {
   const scopes: MemoryScope[] = [{ project: null, facts: await readFacts(folder, null) }]
   for (const project of await projectsWithMemory(folder)) {
@@ -202,11 +164,6 @@ export async function listMemory() {
 
 export type WriteFactInput = { title: string; text: string; project?: string | null; id?: string }
 
-/**
- * Saves a fact. With `id`, that fact is replaced. Without it, a fact with the
- * same title (ignoring case) is replaced, so an agent correcting a fact does
- * not add a twin; otherwise a new id is made from the title, never one in use.
- */
 export async function writeFact(input: WriteFactInput): Promise<MemoryFact> {
   const folder = await dataFolder()
   const title = oneLine(input.title, 120)
@@ -225,13 +182,11 @@ export async function writeFact(input: WriteFactInput): Promise<MemoryFact> {
   })
 }
 
-/** Inside the write queue, so two new facts never take the same id. */
 async function newOrMatchingId(folder: string, project: string | null, title: string) {
   const facts = await readFacts(folder, project)
   const same = facts.find((fact) => fact.title.toLowerCase() === title.toLowerCase())
   if (same) return same.id
-  // Every file name counts, ignoring case: macOS disks match `Foo.md` to `foo.md`,
-  // and a file readFacts skipped must not be overwritten either.
+  // macOS disks match Foo.md to foo.md, so every file name counts, ignoring case.
   const names = await readdir(scopeFolder(folder, project)).catch(() => [] as string[])
   const taken = new Set(names.map((name) => name.toLowerCase().replace(/\.md$/, '')))
   const base = idFromTitle(title)
@@ -240,7 +195,6 @@ async function newOrMatchingId(folder: string, project: string | null, title: st
   return id
 }
 
-/** Deletes a fact. Returns false when there was no such fact. */
 export async function forgetFact(input: { id: string; project?: string | null }): Promise<boolean> {
   const folder = await dataFolder()
   const project = await resolveProject(folder, input.project)
@@ -259,9 +213,7 @@ export async function forgetFact(input: { id: string; project?: string | null })
   })
 }
 
-// ---- Work log ------------------------------------------------------------------------
 
-/** Local date and time, since the user reads the log by their own calendar. */
 function localStamp(date: Date) {
   const pad = (value: number) => String(value).padStart(2, '0')
   return {
@@ -270,7 +222,6 @@ function localStamp(date: Date) {
   }
 }
 
-/** Adds one line to today's work log. */
 export async function appendLog(input: { text: string; project?: string | null }) {
   const folder = await dataFolder()
   const text = oneLine(input.text, 2000)
@@ -285,12 +236,7 @@ export async function appendLog(input: { text: string; project?: string | null }
   return `${day}.md`
 }
 
-// ---- Search --------------------------------------------------------------------------
 
-/**
- * Finds facts and log lines that contain every word of the query, ignoring case.
- * Newest log days come first.
- */
 export async function searchMemory(input: { query: string; project?: string | null; limit?: number }) {
   const folder = await dataFolder()
   const words = input.query.toLowerCase().split(/\s+/).filter(Boolean)
@@ -323,18 +269,8 @@ export async function searchMemory(input: { query: string; project?: string | nu
   return hits.slice(0, limit)
 }
 
-// ---- Prompt --------------------------------------------------------------------------
 
-/**
- * The memory section of an agent's prompt. It goes right after the agent's
- * instructions and before the conversation, and it only changes when a fact
- * changes, so the provider's prompt cache holds between turns.
- *
- * - `project`: a task agent's project; its facts follow the global ones.
- * - `projectIndexes`: the Director spans projects, so it gets each project's
- *   fact count. Not the titles: task agents write project facts
- *   after reading untrusted repository content, and the Director can create tasks.
- */
+// The section changes only when a fact changes, so the prompt cache holds. Project titles are omitted because task agents write them from the repo.
 export async function memoryPrompt(folder: string, options: { project?: string; projectIndexes?: boolean } = {}) {
   const sections: { heading: string; facts: MemoryFact[] }[] = [
     { heading: 'Global', facts: await readFacts(folder, null) },
@@ -355,7 +291,6 @@ export async function memoryPrompt(folder: string, options: { project?: string; 
   ].join('\n')
   if (sections.every(({ facts }) => facts.length === 0) && projects.length === 0) return `${intro}\n\nNothing is saved yet.`
 
-  // Every line counts against the budget, plus its newline.
   const groups = sections.length + (projects.length ? 1 : 0)
   let budget = PROMPT_BUDGET - intro.length - 1 - groups * MORE_LINE_RESERVE
   const body: string[] = []

@@ -10,12 +10,7 @@ function isExecutable(candidate: string) {
   }
 }
 
-/**
- * npm installs a Windows command as a `.cmd` batch shim, which Node cannot
- * spawn without a shell. The shim names its real target relative to `%dp0%`
- * (its own folder): a native `.exe` or a `.js` entry script, which the Agent SDK
- * runs with Node. Return that target.
- */
+// npm's Windows .cmd shim cannot be spawned without a shell. The real target is a .exe or a .js entry.
 function resolveWindowsShim(shim: string) {
   let text: string
   try {
@@ -24,7 +19,6 @@ function resolveWindowsShim(shim: string) {
     return undefined
   }
   for (const match of text.matchAll(/"%~?dp0%?\\?([^"%]+?\.(?:exe|js|cjs|mjs))"/gi)) {
-    // npm shims also probe for a bundled `node.exe`; that is the runtime, not the command.
     if (/(^|\\)node\.exe$/i.test(match[1]!)) continue
     const target = resolve(dirname(shim), match[1]!)
     if (isExecutable(target)) return target
@@ -51,10 +45,6 @@ function searchPath(name: string, pathValue: string) {
   return undefined
 }
 
-/**
- * Absolute path of an executable in this process's PATH. The desktop app puts
- * the login shell's PATH there before it starts the server (electron/shell-env.ts).
- */
 export function findExecutable(name: string): string | undefined {
   return searchPath(name, process.env.PATH ?? '')
 }

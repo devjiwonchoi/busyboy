@@ -4,8 +4,6 @@ import { expect, test, type APIRequestContext, type Page } from '@playwright/tes
 import { useProjectsHome } from './support/projects-home'
 import { createGitRepository } from './support/test-home'
 
-// Managers: a chat per project in the left chat list. Scripts: tests/provider-scripts/managers.json,
-// and task-agents.json for the task a manager creates.
 
 const QUESTION = 'What do you manage?'
 const WORK = 'Add a contributing guide.'
@@ -21,7 +19,6 @@ function storedTasks(home: string): StoredTask[] {
   return existsSync(file) ? (JSON.parse(readFileSync(file, 'utf8')) as { tasks: StoredTask[] }).tasks : []
 }
 
-/** Adds a manager to the settings file, as creating one in the window does. */
 function addManager(home: string, manager: StoredManager) {
   const file = join(home, 'app-settings.json')
   const settings = settingsOf(home)
@@ -102,7 +99,6 @@ test("a message to a manager should be answered in its chat and stay out of the 
 
   await send(page, QUESTION)
 
-  // The scripted reply is the prompt the manager was started with.
   await expect(transcript(page).getByLabel('Reply', { exact: true })).toContainText('You are Webby, the manager of the web project')
   await expect(transcript(page)).toHaveAttribute('data-status', 'idle')
   expect(readFileSync(join(home, 'managers', 'webby', 'transcript.jsonl'), 'utf8')).toContain(QUESTION)
@@ -155,7 +151,6 @@ test("a manager's tools should take no project and refuse another project's task
   expect(message.body.result.isError).toBe(true)
   expect(message.body.result.content[0].text).toContain('belongs to api, which you do not manage')
 
-  // A manager that does not exist is refused, not treated as the Director.
   expect((await rpc(context.request, 'nobody', 'tools/list')).status).toBe(403)
 })
 
@@ -176,7 +171,6 @@ test("removing a manager should take it off the list and show its tasks in the D
 
   await expect(chatList(page).getByText('No managers yet.')).toBeVisible()
   await expect(page.getByRole('textbox', { name: 'Message' })).toHaveAttribute('aria-placeholder', 'Message BusyBoy')
-  // Its task shows in the Director's chat from now on.
   await expect(transcript(page).getByRole('group', { name: 'Tasks' }).getByRole('listitem', { name: 'Contributing guide' })).toBeVisible()
   expect(storedTasks(home)).toMatchObject([{ title: 'Contributing guide', chat: null }])
   expect(settingsOf(home).managers).toEqual([])

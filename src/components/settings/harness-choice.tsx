@@ -8,13 +8,10 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 export type HarnessOption = {
   id: string
   name: string
-  /** Sign-in state, including when this harness is signed out. */
   status: string
-  /** A signed-out or missing harness stays visible and cannot be chosen. */
   selectable: boolean
 }
 
-/** The harness every chat uses. Saved the moment it is chosen. */
 export function HarnessChoice({ harnesses, selected }: { harnesses: HarnessOption[]; selected?: string }) {
   const [value, setValue] = useOptimistic(selected)
   const [, startTransition] = useTransition()

@@ -17,8 +17,6 @@ import {
   UNREADABLE,
 } from '@/server/runner/always-ask'
 
-// The always-ask matcher has no screen of its own, so its spellings are checked here, against a
-// task folder with a git branch, package scripts, Makefiles, and shell scripts to follow.
 let folder: string
 
 test.beforeAll(() => {
@@ -39,7 +37,6 @@ test.beforeAll(() => {
   writeFileSync(join(folder, 'ship', 'Makefile'), 'deploy:\n\t@vercel deploy --prod \\\n\t\t--yes\n')
   writeFileSync(join(folder, 'scripts', 'release.sh'), '#!/bin/sh\nset -e\ngh pr merge "$1" --squash\n')
   writeFileSync(join(folder, 'scripts', 'check.sh'), '#!/bin/sh\necho "checking $1"\nnode scripts/check.mjs\n')
-  // Workspace packages, a Makefile that includes others, a justfile, and a link that points outside.
   mkdirSync(join(folder, 'apps', 'web'), { recursive: true })
   writeFileSync(join(folder, 'apps', 'web', 'package.json'), JSON.stringify({ name: 'web', scripts: { test: 'vitest run', build: 'next build', deploy: 'vercel --prod' } }))
   mkdirSync(join(folder, 'inc'))
@@ -57,7 +54,6 @@ test.beforeAll(() => {
   execFileSync('git', ['init', '-q', '-b', 'busyboy/task'], { cwd: folder })
   execFileSync('git', ['config', 'alias.ship', 'push --force'], { cwd: folder })
   execFileSync('git', ['config', 'alias.st', 'status'], { cwd: folder })
-  // A clone whose task branch pushes to main through its upstream (push.default=upstream).
   const remote = join(folder, '..', 'remote.git')
   execFileSync('git', ['init', '-q', '--bare', '-b', 'main', remote])
   const clone = join(folder, 'upstream-main')
@@ -76,7 +72,6 @@ const bash = (command: string | string[]) => matchAlwaysAsk({ rules: DEFAULT_ALW
 const unreadable = expect.stringMatching(new RegExp(`^${UNREADABLE}: `))
 
 const ASKS: [string | string[], string | ReturnType<typeof expect.stringMatching>][] = [
-  // Force pushes and remote branch deletes.
   ['git push --force', FORCE_PUSH_RULE],
   ['/usr/bin/git push -f origin x', FORCE_PUSH_RULE],
   ['git -C ../x --no-pager push --force-with-lease', FORCE_PUSH_RULE],
@@ -121,7 +116,6 @@ const ASKS: [string | string[], string | ReturnType<typeof expect.stringMatching
   ['hub push -f', FORCE_PUSH_RULE],
   ['$"git" push --force', FORCE_PUSH_RULE],
   ["sh <<'EOF'\ngit push -f\nEOF", unreadable],
-  // Pushes to the default branch.
   ['git push origin HEAD:main', DEFAULT_BRANCH_RULE],
   ['git push origin master', DEFAULT_BRANCH_RULE],
   ['git push origin feature:refs/heads/main', DEFAULT_BRANCH_RULE],
@@ -130,7 +124,6 @@ const ASKS: [string | string[], string | ReturnType<typeof expect.stringMatching
   ['git push origin main>/dev/null', DEFAULT_BRANCH_RULE],
   ['git push origin {main,x}', FORCE_PUSH_RULE],
   ['git subtree push --prefix=x origin main', DEFAULT_BRANCH_RULE],
-  // Wrappers and their options.
   ['nice -n 10 gh pr merge 1', 'Bash(gh pr merge*)'],
   ['sudo -u me git push -f', FORCE_PUSH_RULE],
   ['timeout -s KILL 60 git push --force', FORCE_PUSH_RULE],
@@ -139,7 +132,6 @@ const ASKS: [string | string[], string | ReturnType<typeof expect.stringMatching
   ['env -u FOO gh pr merge 1', 'Bash(gh pr merge*)'],
   ['exec -a foo gh pr merge 1', 'Bash(gh pr merge*)'],
   ['nice --weird 3 gh pr merge 1', unreadable],
-  // Commands built or read when they run.
   ['$(echo gh) pr merge 1', unreadable],
   ['`which git` push', unreadable],
   ['eval "gh pr merge 1"', 'Bash(gh pr merge*)'],
@@ -197,7 +189,6 @@ const ASKS: [string | string[], string | ReturnType<typeof expect.stringMatching
   ['export PATH=/tmp/evil:$PATH; ls', unreadable],
   ["alias p='git push -f'; p", FORCE_PUSH_RULE],
   ['bash -c "$SCRIPT"', unreadable],
-  // Scripts, Makefiles, and package scripts that are followed.
   ['pnpm run release', FORCE_PUSH_RULE],
   ['pnpm ship', FORCE_PUSH_RULE],
   ['npm run deploy', DEPLOY_RULE],
@@ -219,7 +210,6 @@ const ASKS: [string | string[], string | ReturnType<typeof expect.stringMatching
   ['./scripts/release.sh 12', 'Bash(gh pr merge*)'],
   ['bash scripts/release.sh 12', 'Bash(gh pr merge*)'],
   ['source scripts/release.sh', 'Bash(gh pr merge*)'],
-  // Deploys and publishes.
   ['gh pr merge 12 --squash', 'Bash(gh pr merge*)'],
   ['gh -R owner/repo pr merge 12', 'Bash(gh * pr merge*)'],
   ['gh api -X PUT repos/o/r/pulls/1/merge', 'Bash(gh api *merge*)'],
@@ -238,7 +228,6 @@ const ASKS: [string | string[], string | ReturnType<typeof expect.stringMatching
   ['helm upgrade web ./chart', DEPLOY_RULE],
   ['aws s3 sync dist s3://site --delete', DEPLOY_RULE],
   ['serverless deploy', DEPLOY_RULE],
-  // Deletes outside the task folder.
   ['rm -rf ../other-project', DELETE_OUTSIDE_RULE],
   ['cd .. && rm -rf other-project', DELETE_OUTSIDE_RULE],
   ['rm -rf $HOME', DELETE_OUTSIDE_RULE],
@@ -259,7 +248,6 @@ const ASKS: [string | string[], string | ReturnType<typeof expect.stringMatching
   ['rm -rf outside-link/x', DELETE_OUTSIDE_RULE],
   ['</dev/null rm -rf ~/x', DELETE_OUTSIDE_RULE],
   ['gh repo sync owner/repo --force', 'Bash(gh repo sync*--force*)'],
-  // A command line passed as the only element of an argv, and a patch that deletes outside.
   [['git push --force origin HEAD'], FORCE_PUSH_RULE],
   ["apply_patch <<'EOF'\n*** Begin Patch\n*** Delete File: ../other-project/notes.txt\n*** End Patch\nEOF", DELETE_OUTSIDE_RULE],
   [`apply_patch '{"command":["apply_patch","*** Begin Patch\\n*** Delete File: ../other\\n*** End Patch"]}'`, DELETE_OUTSIDE_RULE],
@@ -307,7 +295,6 @@ const RUNS = [
   'terraform plan',
   'kubectl get pods',
   'aws s3 ls s3://site',
-  // Inline code that only waits, computes, prints, or reads.
   `for i in $(seq 1 45); do grep -q -i -E "Local:|ready in|listening" /tmp/dev.log && break; perl -e 'select(undef,undef,undef,2)'; done; grep -v "^$" /tmp/dev.log | tail -25`,
   `python3 -c "import time; time.sleep(2)"`,
   `curl -s localhost:3000/api/health | python3 -c "import json, sys; print(json.load(sys.stdin)['status'])"`,
@@ -320,14 +307,11 @@ const RUNS = [
   `perl -0777 -ne 'print length' notes.txt`,
   `perl -pi -e 's/old/new/' src/fetch.ts`,
   'node scripts/gen.mjs -p 3000',
-  // A task agent edits files in its own folder, with or without an interpreter.
   `perl -pi -e 's/old/new/' src/app.ts`,
-  // Words that only look dangerous: inside a string, a comment, or a longer name.
   `node -e "console.log('do not fetch the request or delete it')"`,
   `node -e "const requestId = 'filesystem'; console.log(requestId)"`,
   `node -e "/* fetch('https://example.com') */ console.log(1)"`,
   `python3 -c "# os.system('git push -f')\nprint(1)"`,
-  // A patch is not a shell script, so a force push written in the diff is not one.
   "apply_patch <<'EOF'\n*** Begin Patch\n*** Update File: src/app.ts\n@@\n-old\n+git push --force origin main\n*** End Patch\nEOF",
   "apply_patch <<'EOF'\n*** Begin Patch\n*** Delete File: dist/old.js\n*** End Patch\nEOF",
 ]
@@ -379,7 +363,6 @@ test('a subagent running inline code should ask only when the code could change 
     `python3 -c "open('notes.txt', 'w').write('x')"`,
     `node -e "require('fs').writeFileSync('notes.txt', 'x')"`,
     'node scripts/check.mjs',
-    // An option of the script's own is not code for the interpreter.
     'node scripts/gen.mjs -p 3000',
     'python3 scripts/gen.py -c config.yml',
     'bun install -p',
@@ -453,7 +436,6 @@ test("reading BusyBoy's own files through a native path should ask", () => {
   try {
     const secret = join(data, 'app-settings.json')
     writeFileSync(secret, '{}')
-    // Quotes keep backslashes, which is how a shell has to write a Windows path.
     expect(matchAlwaysAsk({ rules: [], toolName: 'Bash', input: { command: `cat '${secret}'` }, folder, privateFolder: data })).toBe(BUSYBOY_FILES_RULE)
   } finally {
     rmSync(data, { recursive: true, force: true })

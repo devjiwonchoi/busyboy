@@ -4,12 +4,6 @@ import type { ReactNode } from 'react'
 import { cn } from '@/lib/utils'
 import { Card, CardAction, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 
-/**
- * The timeline card: a container, a header, a body, and a bottom-right action
- * row, composed from the Card primitive. Omit a part the card does not need.
- * `hoverActions` sits on the corner while the pointer is over the card; the
- * reply follow-up fills it and does not add a control to each kind.
- */
 export function CardShell({
   label,
   replying = false,
@@ -19,7 +13,6 @@ export function CardShell({
 }: {
   label: string
   replying?: boolean
-  /** `line` is a single row, for a done card. `panel` is the full card. */
   variant?: 'panel' | 'line'
   hoverActions?: ReactNode
   children: ReactNode
@@ -33,7 +26,6 @@ export function CardShell({
       size={variant === 'line' ? 'sm' : 'default'}
       className={cn(
         'group/timeline-card relative w-full',
-        // The done line is one row. The header has to fill it so View plan sits on the right.
         variant === 'line' && 'flex-row items-center [&_[data-slot=card-header]]:w-full',
         replying && 'ring-ring/50 ring-2',
       )}
@@ -64,7 +56,6 @@ export function CardShellBody({ children }: { children: ReactNode }) {
   return <CardContent className="space-y-2">{children}</CardContent>
 }
 
-/** Actions sit on the bottom right, under a divider. */
 export function CardShellActions({ children }: { children: ReactNode }) {
   return <CardFooter className="justify-end gap-1 border-t">{children}</CardFooter>
 }

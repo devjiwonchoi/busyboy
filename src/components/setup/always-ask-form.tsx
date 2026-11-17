@@ -7,13 +7,7 @@ import { Textarea } from '@/components/ui/textarea'
 
 export type AlwaysAskResult = { error?: string; saved?: boolean }
 
-/**
- * The always-ask list, one rule per line. The text is kept in state because a
- * form action resets its fields, which would throw away the user's edits when
- * a line is refused. In setup a button outside the form submits it through `id`
- * (Continue, which saves and goes on). Given `restore`, the form has its own
- * Restore defaults and Save buttons and stays on the page, as in settings.
- */
+// A form action resets its fields, which would throw away edits when a line is refused.
 export function AlwaysAskForm({
   id,
   rules,
@@ -23,11 +17,9 @@ export function AlwaysAskForm({
   id: string
   rules: string[]
   save: (previous: AlwaysAskResult, form: FormData) => Promise<AlwaysAskResult>
-  /** The default list and the action that goes back to it. */
   restore?: { rules: string[]; action: () => Promise<void> }
 }) {
   const [text, setText] = useState(rules.join('\n'))
-  // What the last Save or Restore did, cleared by the next edit so it never describes unsaved text.
   const [note, setNote] = useState<string | null>(null)
   const [state, action, saving] = useActionState<AlwaysAskResult, FormData>(async (previous, form) => {
     const result = await save(previous, form)

@@ -1,7 +1,3 @@
-// Rewrites a pnpm-lock.yaml so its root importer lists only `keep`.
-// The package snapshots stay, so the kept packages still install at the locked versions.
-// The caller updates package.json to the same set; `pnpm install --frozen-lockfile` then
-// installs that set instead of the whole app.
 export function trimLockfile(lockText: string, keep: ReadonlySet<string>): string {
   const newline = lockText.endsWith('\r\n') ? '\r\n' : '\n'
   const lines = lockText.split(/\r?\n/)

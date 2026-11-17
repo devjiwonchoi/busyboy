@@ -3,10 +3,6 @@ import { join } from 'node:path'
 import type { BrowserContext } from '@playwright/test'
 import { createGitRepository, useTestHome } from './test-home'
 
-/**
- * Gives this browser context its own data folder with setup complete and one
- * git repository per project name, so the main screen opens with those projects.
- */
 export async function useProjectsHome(
   context: BrowserContext,
   baseURL: string,

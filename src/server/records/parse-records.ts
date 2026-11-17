@@ -1,19 +1,12 @@
-// Reads the Markdown records a task agent's jwn skills keep in the record
-// root at `<owner>/<name>/<task>/`. The skills fix only a few headings and labels, so this reads
-// by heading and line, skips fenced code, and reports anything it cannot read
-// as a RecordError instead of guessing: the graph then shows an error node, so
-// a record it misreads never turns into a quietly wrong status.
+// A record that cannot be read is an error node, so a misread never becomes a quietly wrong status.
 
 export const RECORD_FILES = ['ALIGN.md', 'STATUS.md', 'VERIFY.md', 'REVIEW.md'] as const
 export type RecordFile = (typeof RECORD_FILES)[number]
 
-/** The text of each record file that exists, or the error reading it. */
 export type RecordTexts = Partial<Record<RecordFile, string | { error: string }>>
 
-/** `.jwn` when the record folder itself cannot be found. */
 export type RecordError = { file: RecordFile | '.jwn'; message: string }
 
-/** What STATUS.md says about the whole task. */
 export type RecordState = 'running' | 'needs-you' | 'done' | 'stopped' | 'planning'
 
 export type TodoResult = 'running' | 'needs-you' | 'done' | 'stopped' | 'not-started'
@@ -55,7 +48,6 @@ function headingOf(line: Line) {
   return match ? { level: match[1].length, title: match[2] } : null
 }
 
-/** The lines under the first level-1 heading named `name`, up to the next level-1 heading. */
 function section(lines: Line[], name: string) {
   const start = lines.findIndex((line) => {
     const heading = headingOf(line)
@@ -92,11 +84,6 @@ function allMatches(lines: Line[], pattern: RegExp) {
   return lines.flatMap((line) => (line.inFence ? [] : [pattern.exec(line.text)?.[1]])).filter((value) => value !== undefined)
 }
 
-/**
- * Every table data row with the header of its table. A row is a header when a
- * separator row follows it; rows that continue a table after a paragraph keep
- * the last header, so they are still read instead of skipped.
- */
 function tableRows(lines: Line[]) {
   const rows: { header: string[]; cells: string[] }[] = []
   let header: string[] | null = null
@@ -111,16 +98,10 @@ function tableRows(lines: Line[]) {
   return rows
 }
 
-// ---- ALIGN.md ---------------------------------------------------------------
 
-/** A todo heading in the align template: `## 2a · Title        (subagent)`. */
 const TODO_HEADING = /^(\d+[a-z]?)\s*·\s*(.+?)(?:\s{2,}\(.*\))?\s*$/i
 
-/**
- * `Builds on: <project>/<task>[, ...]` is busyboy's own line (the skills have
- * none): a task that continues another project's task names it here, and the
- * graph draws a dashed edge between the two.
- */
+// Builds on: is BusyBoy's own line. The skills have none. The graph draws a dashed edge from it.
 const BUILDS_ON = /^\s*(?:-\s*)?Builds on:\s*(.+)$/i
 
 function parseAlign(text: string, errors: RecordError[]) {
@@ -156,10 +137,7 @@ function parseAlign(text: string, errors: RecordError[]) {
   return { title, approved, todos, buildsOn }
 }
 
-// ---- STATUS.md --------------------------------------------------------------
 
-// The recording rules ask an agent to end each turn by saying whether it is
-// continuing, waiting on something, needing the user, or done.
 const STATE_PATTERNS: [RegExp, RecordState][] = [
   [/^(done|complete|completed|finished|merged|shipped)\b/i, 'done'],
   [/^(needs? (the )?user|needing (the )?user|needs you|waiting (on|for) (the )?user|asking)\b/i, 'needs-you'],
@@ -176,7 +154,6 @@ const RESULT_PATTERNS: [RegExp, TodoResult][] = [
   [/^(not started|pending|todo|waits on|waiting|blocked)\b|^[\s—-]*$/i, 'not-started'],
 ]
 
-/** Todo ids at the start of a table cell or bullet: `2`, `0 + 1 scaffold`, `2a, 2b`. */
 function todoIds(text: string) {
   const match = /^\s*(?:todos?\s+)?((?:\d+[a-z]?)(?:\s*[+,&]\s*\d+[a-z]?)*)\b/i.exec(text.replace(/[*`]/g, ''))
   return match ? match[1].split(/\s*[+,&]\s*/).map((id) => id.toLowerCase()) : []
@@ -185,7 +162,6 @@ function todoIds(text: string) {
 function parseStatus(text: string, errors: RecordError[]) {
   const lines = toLines(text)
   const stage = firstMatch(lines, /^\s*(?:-\s*)?Stage:\s*(.+?)\s*$/i)?.[1] ?? null
-  // The record keeps one current state; several different ones (history left above) cannot be told apart.
   const states = [...new Set(allMatches(lines, /^\s*(?:-\s*)?State:\s*(.+?)\s*$/i))]
   if (states.length > 1) errors.push({ file: 'STATUS.md', message: `There are ${states.length} different 'State:' lines; keep only the current one.` })
   const stateText = states.length === 1 ? states[0] : null
@@ -197,7 +173,6 @@ function parseStatus(text: string, errors: RecordError[]) {
     errors.push({ file: 'STATUS.md', message: "There is no 'State:' or 'Stage:' line." })
   }
 
-  // Todo results: a table with a todo column and a result column, or `- Todo 2: done` bullets.
   const results = new Map<string, string>()
   const record = (id: string, result: string) => {
     const known = results.get(id)
@@ -227,9 +202,7 @@ function todoResult(id: string, text: string | undefined, errors: RecordError[])
   return 'not-started'
 }
 
-// ---- VERIFY.md and REVIEW.md -------------------------------------------------
 
-/** Counts criterion rows in VERIFY.md tables by their result column. */
 function parseVerify(text: string) {
   const checks = { passed: 0, failed: 0, pending: 0 }
   for (const { header, cells } of tableRows(toLines(text))) {
@@ -243,15 +216,12 @@ function parseVerify(text: string) {
   return checks
 }
 
-// A finding's status is read by its first word, so "reopened (was resolved)"
-// or "open; partially fixed" stays open. Bullets have no status cell, so any
-// open word in the line keeps them open.
+// A finding's status is its first word, so "reopened (was resolved)" stays open.
 const OPEN_STATUS = /^\W*(open|reopened|new|unresolved|not)\b/i
 const CLOSED_STATUS = /^\W*(resolved|fixed|dismissed|accepted|won['’]?t fix|dropped|closed)\b/i
 const OPEN_WORD = /\b(open|reopened|unresolved|not (yet )?resolved|partially)\b/i
 const CLOSED_WORD = /\b(resolved|fixed|dismissed|accepted|won['’]?t fix|dropped|closed)\b/i
 
-/** Counts review findings (`R1`-style ids in a table or bullets) not marked resolved or dismissed. */
 function parseReview(text: string, errors: RecordError[]) {
   const open = new Map<string, boolean>()
   const lines = toLines(text)
@@ -275,7 +245,6 @@ function parseReview(text: string, errors: RecordError[]) {
   return [...open.values()].filter(Boolean).length
 }
 
-// ---- One task's records ------------------------------------------------------
 
 function textOf(texts: RecordTexts, file: RecordFile, errors: RecordError[]) {
   const value = texts[file]
@@ -297,7 +266,6 @@ export function parseRecords(texts: RecordTexts): ParsedRecords {
     const resultText = status?.results.get(todo.id)
     return { ...todo, result: todoResult(todo.id, resultText, errors), resultText: resultText ?? null }
   })
-  // A finished task whose todos all read as not started means the results are written in a form this cannot read.
   if (status?.state === 'done' && todos.length > 0 && todos.every(({ resultText }) => resultText === null)) {
     errors.push({ file: 'STATUS.md', message: "The task is done but no todo has a result; use a '| Todo | Result |' table." })
   }
@@ -306,7 +274,6 @@ export function parseRecords(texts: RecordTexts): ParsedRecords {
     title: align?.title ?? null,
     approved: align?.approved ?? false,
     stage: status?.stage ?? null,
-    // A STATUS.md with only a stage still tells the graph the task is under way.
     state: status ? (status.state ?? (status.stage ? 'running' : null)) : null,
     stateText: status?.stateText ?? null,
     todos,

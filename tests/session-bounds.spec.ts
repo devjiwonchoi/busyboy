@@ -12,11 +12,6 @@ const MAX_TRANSCRIPT_BYTES = 20 * 1024 * 1024
 const ADD_LINE = 'Add one more line to the transcript.'
 const REMEMBER = 'What word did I ask you to remember?'
 
-/**
- * Writes a transcript that is already past the rotation limit, plus the provider
- * session the resumed chat continues. The padding line is not a chat entry, so
- * the screen stays small while the file is large.
- */
 function seedFullTranscript(home: string, sessionId: string) {
   const folder = join(home, 'director')
   mkdirSync(folder, { recursive: true })
@@ -43,7 +38,6 @@ function transcriptNames(home: string) {
     .sort()
 }
 
-/** The new line is on disk and the provider session is saved with no turn left open. */
 function transcriptSettled(active: string, stateFile: string, sessionId: string) {
   try {
     const text = readFileSync(active, 'utf8')
@@ -77,7 +71,6 @@ test('filling the transcript past 20MB should rotate it and restoring the sessio
     const archived = join(home, 'director', 'transcript.1.jsonl')
     const active = join(home, 'director', 'transcript.jsonl')
     const stateFile = join(home, 'director', 'state.json')
-    // The reply is shown before its write finishes, and the session file is written after that.
     await expect.poll(() => transcriptSettled(active, stateFile, sessionId)).toBe(true)
 
     expect(transcriptNames(home)).toEqual(['transcript.1.jsonl', 'transcript.jsonl'])

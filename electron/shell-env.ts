@@ -10,11 +10,7 @@ export type ShellPathResult = {
   error?: string
 }
 
-/**
- * Runs the login shell in its own process group. On timeout the whole group is
- * killed and the promise settles without waiting for stdout to close, so a
- * grandchild that keeps the pipe open cannot block startup.
- */
+// A grandchild can hold the login shell's stdout open after the shell exits.
 function readLoginShellPath(shell: string): Promise<string> {
   return new Promise((resolve, reject) => {
     const child = spawn(shell, ['-ilc', `printf '%s%s%s' '${MARKER}' "$PATH" '${MARKER}'`], {
@@ -47,12 +43,10 @@ function readLoginShellPath(shell: string): Promise<string> {
     child.stdout.setEncoding('utf8')
     child.stdout.on('data', (chunk: string) => {
       stdout += chunk
-      // Done as soon as the closing marker arrives, even if the pipe stays open.
       if (stdout.split(MARKER).length >= 3) settle(null)
     })
     child.once('error', (error) => settle(error))
     child.stdout.once('close', () => settle(null))
-    // A grandchild may keep stdout open after the shell exits; give the pipe a moment, then stop waiting.
     child.once('exit', () => setTimeout(() => settle(null), 250))
   })
 }
@@ -67,12 +61,7 @@ function mergePaths(...values: Array<string | undefined>) {
   return [...seen].join(delimiter)
 }
 
-/**
- * Apps opened from Finder or the Dock get launchd's minimal PATH, so spawning
- * `claude`, `codex`, `grok`, or `git` by name fails. Read the PATH the user's login
- * shell sets up and put it first in this process's PATH, which the server and
- * every agent it spawns inherit.
- */
+// Finder and the Dock launch with launchd's minimal PATH.
 export async function installLoginShellPath(): Promise<ShellPathResult> {
   if (process.platform === 'win32') {
     return { source: 'process', entries: (process.env.PATH ?? '').split(delimiter).filter(Boolean).length }

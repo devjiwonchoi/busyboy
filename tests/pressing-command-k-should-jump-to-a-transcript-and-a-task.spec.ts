@@ -3,7 +3,6 @@ import { join } from 'node:path'
 import { expect, test, type Page } from '@playwright/test'
 import { useProjectsHome } from './support/projects-home'
 
-// Cmd+K searches Director and manager transcripts and task titles. Cmd+N starts a new manager.
 
 const line = (entry: unknown) => `${JSON.stringify(entry)}\n`
 
@@ -14,10 +13,7 @@ async function openChat(page: Page) {
 
 async function press(page: Page, key: string, dialog: string) {
   const commands = page.getByRole('dialog', { name: dialog })
-  // A closing dialog stays visible through its exit animation. Press only once
-  // it is gone, or the key is skipped and the palette finishes closing with no
-  // command to choose. A key pressed before hydration is dropped, so press again
-  // until it opens.
+  // A closing dialog stays through its exit animation and swallows the next key. A key pressed before hydration is dropped.
   await expect(commands).toBeHidden()
   await expect(async () => {
     if (await commands.isHidden()) await page.keyboard.press(key)

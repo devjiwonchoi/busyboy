@@ -6,7 +6,6 @@ import { Button } from '@/components/ui/button'
 import { Field, FieldError, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 
-// Typing or pasting a path works everywhere, including a plain browser without the desktop bridge.
 export function AddProjectForm() {
   const [state, action, pending] = useActionState<FormResult, FormData>(addTypedProjectAction, {})
   return (

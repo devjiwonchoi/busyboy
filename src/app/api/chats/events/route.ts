@@ -4,7 +4,6 @@ import { subscribeToChats, type ChatSummary } from '@/server/director/chat'
 
 const HEARTBEAT_MS = 15_000
 
-/** Server-sent events for the chat list: the Director and every manager, sent whole on every change. */
 export async function GET(request: Request) {
   await connection()
   const folder = await dataFolder()

@@ -10,7 +10,6 @@ import { providerState, PROVIDERS, setDefaultProvider, signedInProviders } from 
 import type { ProviderId } from '@/server/runner/contract'
 import { stepHref } from './steps'
 
-// Server actions are public endpoints, so every argument is checked at runtime.
 
 export type FormResult = { error?: string }
 
@@ -41,7 +40,6 @@ export async function removeCompanionImageAction() {
 
 export async function continueFromAgentsAction(form: FormData) {
   const provider = form.get('defaultProvider')
-  // Only sent when two agents are signed in and the user can choose.
   if (typeof provider === 'string') {
     if (!PROVIDERS.some(({ id }) => id === provider)) throw new Error('Unknown provider.')
     await setDefaultProvider(provider as ProviderId)
@@ -49,7 +47,6 @@ export async function continueFromAgentsAction(form: FormData) {
   redirect(stepHref('skills'))
 }
 
-/** Checks sign-in again, skipping the short cache, after the user signed in from a terminal. */
 export async function recheckProvidersAction() {
   await Promise.all(PROVIDERS.map(({ id }) => providerState(id, { fresh: true })))
   refresh()
@@ -57,13 +54,11 @@ export async function recheckProvidersAction() {
 
 export type AddProjectsResult = { added: string[]; errors: string[] }
 
-/** Adds folders from the picker, a drop, or a typed path. Each folder succeeds or fails on its own. */
 export async function addProjectsAction(folders: unknown): Promise<AddProjectsResult> {
   if (!Array.isArray(folders) || folders.length > 100 || !folders.every((folder) => typeof folder === 'string')) {
     throw new Error('Folders must be a list of paths.')
   }
   const result: AddProjectsResult = { added: [], errors: [] }
-  // One at a time, so default names stay unique and errors keep the user's order.
   for (const folder of folders) {
     try {
       result.added.push((await addProject(folder)).name)
@@ -87,7 +82,6 @@ export async function removeProjectAction(name: string) {
   refresh()
 }
 
-/** Finishes setup, with or without projects. Sends the user back to a step that still needs them. */
 export async function startChattingAction() {
   const [settings, signedIn] = await Promise.all([readSettings(), signedInProviders()])
   if (!findCompanion(settings.companion)) redirect(stepHref('companion'))
@@ -98,7 +92,6 @@ export async function startChattingAction() {
   redirect('/')
 }
 
-/** Saves the always-ask list from its text box, one rule per line, and goes on. A line that could never match is refused. */
 export async function continueFromApprovalsAction(_previous: FormResult, form: FormData): Promise<FormResult> {
   const text = form.get('rules')
   const error = alwaysAskError(text)

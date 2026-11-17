@@ -12,12 +12,6 @@ import type { CardViewProps } from '../card-view-props'
 import { CardActionError, useCardActions } from '../card-actions'
 import { CardShell, CardShellActions, CardShellBody, CardShellHeader } from '../card-shell'
 
-/**
- * A plan waiting for approval, laid out like the timeline mock: a bold title
- * with the project name on the right, one summary line, then the end-state
- * list. Reply and Stop stay off this card; a reply starts from Request changes
- * in the dialog, and Stop stays on the task.
- */
 export function PlanCardView({ card }: CardViewProps<PlanCard>) {
   const { pending, replying, onReplyChange, run } = useCardActions()
   const [details, setDetails] = useState(false)

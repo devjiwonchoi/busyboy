@@ -13,7 +13,6 @@ export function createTempFolder(prefix: string) {
   return mkdtempSync(join(tmpdir(), `busyboy-e2e-${prefix}-`))
 }
 
-/** A new git repository with one commit. */
 export function createGitRepository(name = 'repo') {
   const folder = join(createTempFolder(name), name)
   mkdirSync(folder)
@@ -25,10 +24,6 @@ export function createGitRepository(name = 'repo') {
   return folder
 }
 
-/**
- * The data folder the server uses when a test sets no home of its own: setup
- * is complete with one project, so journeys that open the main screen land there.
- */
 export function prepareDefaultHome(folder: string) {
   if (existsSync(join(folder, SETTINGS_FILE))) return
   mkdirSync(folder, { recursive: true })
@@ -46,7 +41,6 @@ export function prepareDefaultHome(folder: string) {
 
 type SignIn = 'signed-in' | 'signed-out' | 'not-installed' | 'outdated'
 
-/** Gives this browser context a fresh, empty data folder and optional sign-in states. */
 export async function useTestHome(
   context: BrowserContext,
   baseURL: string,

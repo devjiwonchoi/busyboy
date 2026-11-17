@@ -4,12 +4,7 @@ import { decideHookCall } from '@/server/runner/codex-always-ask'
 /** How often a waiting response sends a space, well inside fetch's five-minute idle timeout. */
 const KEEP_ALIVE_MS = 30_000
 
-/**
- * Codex's always-ask hook posts each tool call here (see codex-always-ask.ts)
- * and gets `{ allow, reason }` once the session decides, which may be after the
- * user answers an approval card. Until then the response sends spaces, which
- * the hook trims before it reads the JSON.
- */
+// The response sends spaces until the user answers, because fetch's idle timeout is five minutes.
 export async function POST(request: Request) {
   await connection()
   const body = (await request.json().catch(() => null)) as Record<string, unknown> | null
