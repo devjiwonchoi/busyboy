@@ -2,8 +2,9 @@ name: CI
 
 on:
   # A PR targets main, or v2 and the v2-* branches stacked on it until v2 is merged into main.
+  # A stack whose base is a cursor/* branch gets the same checks.
   pull_request:
-    branches: [main, v2, 'v2-*']
+    branches: [main, v2, 'v2-*', 'cursor/**']
   push:
     branches: [main, v2]
 

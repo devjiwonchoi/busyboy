@@ -32,6 +32,13 @@ Every file and folder name is kebab-case, for example `server-process.ts` or `bo
 - Replace real providers with scripted replays; use real files and git in temporary directories.
 - Run only the tests you added or changed.
 
+## Keep journeys honest
+
+- Flaky journeys are never fixed by retries, sleeps, or skips. Find the root cause, or delete the test with the reason in the commit message.
+- Committed tests never write to agent-VM-only paths like `/opt/cursor/artifacts`.
+- Before opening a PR, run the type check and the affected journeys locally.
+- Screenshot baselines (`toHaveScreenshot`) are only updated when the UI change is intentional, and the PR says so.
+
 ## Start from nothing
 
 This branch starts from an empty history. Do not copy code from the `legacy` tag. Reading it for reference (`git show legacy:<path>`) is fine.
