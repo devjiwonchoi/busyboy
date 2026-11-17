@@ -3,11 +3,10 @@
 import { useState } from 'react'
 import { Check, Circle } from 'lucide-react'
 import { cardGroupLabel, type ProgressCard, type ProgressStepState } from '@/server/cards/model'
-import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Spinner } from '@/components/ui/spinner'
 import type { CardViewProps } from '../card-view-props'
-import { CardActionError, CardTrailingActions, useCardActions } from '../card-actions'
+import { useCardActions } from '../card-actions'
 import { CardShell, CardShellActions, CardShellBody, CardShellHeader } from '../card-shell'
 
 const STATE_WORD: Record<ProgressStepState, string> = {
@@ -16,19 +15,19 @@ const STATE_WORD: Record<ProgressStepState, string> = {
   pending: 'Not started',
 }
 
-/** A filled check, a spinner, or an empty circle, one per step. */
+/** A filled green check, a spinner, or an empty circle. */
 function StepMark({ state }: { state: ProgressStepState }) {
   if (state === 'done') {
     return (
-      <span data-step-mark="done" className="bg-success flex size-4 shrink-0 items-center justify-center rounded-full text-white" aria-hidden>
+      <span data-step-mark="done" className="bg-success flex size-3.5 shrink-0 items-center justify-center rounded-full text-white" aria-hidden>
         <Check className="size-2.5" strokeWidth={3} />
       </span>
     )
   }
   if (state === 'running') {
-    return <Spinner data-step-mark="running" aria-hidden className="text-status-running" />
+    return <Spinner data-step-mark="running" aria-hidden className="text-muted-foreground size-3.5" />
   }
-  return <Circle data-step-mark="pending" className="text-muted-foreground/70 size-4 shrink-0" aria-hidden />
+  return <Circle data-step-mark="pending" className="text-muted-foreground/60 size-3.5 shrink-0" aria-hidden />
 }
 
 function StepList({ steps, spelled }: { steps: ProgressCard['steps']; spelled?: boolean }) {
@@ -46,22 +45,23 @@ function StepList({ steps, spelled }: { steps: ProgressCard['steps']; spelled?: 
   )
 }
 
-/** Steps of a task that is underway: a check on each finished step and a spinner on the one running. */
+/** Steps of a task that is underway. The only action is View details. */
 export function ProgressCardView({ card }: CardViewProps<ProgressCard>) {
   const { replying } = useCardActions()
   const [details, setDetails] = useState(false)
   return (
     <CardShell label={cardGroupLabel(card)} replying={replying}>
-      <CardShellHeader title={card.title} />
+      <CardShellHeader
+        title={<span className="font-semibold">{card.title}</span>}
+        meta={<span className="text-muted-foreground text-xs font-normal">{card.project}</span>}
+      />
       <CardShellBody>
         <StepList steps={card.steps} />
-        <CardActionError />
       </CardShellBody>
       <CardShellActions>
-        <Button type="button" size="sm" variant="outline" onClick={() => setDetails(true)}>
+        <button type="button" className="text-muted-foreground cursor-pointer border-0 bg-transparent p-0 text-xs font-normal" onClick={() => setDetails(true)}>
           View details
-        </Button>
-        <CardTrailingActions />
+        </button>
       </CardShellActions>
       <Dialog open={details} onOpenChange={setDetails}>
         <DialogContent>

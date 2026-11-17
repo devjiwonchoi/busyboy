@@ -63,19 +63,29 @@ async function syncWorkCards(folder: string, task: WorkTask, fresh: () => boolea
 
   if (working) {
     show(folder, task, { ...source(task, progressId(task.id), now), kind: 'progress', title: task.title, steps })
-  } else {
-    settleIfOpen(folder, progressId(task.id), finished ? 'Done' : 'Closed')
+  } else if (!finished) {
+    settleIfOpen(folder, progressId(task.id), 'Closed')
   }
   if (!fresh()) return
 
   if (finished) {
-    show(folder, task, { ...source(task, doneId(task.id), now), kind: 'done', title: `${task.title} · Done` })
+    // Replace the progress card in place. Settling it would also write a second closed card.
+    const progress = openCards(folder).find((card) => card.id === progressId(task.id))
+    show(folder, task, { ...source(task, progress?.id ?? doneId(task.id), progress?.openedAt ?? now), kind: 'done', title: task.title })
   } else {
     settleIfOpen(folder, doneId(task.id), 'Reopened')
+    const progress = openCards(folder).find((card) => card.id === progressId(task.id))
+    if (progress?.kind === 'done') settleIfOpen(folder, progress.id, 'Reopened')
   }
 
   if (read.pulls.length > 0) {
-    show(folder, task, { ...source(task, prId(task.id), now), kind: 'pr', title: 'Pull requests', pulls: read.pulls })
+    show(folder, task, {
+      ...source(task, prId(task.id), now),
+      kind: 'pr',
+      title: `Stacked PRs (${read.pulls.length})`,
+      note: 'Approved to merge. This does not deploy.',
+      pulls: read.pulls,
+    })
   } else {
     settleIfOpen(folder, prId(task.id), 'Closed')
   }
@@ -236,6 +246,26 @@ export function parsePullRequests(status: string): PullRequestRow[] {
     })
   }
   return rows
+}
+
+/** The task's ALIGN.md, for the done card's View plan link. Null when the task has no plan. */
+export async function readTaskPlan({ folder, taskId }: { folder: string; taskId: string }) {
+  const { readTasksAt } = await import('../tasks')
+  const task = (await readTasksAt(folder)).find((item) => item.id === taskId)
+  if (!task) throw new CardError('The task for this card is gone.')
+  const { recordFolderOf } = await import('../records/project-graph')
+  const located = await recordFolderOf(task)
+  if (!located || !('folder' in located)) return null
+  const path = join(/*turbopackIgnore: true*/ located.folder, 'ALIGN.md')
+  try {
+    if ((await lstat(/*turbopackIgnore: true*/ path)).isSymbolicLink()) return null
+    const plan = await readFile(/*turbopackIgnore: true*/ path, 'utf8')
+    const title = /^#\s+ALIGN:\s*(.+?)\s*$/m.exec(plan)?.[1] ?? task.title
+    return { title, plan }
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null
+    throw error
+  }
 }
 
 function githubCli() {

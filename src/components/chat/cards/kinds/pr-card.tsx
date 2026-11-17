@@ -3,10 +3,9 @@
 import { mergePullRequestsAction } from '@/app/(main)/director-actions'
 import { cardGroupLabel, type PrCard, type PullRequestCheck } from '@/server/cards/model'
 import { cn } from '@/lib/utils'
-import { Button, buttonVariants } from '@/components/ui/button'
-import { Item, ItemActions, ItemContent, ItemGroup, ItemMedia, ItemTitle } from '@/components/ui/item'
+import { Button } from '@/components/ui/button'
 import type { CardViewProps } from '../card-view-props'
-import { CardActionError, CardTrailingActions, useCardActions } from '../card-actions'
+import { CardActionError, useCardActions } from '../card-actions'
 import { CardShell, CardShellActions, CardShellBody, CardShellHeader } from '../card-shell'
 
 const CHECK_DOT: Record<Exclude<PullRequestCheck, 'none'>, string> = {
@@ -21,51 +20,42 @@ const CHECK_LABEL: Record<Exclude<PullRequestCheck, 'none'>, string> = {
   pending: 'Checks pending',
 }
 
-/**
- * One row per pull request, in stack order. Open leaves the merge for the
- * button, which runs only on a click.
- */
+/** One row per pull request, in stack order. Open and Merge in order are the only actions. */
 export function PrCardView({ card }: CardViewProps<PrCard>) {
   const { pending, replying, run } = useCardActions()
+  const first = card.pulls[0]
   return (
     <CardShell label={cardGroupLabel(card)} replying={replying}>
-      <CardShellHeader title={card.title} />
+      <CardShellHeader
+        title={<span className="font-semibold">{card.title}</span>}
+        meta={<span className="text-muted-foreground text-xs font-normal">{card.project}</span>}
+      />
       <CardShellBody>
-        <ItemGroup className="gap-1">
+        <ul className="space-y-1.5">
           {card.pulls.map((pull) => (
-            <Item key={pull.number} variant="default" size="xs" role="listitem" className="px-0">
-              <ItemMedia>
-                {pull.check !== 'none' && (
-                  <>
-                    <span data-check={pull.check} className={cn('size-2 rounded-full', CHECK_DOT[pull.check])} aria-hidden />
-                    <span className="sr-only">{CHECK_LABEL[pull.check]}</span>
-                  </>
-                )}
-              </ItemMedia>
-              <ItemContent>
-                <ItemTitle>
-                  #{pull.number} {pull.title}
-                </ItemTitle>
-              </ItemContent>
-              <ItemActions>
-                {pull.review && <span className="text-muted-foreground">{pull.review}</span>}
-                <a
-                  href={pull.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  aria-label={`Open #${pull.number} ${pull.title}`}
-                  className={buttonVariants({ variant: 'outline', size: 'sm' })}
-                >
-                  Open
-                </a>
-              </ItemActions>
-            </Item>
+            <li key={pull.number} className="flex items-center gap-2">
+              {pull.check !== 'none' ? (
+                <span data-check={pull.check} className={cn('size-1.5 shrink-0 rounded-full', CHECK_DOT[pull.check])} aria-hidden />
+              ) : (
+                <span className="size-1.5 shrink-0" aria-hidden />
+              )}
+              <span className="min-w-0 truncate">
+                #{pull.number} {pull.title}
+              </span>
+              {pull.check !== 'none' && <span className="text-muted-foreground ml-auto shrink-0">{CHECK_LABEL[pull.check]}</span>}
+              {pull.check === 'none' && pull.review && <span className="text-muted-foreground ml-auto shrink-0">{pull.review}</span>}
+            </li>
           ))}
-        </ItemGroup>
+        </ul>
         {card.note && <p className="text-muted-foreground">{card.note}</p>}
         <CardActionError />
       </CardShellBody>
       <CardShellActions>
+        {first && (
+          <a href={first.url} target="_blank" rel="noopener noreferrer" className="text-muted-foreground text-xs font-normal">
+            Open
+          </a>
+        )}
         <Button
           type="button"
           size="sm"
@@ -74,7 +64,6 @@ export function PrCardView({ card }: CardViewProps<PrCard>) {
         >
           Merge in order
         </Button>
-        <CardTrailingActions />
       </CardShellActions>
     </CardShell>
   )

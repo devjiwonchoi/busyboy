@@ -33,7 +33,8 @@ export function CardShell({
       size={variant === 'line' ? 'sm' : 'default'}
       className={cn(
         'group/timeline-card relative w-full',
-        variant === 'line' && 'flex-row items-center',
+        // The done line is one row. The header has to fill it so View plan sits on the right.
+        variant === 'line' && 'flex-row items-center [&_[data-slot=card-header]]:w-full',
         replying && 'ring-ring/50 ring-2',
       )}
     >
