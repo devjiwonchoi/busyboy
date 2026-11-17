@@ -23,6 +23,8 @@ import {
 } from './runner/agent-runner'
 import { agentEnvironment } from './runner/find-executable'
 import { trackWorkCards } from './cards/work-cards'
+import { finishRememberRecord, observeTaskMessage, observeTaskTurn } from './records/remember-record'
+import { rememberRoot } from './records/remember-root'
 import { APPROVE_MESSAGE, hasOpenCard, stopTaskAgent, trackTaskCards } from './task-cards'
 import type { AgentEvent, AgentStatus, McpServer, ProviderId, StartAgentInput } from './runner/contract'
 
@@ -504,6 +506,21 @@ function watchAgent(folder: string, task: TaskRecord, { resumed = false, fromRes
       })().catch(() => {})
     }
     if (event.type === 'turn-done') turnError = null
+    if (task.kind !== 'subagent') {
+      if (event.type === 'user-message') {
+        // The plan approval is not an intervention. Restart notes are from BusyBoy, not the user.
+        observeTaskMessage({
+          folder,
+          task,
+          approval: event.text.trim() === APPROVE_MESSAGE,
+          system: event.text === RESUME_WORKING_MESSAGE || event.text === RESUME_WAITING_MESSAGE,
+        })
+      } else if (event.type === 'turn-done') {
+        void observeTaskTurn({ folder, task, root: rememberRoot(folder), interrupted: Boolean(event.interrupted) }).catch((error: unknown) =>
+          console.error(`busyboy: could not update the remember record for ${task.id}`, error),
+        )
+      }
+    }
     // The runner updates its status before it delivers the event.
     report()
   })
@@ -791,6 +808,12 @@ export async function archiveTask(taskId: string): Promise<{ task: TaskView; wor
     await stopTaskAgent({ folder, agentId: task.agentId })
     await agentEnded(task.agentId)
     removeAgent(task.agentId)
+    // Records are still in the worktree here. A task the user puts away is finished, even without State: done.
+    if (task.kind !== 'subagent') {
+      await finishRememberRecord({ folder, task, root: rememberRoot(folder) }).catch((error: unknown) =>
+        console.error(`busyboy: could not write the remember record for ${task.id}`, error),
+      )
+    }
     const worktreeKept = task.kind !== 'subagent' && !(await removeWorktree(folder, task))
     // A task whose provider could not start after a restart keeps `running` so the next start
     // tries again; archived, it must not be started then.
