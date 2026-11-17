@@ -37,8 +37,8 @@ const lastState = (updates: Update[]) => updates.filter((update) => update.type 
 
 test('a task that finishes or starts needing the user should be announced, with only its title', async ({ page, context, baseURL }) => {
   const { home, projects } = await useProjectsHome(context, baseURL!, ['web', 'api'])
-  addRecordTask(home, { project: 'api', projectPath: projects.api, ...HEALTH })
-  const footer = addRecordTask(home, { project: 'web', projectPath: projects.web, ...FOOTER })
+  await addRecordTask(home, { project: 'api', projectPath: projects.api, ...HEALTH })
+  const footer = await addRecordTask(home, { project: 'web', projectPath: projects.web, ...FOOTER })
   const stream = await followAttention(page)
 
   // Connecting reports what waits now and announces nothing old.

@@ -1,9 +1,10 @@
 import { watch, type FSWatcher } from 'node:fs'
-import { join } from 'node:path'
+import { basename, dirname } from 'node:path'
 import { SETTINGS_FILE } from '../config'
 import { pathKey } from '../paths'
 import { readTasksAt, subscribeToTasks, TASKS_FILE, type TaskRecord } from '../tasks'
-import { readProjectGraph, RECORDS_FOLDER, type ProjectGraph } from './project-graph'
+import { readProjectGraph, type ProjectGraph } from './project-graph'
+import { taskRecordDirectory } from './record-location'
 
 // Keeps one live project graph per data folder while a window is watching it.
 // It rebuilds the graph when the task list, settings, a task's records, or an
@@ -62,7 +63,7 @@ function refresh(hub: Hub): Promise<void> {
       // Every await can outlast the hub, so check it is still open after each one.
       const tasks = await readTasksAt(hub.folder).catch(() => null)
       if (hub.closed) return
-      rewatch(hub, tasks)
+      await rewatch(hub, tasks)
       const graph = await readProjectGraph(hub.folder)
       if (hub.closed) return
       const json = JSON.stringify(graph)
@@ -105,10 +106,10 @@ function addWatcher(hub: Hub, path: string, recursive: boolean, accept: (name: s
 }
 
 /**
- * Watches the data folder, each task worktree's top level, and each `.jwn`
- * folder recursively. Without a readable task list it keeps the watchers it has.
+ * Watches the data folder and each task's record folder in the jwn record root.
+ * Without a readable task list it keeps the watchers it has.
  */
-function rewatch(hub: Hub, tasks: TaskRecord[] | null) {
+async function rewatch(hub: Hub, tasks: TaskRecord[] | null) {
   const wanted = new Set<string>()
   const want = (path: string, recursive: boolean, accept: (name: string | null) => boolean) => {
     wanted.add(`${recursive ? 'r' : 'd'}:${path}`)
@@ -117,15 +118,20 @@ function rewatch(hub: Hub, tasks: TaskRecord[] | null) {
   want(hub.folder, false, (name) => name === null || name === TASKS_FILE || name === SETTINGS_FILE)
   if (!tasks) return
   for (const task of tasks) {
-    // A hand-edited entry without a worktree has nothing to watch; the graph reports it.
-    if (typeof task?.worktree !== 'string') continue
-    // A subagent's folder is the project checkout, whose records are not BusyBoy's (see readProjectGraph).
+    // A hand-edited entry without a worktree has nothing to place; the graph reports it.
+    if (typeof task?.worktree !== 'string' || typeof task.id !== 'string' || typeof task.project !== 'string') continue
+    // A subagent writes no records.
     if (task.kind === 'subagent') continue
-    // An archived task is not in the graph, and its worktree is usually gone.
+    // An archived task is not in the graph.
     if (task.archivedAt) continue
-    // Only `.jwn` itself appearing or going away matters at the top of a worktree.
-    want(task.worktree, false, (name) => name === null || name === RECORDS_FOLDER)
-    want(join(task.worktree, RECORDS_FOLDER), true, () => true)
+    const directory = await taskRecordDirectory(hub.folder, task)
+    if (hub.closed) return
+    if (typeof directory !== 'string') continue
+    const parent = dirname(directory)
+    const name = basename(directory)
+    // The task folder appearing under its repository, and every file written inside it.
+    want(parent, false, (entry) => entry === null || entry === name)
+    want(directory, true, () => true)
   }
   for (const [key, watcher] of hub.watchers) {
     if (!wanted.has(key)) {

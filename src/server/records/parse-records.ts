@@ -1,5 +1,5 @@
-// Reads the Markdown records a task agent's jwn skills keep under
-// `.jwn/<task>/`. The skills fix only a few headings and labels, so this reads
+// Reads the Markdown records a task agent's jwn skills keep in the record
+// root at `<owner>/<name>/<task>/`. The skills fix only a few headings and labels, so this reads
 // by heading and line, skips fenced code, and reports anything it cannot read
 // as a RecordError instead of guessing: the graph then shows an error node, so
 // a record it misreads never turns into a quietly wrong status.

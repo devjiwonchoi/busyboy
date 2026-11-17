@@ -188,7 +188,7 @@ test('starting a terminal in a folder that is not a task worktree should be refu
   expect(await start()).toEqual(refused)
 
   // A folder elsewhere, with real task worktrees next to it.
-  addRecordTask(home, { project: 'api', projectPath: projects.api, ...FOOTER })
+  await addRecordTask(home, { project: 'api', projectPath: projects.api, ...FOOTER })
   expect(await start()).toEqual(refused)
 
   // A link in the task's own place that leads out of the worktrees folder.

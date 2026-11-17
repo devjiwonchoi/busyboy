@@ -2,6 +2,7 @@ import { lstat, readFile } from 'node:fs/promises'
 import { isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { containsPath, samePath } from '../paths'
+import { locateTaskRecords } from '../records/record-location'
 
 // VERIFY.md cites screenshots and traces by the path the skill wrote. The
 // markdown view only draws an image or a link when the address is http(s) or
@@ -89,9 +90,10 @@ function hostedArtifact(destination: string, context: ArtifactContext) {
   const pathOnly = cutAt.length > 0 ? decoded.slice(0, Math.min(...cutAt)) : decoded
   if (!pathOnly || pathOnly.includes('\0')) return null
   const absolute = isAbsolute(pathOnly) ? pathOnly : resolve(/*turbopackIgnore: true*/ context.recordFolder, pathOnly)
-  // The worktree root is a directory, and a path outside it is not this task's file.
-  if (!containsPath(context.worktree, absolute) || samePath(context.worktree, absolute)) return null
-  const relativeFile = relative(/*turbopackIgnore: true*/ context.worktree, absolute).split(sep).join('/')
+  // Relative paths are next to VERIFY.md, in the record folder. An absolute path may also name a file in the worktree.
+  const root = containsPath(context.recordFolder, absolute) && !samePath(context.recordFolder, absolute) ? context.recordFolder : containsPath(context.worktree, absolute) && !samePath(context.worktree, absolute) ? context.worktree : null
+  if (!root) return null
+  const relativeFile = relative(/*turbopackIgnore: true*/ root, absolute).split(sep).join('/')
   if (!safeRelative(relativeFile)) return null
   return artifactUrl(context.taskId, relativeFile)
 }
@@ -137,8 +139,8 @@ export function linkTaskArtifacts(markdown: string, context: ArtifactContext) {
 }
 
 /**
- * One file a verification note cites, read from the task worktree.
- * A symbolic link is refused: it could name a file outside the worktree.
+ * One file a verification note cites, read from the task's record folder, or from
+ * the worktree when the path names a file there. A symbolic link is refused.
  * Null when the task or the file is not there.
  */
 export async function readTaskArtifact({
@@ -155,7 +157,16 @@ export async function readTaskArtifact({
   const { readTasksAt } = await import('../tasks')
   const task = (await readTasksAt(folder)).find((item) => item.id === taskId)
   if (!task) return null
-  const root = task.worktree
+  const located = await locateTaskRecords(folder, task)
+  const roots = [located && 'folder' in located ? located.folder : null, task.worktree].filter((root): root is string => root !== null)
+  for (const root of roots) {
+    const found = await readArtifactFile(root, relativeFile)
+    if (found) return found
+  }
+  return null
+}
+
+async function readArtifactFile(root: string, relativeFile: string): Promise<TaskArtifact | 'too-large' | null> {
   const absolute = join(/*turbopackIgnore: true*/ root, ...relativeFile.split('/'))
   if (!containsPath(root, absolute)) return null
   const parts = relativeFile.split('/')
@@ -164,7 +175,7 @@ export async function readTaskArtifact({
   try {
     if ((await lstat(/*turbopackIgnore: true*/ current)).isSymbolicLink()) return null
     for (const [index, part] of parts.entries()) {
-      // The worktree is outside this project. The ignore keeps the build from tracing every file in it.
+      // The folder is outside this project. The ignore keeps the build from tracing every file in it.
       current = join(/*turbopackIgnore: true*/ current, part)
       stats = await lstat(/*turbopackIgnore: true*/ current)
       if (stats.isSymbolicLink()) return null

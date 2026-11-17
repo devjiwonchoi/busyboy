@@ -8,6 +8,7 @@ import { mkdirSync, readdirSync, readFileSync, renameSync, writeFileSync } from 
 import { mkdir, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { basename, dirname, join } from 'node:path'
+import { containsPath } from '../paths'
 import { alwaysAskApproval, createAllowedCalls, matchAlwaysAsk } from './always-ask'
 import { checkUserRules, userRuleApproval } from './user-rules'
 import {
@@ -337,7 +338,12 @@ function startScripted(folder: string, options: ProviderStartOptions): ProviderS
         continue
       }
       if ('writeFile' in step) {
-        const file = join(options.cwd, step.writeFile.path.replaceAll('<cwd-name>', basename(options.cwd)))
+        const relative = step.writeFile.path.replaceAll('<cwd-name>', basename(options.cwd))
+        const recordFile = scriptedRecordFile(options.recordFolder, relative)
+        if (relative.replaceAll('\\', '/').startsWith('.jwn/') && !recordFile) {
+          throw new Error('This task has no record folder, so the record was not written.')
+        }
+        const file = recordFile ?? join(options.cwd, relative)
         await cancellable(mkdir(dirname(file), { recursive: true }).then(() => writeFile(file, step.writeFile.text)))
         continue
       }
@@ -446,6 +452,16 @@ function startScripted(folder: string, options: ProviderStartOptions): ProviderS
       emit({ type: 'stopped', finished })
     },
   }
+}
+
+/** A script path `.jwn/<task>/<file>` is written in the task's home record folder, not the worktree. */
+function scriptedRecordFile(recordFolder: string | undefined, relative: string): string | null {
+  const normalized = relative.replaceAll('\\', '/')
+  if (!recordFolder || !normalized.startsWith('.jwn/')) return null
+  const parts = normalized.split('/').slice(2)
+  if (parts.length === 0 || parts.some((part) => !part || part === '.' || part === '..')) return null
+  const file = join(/*turbopackIgnore: true*/ recordFolder, ...parts)
+  return containsPath(recordFolder, file) ? file : null
 }
 
 export function createScriptedAdapter(folder: string): ProviderAdapter {

@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { expect as baseExpect, test, type APIRequestContext, type Page } from '@playwright/test'
+import { homeRecordFolder } from './support/record-tasks'
 import { useProjectsHome } from './support/projects-home'
 
 // Task agents that wait on the user, played from tests/provider-scripts/task-cards.json
@@ -120,8 +121,9 @@ test.describe('Claude task agents', () => {
 
     await expect(openCards(page)).toHaveCount(0)
     await expect(transcript(page).getByRole('group', { name: 'Card from web · Add a footer' })).toContainText('Approved')
-    // The agent got the approval and saved the plan as approved.
-    await expect.poll(() => readFileSync(join(task.worktree, '.jwn', task.id, 'ALIGN.md'), 'utf8')).toContain('Status: approved')
+    // The agent got the approval and saved the plan as approved, in the record root.
+    const records = await homeRecordFolder(home, { id: task.id, project: 'web', worktree: task.worktree })
+    await expect.poll(() => readFileSync(join(records, 'ALIGN.md'), 'utf8')).toContain('Status: approved')
     // Its turn ended with the approved plan, which asks for nothing more.
     await expect(transcript(page).getByLabel('web · Add a footer', { exact: true })).toContainText('Idle')
     await expect(openCards(page)).toHaveCount(0)

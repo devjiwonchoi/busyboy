@@ -2,6 +2,7 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { crc32, deflateSync } from 'node:zlib'
 import { expect as baseExpect, test, type APIRequestContext, type Locator, type Page } from '@playwright/test'
+import { homeRecordFolder } from './support/record-tasks'
 import { useProjectsHome } from './support/projects-home'
 
 // The agent writes ALIGN.md, STATUS.md, and VERIFY.md. The screenshots and the
@@ -80,7 +81,7 @@ test('viewing the done plan should render a verify image and its trace link', as
   await expect(done.getByRole('button')).toHaveText('View plan')
   await expect(done.getByRole('img')).toHaveCount(0)
 
-  const record = join(task.worktree, '.jwn', task.id)
+  const record = await homeRecordFolder(home, { id: task.id, project: 'web', worktree: task.worktree })
   mkdirSync(record, { recursive: true })
   writeFileSync(join(record, 'footer-before.png'), png(320, 140, [48, 64, 82]))
   writeFileSync(join(record, 'footer-after.png'), png(320, 140, [22, 140, 72]))

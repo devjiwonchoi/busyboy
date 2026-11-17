@@ -58,7 +58,7 @@ function settleIfOpen(folder: string, cardId: string, outcome: string) {
 }
 
 async function syncWorkCards(folder: string, task: WorkTask, fresh: () => boolean) {
-  const read = await readWorkRecords(task)
+  const read = await readWorkRecords(folder, task)
   if (!fresh() || getAgent(task.agentId)?.status === 'stopped' || !read) return
   const now = new Date().toISOString()
   const steps = stepsFrom(read.records.todos)
@@ -160,9 +160,9 @@ function stepsFrom(todos: { id: string; title: string; result: TodoResult }[]): 
   return steps
 }
 
-async function readWorkRecords(task: Pick<WorkTask, 'id' | 'worktree'>) {
+async function readWorkRecords(dataFolder: string, task: Pick<WorkTask, 'id' | 'project' | 'worktree'>) {
   const { recordFolderOf } = await import('../records/project-graph')
-  const located = await recordFolderOf(task)
+  const located = await recordFolderOf(dataFolder, task)
   if (!located || !('folder' in located)) return null
   const texts: RecordTexts = {}
   let status = ''
@@ -293,7 +293,7 @@ export async function readTaskPlan({ folder, taskId }: { folder: string; taskId:
   const task = (await readTasksAt(folder)).find((item) => item.id === taskId)
   if (!task) throw new CardError('The task for this card is gone.')
   const { recordFolderOf } = await import('../records/project-graph')
-  const located = await recordFolderOf(task)
+  const located = await recordFolderOf(folder, task)
   if (!located || !('folder' in located)) return null
   const path = join(/*turbopackIgnore: true*/ located.folder, 'ALIGN.md')
   try {

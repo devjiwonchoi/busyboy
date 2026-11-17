@@ -10,8 +10,8 @@ const HEALTH = { id: 'add-health-endpoint-d4e5f6', title: 'Add a health endpoint
 /** web has a task waiting on the user that builds on api's finished task (tests/fixtures/records/). */
 async function useRecordHome(context: BrowserContext, baseURL: string) {
   const { home, projects } = await useProjectsHome(context, baseURL, ['web', 'api'])
-  addRecordTask(home, { project: 'api', projectPath: projects.api, ...HEALTH })
-  const footer = addRecordTask(home, { project: 'web', projectPath: projects.web, ...FOOTER })
+  await addRecordTask(home, { project: 'api', projectPath: projects.api, ...HEALTH })
+  const footer = await addRecordTask(home, { project: 'web', projectPath: projects.web, ...FOOTER })
   return { home, footer }
 }
 

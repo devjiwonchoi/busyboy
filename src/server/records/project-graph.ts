@@ -1,16 +1,17 @@
-import { lstat, readdir, readFile } from 'node:fs/promises'
+import { lstat, readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { CardKind } from '../cards/model'
 import { SETTINGS_FILE } from '../config'
-import { sameEntryName } from '../paths'
 import { openCards } from '../task-cards'
 import { readTasksAt, taskView, type TaskRecord, type TaskStatus } from '../tasks'
+import { locateTaskRecords } from './record-location'
 import { parseRecords, RECORD_FILES, type BuildsOn, type ParsedRecords, type RecordError, type RecordTexts } from './parse-records'
+import { CALM_PROGRESS, deriveProgress, sumProgress, type TaskProgress } from './progress'
 import { taskPhase, type TaskPhase } from './task-phase'
 
-// project → task → todo, built from the task list, each task's `.jwn` records,
-// and its agent's live status. Plain data, so it can be sent to the window and
-// summarized for the Director.
+// project → task → todo, built from the task list, each task's records in the
+// jwn record root, and its agent's live status. Plain data, so it can be sent
+// to the window and summarized for the Director.
 
 /** amber = needs-you, blue = running, green = done, gray = not-started, red = stopped. */
 export type NodeStatus = 'needs-you' | 'running' | 'done' | 'not-started' | 'stopped'
@@ -39,47 +40,45 @@ export type GraphTask = {
   openFindings: number
   /** Non-empty when a record could not be read; the task then shows as an error node. */
   errors: RecordError[]
+  /** Progress against the aligned end state. */
+  progress: TaskProgress
 }
 
-export type GraphProject = { name: string; tasks: GraphTask[] }
+export type GraphProject = {
+  name: string
+  tasks: GraphTask[]
+  /** The sum of this project's tasks. */
+  progress: TaskProgress
+}
 
 /** `error` is set when the task list or settings cannot be read, so the graph would be incomplete. */
-export type ProjectGraph = { projects: GraphProject[]; error?: string }
+export type ProjectGraph = {
+  projects: GraphProject[]
+  /** The sum of every project: the Director's total. */
+  progress: TaskProgress
+  error?: string
+}
 
+/** Kept as the name of a record-folder error. Records themselves live in the jwn record root, not in this folder. */
 export const RECORDS_FOLDER = '.jwn'
 
 type RecordFolder = { folder: string } | { error: string } | null
 
-/**
- * The task's record folder. Task agents are told to use `.jwn/<task id>/`;
- * when an agent named it differently and there is exactly one folder holding
- * a record file, that one is used. Anything else is an error rather than an
- * empty record, which would look like a task with no progress.
- */
-export async function recordFolderOf(task: Pick<TaskRecord, 'id' | 'worktree'>): Promise<RecordFolder> {
-  const root = join(task.worktree, RECORDS_FOLDER)
-  let names: string[]
+/** The task's record folder in the jwn record root (`<owner>/<name>/<task>`). */
+export async function recordFolderOf(dataFolder: string, task: Pick<TaskRecord, 'id' | 'project' | 'worktree'>): Promise<RecordFolder> {
+  return locateTaskRecords(dataFolder, task)
+}
+
+async function readOptional(recordFolder: string, file: string): Promise<string | null> {
+  const path = join(recordFolder, file)
   try {
-    // A linked `.jwn` could point anywhere on the machine, like a linked record file.
-    if ((await lstat(root)).isSymbolicLink()) return { error: `${RECORDS_FOLDER} is a symbolic link.` }
-    names = (await readdir(root, { withFileTypes: true })).filter((entry) => entry.isDirectory()).map(({ name }) => name)
-  } catch {
+    const stats = await lstat(path)
+    if (stats.isSymbolicLink() || !stats.isFile()) return null
+    return await readFile(path, 'utf8')
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null
     return null
   }
-  // The folder may differ in case from the task id on a case-insensitive disk.
-  const named = names.find((name) => sameEntryName(name, task.id))
-  if (named) return { folder: join(root, named) }
-  const withRecords = (
-    await Promise.all(
-      names.map(async (name) => {
-        const files = await readdir(join(root, name)).catch(() => [] as string[])
-        return RECORD_FILES.some((file) => files.includes(file)) ? name : null
-      }),
-    )
-  ).filter((name) => name !== null)
-  if (withRecords.length === 1) return { folder: join(root, withRecords[0]) }
-  if (withRecords.length === 0) return null
-  return { error: `There is no ${RECORDS_FOLDER}/${task.id}/ folder, and several others hold records: ${withRecords.join(', ')}.` }
 }
 
 async function readRecordTexts(recordFolder: string): Promise<{ texts: RecordTexts; changedAt: number | null }> {
@@ -135,11 +134,14 @@ function taskStatus(records: ParsedRecords, agent: TaskStatus): NodeStatus {
 /** A task that could not resume has no agent, whatever its records last said. */
 const resumeFailed = (task: TaskRecord) => Boolean(task.note) && taskView(task).status === 'stopped'
 
-async function readTask(task: TaskRecord, cards: readonly CardKind[]) {
-  const folder = await recordFolderOf(task)
+async function readTask(dataFolder: string, task: TaskRecord, cards: readonly CardKind[]) {
+  const folder = await recordFolderOf(dataFolder, task)
   const read = folder && 'folder' in folder ? await readRecordTexts(folder.folder) : { texts: {}, changedAt: null }
   const records = parseRecords(read.texts)
   if (folder && 'error' in folder) records.errors.push({ file: RECORDS_FOLDER, message: folder.error })
+  const approved = folder && 'folder' in folder ? await readOptional(folder.folder, 'ALIGN.approved.md') : null
+  const text = (file: (typeof RECORD_FILES)[number]) => (typeof read.texts[file] === 'string' ? read.texts[file] : null)
+  const progress = deriveProgress({ approved, align: text('ALIGN.md'), status: text('STATUS.md'), verify: text('VERIFY.md') })
   const view = taskView(task)
   const failed = resumeFailed(task)
   return {
@@ -159,6 +161,7 @@ async function readTask(task: TaskRecord, cards: readonly CardKind[]) {
     checks: records.checks,
     openFindings: records.openFindings,
     errors: records.errors,
+    progress,
   }
 }
 
@@ -186,12 +189,12 @@ export async function readProjectGraph(folder: string): Promise<ProjectGraph> {
   try {
     ;[names, tasks] = await Promise.all([projectNames(folder), readTasksAt(folder)])
   } catch (error) {
-    return { projects: [], error: `The task list or settings could not be read: ${error instanceof Error ? error.message : String(error)}` }
+    return { projects: [], progress: CALM_PROGRESS, error: `The task list or settings could not be read: ${error instanceof Error ? error.message : String(error)}` }
   }
   // The task list can be edited by hand. An entry without these fields cannot be placed or read,
   // and reading it would throw on every rescan, so the graph says the list is broken instead.
   if (!tasks.every((task) => typeof task?.id === 'string' && typeof task.project === 'string' && typeof task.worktree === 'string')) {
-    return { projects: [], error: 'The task list could not be read: an entry is missing its id, project, or worktree.' }
+    return { projects: [], progress: CALM_PROGRESS, error: 'The task list could not be read: an entry is missing its id, project, or worktree.' }
   }
   const projects = new Map<string, Awaited<ReturnType<typeof readTask>>[]>(names.map((name) => [name, []]))
   const cardsOf = new Map<string, CardKind[]>()
@@ -200,23 +203,22 @@ export async function readProjectGraph(folder: string): Promise<ProjectGraph> {
     if (kinds) kinds.push(card.kind)
     else cardsOf.set(card.taskId, [card.kind])
   }
-  // A subagent runs in the project's own checkout and writes no records; any `.jwn` there is the user's.
+  // A subagent runs in the project's own checkout and writes no records.
   // An archived task is out of the way until it is restored.
   const shown = tasks.filter(({ kind, archivedAt }) => kind !== 'subagent' && !archivedAt)
-  for (const task of await Promise.all(shown.map((task) => readTask(task, cardsOf.get(task.id) ?? [])))) {
+  for (const task of await Promise.all(shown.map((task) => readTask(folder, task, cardsOf.get(task.id) ?? [])))) {
     // A task whose project was removed from settings still shows under its own name.
     let list = projects.get(task.project)
     if (!list) projects.set(task.project, (list = []))
     list.push(task)
   }
   const known = new Set([...projects.values()].flat().map(({ project, id }) => `${project}/${id}`))
-  return {
-    projects: [...projects].map(([name, list]) => ({
-      name,
-      tasks: list.map((task) => ({
-        ...task,
-        buildsOn: task.buildsOn.map((base) => ({ ...base, found: known.has(`${base.project}/${base.task}`) })),
-      })),
-    })),
-  }
+  const graphProjects = [...projects].map(([name, list]) => {
+    const tasks = list.map((task) => ({
+      ...task,
+      buildsOn: task.buildsOn.map((base) => ({ ...base, found: known.has(`${base.project}/${base.task}`) })),
+    }))
+    return { name, tasks, progress: sumProgress(tasks.map((task) => task.progress)) }
+  })
+  return { projects: graphProjects, progress: sumProgress(graphProjects.map((project) => project.progress)) }
 }

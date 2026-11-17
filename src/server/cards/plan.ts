@@ -1,5 +1,6 @@
-import { readFile } from 'node:fs/promises'
+import { lstat, readFile } from 'node:fs/promises'
 import { join } from 'node:path'
+import { locateTaskRecords } from '../records/record-location'
 
 // Reading a draft ALIGN.md. `criteria` are its end-state items: the Success
 // criteria headings in the full form, or each todo's Done when line in the
@@ -18,7 +19,7 @@ const CRITERION = /^##\s+\d+[a-z]?\s*·\s*(.+?)\s*#*\s*$/i
 
 const DONE_WHEN = /^\s*-\s*Done when:\s*(.*?)\s*$/i
 
-type PlanTask = { id: string; title: string; worktree: string }
+type PlanTask = { id: string; title: string; project: string; worktree: string }
 
 function headingOf(line: string) {
   const match = /^(#{1,6})\s+(.*?)\s*#*\s*$/.exec(line)
@@ -109,13 +110,16 @@ export function alignSummary(plan: string) {
 }
 
 /** A draft plan waiting for approval. Null when there is none or it is already approved. */
-export async function readDraftPlan(task: PlanTask) {
-  const plan = await readFile(join(task.worktree, '.jwn', task.id, 'ALIGN.md'), 'utf8').catch((error: NodeJS.ErrnoException) => {
-    if (error.code === 'ENOENT') {
-      return null
-    }
-    throw error
-  })
+export async function readDraftPlan(dataFolder: string, task: PlanTask) {
+  const located = await locateTaskRecords(dataFolder, task)
+  if (!located || !('folder' in located)) return null
+  const path = join(located.folder, 'ALIGN.md')
+  const plan = await lstat(path)
+    .then(async (stats) => (stats.isSymbolicLink() ? null : readFile(path, 'utf8')))
+    .catch((error: NodeJS.ErrnoException) => {
+      if (error.code === 'ENOENT') return null
+      throw error
+    })
   if (plan === null || APPROVED.test(plan)) {
     return null
   }

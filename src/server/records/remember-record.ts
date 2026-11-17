@@ -15,6 +15,8 @@ import { promisify } from 'node:util'
 import { containsPath } from '../paths'
 import { agentEnvironment } from '../runner/find-executable'
 import { parseRecords } from './parse-records'
+import { locateTaskRecords } from './record-location'
+import { repoFromOrigin, repoSegments } from './record-path'
 
 export const TEST_REMEMBER_ROOT = 'jwn-records'
 export const REMEMBER_FILE = 'REMEMBER.md'
@@ -408,23 +410,6 @@ function isHumanLogin(login: string | undefined, type?: string) {
   return true
 }
 
-function repoFromOrigin(url: string): string[] | null {
-  const cleaned = url.trim().replace(/\.git$/i, '').replace(/\/+$/, '')
-  if (!cleaned) return null
-  let path = cleaned
-  const scp = /^[^/\s]+@[^:\s]+:(.+)$/.exec(cleaned)
-  if (scp) path = scp[1]
-  else if (cleaned.includes('://')) {
-    try {
-      path = new URL(cleaned).pathname
-    } catch {
-      return null
-    }
-  }
-  const parts = path.split('/').filter(Boolean).slice(-2)
-  if (parts.length !== 2 || parts.some((part) => part === '.' || part === '..')) return null
-  return parts
-}
 
 const GH_WORKER = `
 const { parentPort, workerData } = require('node:worker_threads')
@@ -490,8 +475,10 @@ function delegationReasons(interventions: number, total: number, met: number): s
 
 // ---- Writing -----------------------------------------------------------------
 
-async function readRecord(worktree: string, taskId: string, file: string): Promise<string | null> {
-  const path = join(worktree, '.jwn', taskId, file)
+async function readRecord(dataFolder: string, task: RememberTask, file: string): Promise<string | null> {
+  const located = await locateTaskRecords(dataFolder, task)
+  if (!located || !('folder' in located)) return null
+  const path = join(located.folder, file)
   try {
     const stats = await lstat(path)
     if (stats.isSymbolicLink()) return null
@@ -499,24 +486,6 @@ async function readRecord(worktree: string, taskId: string, file: string): Promi
   } catch {
     return null
   }
-}
-
-async function repoSegments(task: RememberTask): Promise<string[]> {
-  try {
-    const origin = await git(task.worktree, 'remote', 'get-url', 'origin')
-    const fromOrigin = repoFromOrigin(origin)
-    if (fromOrigin) return fromOrigin
-  } catch {
-    // No origin: the directory that holds the git dir names the repo.
-  }
-  try {
-    const common = await git(task.worktree, 'rev-parse', '--path-format=absolute', '--git-common-dir')
-    const name = basename(dirname(common))
-    if (name && name !== '.' && name !== '..') return [name]
-  } catch {
-    // Not a git checkout: the project name is the last resort.
-  }
-  return [task.project || 'task']
 }
 
 async function writeRemember({
@@ -530,11 +499,11 @@ async function writeRemember({
   root: string
   finishedByHand: boolean
 }) {
-  const align = await readRecord(task.worktree, task.id, 'ALIGN.md')
+  const align = await readRecord(folder, task, 'ALIGN.md')
   const items = endStateItems(align ?? '')
   // The delegation-rate script rejects a total below 1, so a task with no end state is not recorded.
   if (items.length < 1) return
-  const status = await readRecord(task.worktree, task.id, 'STATUS.md')
+  const status = await readRecord(folder, task, 'STATUS.md')
   const done = parseRecords(status === null ? {} : { 'STATUS.md': status }).state === 'done'
   if (!done && !finishedByHand) return
 
@@ -542,14 +511,15 @@ async function writeRemember({
   // ALIGN can say approved when this process missed the Approve message. The file's mtime is
   // when the agent saved that status, which is the approval turn, so later user messages still count.
   if (!obs.approvedAt && align && /^(?:\W*Version:[^·\n]*·)?\W*Status:\s*approved\b/im.test(align)) {
-    const stats = await lstat(join(task.worktree, '.jwn', task.id, 'ALIGN.md')).catch(() => null)
+    const located = await locateTaskRecords(folder, task)
+    const stats = located && 'folder' in located ? await lstat(join(located.folder, 'ALIGN.md')).catch(() => null) : null
     obs.approvedAt = stats?.mtime.toISOString() ?? null
   }
   const messages = obs.messages.filter((at) => afterApproval(obs, at)).length
   const interruptions = obs.interruptions.filter((at) => afterApproval(obs, at)).length
   const manual = await manualCommits(task, obs)
   const interventions = messages + interruptions + manual
-  const met = endStateItemsMet(await readRecord(task.worktree, task.id, 'VERIFY.md'), items)
+  const met = endStateItemsMet(await readRecord(folder, task, 'VERIFY.md'), items)
   const changes = await reviewChangeRequests(task.worktree)
   const delegated = interventions === 0 && met === items.length
   const reasons = delegationReasons(interventions, items.length, met)
