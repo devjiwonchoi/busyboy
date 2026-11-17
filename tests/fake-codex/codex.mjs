@@ -9,6 +9,8 @@
 // so the turn then stays open with no more output until `turn/interrupt`. An
 // MCP form's reply, declined or not, only goes to its server: the turn goes on.
 // A step with `echoReply` then writes the reply's action and content as an agent message.
+// A step with `echoDecision` writes the command decision Codex was sent, so a journey
+// can see that an allow, a denial, or an execpolicy object actually arrived.
 // A `delayMs` step waits, unless the turn ends first (an interrupt or a stop).
 // `thread/resume` fails as Codex does for ids starting with `missing-`.
 // `thread/fork` answers like `thread/start`, and an `echoThread` step writes
@@ -88,10 +90,29 @@ const notify = (method, params) => send({ method, params: { threadId, ...(curren
 /** The reply as a command decision: permissions granted nothing, or an elicitation declined, count as a decline. */
 function replyDecision(result) {
   if (!result || typeof result !== 'object') return 'accept'
-  if ('decision' in result) return typeof result.decision === 'string' ? result.decision : 'accept'
+  if ('decision' in result) return decisionName(result.decision)
   if ('action' in result) return result.action
   if ('permissions' in result) return Object.keys(result.permissions ?? {}).length ? 'accept' : 'decline'
   return 'accept'
+}
+
+/** A string decision, or the one key of an externally tagged object such as `acceptWithExecpolicyAmendment`. */
+function decisionName(decision) {
+  if (typeof decision === 'string') return decision
+  if (!decision || typeof decision !== 'object') return 'accept'
+  const [name] = Object.keys(decision)
+  if (name === 'acceptWithExecpolicyAmendment' || name === 'acceptForSession') return 'accept'
+  if (name === 'applyNetworkPolicyAmendment') {
+    return decision.applyNetworkPolicyAmendment?.network_policy_amendment?.action === 'deny' ? 'decline' : 'accept'
+  }
+  return name || 'accept'
+}
+
+/** What a journey reads back: the decision string, or the object Codex was sent. */
+function decisionText(decision) {
+  if (typeof decision === 'string') return decision
+  if (decision && typeof decision === 'object') return JSON.stringify(decision)
+  return 'unknown'
 }
 
 function completeTurn(status, error = null) {
@@ -130,7 +151,7 @@ function say(text) {
 
 async function playTurn(turn) {
   const own = current
-  for (const { raw, echoReply, delayMs, echoThread, preToolUse, then } of turn.steps) {
+  for (const { raw, echoReply, echoDecision, delayMs, echoThread, preToolUse, then } of turn.steps) {
     if (own.ended) return
     if (preToolUse) {
       const branch = then?.[(await hooksDeny(preToolUse)) ? 'deny' : 'allow']
@@ -163,6 +184,7 @@ async function playTurn(turn) {
       send({ id, method: raw.method, params: { threadId, turnId: own.id, itemId: randomUUID(), ...raw.params } })
       const result = await reply
       if (own.ended) return
+      if (echoDecision) say(`Codex received ${decisionText(result?.decision)}`)
       if (echoReply) say(`Reply ${result?.action ?? ''}: ${JSON.stringify(result?.content ?? null)}`)
       // An MCP form's answer, declined or not, goes to its server and the turn goes on.
       if (result && typeof result === 'object' && 'action' in result) continue

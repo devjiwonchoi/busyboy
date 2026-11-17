@@ -10,6 +10,8 @@ const QUESTION_REQUEST = 'Add a license file to the project.'
 const APPROVAL_REQUEST = 'Clean up the old build output.'
 const TWIN_QUESTIONS_REQUEST = 'Pick the two theme colors.'
 const CODEX_APPROVAL_REQUEST = 'Run the shell command `touch notes.txt`, then reply with exactly: Created notes.txt.'
+const CODEX_ROUTED_REQUEST = 'Run the shell command `touch routed.txt` and report how it was approved.'
+const CODEX_PREFIX_DECISION = '{"acceptWithExecpolicyAmendment":{"execpolicy_amendment":["touch","routed.txt"]}}'
 
 // A Codex task starts the fake app server, a Node process, which can be slow on a busy machine.
 const expect = baseExpect.configure({ timeout: 15_000 })
@@ -24,6 +26,16 @@ async function createTask(request: APIRequestContext, title: string, text: strin
   expect(body.result.isError ?? false).toBe(false)
   const { tasks } = JSON.parse(readFileSync(join(home, 'task-list.json'), 'utf8')) as { tasks: { title: string; worktree: string; id: string }[] }
   return tasks.find((task) => task.title === title)!
+}
+
+/** Starts a subagent the way the Director does. Its one reply is shown on the task line. */
+async function runSubagent(request: APIRequestContext, title: string, text: string) {
+  const response = await request.post('/api/mcp', {
+    data: { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'run_subagent', arguments: { project: 'web', title, request: text } } },
+  })
+  expect(response.status()).toBe(200)
+  const body = (await response.json()) as { result: { isError?: boolean; content: { text: string }[] } }
+  expect(body.result.isError ?? false, body.result.content[0]?.text).toBe(false)
 }
 
 async function openChat(page: Page) {
@@ -222,11 +234,58 @@ test.describe('Codex task agents', () => {
     await createTask(context.request, 'Create notes', CODEX_APPROVAL_REQUEST)
 
     const card = openCard(page, 'Approval from web · Create notes')
-    await expect(card.getByRole('button', { name: /^[A-C]\. / })).toHaveText(['AAllow', 'BDeny'])
+    // The recorded request offers an execpolicy prefix, not the string `acceptForSession`.
+    await expect(card.getByRole('button', { name: /^[A-C]\. / })).toHaveText([
+      'AAllow',
+      'BAlways allow commands starting with touch notes.txt',
+      'CDeny',
+    ])
     await card.getByRole('button', { name: 'A. Allow' }).click()
 
     await expect(openCards(page)).toHaveCount(0)
     await expect(transcript(page).getByRole('group', { name: 'Card from web · Create notes' })).toContainText('A · Allow')
     await expect(transcript(page).getByLabel('web · Create notes', { exact: true })).toContainText('Idle')
+  })
+
+  test('allowing a Codex command should send accept, and denying it should send cancel', async ({ page, context }) => {
+    await openChat(page)
+    await runSubagent(context.request, 'Route the command', CODEX_ROUTED_REQUEST)
+
+    const card = openCard(page, 'Approval from web · Route the command')
+    await expect(card).toContainText('Allow Shell: touch routed.txt?')
+    await expect(card.getByRole('button', { name: /^[A-C]\. / })).toHaveText([
+      'AAllow',
+      'BAlways allow commands starting with touch routed.txt',
+      'CDeny',
+    ])
+    await card.getByRole('button', { name: 'A. Allow' }).click()
+
+    const allowed = transcript(page).getByRole('listitem', { name: 'web · Route the command' })
+    await expect(allowed.getByLabel('Result')).toHaveText('Codex received accept')
+    await expect(allowed.locator('[data-status]')).toHaveText('Done')
+
+    await runSubagent(context.request, 'Refuse the command', CODEX_ROUTED_REQUEST)
+    const denial = openCard(page, 'Approval from web · Refuse the command')
+    await denial.getByRole('button', { name: 'C. Deny' }).click()
+
+    const refused = transcript(page).getByRole('listitem', { name: 'web · Refuse the command' })
+    await expect(refused.getByLabel('Result')).toHaveText('Codex received cancel')
+    await expect(refused.locator('[data-status]')).toHaveText('Stopped')
+    await expect.poll(() => {
+      const { tasks } = JSON.parse(readFileSync(join(home, 'task-list.json'), 'utf8')) as { tasks: { title: string; note?: string }[] }
+      return tasks.find((task) => task.title === 'Refuse the command')?.note
+    }).toBe('The command was denied, so Codex ended the turn.')
+  })
+
+  test('allowing a Codex command for its prefix should send the execpolicy decision Codex offered', async ({ page, context }) => {
+    await openChat(page)
+    await runSubagent(context.request, 'Remember the command', CODEX_ROUTED_REQUEST)
+
+    const card = openCard(page, 'Approval from web · Remember the command')
+    await card.getByRole('button', { name: 'B. Always allow commands starting with touch routed.txt' }).click()
+
+    const line = transcript(page).getByRole('listitem', { name: 'web · Remember the command' })
+    await expect(line.getByLabel('Result')).toHaveText(`Codex received ${CODEX_PREFIX_DECISION}`)
+    await expect(line.locator('[data-status]')).toHaveText('Done')
   })
 })

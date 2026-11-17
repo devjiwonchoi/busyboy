@@ -1,0 +1,39 @@
+{
+  "provider": "codex",
+  "description": "Hand-written from a recorded command approval. Codex lists accept, an execpolicy object, and cancel. echoDecision writes the decision BusyBoy sent back.",
+  "turns": [
+    {
+      "prompt": "Run the shell command `touch routed.txt` and report how it was approved.",
+      "steps": [
+        {
+          "echoDecision": true,
+          "raw": {
+            "id": 0,
+            "method": "item/commandExecution/requestApproval",
+            "params": {
+              "kind": "command",
+              "command": "/bin/zsh -lc 'touch routed.txt'",
+              "cwd": "/tmp/project",
+              "commandActions": [
+                {
+                  "type": "unknown",
+                  "command": "touch routed.txt"
+                }
+              ],
+              "proposedExecpolicyAmendment": ["touch", "routed.txt"],
+              "availableDecisions": [
+                "accept",
+                {
+                  "acceptWithExecpolicyAmendment": {
+                    "execpolicy_amendment": ["touch", "routed.txt"]
+                  }
+                },
+                "cancel"
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -186,7 +186,9 @@ class AppServerConnection {
   async initialize() {
     await this.request('initialize', {
       clientInfo: CLIENT_INFO,
-      capabilities: { experimentalApi: true, requestAttestation: false },
+      // `requiredHumanApproval` is what makes Codex deliver a `humanCommand` checkpoint.
+      // Without it the command is rejected and the user is never asked.
+      capabilities: { experimentalApi: true, requestAttestation: false, requiredHumanApproval: true },
     })
     this.notify('initialized')
   }
