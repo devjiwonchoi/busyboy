@@ -1,4 +1,4 @@
-import { execFileSync } from 'node:child_process'
+import { gitText } from './git-text.mts'
 
 const base = process.argv[2]
 if (!base) {
@@ -6,16 +6,7 @@ if (!base) {
   process.exit(1)
 }
 
-let diff: string
-try {
-  diff = execFileSync('git', ['diff', '--unified=0', '--no-color', '--diff-filter=ACMR', base, 'HEAD'], {
-    encoding: 'utf8',
-  })
-} catch (error) {
-  const stderr = error && typeof error === 'object' && 'stderr' in error ? String(error.stderr) : ''
-  console.error(stderr.trim() || (error instanceof Error ? error.message : String(error)))
-  process.exit(1)
-}
+const diff = gitText(['diff', '--unified=0', '--no-color', '--diff-filter=ACMR', base, 'HEAD'])
 
 const typescript = /\.(?:tsx?|mts)$/
 
