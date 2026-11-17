@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process'
 import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs'
-import { homedir, tmpdir } from 'node:os'
+import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test'
 import { localIsoDate, readRecordsForWeek, TEST_REMEMBER_ROOT } from '@/server/records/remember-record'
@@ -10,10 +10,9 @@ import { useProjectsHome } from './support/projects-home'
 // Script: tests/provider-scripts/task-remember.json.
 const REQUEST = 'Add a health check that reports whether the service is up.'
 const FOLLOW_UP = 'Also include the service version in the health response.'
-// The delegation-rate script on main of devjiwonchoi/skills. A named file is checked
-// whatever it is called, so it accepts REMEMBER.md. Pinned so the rules do not drift.
-const DELEGATION_RATE_URL =
-  'https://raw.githubusercontent.com/devjiwonchoi/skills/f179d4d3c37a9b60393723872fff0e5b2c0d0c12/skills/utils/retro/delegation-rate'
+// Vendored from devjiwonchoi/skills@f179d4d3 skills/utils/retro/delegation-rate.
+// A named file is checked whatever it is called, so it accepts REMEMBER.md.
+const DELEGATION_RATE = join(__dirname, 'fixtures', 'delegation-rate.sh')
 
 type StoredTask = { id: string; title: string; worktree: string }
 
@@ -48,6 +47,7 @@ async function openChat(page: Page) {
   await expect(page.getByRole('log', { name: 'Transcript' })).toHaveAttribute('data-connected', 'true')
 }
 
+const transcript = (page: Page) => page.getByRole('log', { name: 'Transcript' })
 const taskLine = (page: Page, name: string) => page.getByRole('group', { name: 'Tasks' }).getByRole('listitem', { name })
 
 test('finishing a task should write REMEMBER.md the delegation rate accepts', async ({ page, context, baseURL }) => {
@@ -57,7 +57,8 @@ test('finishing a task should write REMEMBER.md the delegation rate accepts', as
   await openChat(page)
   await callTool(context.request, 'create_task', { project: 'web', title: 'Add a health check', request: REQUEST })
 
-  const card = page.getByRole('region', { name: 'Waiting for you' }).getByRole('group', { name: 'Plan from web · Add a health check' })
+  // Open cards sit in the timeline. The closed record uses a different name.
+  const card = transcript(page).getByRole('group', { name: 'Plan from web · Add a health check' })
   await expect(card).toContainText('When done: a health check that reports whether the service is up')
   await card.getByRole('button', { name: 'Approve' }).click()
   await expect(card).toHaveCount(0)
@@ -94,9 +95,7 @@ test('finishing a task should write REMEMBER.md the delegation rate accepts', as
   expect(text).toContain('Not delegated: interventions_after_approval, end_state_incomplete.')
   expect(readFileSync(join(root, 'VERSION'), 'utf8').trim()).toBe('1')
 
-  const script = join(tmpdir(), `delegation-rate-${task.id}`)
-  execFileSync('curl', ['-fsSL', '-o', script, DELEGATION_RATE_URL])
-  const rated = execFileSync('sh', [script, recordPath], { encoding: 'utf8' })
+  const rated = execFileSync('sh', [DELEGATION_RATE, recordPath], { encoding: 'utf8' })
   expect(rated).toContain('tasks: 1')
   expect(rated).toContain('delegated: 0')
   expect(rated).toContain('delegation_rate: 0/1')

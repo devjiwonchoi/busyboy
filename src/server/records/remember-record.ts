@@ -10,8 +10,9 @@ import { execFile, execFileSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import { Worker } from 'node:worker_threads'
 import { lstat, mkdir, readdir, readFile, rename, writeFile } from 'node:fs/promises'
-import { basename, dirname, join, relative, isAbsolute } from 'node:path'
+import { basename, dirname, join } from 'node:path'
 import { promisify } from 'node:util'
+import { containsPath } from '../paths'
 import { agentEnvironment } from '../runner/find-executable'
 import { parseRecords } from './parse-records'
 
@@ -518,11 +519,6 @@ async function repoSegments(task: RememberTask): Promise<string[]> {
   return [task.project || 'task']
 }
 
-function insideRoot(root: string, path: string) {
-  const fromRoot = relative(root, path)
-  return fromRoot === '' || (!fromRoot.startsWith('..') && !isAbsolute(fromRoot))
-}
-
 async function writeRemember({
   folder,
   task,
@@ -562,7 +558,7 @@ async function writeRemember({
   const segments = await repoSegments(task)
   const directory = join(root, ...segments, task.id)
   const path = join(directory, REMEMBER_FILE)
-  if (!insideRoot(root, path)) return
+  if (!containsPath(root, path)) return
   await mkdir(directory, { recursive: true })
   const versionPath = join(root, VERSION_FILE)
   if (!(await lstat(versionPath).then(() => true, () => false))) {
