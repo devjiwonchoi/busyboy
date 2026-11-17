@@ -81,6 +81,9 @@ test('finishing a task should write REMEMBER.md the delegation rate accepts', as
     }
   }, { timeout: 20_000 }).toContain('delegated: false')
 
+  // The same finished turn opens the done card from STATUS.md.
+  await expect(transcript(page).getByRole('group', { name: 'Done from web · Add a health check' })).toContainText('Add a health check · Done')
+
   const text = readFileSync(recordPath, 'utf8')
   const today = localIsoDate()
   expect(frontMatter(text)).toMatchObject({
