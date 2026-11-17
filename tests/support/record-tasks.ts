@@ -3,10 +3,7 @@ import { cpSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node
 import { dirname, join } from 'node:path'
 import { TEST_REMEMBER_ROOT } from '@/server/records/remember-record'
 import { recordDirectory, repoSegments } from '@/server/records/record-path'
-
-// Must match src/server/tasks.ts.
-const TASKS_FILE = 'task-list.json'
-const WORKTREES_FOLDER = 'task-worktrees'
+import { TASKS_FILE, WORKTREES_FOLDER } from '@/server/tasks'
 
 const FIXTURES = join(__dirname, '..', 'fixtures', 'records')
 

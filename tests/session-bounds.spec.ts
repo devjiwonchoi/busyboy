@@ -3,11 +3,9 @@ import { mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync }
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test } from '@playwright/test'
+import { MAX_TRANSCRIPT_BYTES } from '@/server/director/transcript-log'
 import { useProjectsHome } from './support/projects-home'
 import { startStandaloneServer } from './support/standalone-server'
-
-// Must match src/server/director/transcript-log.ts.
-const MAX_TRANSCRIPT_BYTES = 20 * 1024 * 1024
 
 const ADD_LINE = 'Add one more line to the transcript.'
 const REMEMBER = 'What word did I ask you to remember?'

@@ -3,11 +3,8 @@ import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { BrowserContext } from '@playwright/test'
-
-// Must match server/config.ts and server/providers.ts.
-const TEST_HOME_COOKIE = 'busyboy-test-home'
-const TEST_SIGN_IN_COOKIE = 'busyboy-test-sign-in'
-const SETTINGS_FILE = 'app-settings.json'
+import { SETTINGS_FILE, TEST_HOME_COOKIE } from '@/server/config'
+import { TEST_SIGN_IN_COOKIE } from '@/server/providers'
 
 export function createTempFolder(prefix: string) {
   return mkdtempSync(join(tmpdir(), `busyboy-e2e-${prefix}-`))
