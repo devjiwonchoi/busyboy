@@ -52,7 +52,7 @@ function StepMark({ state }: { state: ProgressStepState }) {
 
 function StepList({ steps, spelled }: { steps: ProgressCard["steps"]; spelled?: boolean }) {
   return (
-    <ol className="space-y-1.5">
+    <ol className="space-y-2">
       {steps.map((step) => (
         <li key={step.id} className="flex items-center gap-2" data-state={step.state}>
           <StepMark state={step.state} />

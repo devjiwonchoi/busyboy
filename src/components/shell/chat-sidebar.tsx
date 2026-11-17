@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, CircleCheck, CircleHelp, Plus, Search, Trash2 } from "lucide-react";
+import { AlertTriangle, CircleCheck, CircleHelp, MoreHorizontal, Plus, Search } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useActionState, useEffect, useState, useSyncExternalStore } from "react";
@@ -27,10 +27,15 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   Field,
   FieldContent,
@@ -103,7 +108,7 @@ export function ChatSidebar({
       data-loaded={chats !== null}
       className="hidden h-full w-[17rem] shrink-0 flex-col border-r bg-background text-foreground md:flex dark:border-white/8 dark:bg-[#161617] dark:text-white"
     >
-      <div className="flex h-10 items-center justify-end gap-0.5 px-2">
+      <div className="flex h-10 items-center justify-end gap-1 px-2">
         <Button
           variant="ghost"
           size="icon-sm"
@@ -141,7 +146,7 @@ export function ChatSidebar({
             progress={recordProgress}
           />
         </div>
-        <ItemGroup aria-label="Managers" className="gap-0.5">
+        <ItemGroup aria-label="Managers" className="gap-1">
           {visibleManagers.map((manager) => (
             <ManagerItem
               key={manager.chat}
@@ -160,7 +165,7 @@ export function ChatSidebar({
           </p>
         )}
       </div>
-      <div className="flex items-center gap-2.5 px-3 py-3">
+      <div className="flex items-center gap-2 p-2">
         <span
           className="flex size-7 shrink-0 items-center justify-center rounded-full bg-[#3a3a40] text-xs font-medium text-white"
           aria-hidden
@@ -291,7 +296,7 @@ function DirectorRow({
       aria-current={active ? "page" : undefined}
       aria-label={directorLabel(director.name, progress.total, marks)}
       className={cn(
-        "flex items-center gap-2.5 rounded-xl px-2 py-1.5",
+        "flex items-center gap-2 rounded-xl px-2 py-1.5",
         active && "bg-muted dark:bg-[#232325]",
       )}
     >
@@ -333,7 +338,7 @@ function ManagerItem({
         href={managerHref(id)}
         aria-current={active ? "page" : undefined}
         className={cn(
-          "flex items-center gap-2.5 rounded-xl px-2 py-1.5",
+          "flex items-center gap-2 rounded-xl px-2 py-1.5",
           active && "bg-muted dark:bg-[#232325]",
         )}
       >
@@ -344,15 +349,13 @@ function ManagerItem({
             {statusLine(manager, manager.project ?? "")}
           </span>
         </span>
-        {/* Hover brings the remove control up over this corner. Focusing the row itself leaves the count in place. */}
         {progress && progress.total > 0 && (
           <span className="group-hover/manager:invisible">
             <ManagerProgress progress={progress} />
           </span>
         )}
       </Link>
-      {/* Above the row's link. Shown on hover, or when the control itself is focused. */}
-      <div className="pointer-events-none absolute top-1/2 right-2 z-10 -translate-y-1/2 opacity-0 group-hover/manager:pointer-events-auto group-hover/manager:opacity-100 focus-within:pointer-events-auto focus-within:opacity-100">
+      <div className="pointer-events-none absolute top-1/2 right-2 z-10 -translate-y-1/2 opacity-0 group-hover/manager:pointer-events-auto group-hover/manager:opacity-100 focus-within:pointer-events-auto focus-within:opacity-100 has-data-[popup-open]:pointer-events-auto has-data-[popup-open]:opacity-100">
         <RemoveManager
           id={id}
           name={manager.name}
@@ -374,7 +377,7 @@ function RoomItem({ room, managers }: { room: Room; managers: ChatSummary[] }) {
     <div
       role="listitem"
       aria-label={room.name}
-      className="flex items-center gap-2.5 rounded-xl px-2 py-1.5"
+      className="flex items-center gap-2 rounded-xl px-2 py-1.5"
     >
       <LetterStack names={names} />
       <span className="min-w-0">
@@ -400,37 +403,47 @@ function RemoveManager({
 }) {
   const router = useRouter();
   const [error, setError] = useState(false);
+  const [confirm, setConfirm] = useState(false);
   return (
-    <AlertDialog>
-      <AlertDialogTrigger
-        render={<Button variant="ghost" size="icon-xs" aria-label={`Remove ${name}`} />}
-      >
-        <Trash2 />
-      </AlertDialogTrigger>
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle>Remove {name}?</AlertDialogTitle>
-          <AlertDialogDescription>
-            {name} stops, and its tasks show in the Director&apos;s chat from now on. The {project}{" "}
-            project and its tasks stay.
-            {error && " It could not be removed. Try again."}
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel>Cancel</AlertDialogCancel>
-          <AlertDialogAction
-            onClick={() =>
-              void removeManagerAction(id).then(
-                () => active && router.push("/"),
-                () => setError(true),
-              )
-            }
-          >
+    <>
+      <DropdownMenu>
+        <DropdownMenuTrigger
+          render={<Button variant="ghost" size="icon-xs" aria-label={`Actions for ${name}`} />}
+        >
+          <MoreHorizontal />
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          <DropdownMenuItem variant="destructive" onClick={() => setConfirm(true)}>
             Remove
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+      <AlertDialog open={confirm} onOpenChange={setConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove {name}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {name} stops, and its tasks show in the Director&apos;s chat from now on. The{" "}
+              {project} project and its tasks stay.
+              {error && " It could not be removed. Try again."}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() =>
+                void removeManagerAction(id).then(
+                  () => active && router.push("/"),
+                  () => setError(true),
+                )
+              }
+            >
+              Remove
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   );
 }
 

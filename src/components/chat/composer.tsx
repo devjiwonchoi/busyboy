@@ -602,7 +602,7 @@ export const ChatComposer = forwardRef<
         </ComposerActions>
       </Composer>
       {error && (
-        <p role="alert" className="px-3 pt-1 pb-2 text-xs text-red-400">
+        <p role="alert" className="px-2 pt-1 pb-2 text-xs text-red-400">
           {error}
         </p>
       )}

@@ -1,6 +1,6 @@
 "use client";
 
-import { Archive, ArchiveRestore, MessageSquare, Square } from "lucide-react";
+import { MessageSquare, MoreHorizontal, Square } from "lucide-react";
 import { useState } from "react";
 
 import {
@@ -13,6 +13,12 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Bubble, BubbleContent } from "@/components/ui/bubble";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Message, MessageContent } from "@/components/ui/message";
 import { Toggle } from "@/components/ui/toggle";
 import { cn } from "@/lib/utils";
@@ -83,7 +89,7 @@ export function TaskGroup({
       <MessageContent>
         <Bubble variant="outline" role="group" aria-label="Tasks" className="w-full max-w-[80%]">
           <BubbleContent className="w-full">
-            <ul className="space-y-1">
+            <ul className="space-y-2">
               {taskIds.map((id) => {
                 const task = tasks.get(id);
                 const done = Boolean(task?.subagent && task.status === "idle");
@@ -106,11 +112,11 @@ export function TaskGroup({
                     data-jump-id={`task-${id}`}
                     data-current={currentJump === `task-${id}` ? "true" : undefined}
                     className={cn(
-                      "space-y-1",
+                      "space-y-2",
                       currentJump === `task-${id}` && "rounded-md ring-2 ring-ring",
                     )}
                   >
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-2">
                       {task?.subagent ? (
                         <span className="min-w-0 flex-1 truncate text-sm">
                           <span className="text-muted-foreground">{task.project} · </span>
@@ -159,36 +165,28 @@ export function TaskGroup({
                         </Toggle>
                       )}
                       {task && !task.archived && !working && (
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon-xs"
-                          aria-label={`Archive ${task.project} · ${task.title}`}
-                          onClick={() =>
+                        <RowMenu
+                          label={`Actions for ${task.project} · ${task.title}`}
+                          action="Archive"
+                          onAction={() =>
                             act(
                               archiveTaskAction(task.id),
                               "The task could not be archived. Try again.",
                             )
                           }
-                        >
-                          <Archive />
-                        </Button>
+                        />
                       )}
                       {task?.archived && (
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon-xs"
-                          aria-label={`Restore ${task.project} · ${task.title}`}
-                          onClick={() =>
+                        <RowMenu
+                          label={`Actions for ${task.project} · ${task.title}`}
+                          action="Restore"
+                          onAction={() =>
                             act(
                               restoreTaskAction(task.id),
                               "The task could not be restored. Try again.",
                             )
                           }
-                        >
-                          <ArchiveRestore />
-                        </Button>
+                        />
                       )}
                       {task && !task.archived && task.status !== "stopped" && !done && (
                         <Button
@@ -234,5 +232,28 @@ export function TaskGroup({
         </Bubble>
       </MessageContent>
     </Message>
+  );
+}
+
+function RowMenu({
+  label,
+  action,
+  onAction,
+}: {
+  label: string;
+  action: string;
+  onAction: () => void;
+}) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        render={<Button type="button" variant="ghost" size="icon-xs" aria-label={label} />}
+      >
+        <MoreHorizontal />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        <DropdownMenuItem onClick={onAction}>{action}</DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }

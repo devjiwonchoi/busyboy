@@ -388,7 +388,7 @@ export function DirectorChat({
           aria-label="Transcript"
           data-connected={view.connected}
           data-status={view.status}
-          className="mx-auto flex w-full max-w-3xl flex-col gap-3 px-6 py-6"
+          className="mx-auto flex w-full max-w-3xl flex-col gap-4 px-6 py-6"
         >
           <DirectorMessage persona={persona} header={header}>
             <Bubble variant="muted">
@@ -455,7 +455,7 @@ export function DirectorChat({
           )}
         </section>
       </div>
-      <div className="mx-auto w-full max-w-3xl px-6 pb-4">
+      <div className="mx-auto w-full max-w-3xl px-6 pb-6">
         {editingId && (
           <div
             role="status"

@@ -32,7 +32,7 @@ export function PrCardView({ card }: CardViewProps<PrCard>) {
         meta={<span className="text-muted-foreground text-xs font-normal">{card.project}</span>}
       />
       <CardShellBody>
-        <ul className="space-y-1.5">
+        <ul className="space-y-2">
           {card.pulls.map((pull) => (
             <li key={pull.number} className="flex items-center gap-2">
               {pull.check !== "none" ? (

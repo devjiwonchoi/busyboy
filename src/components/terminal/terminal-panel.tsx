@@ -84,7 +84,7 @@ export function TerminalPanel() {
 
   return (
     <div data-slot="terminal-panel" className="flex h-full flex-col">
-      <div className="flex h-8 shrink-0 items-center gap-2 border-b px-3 text-xs">
+      <div className="flex h-8 shrink-0 items-center gap-2 border-b px-2 text-xs">
         <SquareTerminal className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
         <span className="font-medium">Terminal</span>
         {shell?.task ? (
@@ -150,9 +150,9 @@ export function TerminalPanel() {
       </div>
       {ended ? (
         // A shell that ended is news, not an emergency, so this alert is a polite status.
-        <Alert role="status" className="shrink-0 rounded-none border-x-0 border-t-0 px-3">
+        <Alert role="status" className="shrink-0 rounded-none border-x-0 border-t-0">
           <AlertDescription>{ended}</AlertDescription>
-          <AlertAction className="top-1 right-3">
+          <AlertAction className="top-1 right-2">
             <Button variant="outline" size="xs" onClick={restart}>
               <RotateCcw />
               New terminal

@@ -96,7 +96,7 @@ async function Body({ searchParams }: Pick<PageProps<"/settings">, "searchParams
         </ul>
       </nav>
       <main aria-label="Settings" className="min-h-0 flex-1 overflow-y-auto">
-        <div className="mx-auto w-full max-w-2xl space-y-6 px-6 py-8">
+        <div className="mx-auto w-full max-w-2xl space-y-6 px-6 py-6">
           <Section id={section} />
         </div>
       </main>
@@ -190,7 +190,7 @@ async function AgentsSection() {
   ]);
   return (
     <>
-      <section aria-label="Harness" className="space-y-3">
+      <section aria-label="Harness" className="space-y-4">
         <div className="space-y-1">
           <h2 className="text-sm font-medium">Harness</h2>
           <p className="text-muted-foreground text-sm">
@@ -207,7 +207,7 @@ async function AgentsSection() {
           selected={current ?? undefined}
         />
       </section>
-      <ItemGroup aria-label="Agents" className="gap-2">
+      <ItemGroup aria-label="Agents">
         {agents.map(({ id, name, state, skills }) => (
           <Item key={id} role="listitem" variant="outline">
             <ItemContent>
@@ -269,7 +269,7 @@ const CONNECTOR_STATUS: Record<ConnectorStatus, string> = {
 async function ConnectorsSection() {
   const harnesses = await listConnectors();
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       {harnesses.map((harness) => (
         <section
           key={harness.provider}
@@ -284,7 +284,7 @@ async function ConnectorsSection() {
               </EmptyHeader>
             </Empty>
           ) : (
-            <ItemGroup aria-label={`${harness.name} servers`} className="gap-2">
+            <ItemGroup aria-label={`${harness.name} servers`}>
               {harness.servers.map((server) => (
                 <Item key={server.name} role="listitem" aria-label={server.name} variant="outline">
                   <ItemContent>
@@ -312,7 +312,7 @@ async function ConnectorsSection() {
             </ItemGroup>
           )}
           {harness.add.length > 0 && (
-            <div className="space-y-3">
+            <div className="space-y-4">
               <h3 className="text-muted-foreground text-sm">Add a connector</h3>
               {harness.add.map((offer) => (
                 <ConnectorAddForm
@@ -354,7 +354,7 @@ async function ProjectsSection() {
           </EmptyHeader>
         </Empty>
       ) : (
-        <ItemGroup aria-label="Projects" className="gap-2">
+        <ItemGroup aria-label="Projects">
           {projects.map((project) => (
             <Item key={project.name} role="listitem" variant="outline">
               <ItemContent className="min-w-0">

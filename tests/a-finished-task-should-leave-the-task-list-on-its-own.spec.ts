@@ -81,7 +81,9 @@ test("a finished task should leave the task list on its own", async ({
 
   // The first turn is still working, so the task stays in the list.
   await expect(line.locator("[data-status]")).toHaveText("Working");
-  await expect(line.getByRole("button", { name: "Archive web · Release checklist" })).toBeVisible();
+  await line.getByRole("button", { name: "Actions for web · Release checklist" }).click();
+  await expect(page.getByRole("menuitem", { name: "Archive" })).toBeVisible();
+  await page.keyboard.press("Escape");
   expect(existsSync(task.worktree)).toBe(true);
   expect(await taskStatus(context.request)).toContain(task.id);
 
@@ -91,10 +93,9 @@ test("a finished task should leave the task list on its own", async ({
 
   // Nobody clicked Archive. The finished task leaves the active list.
   await expect(line.locator("[data-status]")).toHaveText("Archived");
-  await expect(line.getByRole("button", { name: "Archive web · Release checklist" })).toHaveCount(
-    0,
-  );
-  await expect(line.getByRole("button", { name: "Restore web · Release checklist" })).toBeVisible();
+  await line.getByRole("button", { name: "Actions for web · Release checklist" }).click();
+  await expect(page.getByRole("menuitem", { name: "Archive" })).toHaveCount(0);
+  await expect(page.getByRole("menuitem", { name: "Restore" })).toBeVisible();
   expect(existsSync(task.worktree)).toBe(false);
   // The branch and the record stay, so a later message can bring the task back.
   expect(

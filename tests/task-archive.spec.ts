@@ -85,7 +85,8 @@ test("archiving a finished task should remove its worktree, and restoring should
   await openChat(page);
   const line = taskLine(page, "web · Contributing guide");
 
-  await line.getByRole("button", { name: "Archive web · Contributing guide" }).click();
+  await line.getByRole("button", { name: "Actions for web · Contributing guide" }).click();
+  await page.getByRole("menuitem", { name: "Archive" }).click();
 
   await expect(line.locator("[data-status]")).toHaveText("Archived");
   expect(existsSync(task.worktree)).toBe(false);
@@ -100,7 +101,8 @@ test("archiving a finished task should remove its worktree, and restoring should
     line.getByRole("button", { name: "Select web · Contributing guide" }),
   ).toBeDisabled();
 
-  await line.getByRole("button", { name: "Restore web · Contributing guide" }).click();
+  await line.getByRole("button", { name: "Actions for web · Contributing guide" }).click();
+  await page.getByRole("menuitem", { name: "Restore" }).click();
 
   await expect(line.locator("[data-status]")).not.toHaveText("Archived");
   expect(existsSync(join(task.worktree, ".busyboy-scratch"))).toBe(true);
@@ -126,7 +128,8 @@ test("archiving a task with uncommitted changes should keep its worktree and say
   await openChat(page);
   const line = taskLine(page, "web · Contributing guide");
 
-  await line.getByRole("button", { name: "Archive web · Contributing guide" }).click();
+  await line.getByRole("button", { name: "Actions for web · Contributing guide" }).click();
+  await page.getByRole("menuitem", { name: "Archive" }).click();
 
   await expect(line.locator("[data-status]")).toHaveText("Archived");
   await expect(page.getByRole("group", { name: "Tasks" })).toContainText(KEPT_NOTICE);
@@ -186,14 +189,17 @@ test("a working task should not be archived, and a finished subagent should", as
   await expect(subagent.locator("[data-status]")).toHaveText("Done");
   const [task] = storedTasks(home);
 
-  await expect(working.getByRole("button", { name: "Archive web · Release notes" })).toHaveCount(0);
+  await expect(
+    working.getByRole("button", { name: "Actions for web · Release notes" }),
+  ).toHaveCount(0);
   expect(await callTool(context.request, "archive_task", { task: task.id })).toEqual({
     isError: true,
     text: "web · Release notes is still working. Stop it before archiving it.",
   });
   expect(existsSync(task.worktree)).toBe(true);
 
-  await subagent.getByRole("button", { name: "Archive web · Which branch" }).click();
+  await subagent.getByRole("button", { name: "Actions for web · Which branch" }).click();
+  await page.getByRole("menuitem", { name: "Archive" }).click();
   await expect(subagent.locator("[data-status]")).toHaveText("Archived");
   expect((await callTool(context.request, "task_status", {})).text).not.toContain("Which branch");
 });
