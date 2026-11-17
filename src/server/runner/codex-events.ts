@@ -210,14 +210,7 @@ export class CodexEventMapper {
   /** A denial in the running turn could only `cancel` it (see `deniedWithCancel`). */
   private endedByDenial = false
 
-  /**
-   * @param mcpServers Names of the MCP servers this agent passed to Codex; only their startup
-   * failures are reported, not those of servers in the user's own Codex config.
-   */
-  constructor(
-    private readonly emit: (event: AgentEvent) => void,
-    private readonly mcpServers: ReadonlySet<string> = new Set(),
-  ) {}
+  constructor(private readonly emit: (event: AgentEvent) => void) {}
 
   /**
    * A command was denied with `cancel`, because the request offered no
@@ -254,11 +247,19 @@ export class CodexEventMapper {
         return
       }
       case 'mcpServer/startupStatus/updated': {
-        const name = String(params.name)
-        if (params.status !== 'failed' || !this.mcpServers.has(name) || this.failedServers.has(name)) return
+        // User-configured servers are inherited from Codex's own config, so a failure there
+        // is reported too, not only a server BusyBoy passed in.
+        const name = typeof params.name === 'string' ? params.name.trim() : ''
+        const status = params.status
+        if (!name || this.failedServers.has(name)) return
+        if (status !== 'failed' && status !== 'needs-auth' && status !== 'needsAuth') return
         this.failedServers.add(name)
         const reason = typeof params.error === 'string' && params.error.trim() ? `: ${params.error.trim().slice(0, DETAIL_LIMIT)}` : '.'
-        this.send({ type: 'error', code: 'provider', message: `The MCP server ${name} failed to start${reason}` })
+        const message =
+          status === 'failed'
+            ? `The MCP server ${name} failed to start${reason}`
+            : `The MCP server ${name} needs a login. Run \`codex mcp login ${name}\`.`
+        this.send({ type: 'error', code: 'provider', message })
         return
       }
       case 'turn/completed': {

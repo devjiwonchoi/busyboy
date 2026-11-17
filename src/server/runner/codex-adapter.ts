@@ -336,7 +336,7 @@ function startCodex(options: ProviderStartOptions): ProviderSession {
     }
     emit(event)
   }
-  const mapper = new CodexEventMapper(onEvent, new Set(Object.keys(mcp.config).map((key) => key.slice('mcp_servers.'.length))))
+  const mapper = new CodexEventMapper(onEvent)
 
   // The protocol is experimental: a message that does not have the expected shape is reported
   // (and a request refused) instead of being lost with the rest of its output.

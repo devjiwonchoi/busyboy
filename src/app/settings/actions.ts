@@ -4,6 +4,7 @@ import { refresh } from 'next/cache'
 import type { AlwaysAskResult } from '@/components/setup/always-ask-form'
 import { alwaysAskError, saveAlwaysAsk } from '@/server/always-ask-list'
 import { chooseCompanion, findCompanion } from '@/server/companions'
+import { addConnector } from '@/server/connectors'
 import { PROVIDERS, setDefaultProvider } from '@/server/providers'
 import type { ProviderId } from '@/server/runner/contract'
 
@@ -20,6 +21,23 @@ export async function setDefaultProviderAction(id: unknown) {
   if (!PROVIDERS.some((provider) => provider.id === id)) throw new Error('Unknown provider.')
   await setDefaultProvider(id as ProviderId)
   refresh()
+}
+
+export type AddConnectorResult = { error?: string; added?: boolean }
+
+/** Adds an official connector with the harness CLI. The name has to be one BusyBoy offers. */
+export async function addConnectorAction(_previous: AddConnectorResult, form: FormData): Promise<AddConnectorResult> {
+  const provider = form.get('provider')
+  const name = form.get('name')
+  if (provider !== 'claude' && provider !== 'codex') return { error: 'Unknown harness.' }
+  if (typeof name !== 'string') return { error: 'Unknown connector.' }
+  try {
+    await addConnector(provider, name)
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : 'The connector could not be added.' }
+  }
+  refresh()
+  return { added: true }
 }
 
 /** Saves the always-ask list from its text box, one rule per line. A line that could never match is refused. */
