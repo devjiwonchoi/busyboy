@@ -1,6 +1,7 @@
 import type { ChildProcess } from 'node:child_process'
 import { createInterface } from 'node:readline'
 import { alwaysAskApproval, createAllowedCalls, matchAlwaysAsk } from './always-ask'
+import { checkUserRules, userRuleApproval, userRulesHookNeeded } from './user-rules'
 import { spawnClaudeProcess as spawnProcessGroup, type ClaudeProcess as GroupProcess } from './claude-process'
 import type {
   AgentAnswer,
@@ -29,7 +30,7 @@ import {
  * BusyBoy does not install a Grok hook. Grok's hooks are fail-open (a hook that
  * is missing or errors lets the tool run), so an always-ask match would not be
  * stopped. The session is put in ACP permission mode `default` whenever the
- * list, a private folder, or a no-edit rule is in force, and every
+ * list, a private folder, a no-edit rule, or a ~/.jwn rule is in force, and every
  * `session/request_permission` is decided here: a match becomes an approval
  * card, and anything else is allowed, which is Auto mode.
  */
@@ -292,7 +293,8 @@ function questionList(value: unknown): Question[] {
 function startGrok(options: ProviderStartOptions): ProviderSession {
   const { emit } = options
   const enforce =
-    !options.noTools && ((options.alwaysAsk?.length ?? 0) > 0 || Boolean(options.privateFolder) || Boolean(options.noFileEdits))
+    !options.noTools &&
+    ((options.alwaysAsk?.length ?? 0) > 0 || Boolean(options.privateFolder) || Boolean(options.noFileEdits) || userRulesHookNeeded(options.rulesFolder))
   const mode = grokPermissionMode(options, enforce)
   const trusted = new Set(Object.entries(options.mcpServers ?? {}).filter(([, server]) => server.trusted).map(([name]) => name))
   const queue: UserTurn[] = []
@@ -370,6 +372,28 @@ function startGrok(options: ProviderStartOptions): ProviderSession {
       return
     }
     const subject = grokToolSubject(toolCall)
+    // Grok's own hooks are fail-open, so user rules are decided on this permission request.
+    const userRule = await checkUserRules({
+      rulesFolder: options.rulesFolder,
+      toolName: subject.toolName,
+      input: subject.input,
+      cwd: options.cwd,
+    })
+    if (userRule.ask) {
+      const remembered = { toolName: subject.toolName, input: subject.input, rule: userRule.ruleKey, cwd: options.cwd }
+      if (!(userRule.remember && allowedCalls.has(remembered))) {
+        const requestId = `grok-rule-${rpcId}`
+        const answer = await waitFor(
+          requestId,
+          userRuleApproval({ requestId, toolName: subject.toolName, input: subject.input, detail: userRule.detail, remember: userRule.remember }),
+        )
+        if (!answer || answer.kind !== 'approval' || !answer.allow) {
+          respond('deny')
+          return
+        }
+        if (answer.forSession && userRule.remember) allowedCalls.add(remembered)
+      }
+    }
     const rule = matchAlwaysAsk({
       rules: options.alwaysAsk ?? [],
       toolName: subject.toolName,

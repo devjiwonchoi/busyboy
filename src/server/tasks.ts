@@ -4,6 +4,7 @@ import { lstat, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { promisify } from 'node:util'
 import { alwaysAskRulesAt } from './always-ask-list'
+import { rulesFolderFor } from './runner/user-rules'
 import { gitPath, pathKey } from './paths'
 import { dataFolder } from './config'
 import { REVERT_AND_REMEMBER } from './director/context'
@@ -127,6 +128,7 @@ export function taskInstructions(task: Pick<TaskRecord, 'id' | 'project' | 'work
           ...alwaysAsk.map((rule) => `  - ${rule}`),
         ]
       : []),
+    '- Rules in ~/.jwn block a matching tool call until the user allows it. If a rule cannot be checked, the action is blocked until the user answers.',
     '',
     'Memory:',
     '- The Memory section below is what BusyBoy remembers about the user and this project. Follow it.',
@@ -145,6 +147,7 @@ export function subagentInstructions(task: Pick<TaskRecord, 'project' | 'worktre
     ...(alwaysAsk.length > 0
       ? ['BusyBoy asks the user before every tool call that matches one of these rules, so expect to wait for an answer there:', ...alwaysAsk.map((rule) => `- ${rule}`)]
       : []),
+    'Rules in ~/.jwn block a matching tool call until the user allows it. If a rule cannot be checked, the action is blocked until the user answers.',
   ].join('\n')
 }
 
@@ -355,6 +358,7 @@ export async function createTask(input: CreateTaskInput): Promise<TaskView> {
       mcpServers: input.taskMcp ? await input.taskMcp(project.name) : undefined,
       alwaysAsk,
       noFileEdits: Boolean(kind),
+      rulesFolder: rulesFolderFor(folder),
     })
     agentId = agent.id
     if (getAgent(agent.id)?.status === 'stopped') throw new TaskError(`The task agent could not start: ${startError(agent.id)}`)
@@ -679,6 +683,7 @@ async function startAgainInput(folder: string, task: TaskRecord): Promise<StartA
     mcpServers: await busyboyMcpServers(task.project, folder),
     resumeSessionId: task.sessionId ?? undefined,
     alwaysAsk,
+    rulesFolder: rulesFolderFor(folder),
   }
 }
 

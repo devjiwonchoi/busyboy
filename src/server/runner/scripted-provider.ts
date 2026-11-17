@@ -9,6 +9,7 @@ import { mkdir, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { basename, dirname, join } from 'node:path'
 import { alwaysAskApproval, createAllowedCalls, matchAlwaysAsk } from './always-ask'
+import { checkUserRules, userRuleApproval } from './user-rules'
 import {
   ClaudeEventMapper,
   claudePermissionToEvent,
@@ -312,8 +313,22 @@ function startScripted(folder: string, options: ProviderStartOptions): ProviderS
       }
       if ('toolCall' in step) {
         const { name, input } = step.toolCall
-        const rule = matchAlwaysAsk({ rules: options.alwaysAsk ?? [], toolName: name, input, folder: options.cwd, privateFolder: options.privateFolder, noFileEdits: options.noFileEdits })
         let key = 'allow'
+        // The scripted replay stands in for Claude's hook: the same rule check, then the same card.
+        const userRule = await checkUserRules({ rulesFolder: options.rulesFolder, toolName: name, input, cwd: options.cwd })
+        if (userRule.ask) {
+          const remembered = { toolName: name, input, rule: userRule.ruleKey, cwd: options.cwd }
+          if (!(userRule.remember && allowedCalls.has(remembered))) {
+            const answer = await pause(userRuleApproval({ requestId: `script-${++requestCount}`, toolName: name, input, detail: userRule.detail, remember: userRule.remember }))
+            if (answer.kind === 'approval' && answer.allow && answer.forSession && userRule.remember) allowedCalls.add(remembered)
+            if (!(answer.kind === 'approval' && answer.allow)) {
+              const branch = step.then?.deny
+              if (branch) return playSteps(branch)
+              continue
+            }
+          }
+        }
+        const rule = matchAlwaysAsk({ rules: options.alwaysAsk ?? [], toolName: name, input, folder: options.cwd, privateFolder: options.privateFolder, noFileEdits: options.noFileEdits })
         const call = { toolName: name, input, rule: rule ?? '', cwd: options.cwd }
         if (rule && !allowedCalls.has(call)) {
           const answer = await pause(alwaysAskApproval({ requestId: `script-${++requestCount}`, toolName: name, input, rule }))

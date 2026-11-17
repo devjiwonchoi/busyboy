@@ -73,7 +73,15 @@ export type TaskCard = CardBase &
         criteria: string[]
       }
     | { kind: 'progress'; title: string; steps: ProgressStep[] }
-    | { kind: 'done'; title: string }
+    | {
+        kind: 'done'
+        title: string
+        /**
+         * Share of agreed end-state items met (records on main). Null when this
+         * task has no agreed end state there.
+         */
+        achievement: { met: number; agreed: number } | null
+      }
     | { kind: 'pr'; title: string; note?: string; pulls: PullRequestRow[] }
   )
 
