@@ -255,9 +255,11 @@ function startScripted(folder: string, options: ProviderStartOptions): ProviderS
         continue
       }
       if ('toolCall' in step) {
-        const { name, input } = step.toolCall
+        const { name } = step.toolCall
+        // `<cwd>` and `<record-folder>` stand in for this task's paths, so a script can name them.
+        const input = fillTaskPaths(step.toolCall.input, options.cwd, options.recordFolder)
         let key = 'allow'
-        const userRule = await checkUserRules({ rulesFolder: options.rulesFolder, toolName: name, input, cwd: options.cwd })
+        const userRule = await checkUserRules({ rulesFolder: options.rulesFolder, toolName: name, input, cwd: options.cwd, recordFolder: options.recordFolder })
         if (userRule.ask) {
           const remembered = { toolName: name, input, rule: userRule.ruleKey, cwd: options.cwd }
           if (!(userRule.remember && allowedCalls.has(remembered))) {
@@ -270,7 +272,7 @@ function startScripted(folder: string, options: ProviderStartOptions): ProviderS
             }
           }
         }
-        const rule = matchAlwaysAsk({ rules: options.alwaysAsk ?? [], toolName: name, input, folder: options.cwd, privateFolder: options.privateFolder, noFileEdits: options.noFileEdits })
+        const rule = matchAlwaysAsk({ rules: options.alwaysAsk ?? [], toolName: name, input, folder: options.cwd, recordFolder: options.recordFolder, privateFolder: options.privateFolder, noFileEdits: options.noFileEdits })
         const call = { toolName: name, input, rule: rule ?? '', cwd: options.cwd }
         if (rule && !allowedCalls.has(call)) {
           const answer = await pause(alwaysAskApproval({ requestId: `script-${++requestCount}`, toolName: name, input, rule }))
@@ -389,6 +391,17 @@ function startScripted(folder: string, options: ProviderStartOptions): ProviderS
       emit({ type: 'stopped', finished })
     },
   }
+}
+
+function fillTaskPaths(input: Record<string, unknown>, cwd: string, recordFolder: string | undefined): Record<string, unknown> {
+  const fill = (value: string) => value.replaceAll('<cwd>', cwd).replaceAll('<record-folder>', recordFolder ?? '<record-folder>')
+  const next: Record<string, unknown> = { ...input }
+  for (const key of ['command', 'cmd', 'command_line', 'commandLine']) {
+    const value = next[key]
+    if (typeof value === 'string') next[key] = fill(value)
+    else if (Array.isArray(value)) next[key] = value.map((part) => (typeof part === 'string' ? fill(part) : part))
+  }
+  return next
 }
 
 function scriptedRecordFile(recordFolder: string | undefined, relative: string): string | null {

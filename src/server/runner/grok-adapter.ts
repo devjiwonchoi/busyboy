@@ -347,6 +347,7 @@ function startGrok(options: ProviderStartOptions): ProviderSession {
       toolName: subject.toolName,
       input: subject.input,
       cwd: options.cwd,
+      recordFolder: options.recordFolder,
     })
     if (userRule.ask) {
       const remembered = { toolName: subject.toolName, input: subject.input, rule: userRule.ruleKey, cwd: options.cwd }
@@ -368,6 +369,7 @@ function startGrok(options: ProviderStartOptions): ProviderSession {
       toolName: subject.toolName,
       input: subject.input,
       folder: options.cwd,
+      recordFolder: options.recordFolder,
       privateFolder: options.privateFolder,
       noFileEdits: options.noFileEdits,
     })

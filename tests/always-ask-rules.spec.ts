@@ -257,6 +257,15 @@ const ASKS: [string | string[], string | ReturnType<typeof expect.stringMatching
   ["apply_patch <<'EOF'\n*** Begin Patch\n*** Delete File: ../other-project/notes.txt\n*** End Patch\nEOF", DELETE_OUTSIDE_RULE],
   [`apply_patch '{"command":["apply_patch","*** Begin Patch\\n*** Delete File: ../other\\n*** End Patch"]}'`, DELETE_OUTSIDE_RULE],
   [`python3 -c "os . system('git push -f')"`, unreadable],
+  // A variable that is a delete target, a forced ref, or the default branch still asks once it is known.
+  ['A=../../gone; rm -rf $A', DELETE_OUTSIDE_RULE],
+  ['export A="../../gone files"; rm -rf "$A"', DELETE_OUTSIDE_RULE],
+  ['A=../../gone && rm -rf "$A"', DELETE_OUTSIDE_RULE],
+  ['rm -rf $NOT_A_REAL_VAR', DELETE_OUTSIDE_RULE],
+  ['A=main; git push origin $A', DEFAULT_BRANCH_RULE],
+  ['A=+main; git push origin $A', FORCE_PUSH_RULE],
+  // The command name is still unknown, and the arguments could be a delete.
+  ['$(echo rm) -rf ../other-project', unreadable],
 ]
 
 const RUNS = [
@@ -324,6 +333,17 @@ const RUNS = [
   `python3 -c "# os.system('git push -f')\nprint(1)"`,
   "apply_patch <<'EOF'\n*** Begin Patch\n*** Update File: src/app.ts\n@@\n-old\n+git push --force origin main\n*** End Patch\nEOF",
   "apply_patch <<'EOF'\n*** Begin Patch\n*** Delete File: dist/old.js\n*** End Patch\nEOF",
+  // Assignments in the same command are filled in. A variable that cannot match a rule does not ask.
+  'A=dist; rm -rf $A',
+  'export A="my dist"; rm -rf "$A"',
+  'A=dist && rm -rf "$A"',
+  'B=dist; A=$B/cache; rm -rf $A',
+  'A=../../gone; mkdir -p $A',
+  '$(echo ls) -la',
+  'NAME=world; echo "$NAME"',
+  'rm -rf .busyboy-scratch/shot.png',
+  'mkdir -p .busyboy-scratch && printf x > .busyboy-scratch/shot.png && rm -f .busyboy-scratch/shot.png',
+  'A=feature; git push origin $A',
 ]
 
 for (const [command, rule] of ASKS) {
@@ -422,6 +442,18 @@ test('a JSON-wrapped patch that edits BusyBoy files should ask, and one that edi
     })
   expect(edit('../data/app-settings.json')).toBe(BUSYBOY_FILES_RULE)
   expect(edit('src/app.ts')).toBeNull()
+})
+
+test('deleting inside the record folder through a variable should not ask, and outside both should', () => {
+  const records = join(folder, '..', 'task-record')
+  mkdirSync(records, { recursive: true })
+  const command = `cd ${folder}; A=${records}/ci-artifact; rm -rf $A; mkdir -p $A; gh run download 44170948268 -D $A 2>&1 | tail -2; find $A -name "empty-composer*.png"`
+  const ask = (text: string, recordFolder?: string) => matchAlwaysAsk({ rules: DEFAULT_ALWAYS_ASK, toolName: 'Bash', input: { command: text }, folder, recordFolder })
+  expect(ask(command, records)).toBeNull()
+  // The same delete, without counting the record folder, is outside the worktree.
+  expect(ask(`A=${records}/ci-artifact; rm -rf $A`)).toBe(DELETE_OUTSIDE_RULE)
+  expect(ask(`export A="${records}/ci artifact"; rm -rf "$A"`, records)).toBeNull()
+  expect(ask('A=../../gone && rm -rf "$A"', records)).toBe(DELETE_OUTSIDE_RULE)
 })
 
 test('deleting a file named ..secret inside the task should not ask, and one outside should', () => {

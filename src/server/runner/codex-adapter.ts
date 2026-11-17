@@ -230,7 +230,7 @@ function startCodex(options: ProviderStartOptions): ProviderSession {
 
   const gate = async ({ toolName, input, cwd, signal }: { toolName: string; input: unknown; cwd?: string; signal: AbortSignal }): Promise<HookDecision> => {
     const folder = cwd || options.cwd
-    const userRule = await checkUserRules({ rulesFolder: options.rulesFolder, toolName, input, cwd: folder })
+    const userRule = await checkUserRules({ rulesFolder: options.rulesFolder, toolName, input, cwd: folder, recordFolder: options.recordFolder })
     if (userRule.ask) {
       const call = { toolName, input, rule: userRule.ruleKey, cwd: folder }
       if (!(userRule.remember && allowedCalls.has(call))) {
@@ -247,7 +247,7 @@ function startCodex(options: ProviderStartOptions): ProviderSession {
         if (answer.forSession && userRule.remember) allowedCalls.add(call)
       }
     }
-    const rule = matchAlwaysAsk({ rules: options.alwaysAsk ?? [], toolName, input, folder: options.cwd, privateFolder: options.privateFolder, noFileEdits: options.noFileEdits })
+    const rule = matchAlwaysAsk({ rules: options.alwaysAsk ?? [], toolName, input, folder: options.cwd, recordFolder: options.recordFolder, privateFolder: options.privateFolder, noFileEdits: options.noFileEdits })
     const call = { toolName, input, rule: rule ?? '', cwd: folder }
     if (!rule || allowedCalls.has(call)) {
       return { allow: true, reason: '' }

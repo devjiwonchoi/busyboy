@@ -198,7 +198,7 @@ type PatchFile = { path: string; kind: 'add' | 'update' | 'delete' | 'move' }
 
 type Fact = { written: Word[]; argv: Word[]; cwd: string | null; viaXargs: boolean; gitDir: Word | null; scan: boolean; patches: PatchFile[] }
 
-type Context = { cwd: string | null; depth: number; scan: boolean; file?: string }
+type Context = { cwd: string | null; depth: number; scan: boolean; file?: string; bindings?: ReadonlyMap<string, Word> }
 
 type Analysis = { facts: Fact[]; unknown: string | null }
 
@@ -437,13 +437,14 @@ function unwrap(words: Word[]): { argv: Word[]; viaXargs: boolean } | null {
   let viaXargs = false
   for (;;) {
     const [first, second] = argv
+    // Checked before the dynamic return: `PATH=/tmp:$PATH` is dynamic and still changes which program runs.
+    if (first && RISKY_VARIABLE.test(first.text)) {
+      return null
+    }
     if (!first || first.dynamic) {
       return { argv, viaXargs }
     }
     const name = commandName(first.text)
-    if (RISKY_VARIABLE.test(first.text)) {
-      return null
-    }
     if (KEYWORDS.has(first.text) || /^[A-Za-z_][A-Za-z0-9_]*=/.test(first.text) || first.text === 'coproc') {
       argv = argv.slice(1)
       continue
@@ -853,6 +854,56 @@ function inlineCode(name: string, args: Word[], strict = false) {
 const GIT_GLOBAL_OPTIONS =
   /^(-C|-c|-p|-P|--paginate|--no-pager|--git-dir|--work-tree|--namespace|--bare|--exec-path|--config-env|--no-replace-objects|--no-lazy-fetch|--no-optional-locks|--no-advice|--literal-pathspecs|--glob-pathspecs|--noglob-pathspecs|--icase-pathspecs|--attr-source|--super-prefix|--list-cmds|--html-path|--man-path|--info-path|--version|-v|--help|-h)$/
 
+const ASSIGNMENT = /^([A-Za-z_][A-Za-z0-9_]*)=(.*)$/s
+
+// A verb, a short cluster with r, f, or d (`-rf`, `-R`), or a forced refspec. An unresolved command asks only with one of these.
+const UNRESOLVED_RISK =
+  /^(?:push|deploy|publish|merge|delete|destroy|apply|up|release|rm|rmdir)$|^(?:--(?:force|force-with-lease|force-if-includes|delete|mirror|prod)(?:=|$)|-[A-Za-z]*[rfdRFD][A-Za-z]*)$|^[+:]/
+
+function unresolvedCommandCouldMatch(args: Word[]) {
+  return args.some(({ text }) => UNRESOLVED_RISK.test(text))
+}
+
+// `$NAME` and `${NAME}` from assignments already recorded. A single-quoted word is not dynamic, so it stays literal.
+function expandWord(word: Word, bindings: ReadonlyMap<string, Word>): Word {
+  if (!word.dynamic || !word.text.includes('$')) return word
+  let unresolved = false
+  const text = word.text.replace(/\$\{([A-Za-z_][A-Za-z0-9_]*)\}|\$([A-Za-z_][A-Za-z0-9_]*)/g, (full, braced?: string, bare?: string) => {
+    const bound = bindings.get(braced ?? bare ?? '')
+    if (!bound) {
+      unresolved = true
+      return full
+    }
+    if (bound.dynamic) unresolved = true
+    return bound.text
+  })
+  return { text, dynamic: unresolved || /\$[{(]|`/.test(text) || /\$[0-9@*#?$!-]/.test(text) }
+}
+
+function persistedAssignment(word: Word, bindings: ReadonlyMap<string, Word>): { name: string; value: Word } | null {
+  const expanded = expandWord(word, bindings)
+  const match = ASSIGNMENT.exec(expanded.text)
+  if (!match) return null
+  return { name: match[1], value: { text: match[2], dynamic: expanded.dynamic } }
+}
+
+// Assignments that stay in the shell for later commands. A prefix (`A=/path rm $A`) does not: the shell expands `$A` first. `export` is what a child shell sees.
+function recordPersistedAssignments(words: Word[], bindings: Map<string, Word>, exported: Map<string, Word>) {
+  const [first] = words
+  if (!first) return
+  const name = first.dynamic ? '' : commandName(first.text)
+  const exporter = name === 'export' || name === 'declare' || name === 'typeset' || name === 'readonly'
+  const targets = exporter ? words.slice(1) : words.every((word) => ASSIGNMENT.test(word.text)) ? words : null
+  if (!targets) return
+  for (const word of targets) {
+    if (exporter && word.text.startsWith('-')) continue
+    const assigned = persistedAssignment(word, bindings)
+    if (!assigned) continue
+    bindings.set(assigned.name, assigned.value)
+    if (name === 'export') exported.set(assigned.name, assigned.value)
+  }
+}
+
 const GIT_COMMANDS = new Set([
   'add', 'am', 'apply', 'archive', 'bisect', 'blame', 'branch', 'bundle', 'checkout', 'cherry', 'cherry-pick', 'clean', 'clone', 'commit',
   'config', 'describe', 'diff', 'fetch', 'format-patch', 'gc', 'grep', 'init', 'log', 'ls-files', 'ls-remote', 'ls-tree', 'merge',
@@ -863,12 +914,17 @@ const GIT_COMMANDS = new Set([
 ])
 
 function analyzeCommands(commands: Word[][], context: Context, heredocs: string[][] = []): Analysis {
+  const bindings = new Map(context.bindings)
+  const exported = new Map(context.bindings)
   const deeper = (cwd: string | null) => ({ ...context, cwd, depth: context.depth + 1 })
   const results: Analysis[] = []
   let cwd = context.cwd
 
   for (let commandIndex = 0; commandIndex < commands.length; commandIndex++) {
-    const written = commands[commandIndex]!
+    const original = commands[commandIndex]!
+    // Expand before recording, so a prefix assignment does not change this command's own words.
+    const written = original.map((word) => expandWord(word, bindings))
+    recordPersistedAssignments(original, bindings, exported)
     const unwrapped = unwrap(written)
     if (!unwrapped) {
       results.push(unknownOnly('it sets PATH or a git variable, or passes a wrapper command an option BusyBoy does not know'))
@@ -880,7 +936,7 @@ function analyzeCommands(commands: Word[][], context: Context, heredocs: string[
       continue
     }
     if (argv[0].dynamic) {
-      if (!context.scan || argv.slice(1).some(({ text }) => /^(push|deploy|publish|merge|delete|destroy|apply|up|release)$/.test(text))) {
+      if (unresolvedCommandCouldMatch(argv.slice(1))) {
         results.push(unknownOnly('it runs a command built from a variable or a substitution'))
       }
       continue
@@ -938,7 +994,7 @@ function analyzeCommands(commands: Word[][], context: Context, heredocs: string[
       const flag = args.findIndex((word) => /^-[a-zA-Z]*c[a-zA-Z]*$/.test(word.text))
       if (flag !== -1) {
         const inner = args.slice(flag + 1).find((word) => word.text !== '--')
-        results.push(!inner || inner.dynamic ? unknownOnly(`${name} -c runs a script decided when it runs`) : analyze(inner.text, deeper(cwd)))
+        results.push(!inner || inner.dynamic ? unknownOnly(`${name} -c runs a script decided when it runs`) : analyze(inner.text, { ...deeper(cwd), bindings: exported }))
         continue
       }
       const file = args.find((word) => !word.text.startsWith('-') && !word.text.startsWith('+'))
@@ -953,18 +1009,18 @@ function analyzeCommands(commands: Word[][], context: Context, heredocs: string[
         results.push(unknownOnly(`${name} runs a script BusyBoy cannot read`))
         continue
       }
-      results.push(analyzeFile(path, deeper(cwd)))
+      results.push(analyzeFile(path, { ...deeper(cwd), bindings: exported }))
       continue
     }
     if (name === 'eval') {
       results.push(
-        args.some((word) => word.dynamic) ? unknownOnly('eval runs a command built when it runs') : analyze(args.map(({ text }) => text).join(' '), deeper(cwd)),
+        args.some((word) => word.dynamic) ? unknownOnly('eval runs a command built when it runs') : analyze(args.map(({ text }) => text).join(' '), { ...deeper(cwd), bindings }),
       )
       continue
     }
     if (name === 'source' || name === '.') {
       const path = pathOf(args[0])
-      results.push(path === null ? unknownOnly(`${name} reads a script whose path is decided when it runs`) : analyzeFile(path, deeper(cwd)))
+      results.push(path === null ? unknownOnly(`${name} reads a script whose path is decided when it runs`) : analyzeFile(path, { ...deeper(cwd), bindings }))
       continue
     }
     if (/^(npm|pnpm|yarn|bun|turbo|lerna|nx)$/.test(name) && cwd !== null) {
@@ -985,7 +1041,7 @@ function analyzeCommands(commands: Word[][], context: Context, heredocs: string[
     if ((name === 'npx' || name === 'npm') && args.some(({ text }) => text === '-c' || text === '--call')) {
       const flag = args.findIndex(({ text }) => text === '-c' || text === '--call')
       const inner = args[flag + 1]
-      results.push(!inner || inner.dynamic ? unknownOnly(`${name} -c runs a command decided when it runs`) : analyze(inner.text, deeper(cwd)))
+      results.push(!inner || inner.dynamic ? unknownOnly(`${name} -c runs a command decided when it runs`) : analyze(inner.text, { ...deeper(cwd), bindings: exported }))
     }
     if (name === 'find') {
       for (let index = 0; index < args.length; index++) {
@@ -1019,7 +1075,7 @@ function analyzeCommands(commands: Word[][], context: Context, heredocs: string[
       }
     }
     if (namesAPath(argv[0].text) && cwd !== null) {
-      results.push(analyzeFile(resolve(cwd, argv[0].text), deeper(cwd)))
+      results.push(analyzeFile(resolve(cwd, argv[0].text), { ...deeper(cwd), bindings: exported }))
     }
 
     const gitProgram = /^git-(push|send-pack)$/.exec(name)
@@ -1485,6 +1541,7 @@ export function matchAlwaysAsk({
   toolName,
   input,
   folder,
+  recordFolder,
   privateFolder,
   noFileEdits,
 }: {
@@ -1492,6 +1549,7 @@ export function matchAlwaysAsk({
   toolName: string
   input: unknown
   folder: string
+  recordFolder?: string
   privateFolder?: string
   noFileEdits?: boolean
 }) {
@@ -1505,12 +1563,15 @@ export function matchAlwaysAsk({
     script !== null ? analyze(script, { cwd: folder, depth: 0, scan: false }) : isShellTool(toolName) ? unreadableShell : NOTHING,
     isPatchTool(toolName) ? patchAnalysis(input, folder) : NOTHING,
   ])
-  // The folder as given and with symlinks resolved (/var and /private/var on macOS).
-  const folders = [folder]
-  try {
-    folders.push(realpathSync(folder))
-  } catch {
-    // A folder that does not exist yet is compared as given.
+  // The worktree and the record folder, as given and with symlinks resolved (/var and /private/var on macOS).
+  const roots = recordFolder ? [folder, recordFolder] : [folder]
+  const folders = [...roots]
+  for (const root of roots) {
+    try {
+      folders.push(realpathSync(root))
+    } catch {
+      // A folder that does not exist yet is compared as given.
+    }
   }
 
   if (noFileEdits && subagentChanges({ toolName, script, facts, unknown })) {
