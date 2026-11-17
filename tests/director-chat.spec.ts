@@ -132,7 +132,7 @@ test('typing @ should list projects', async ({ page, context, baseURL }) => {
   await expect.poll(() => message.innerText()).toBe('Fix the build in @api and @')
 })
 
-test('a message sent while the Director is answering should interrupt it', async ({ page, context, baseURL }) => {
+test('a message sent while the Director is answering should wait, and Send now should interrupt it', async ({ page, context, baseURL }) => {
   const { home } = await useProjectsHome(context, baseURL!, ['web'])
   await openChat(page)
   const transcript = page.getByRole('log', { name: 'Transcript' })
@@ -141,6 +141,12 @@ test('a message sent while the Director is answering should interrupt it', async
   await expect(transcript.getByLabel('Reply in progress')).toContainText('Once upon a time, a lighthouse')
 
   await send(page, INTERRUPTING_REQUEST)
+
+  const queued = page.getByRole('status', { name: 'Queued message' })
+  await expect(queued).toContainText('Send after this reply')
+  await expect(queued).toContainText(INTERRUPTING_REQUEST)
+  await expect(transcript.getByLabel('Reply in progress')).toContainText('Once upon a time, a lighthouse')
+  await queued.getByRole('button', { name: 'Send now' }).click()
 
   const replies = transcript.getByLabel('Reply', { exact: true })
   await expect(replies.last()).toHaveText('Hi!')

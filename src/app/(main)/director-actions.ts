@@ -1,7 +1,7 @@
 'use server'
 
 import { dataFolder } from '@/server/config'
-import { replyToTaskCard, sendToDirector, sendToTask, stopDirector } from '@/server/director/chat'
+import { replyToTaskCard, reviseDirectorMessage, sendDirectorQueueNow, sendToDirector, sendToTask, stopDirector } from '@/server/director/chat'
 import { getManagerAt } from '@/server/managers'
 import { busyboyMcpServers } from '@/server/mcp-tools'
 import { defaultProvider, providerState } from '@/server/providers'
@@ -49,6 +49,31 @@ export async function sendToDirectorAction(text: string, chat?: string | null) {
 
 export async function stopDirectorAction(chat?: string | null) {
   await stopDirector(await dataFolder(), await checkChat(chat))
+}
+
+/** Interrupts the current reply and sends the messages waiting behind it. */
+export async function sendDirectorQueueNowAction(chat?: string | null) {
+  await sendDirectorQueueNow(await dataFolder(), await checkChat(chat))
+}
+
+/**
+ * Replaces the latest message in the chat with `text` and asks again.
+ * Server actions are public endpoints, so every argument is checked at runtime.
+ */
+export async function reviseDirectorMessageAction(entryId: string, text: string, chat?: string | null) {
+  checkId(entryId, 'The message')
+  if (typeof text !== 'string' || !text.trim() || text.length > MAX_MESSAGE_LENGTH) {
+    throw new Error('A message must be non-empty text of at most 100,000 characters.')
+  }
+  const manager = await checkChat(chat)
+  await reviseDirectorMessage({
+    folder: await dataFolder(),
+    chat: manager,
+    entryId,
+    text,
+    resolveProvider: resolveDirectorProvider,
+    mcp: await busyboyMcpServers(undefined, undefined, manager ?? undefined),
+  })
 }
 
 // Server actions are public endpoints, so every argument is checked at runtime.

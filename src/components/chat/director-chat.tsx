@@ -1,21 +1,33 @@
 'use client'
 
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { archiveTaskAction, messageTaskAction, replyToCardAction, sendToDirectorAction, stopDirectorAction } from '@/app/(main)/director-actions'
+import {
+  archiveTaskAction,
+  messageTaskAction,
+  replyToCardAction,
+  reviseDirectorMessageAction,
+  sendDirectorQueueNowAction,
+  sendToDirectorAction,
+  stopDirectorAction,
+} from '@/app/(main)/director-actions'
+import { EscapeShortcut } from '@/components/shell/shortcut-registry'
 import { cn } from '@/lib/utils'
 import type { ChatEntry, DirectorStatus, DirectorUpdate } from '@/server/director/chat'
 import type { TaskCard } from '@/server/cards/model'
 import type { TaskView } from '@/server/tasks'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Bubble, BubbleContent } from '@/components/ui/bubble'
+import { Button } from '@/components/ui/button'
 import { Message, MessageAvatar, MessageContent, MessageFooter, MessageHeader } from '@/components/ui/message'
 import { ClosedCard } from './cards/closed-card'
 import { OpenCard } from './cards/open-card'
 import { mergeTimeline } from './cards/timeline'
 import { ChatComposer } from './composer'
 import { Markdown } from './markdown'
+import { MessageActions } from './message-actions'
 import { PersonaAvatar, type Persona } from './persona'
 import { ReplyTarget } from './reply-target'
+import { suggestFollowUps } from './suggest-follow-ups'
 import { TaskGroup } from './task-group'
 
 type View = {
@@ -25,11 +37,58 @@ type View = {
   cards: TaskCard[]
   status: DirectorStatus
   draft: string
+  queue: string[]
   connected: boolean
   sendError?: string
 }
 
-const initialView: View = { entries: [], tasks: new Map(), cards: [], status: 'idle', draft: '', connected: false }
+const initialView: View = { entries: [], tasks: new Map(), cards: [], status: 'idle', draft: '', queue: [], connected: false }
+
+type UserEntry = Extract<ChatEntry, { kind: 'user' }>
+type DirectorReply = Extract<ChatEntry, { kind: 'director' }>
+
+/** The latest message sent to this chat, and whether its turn failed or was interrupted. */
+function latestTurn(entries: ChatEntry[]): { user: UserEntry; reply?: DirectorReply; retry: boolean } | null {
+  let userIndex = -1
+  for (let index = entries.length - 1; index >= 0; index--) {
+    const entry = entries[index]
+    if (entry.kind === 'user' && !entry.to) {
+      userIndex = index
+      break
+    }
+  }
+  if (userIndex === -1) return null
+  const user = entries[userIndex] as UserEntry
+  let reply: DirectorReply | undefined
+  let failed = false
+  for (const entry of entries.slice(userIndex + 1)) {
+    if (entry.kind === 'director' && !reply) reply = entry
+    if (entry.kind === 'note' && (entry.tone === 'error' || entry.text === 'Stopped.')) failed = true
+  }
+  return { user, reply, retry: Boolean((reply && reply.interrupted) || (!reply && failed)) }
+}
+
+function followUps(entries: ChatEntry[], status: DirectorStatus): string[] {
+  if (status !== 'idle') return []
+  for (let index = entries.length - 1; index >= 0; index--) {
+    const entry = entries[index]
+    if (entry.kind === 'note' || entry.kind === 'tasks' || entry.kind === 'card') continue
+    if (entry.kind === 'user') return []
+    if (entry.interrupted) return []
+    return suggestFollowUps(entry.text)
+  }
+  return []
+}
+
+/** Escape stops this chat unless the pointer is in a side chat that is answering. */
+function directorHandlesEscape(event: KeyboardEvent) {
+  if (event.repeat) return false
+  const target = event.target
+  if (!(target instanceof Element)) return true
+  const side = target.closest('[data-side-chat]')
+  if (!side) return true
+  return !side.hasAttribute('data-asking')
+}
 
 function apply(view: View, update: DirectorUpdate): View {
   switch (update.type) {
@@ -40,6 +99,7 @@ function apply(view: View, update: DirectorUpdate): View {
         cards: update.cards,
         status: update.status,
         draft: update.draft,
+        queue: update.queue,
         connected: true,
       }
     case 'entry': {
@@ -49,6 +109,10 @@ function apply(view: View, update: DirectorUpdate): View {
       else entries[index] = update.entry
       return { ...view, entries, sendError: update.entry.kind === 'user' ? undefined : view.sendError }
     }
+    case 'entries':
+      return { ...view, entries: update.entries }
+    case 'queue':
+      return { ...view, queue: update.messages }
     case 'draft':
       return { ...view, draft: update.text }
     case 'status':
@@ -103,6 +167,12 @@ export function DirectorChat({
   // Set when the chosen task stopped taking messages (it opened a card, or was archived) before
   // the message was sent. Like a lost card reply, that message is refused, not sent to the Director.
   const [messageLost, setMessageLost] = useState(false)
+  const [seed, setSeed] = useState<{ token: number; text: string } | null>(null)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [draftText, setDraftText] = useState('')
+  const stash = useRef('')
+  const seedToken = useRef(0)
+  const retrying = useRef(false)
   const scroller = useRef<HTMLDivElement>(null)
   const name = persona.name
 
@@ -134,6 +204,51 @@ export function DirectorChat({
     if (element) element.scrollTop = element.scrollHeight
   }, [view.entries, view.draft, view.tasks, view.cards])
 
+  const turn = latestTurn(view.entries)
+  const canEdit = view.status === 'idle' && view.queue.length === 0
+  const suggestions = editingId || draftText.trim() ? [] : followUps(view.entries, view.status)
+  const queued = view.status === 'answering' ? view.queue : []
+
+  function fillComposer(text: string) {
+    seedToken.current += 1
+    setSeed({ token: seedToken.current, text })
+  }
+
+  function beginEdit(text: string, id: string) {
+    if (!canEdit) return
+    if (editingId === null) stash.current = draftText
+    setEditingId(id)
+    fillComposer(text)
+  }
+
+  function cancelEdit() {
+    const text = stash.current
+    setEditingId(null)
+    fillComposer(text)
+  }
+
+  function stopReply() {
+    void stopDirectorAction(chat).catch(() =>
+      setView((current) => ({ ...current, sendError: 'The reply could not be stopped. Try again.' })),
+    )
+  }
+
+  function sendQueuedNow() {
+    void sendDirectorQueueNowAction(chat).catch(() =>
+      setView((current) => ({ ...current, sendError: 'The message could not be sent. Try again.' })),
+    )
+  }
+
+  function retry() {
+    if (retrying.current || !turn?.retry) return
+    retrying.current = true
+    void reviseDirectorMessageAction(turn.user.id, turn.user.text, chat)
+      .catch(() => setView((current) => ({ ...current, sendError: 'The message could not be sent. Try again.' })))
+      .finally(() => {
+        retrying.current = false
+      })
+  }
+
   const thinking = view.status === 'answering' && !view.draft
   const replyCard = view.cards.find(({ id }) => id === replyChoice)
   const replyCardId = replyCard?.id ?? null
@@ -156,6 +271,12 @@ export function DirectorChat({
 
   return (
     <div className="flex h-full flex-col">
+      {view.status === 'answering' && (
+        <EscapeShortcut id="stop-director-reply" label="Stop the reply" handles={directorHandlesEscape} run={stopReply} />
+      )}
+      {editingId && view.status !== 'answering' && (
+        <EscapeShortcut id="cancel-message-edit" label="Cancel editing" handles={directorHandlesEscape} run={cancelEdit} />
+      )}
       <div ref={scroller} className="min-h-0 flex-1 overflow-y-auto">
         <section
           role="log"
@@ -190,6 +311,10 @@ export function DirectorChat({
                 tasks={view.tasks}
                 persona={persona}
                 messaging={messageTask?.id ?? null}
+                turn={turn}
+                canEdit={canEdit}
+                onEdit={beginEdit}
+                onRetry={retry}
                 onMessage={(taskId) => {
                   // One target at a time: a task replaces a card reply.
                   choice.current = null
@@ -218,17 +343,41 @@ export function DirectorChat({
         </section>
       </div>
       <div className="mx-auto w-full max-w-3xl px-6 pb-4">
+        {suggestions.length > 0 && (
+          <div role="group" aria-label="Suggested replies" className="mb-2 flex flex-wrap gap-1.5">
+            {suggestions.map((text) => (
+              <Button key={text} type="button" variant="outline" size="sm" className="rounded-full" onClick={() => fillComposer(text)}>
+                {text}
+              </Button>
+            ))}
+          </div>
+        )}
+        {editingId && (
+          <div role="status" aria-label="Editing your last message" className="text-muted-foreground mb-2 flex items-center gap-2 text-xs">
+            <span>Editing your last message</span>
+            <Button type="button" size="xs" variant="ghost" onClick={cancelEdit}>
+              Cancel
+            </Button>
+          </div>
+        )}
+        {queued.length > 0 && (
+          <div role="status" aria-label="Queued message" className="bg-muted/70 mb-2 flex items-center gap-2 rounded-full border px-2.5 py-1 text-xs">
+            <span className="text-muted-foreground shrink-0">
+              {queued.length > 1 ? `${queued.length} queued` : 'Send after this reply'}
+            </span>
+            <span className="min-w-0 flex-1 truncate">{queued.join('  ·  ')}</span>
+            <Button type="button" size="xs" variant="secondary" onClick={sendQueuedNow}>
+              Send now
+            </Button>
+          </div>
+        )}
         <ChatComposer
           projects={projects}
           filesProject={messageTask?.project ?? managedProject}
           canStop={view.status === 'answering'}
           canArchive={Boolean(messageTask)}
           onCommand={(command) => {
-            if (command === 'stop') {
-              void stopDirectorAction(chat).catch(() =>
-                setView((current) => ({ ...current, sendError: 'The reply could not be stopped. Try again.' })),
-              )
-            }
+            if (command === 'stop') stopReply()
             if (command === 'archive' && messageTask) {
               const taskId = messageTask.id
               setMessageChoice(null)
@@ -236,6 +385,12 @@ export function DirectorChat({
                 if (error) setView((current) => ({ ...current, sendError: error }))
               })
             }
+          }}
+          draftKey={chat ?? 'director'}
+          seed={seed}
+          onTextChange={setDraftText}
+          onEmptyArrowUp={() => {
+            if (turn && canEdit) beginEdit(turn.user.text, turn.user.id)
           }}
           leading={
             target ? (
@@ -252,14 +407,7 @@ export function DirectorChat({
             ) : undefined
           }
           placeholder={target ? `${replyCard ? 'Reply to' : 'Message'} ${target}` : `Message ${name}`}
-          onStop={
-            view.status === 'answering'
-              ? () =>
-                  void stopDirectorAction(chat).catch(() =>
-                    setView((current) => ({ ...current, sendError: 'The reply could not be stopped. Try again.' })),
-                  )
-              : undefined
-          }
+          onStop={view.status === 'answering' ? stopReply : undefined}
           onSend={(text) => {
             if (replyLost) {
               setReplyLost(false)
@@ -278,6 +426,15 @@ export function DirectorChat({
                 sendError: `The task you were messaging stopped taking messages, so this was not sent. Send again to message ${name}.`,
               }))
               return Promise.reject(new Error('The task stopped taking messages.'))
+            }
+            if (editingId && !replyCard && !messageTask) {
+              return reviseDirectorMessageAction(editingId, text, chat).then(
+                () => setEditingId(null),
+                (error: unknown) => {
+                  setView((current) => ({ ...current, sendError: 'The message could not be sent. Try again.' }))
+                  throw error
+                },
+              )
             }
             if (replyCard) {
               // A delivered reply closes its card; that close must not count as a lost reply.
@@ -346,12 +503,20 @@ function EntryView({
   tasks,
   persona,
   messaging,
+  turn,
+  canEdit,
+  onEdit,
+  onRetry,
   onMessage,
 }: {
   entry: ChatEntry
   tasks: Map<string, TaskView>
   persona: Persona
   messaging: string | null
+  turn: ReturnType<typeof latestTurn>
+  canEdit: boolean
+  onEdit: (text: string, id: string) => void
+  onRetry: () => void
   onMessage: (taskId: string | null) => void
 }) {
   switch (entry.kind) {
@@ -360,20 +525,37 @@ function EntryView({
         <Message align="end">
           <MessageContent>
             {entry.to && <MessageHeader>To {entry.to}</MessageHeader>}
-            <Bubble role="group" aria-label={entry.to ? `Your reply to ${entry.to}` : 'Your message'}>
-              <BubbleContent className="whitespace-pre-wrap">{entry.text}</BubbleContent>
-            </Bubble>
+            <div className="relative flex w-full min-w-0 flex-col items-end pt-7">
+              <Bubble role="group" aria-label={entry.to ? `Your reply to ${entry.to}` : 'Your message'}>
+                <BubbleContent className="whitespace-pre-wrap">{entry.text}</BubbleContent>
+              </Bubble>
+              <MessageActions
+                align="end"
+                text={entry.text}
+                at={entry.at}
+                onEdit={!entry.to && canEdit && turn?.user.id === entry.id ? () => onEdit(entry.text, entry.id) : undefined}
+                onRetry={turn?.retry && !turn.reply && turn.user.id === entry.id ? onRetry : undefined}
+              />
+            </div>
           </MessageContent>
         </Message>
       )
     case 'director':
       return (
         <DirectorMessage persona={persona}>
-          <Bubble variant="muted" role="group" aria-label="Reply" data-interrupted={entry.interrupted || undefined}>
-            <BubbleContent>
-              <Markdown text={entry.text} />
-            </BubbleContent>
-          </Bubble>
+          <div className="relative flex w-full min-w-0 flex-col items-start pt-7">
+            <Bubble variant="muted" role="group" aria-label="Reply" data-interrupted={entry.interrupted || undefined}>
+              <BubbleContent>
+                <Markdown text={entry.text} />
+              </BubbleContent>
+            </Bubble>
+            <MessageActions
+              align="start"
+              text={entry.text}
+              at={entry.at}
+              onRetry={turn?.retry && turn.reply?.id === entry.id ? onRetry : undefined}
+            />
+          </div>
           {entry.interrupted && <MessageFooter>Interrupted</MessageFooter>}
         </DirectorMessage>
       )

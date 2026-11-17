@@ -23,6 +23,18 @@
       ]
     },
     {
+      "prompt": "Write a long story about a lighthouse.",
+      "context": "Write a long story about a lighthouse.",
+      "steps": [
+        {
+          "event": {
+            "type": "text",
+            "text": "A lighthouse, briefly."
+          }
+        }
+      ]
+    },
+    {
       "prompt": "Never mind, just say hi.",
       "steps": [
         {
