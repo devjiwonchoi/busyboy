@@ -1,0 +1,32 @@
+name: Cache the pnpm store
+description: >-
+  Restores the pnpm content-addressable store. The key matches this OS and
+  architecture, then falls back to an older lockfile, the other architecture
+  of the same OS, and the caches actions/setup-node saved before this action
+  existed. setup-node's own pnpm cache does not use a fallback key, so a
+  lockfile change made Windows arm64 download every package.
+
+runs:
+  using: composite
+  steps:
+    - id: store
+      shell: bash
+      run: |
+        arch="$(printf '%s' "$RUNNER_ARCH" | tr '[:upper:]' '[:lower:]')"
+        store="$(pnpm store path --silent | tr -d '\r')"
+        # pnpm on Windows can return an extended path, which actions/cache rejects.
+        store="$(node -e 'const s = process.argv[1]; process.stdout.write(s.startsWith("\\\\?\\") ? s.slice(4) : s)' "$store")"
+        {
+          echo "arch=$arch"
+          echo "path=$store"
+        } >> "$GITHUB_OUTPUT"
+
+    - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ${{ steps.store.outputs.path }}
+        key: pnpm-store-${{ runner.os }}-${{ steps.store.outputs.arch }}-${{ hashFiles('pnpm-lock.yaml') }}
+        restore-keys: |
+          pnpm-store-${{ runner.os }}-${{ steps.store.outputs.arch }}-
+          node-cache-${{ runner.os }}-${{ steps.store.outputs.arch }}-pnpm-
+          pnpm-store-${{ runner.os }}-
+          node-cache-${{ runner.os }}-

@@ -1,6 +1,6 @@
 // Packages the desktop app with electron-builder.
 //
-//   node scripts/build-desktop.mts [--skip-next] [--version <x.y.z>] [--mac | --win | --linux] [--release]
+//   node scripts/build-desktop.mts [--skip-next] [--skip-electron] [--version <x.y.z>] [--mac | --win | --linux] [--release]
 //
 // package.json stays at 0.0.0; a release passes its version with --version.
 // The result, including the path of the packaged executable, is written to
@@ -51,8 +51,10 @@ function run(command: string, commandArgs: string[]) {
   execFileSync(command, commandArgs, { cwd: root, stdio: 'inherit', shell: process.platform === 'win32' })
 }
 
-// The standalone server carries native modules built for this machine
-// (for example sharp), so the app can only be packaged for the host platform.
+// electron-builder and the server's native modules are built for this machine,
+// so the app can only be packaged on the platform it will run on. The Next
+// output and the Electron bundle are not: --skip-next and --skip-electron
+// reuse ones built elsewhere (the release workflow builds them once on Linux).
 function targetPlatform() {
   const requested = args.has('--mac') ? 'darwin' : args.has('--win') ? 'win32' : args.has('--linux') ? 'linux' : null
   if (requested && requested !== process.platform) {
@@ -85,15 +87,33 @@ if (!args.has('--skip-next')) run('pnpm', ['build'])
 if (!existsSync(join(standalone, 'server.js'))) {
   throw new Error('No .next/standalone/server.js. Run `pnpm build` first.')
 }
-run('pnpm', ['build:electron'])
+if (!args.has('--skip-electron')) run('pnpm', ['build:electron'])
+else if (!existsSync(join(root, 'dist-electron', 'main.cjs'))) {
+  throw new Error('No dist-electron/main.cjs. Run `pnpm build:electron` first.')
+}
 
 rmSync(outputDir, { recursive: true, force: true })
+
+// Packaging does not ship node_modules in the app, but electron-builder still
+// requires every production dependency to be installed. The release jobs only
+// install electron and electron-builder, so the dependency list is set aside
+// for the build and restored afterwards. The version the app reports comes
+// from extraMetadata below.
+const packagePath = join(root, 'package.json')
+const packageBackup = args.has('--skip-next') ? readFileSync(packagePath) : null
+if (packageBackup) {
+  const packaged = JSON.parse(packageBackup.toString('utf8')) as Record<string, unknown>
+  delete packaged.dependencies
+  delete packaged.optionalDependencies
+  writeFileSync(packagePath, `${JSON.stringify(packaged, null, 2)}\n`)
+}
 
 let packagedServer: string | undefined
 let executable: string | undefined
 
 const entitlements = join(root, 'electron', 'entitlements.mac.plist')
 
+try {
 await builder.build({
   targets: platform.createTarget(release ? (mac ? ['dmg', 'zip'] : ['nsis']) : 'dir'),
   // Nothing is uploaded from here; the release workflow publishes the files.
@@ -154,6 +174,9 @@ await builder.build({
           { identity: null }),
     },
     afterPack: async (context) => {
+      // The dependency list was set aside so electron-builder would not require
+      // packages this job did not install. The server install reads it back.
+      if (packageBackup) writeFileSync(packagePath, packageBackup)
       const { productFilename } = context.packager.appInfo
       const mac = context.electronPlatformName === 'darwin'
       const resources = mac
@@ -182,6 +205,9 @@ await builder.build({
     },
   },
 })
+} finally {
+  if (packageBackup) writeFileSync(packagePath, packageBackup)
+}
 
 if (!packagedServer || !executable) throw new Error('electron-builder did not run the afterPack step.')
 await checkPackagedServer(packagedServer)

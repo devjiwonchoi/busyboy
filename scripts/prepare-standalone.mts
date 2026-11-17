@@ -2,12 +2,19 @@
 // `.next/standalone/server.js` can serve the full app on its own, and
 // installs the packages in src/lib/server-external-packages.ts whole, as the
 // desktop build does, since tracing misses their native binaries.
+//
+//   node scripts/prepare-standalone.mts [--assets-only]
+//
+// --assets-only skips the native-package install. The release workflow builds
+// the standalone output once, keeps pnpm's symlinks, and each platform
+// installs its own native modules when it packages the app.
 import { cpSync, existsSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { installServerPackages } from './install-server-packages.mts'
 
 const root = join(import.meta.dirname, '..')
 const standalone = join(root, '.next', 'standalone')
+const assetsOnly = process.argv.includes('--assets-only')
 
 if (!existsSync(join(standalone, 'server.js'))) {
   throw new Error('No .next/standalone/server.js. Run `next build` first.')
@@ -24,4 +31,4 @@ for (const [from, to] of copies) {
   cpSync(from, to, { recursive: true })
 }
 
-installServerPackages(standalone, process.platform, process.arch)
+if (!assetsOnly) installServerPackages(standalone, process.platform, process.arch)

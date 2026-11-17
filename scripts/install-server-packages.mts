@@ -3,15 +3,22 @@
 // tracing picked: they load native binaries or files by computed paths, so a
 // traced subset can miss what they need at runtime.
 //
-// The app's production dependencies are installed into a temporary folder
-// from copies of package.json, pnpm-lock.yaml, and pnpm-workspace.yaml
-// (frozen, so exactly the locked versions) as real, hoisted folders. The
-// listed packages and everything they resolve to are copied from there.
+// The packages the server loads by name are installed into a temporary folder
+// from the lockfile (frozen, so exactly the locked versions) as real, hoisted
+// folders. Only those packages are installed: the rest of the app is not, so
+// the install stays small on the slow Windows runners. The listed packages and
+// everything they resolve to are copied from there.
+//
+// Next also traces `sharp` into the standalone output, including the build
+// machine's native binary. `sharp` is not a direct dependency, so it is added
+// here and installed for the machine doing the packaging. Binaries for any
+// other platform are then removed.
 import { execFileSync } from 'node:child_process'
-import { chmodSync, copyFileSync, cpSync, existsSync, lstatSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync } from 'node:fs'
+import { chmodSync, copyFileSync, cpSync, existsSync, lstatSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, relative, sep } from 'node:path'
 import { serverExternalPackages } from '../src/lib/server-external-packages.ts'
+import { trimLockfile } from './trim-lockfile.mts'
 
 const root = join(import.meta.dirname, '..')
 
@@ -23,6 +30,7 @@ const bundledExecutables = /^@anthropic-ai\/claude-agent-sdk-/
 type Manifest = {
   name: string
   version?: string
+  packageManager?: string
   dependencies?: Record<string, string>
   optionalDependencies?: Record<string, string>
   peerDependencies?: Record<string, string>
@@ -114,6 +122,61 @@ function makeSpawnHelperExecutable(packageDir: string, platform: string, arch: s
   }
 }
 
+/** The lockfile snapshot Next resolved for sharp, including its peer suffix when it has one. */
+function lockedSharp(lockText: string): { specifier: string; version: string } | null {
+  const withPeer = /^  sharp@(\d+\.\d+\.\d+)\([^)\n]+\):/m.exec(lockText)
+  if (withPeer) return { specifier: withPeer[1], version: withPeer[1] + withPeer[0].slice(`  sharp@${withPeer[1]}`.length, -1) }
+  const plain = /^  sharp@(\d+\.\d+\.\d+):/m.exec(lockText)
+  return plain ? { specifier: plain[1], version: plain[1] } : null
+}
+
+function quoteYaml(name: string) {
+  return /[^A-Za-z0-9_-]/.test(name) ? `'${name.replaceAll("'", "''")}'` : name
+}
+
+/** Adds one root dependency the committed importer does not list. `version` is the lockfile snapshot id. */
+function addLockfileDependency(lockText: string, name: string, specifier: string, version: string) {
+  const newline = lockText.includes('\r\n') ? '\r\n' : '\n'
+  const header = `    dependencies:${newline}`
+  const entry = `      ${quoteYaml(name)}:${newline}        specifier: ${specifier}${newline}        version: ${version}${newline}`
+  const at = lockText.indexOf(header)
+  if (at === -1) throw new Error('The trimmed lockfile has no dependencies section to add sharp to.')
+  return lockText.slice(0, at + header.length) + entry + lockText.slice(at + header.length)
+}
+
+/**
+ * Deletes `@img/sharp-*` binaries that are not for `platform-arch`. A standalone
+ * output built on another machine contains that machine's copy, and loading it
+ * crashes the server.
+ */
+function removeForeignSharpPackages(serverDir: string, platform: string, arch: string) {
+  const keep = new Set([`sharp-${platform}-${arch}`, `sharp-libvips-${platform}-${arch}`])
+  const stack = [serverDir]
+  while (stack.length > 0) {
+    const dir = stack.pop()!
+    let entries
+    try {
+      entries = readdirSync(dir, { withFileTypes: true })
+    } catch {
+      continue
+    }
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue
+      const path = join(dir, entry.name)
+      if (entry.name === '@img') {
+        for (const child of readdirSync(path, { withFileTypes: true })) {
+          // Symlinks too: pnpm links each platform package, and a link to the
+          // build machine's binary must not survive onto another platform.
+          if (keep.has(child.name) || !child.name.startsWith('sharp-')) continue
+          if (!child.isDirectory() && !child.isSymbolicLink()) continue
+          rmSync(join(path, child.name), { recursive: true, force: true })
+        }
+      }
+      stack.push(path)
+    }
+  }
+}
+
 export function installServerPackages(serverDir: string, platform: string, arch: string) {
   const manifest = readManifest(root)
   for (const name of serverExternalPackages) {
@@ -122,16 +185,33 @@ export function installServerPackages(serverDir: string, platform: string, arch:
     }
   }
 
+  const lockText = readFileSync(join(root, 'pnpm-lock.yaml'), 'utf8')
+  const sharp = lockedSharp(lockText)
+  const keep = new Set<string>(serverExternalPackages)
+  if (sharp) keep.add('sharp')
+
   const staging = mkdtempSync(join(tmpdir(), 'busyboy-server-packages-'))
   try {
     // A separate project outside the repository, so the install cannot change
     // the repository's own node_modules or install state.
-    for (const file of ['package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml']) {
-      copyFileSync(join(root, file), join(staging, file))
+    const staged: { name: string; private: true; packageManager?: string; dependencies: Record<string, string> } = {
+      name: 'busyboy-server-packages',
+      private: true,
+      dependencies: {},
     }
+    if (manifest.packageManager) staged.packageManager = manifest.packageManager
+    for (const name of serverExternalPackages) staged.dependencies[name] = manifest.dependencies![name]
+    if (sharp) staged.dependencies.sharp = sharp.specifier
+    writeFileSync(join(staging, 'package.json'), `${JSON.stringify(staged, null, 2)}\n`)
+    let stagedLock = trimLockfile(lockText, keep)
+    if (sharp && !(serverExternalPackages as readonly string[]).includes('sharp')) {
+      stagedLock = addLockfileDependency(stagedLock, 'sharp', sharp.specifier, sharp.version)
+    }
+    writeFileSync(join(staging, 'pnpm-lock.yaml'), stagedLock)
+    copyFileSync(join(root, 'pnpm-workspace.yaml'), join(staging, 'pnpm-workspace.yaml'))
     execFileSync(
       'pnpm',
-      ['install', '--frozen-lockfile', '--prod', '--config.node-linker=hoisted', '--prefer-offline', '--reporter=silent'],
+      ['install', '--frozen-lockfile', '--prod', '--config.node-linker=hoisted', '--prefer-offline', '--reporter=append-only'],
       { cwd: staging, stdio: 'inherit', shell: process.platform === 'win32' },
     )
     const installed = join(staging, 'node_modules')
@@ -140,19 +220,18 @@ export function installServerPackages(serverDir: string, platform: string, arch:
     }
 
     const target = join(serverDir, 'node_modules')
-    for (const name of dependencyClosure(installed, serverExternalPackages)) {
+    const roots = sharp ? [...serverExternalPackages, 'sharp'] : [...serverExternalPackages]
+    for (const name of dependencyClosure(installed, roots)) {
       const from = join(installed, name)
       const to = join(target, name)
       pruneForeignPrebuilds(from, platform, arch)
+      // Tracing leaves a partial copy, and a shared build leaves another platform's
+      // sharp. Replace those with the package installed for this machine.
+      const replace = name === 'sharp' || name.startsWith('@img/') || (serverExternalPackages as readonly string[]).includes(name)
       if (pathExists(to)) {
-        if ((serverExternalPackages as readonly string[]).includes(name)) {
-          // Replace whatever tracing put there with the whole package.
-          rmSync(to, { recursive: true, force: true })
-        } else if (readManifest(to).version === readManifest(from).version) {
-          continue
-        } else {
-          throw new Error(`${name} ${readManifest(from).version} conflicts with ${readManifest(to).version} in the server.`)
-        }
+        if (replace) rmSync(to, { recursive: true, force: true })
+        else if (readManifest(to).version === readManifest(from).version) continue
+        else throw new Error(`${name} ${readManifest(from).version} conflicts with ${readManifest(to).version} in the server.`)
       }
       cpSync(from, to, { recursive: true })
       makeSpawnHelperExecutable(to, platform, arch)
@@ -160,6 +239,7 @@ export function installServerPackages(serverDir: string, platform: string, arch:
   } finally {
     rmSync(staging, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 })
   }
+  removeForeignSharpPackages(serverDir, platform, arch)
   pointAliasesAtInstalledPackages(serverDir, platform)
 }
 
