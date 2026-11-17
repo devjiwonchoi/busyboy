@@ -36,6 +36,10 @@ test('sending an image should show it in the message and open it larger on click
   const message = transcript.getByLabel('Your message')
   await expect(message).toContainText('Look at this pasted image')
   await expect(message).not.toContainText('Image: pixel.png')
+  const chats = page.getByRole('navigation', { name: 'Chats' })
+  await expect(chats).toHaveAttribute('data-loaded', 'true')
+  await expect(chats.getByText('Look at this pasted image', { exact: true })).toBeVisible()
+  await expect(chats.getByText(/Image:/)).toHaveCount(0)
   await expectLoaded(message.getByRole('img', { name: 'pixel.png' }))
   await expect(transcript.getByLabel('Reply', { exact: true })).toContainText('image image/png', { timeout: 15_000 })
 
@@ -106,6 +110,10 @@ test('a message of images alone should not offer Edit', async ({ page, context, 
   const message = transcript.getByLabel('Your message')
   await expectLoaded(message.getByRole('img', { name: 'pixel.png' }))
   await expect(transcript).toHaveAttribute('data-status', 'idle')
+  const chats = page.getByRole('navigation', { name: 'Chats' })
+  await expect(chats).toHaveAttribute('data-loaded', 'true')
+  await expect(chats.getByText('Image', { exact: true })).toBeVisible()
+  await expect(chats.getByText(/Image:/)).toHaveCount(0)
 
   await message.hover()
   await expect(message.locator('..').getByRole('button', { name: 'Copy' })).toBeVisible()

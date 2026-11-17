@@ -2,12 +2,7 @@ import { randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
-import {
-  isMessageImages,
-  textWithImages,
-  type AttachmentInput,
-  type MessageImage,
-} from "@/lib/chat-attachments";
+import { isMessageImages, type AttachmentInput, type MessageImage } from "@/lib/chat-attachments";
 
 import { alwaysAskRulesAt } from "../always-ask-list";
 import { cardRecordTitle, isStoredCardKind, type StoredCardKind } from "../cards/model";
@@ -1026,9 +1021,15 @@ function previewOf(director: Director) {
   const last = director.entries.findLast(
     (entry) => entry.kind === "user" || entry.kind === "director",
   );
-  const shown = last?.kind === "user" ? textWithImages(last.text, last.images) : (last?.text ?? "");
+  const shown = last?.kind === "user" ? userPreview(last) : (last?.text ?? "");
   const text = shown.replace(/\s+/g, " ").trim();
   return text.length > PREVIEW_LENGTH ? `${text.slice(0, PREVIEW_LENGTH)}…` : text;
+}
+
+function userPreview(entry: Extract<ChatEntry, { kind: "user" }>) {
+  const typed = entry.text.trim();
+  if (typed) return typed;
+  return entry.images?.length ? "Image" : "";
 }
 
 async function chatSummaries(
