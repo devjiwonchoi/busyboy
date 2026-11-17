@@ -48,14 +48,18 @@ export function MessageActions({
       role="toolbar"
       aria-label="Message actions"
       className={cn(
-        "pointer-events-none absolute top-0 z-10 flex items-center gap-0.5 rounded-full border border-border bg-popover/95 p-0.5 opacity-0 shadow-sm transition-opacity",
+        "pointer-events-none absolute bottom-0 z-10 flex items-center gap-1 opacity-0 transition-opacity",
         "group-focus-within/message:pointer-events-auto group-focus-within/message:opacity-100",
         "group-hover/message:pointer-events-auto group-hover/message:opacity-100",
-        align === "end" ? "right-0" : "left-0",
+        "pointer-coarse:pointer-events-auto pointer-coarse:opacity-100",
+        align === "end" ? "right-full flex-row-reverse pr-1" : "left-full pl-1",
       )}
     >
       {time && (
-        <time dateTime={at} className="text-muted-foreground px-1.5 text-[0.625rem] tabular-nums">
+        <time
+          dateTime={at}
+          className="text-muted-foreground px-1 text-[0.625rem] leading-none tabular-nums whitespace-nowrap"
+        >
           {time}
         </time>
       )}

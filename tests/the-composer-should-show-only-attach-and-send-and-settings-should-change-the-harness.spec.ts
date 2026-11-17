@@ -80,7 +80,18 @@ test("the composer should show only attach and send, and Settings should change 
   expect(Math.abs(plus.y - submit.y)).toBeLessThanOrEqual(4);
   expect(plus.x - box.x).toBeLessThanOrEqual(16);
   expect(submit.x).toBeGreaterThan(plus.x + plus.width);
+  expect(box.x + box.width - (submit.x + submit.width)).toBeGreaterThanOrEqual(1);
   expect(box.x + box.width - (submit.x + submit.width)).toBeLessThanOrEqual(16);
+  const dictate = await composer.getByRole("button", { name: "Dictate" }).boundingBox();
+  if (dictate) {
+    expect(
+      Math.abs(dictate.y + dictate.height / 2 - (submit.y + submit.height / 2)),
+    ).toBeLessThanOrEqual(1);
+    expect(dictate.x + dictate.width).toBeLessThanOrEqual(submit.x);
+    expect(Math.abs(plus.y + plus.height / 2 - (submit.y + submit.height / 2))).toBeLessThanOrEqual(
+      1,
+    );
+  }
   expect(box.height).toBeGreaterThan(56);
   expect(box.height).toBeLessThan(160);
 
