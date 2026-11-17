@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { expect, test, type Page } from "@playwright/test";
@@ -49,6 +49,31 @@ test("hovering a message should copy it and show when it was sent", async ({
   await expect(user.locator("..").locator("time")).toHaveAttribute("datetime", userEntry!.at);
   await expect(reply.locator("..").locator("time")).toHaveAttribute("datetime", replyEntry!.at);
 
+  for (const [bubble, toolbar, side] of [
+    [user, userToolbar, "end"],
+    [reply, replyToolbar, "start"],
+  ] as const) {
+    const bubbleBox = await bubble.boundingBox();
+    const toolbarBox = await toolbar.boundingBox();
+    const textBox = await bubble.locator('[data-slot="bubble-content"]').boundingBox();
+    expect(bubbleBox && toolbarBox && textBox).toBeTruthy();
+    expect(Math.abs(bubbleBox!.height - textBox!.height)).toBeLessThanOrEqual(2);
+    expect(toolbarBox!.y).toBeGreaterThanOrEqual(bubbleBox!.y - 1);
+    expect(toolbarBox!.y + toolbarBox!.height).toBeLessThanOrEqual(
+      bubbleBox!.y + bubbleBox!.height + 1,
+    );
+    if (side === "end")
+      expect(toolbarBox!.x + toolbarBox!.width).toBeLessThanOrEqual(bubbleBox!.x + 1);
+    else expect(toolbarBox!.x).toBeGreaterThanOrEqual(bubbleBox!.x + bubbleBox!.width - 1);
+  }
+  const header = reply
+    .locator('xpath=ancestor::*[@data-slot="message-content"][1]')
+    .locator('[data-slot="message-header"]');
+  const headerBox = await header.boundingBox();
+  const replyBox = await reply.boundingBox();
+  expect(headerBox && replyBox).toBeTruthy();
+  expect(replyBox!.y - (headerBox!.y + headerBox!.height)).toBeLessThanOrEqual(12);
+
   await user.hover();
   await expect(userToolbar).toHaveCSS("opacity", "1");
   await userToolbar.getByRole("button", { name: "Copy" }).click();
@@ -62,9 +87,4 @@ test("hovering a message should copy it and show when it was sent", async ({
   await expect
     .poll(() => page.evaluate(() => navigator.clipboard.readText()))
     .toBe(replyEntry!.text);
-
-  mkdirSync("/opt/cursor/artifacts", { recursive: true });
-  await page
-    .getByRole("region", { name: "Chat" })
-    .screenshot({ path: "/opt/cursor/artifacts/message-actions.png" });
 });

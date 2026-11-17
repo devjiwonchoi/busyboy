@@ -542,7 +542,7 @@ export const ChatComposer = forwardRef<
             </ComposerList>
           </div>
         </ComposerPopup>
-        <ComposerActions className="w-full items-center justify-between">
+        <ComposerActions className="items-center justify-between">
           <ComposerActionGroup align="start">
             <input
               id={pickerId}
@@ -654,7 +654,7 @@ function RoundSendButton({
   return (
     <Button
       {...props}
-      size="icon-lg"
+      size="icon"
       aria-label={label}
       className={`${className ?? ""} rounded-full disabled:opacity-100 ${canSubmit ? "bg-white text-black hover:bg-zinc-200" : "bg-white/15 text-zinc-500 hover:bg-white/15"}`}
     >

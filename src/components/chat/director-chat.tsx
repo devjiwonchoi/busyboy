@@ -588,8 +588,9 @@ function EntryView({
         <Message align="end">
           <MessageContent>
             {entry.to && <MessageHeader>To {entry.to}</MessageHeader>}
-            <div className="relative flex w-full min-w-0 flex-col items-end pt-7">
+            <div className="relative w-fit max-w-[80%] self-end">
               <Bubble
+                className="max-w-full"
                 role="group"
                 aria-label={entry.to ? `Your reply to ${entry.to}` : "Your message"}
               >
@@ -615,8 +616,9 @@ function EntryView({
     case "director":
       return (
         <DirectorMessage persona={persona}>
-          <div className="relative flex w-full min-w-0 flex-col items-start pt-7">
+          <div className="relative w-fit max-w-[80%]">
             <Bubble
+              className="max-w-full"
               variant="muted"
               role="group"
               aria-label="Reply"
