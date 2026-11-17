@@ -39,6 +39,7 @@ Every file and folder name is kebab-case, for example `server-process.ts` or `bo
 - Committed tests never write to agent-VM-only paths like `/opt/cursor/artifacts`.
 - Before opening a PR, run the type check and the affected journeys locally.
 - Screenshot baselines (`toHaveScreenshot`) are only updated when the UI change is intentional, and the PR says so.
+- UI changes must attach evidence produced by `pnpm verify` to the pull request.
 
 ## Start from nothing
 
