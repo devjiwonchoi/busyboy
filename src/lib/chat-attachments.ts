@@ -26,7 +26,9 @@ export function messageImageUrl(image: MessageImage, chat: string | null) {
 }
 
 export function textWithImages(text: string, images: MessageImage[] | undefined) {
-  return [text, ...(images ?? []).map((image) => `Image: ${image.name}`)].filter(Boolean).join("\n\n");
+  return [text, ...(images ?? []).map((image) => `Image: ${image.name}`)]
+    .filter(Boolean)
+    .join("\n\n");
 }
 
 export const MAX_IMAGE_BYTES = 4 * 1024 * 1024;

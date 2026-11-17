@@ -119,18 +119,22 @@ export async function readSavedImage(
   const path = join(/*turbopackIgnore: true*/ attachments, file);
   try {
     if (!(await lstat(/*turbopackIgnore: true*/ attachments)).isDirectory()) return null;
-    if (NO_FOLLOW === undefined && !(await lstat(/*turbopackIgnore: true*/ path)).isFile()) return null;
-    const handle = await open(/*turbopackIgnore: true*/ path, constants.O_RDONLY | (NO_FOLLOW ?? 0))
+    if (NO_FOLLOW === undefined && !(await lstat(/*turbopackIgnore: true*/ path)).isFile())
+      return null;
+    const handle = await open(
+      /*turbopackIgnore: true*/ path,
+      constants.O_RDONLY | (NO_FOLLOW ?? 0),
+    );
     try {
-      const stats = await handle.stat()
-      if (!stats.isFile() || stats.size > MAX_IMAGE_BYTES) return null
-      const bytes = await handle.readFile()
-      const mediaType = IMAGE_MEDIA_TYPES.find((type) => matchesImage(bytes, type))
-      return mediaType ? { bytes, mediaType, path } : null
+      const stats = await handle.stat();
+      if (!stats.isFile() || stats.size > MAX_IMAGE_BYTES) return null;
+      const bytes = await handle.readFile();
+      const mediaType = IMAGE_MEDIA_TYPES.find((type) => matchesImage(bytes, type));
+      return mediaType ? { bytes, mediaType, path } : null;
     } finally {
-      await handle.close()
+      await handle.close();
     }
   } catch {
-    return null
+    return null;
   }
 }

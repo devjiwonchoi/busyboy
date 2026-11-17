@@ -6,7 +6,12 @@ import { isMessageImages, type AttachmentInput, type MessageImage } from "@/lib/
 
 import { alwaysAskRulesAt } from "../always-ask-list";
 import { cardRecordTitle, isStoredCardKind, type StoredCardKind } from "../cards/model";
-import { AttachmentError, attachmentsTurn, messageImages, readSavedImage } from "../chat-attachments";
+import {
+  AttachmentError,
+  attachmentsTurn,
+  messageImages,
+  readSavedImage,
+} from "../chat-attachments";
 import { getManagerAt, isListedManager, listManagersAt, subscribeToManagers } from "../managers";
 import { pathKey, samePath } from "../paths";
 import { PROVIDERS } from "../providers";
@@ -25,7 +30,13 @@ import {
 import { BUSYBOY_FILES_RULE } from "../runner/always-ask";
 import type { AgentEventEnvelope, McpServer, ProviderId } from "../runner/contract";
 import { rulesFolderFor } from "../runner/user-rules";
-import { combineTurns, displayText, modelText, type TurnImage, type UserTurn } from "../runner/user-turn";
+import {
+  combineTurns,
+  displayText,
+  modelText,
+  type TurnImage,
+  type UserTurn,
+} from "../runner/user-turn";
 import {
   closeDirectorApproval,
   openCards,
@@ -858,7 +869,9 @@ export async function reviseDirectorMessage(
   if (!displayText(turn)) {
     if (again.length)
       throw new AttachmentError(
-        again.length > 1 ? "The images are no longer available." : "The image is no longer available.",
+        again.length > 1
+          ? "The images are no longer available."
+          : "The image is no longer available.",
       );
     throw new Error("A message must be non-empty text of at most 100,000 characters.");
   }
@@ -971,7 +984,6 @@ export async function readChatImage({
 }) {
   const from = await imageFolder(folder, chat, task);
   return from ? readSavedImage(from, file) : null;
-}
 }
 
 export async function attachTaskToDirector(
