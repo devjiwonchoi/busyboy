@@ -93,8 +93,6 @@ function shellEnvironment(cwd: string): Record<string, string> {
   for (const [key, value] of Object.entries(process.env)) {
     if (value !== undefined) env[key] = value
   }
-  // BUSYBOY_TOKEN, PORT, and HOSTNAME would let any program run in the shell
-  // call this server as the app. Next's private variables do not belong there either.
   for (const key of ['PORT', 'HOSTNAME', 'NODE_ENV', 'NEXT_RUNTIME']) delete env[key]
   for (const key of Object.keys(env)) {
     if (key.startsWith('BUSYBOY_') || key.startsWith('__NEXT') || key.startsWith('NEXT_PRIVATE')) delete env[key]
