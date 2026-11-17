@@ -4,7 +4,7 @@
 // providers keep their real adapter (for example one pointed at a fake CLI).
 // See `ProviderScript` for the format.
 import { randomUUID } from 'node:crypto'
-import { mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { mkdir, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { basename, dirname, join } from 'node:path'
@@ -168,7 +168,11 @@ function saveHistory(sessionId: string, history: string[]) {
   const file = scriptedHistoryFile(sessionId)
   if (!file || histories.get(sessionId) !== history) return
   mkdirSync(HISTORY_FOLDER, { recursive: true })
-  writeFileSync(file, JSON.stringify(history))
+  // Replace the file in one step. Writing in place empties it first, and a reader
+  // in that gap sees an empty file and fails to parse the history.
+  const temporary = `${file}.${process.pid}.tmp`
+  writeFileSync(temporary, JSON.stringify(history))
+  renameSync(temporary, file)
 }
 
 /** Continues, branches, or starts a session's history, and returns its session id. */
