@@ -10,6 +10,7 @@ import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useShellState, useTaskSelection } from "@/components/shell/shell-state";
 import {
   COMMAND_PALETTE_KEYS,
+  isChatSwitchShortcut,
   isMacPlatform,
   matchesShortcut,
   NEW_TASK_KEYS,
@@ -44,6 +45,7 @@ function isAppShortcut(event: KeyboardEvent) {
   const mac = isMacPlatform();
   if (matchesShortcut(COMMAND_PALETTE_KEYS, event, mac)) return true;
   if (matchesShortcut(NEW_TASK_KEYS, event, mac)) return true;
+  if (isChatSwitchShortcut(event, mac)) return true;
   const mod = mac ? event.metaKey && !event.ctrlKey : event.ctrlKey && !event.metaKey;
   if (!mod || event.shiftKey) return false;
   if (event.code === "Backquote" && !event.altKey) return true;
