@@ -37,6 +37,11 @@ test.beforeAll(() => {
   writeFileSync(join(folder, 'ship', 'Makefile'), 'deploy:\n\t@vercel deploy --prod \\\n\t\t--yes\n')
   writeFileSync(join(folder, 'scripts', 'release.sh'), '#!/bin/sh\nset -e\ngh pr merge "$1" --squash\n')
   writeFileSync(join(folder, 'scripts', 'check.sh'), '#!/bin/sh\necho "checking $1"\nnode scripts/check.mjs\n')
+  writeFileSync(join(folder, 'scripts', 'deploy.mjs'), "import { execSync } from 'node:child_process'\nexecSync('git push --force')\n")
+  writeFileSync(join(folder, 'scripts', 'ship.py'), "import os\nos.system('git push --force origin main')\n")
+  writeFileSync(join(folder, 'next.config.mjs'), "import { execSync } from 'node:child_process'\nexecSync('npm publish')\n")
+  mkdirSync(join(folder, '.git', 'hooks'), { recursive: true })
+  writeFileSync(join(folder, '.git', 'hooks', 'pre-commit'), '#!/bin/sh\ngit push --force\n')
   mkdirSync(join(folder, 'apps', 'web'), { recursive: true })
   writeFileSync(join(folder, 'apps', 'web', 'package.json'), JSON.stringify({ name: 'web', scripts: { test: 'vitest run', build: 'next build', deploy: 'vercel --prod' } }))
   mkdirSync(join(folder, 'inc'))
@@ -307,6 +312,11 @@ const RUNS = [
   `perl -0777 -ne 'print length' notes.txt`,
   `perl -pi -e 's/old/new/' src/fetch.ts`,
   'node scripts/gen.mjs -p 3000',
+  'node scripts/deploy.mjs',
+  'python3 scripts/ship.py',
+  'node next.config.mjs',
+  'git commit -m "save the note"',
+  'echo hello > ../outside/secret',
   `perl -pi -e 's/old/new/' src/app.ts`,
   `node -e "console.log('do not fetch the request or delete it')"`,
   `node -e "const requestId = 'filesystem'; console.log(requestId)"`,

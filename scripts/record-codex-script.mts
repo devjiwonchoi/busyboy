@@ -110,8 +110,6 @@ const codex = [...shellPath.split(delimiter), ...(process.env.PATH ?? '').split(
   .find((candidate) => existsSync(candidate))
 if (!codex) throw new Error('The `codex` command was not found on the login-shell PATH.')
 
-// Like the server's agent environment (src/server/runner/find-executable.ts), BusyBoy's own variables stay out.
-// Next types NODE_ENV as required in ProcessEnv; leaving it out is the point.
 const env = Object.fromEntries(
   Object.entries(process.env).filter(
     ([name]) => !/^(BUSYBOY_|__NEXT)/i.test(name) && !/^(PORT|HOSTNAME|NODE_ENV|NEXT_RUNTIME|ELECTRON_RUN_AS_NODE)$/i.test(name),

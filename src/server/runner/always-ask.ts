@@ -5,8 +5,6 @@ import { basename as fileBasename, dirname, join, relative, resolve } from 'node
 import type { AgentEvent } from './contract'
 import { containsPath, expandShellPath, isShellHome, pathKey } from '../paths'
 
-// Known limits: script files, git hooks, and build scripts are not read, and a redirection that overwrites a file is not a delete.
-
 export const FORCE_PUSH_RULE = 'Force push or delete a remote branch'
 export const DEFAULT_BRANCH_RULE = 'Push to the default branch'
 export const DEPLOY_RULE = 'Deploy, publish, or change infrastructure'

@@ -49,12 +49,6 @@ export function findExecutable(name: string): string | undefined {
   return searchPath(name, process.env.PATH ?? '')
 }
 
-/**
- * BusyBoy's own variables, which must never reach an agent or the commands it
- * runs: the server token would let an agent call this server (answer its own
- * approvals, start agents, read transcripts), and the server's PORT, HOSTNAME
- * and NODE_ENV would change how the agent's commands behave.
- */
 function isServerVariable(name: string) {
   const upper = name.toUpperCase()
   return (
@@ -68,10 +62,6 @@ function isServerVariable(name: string) {
   )
 }
 
-/**
- * The environment every agent process runs with. Every adapter must use it:
- * this process's environment without BusyBoy's own variables.
- */
 export function agentEnvironment(): Record<string, string> {
   const env: Record<string, string> = {}
   for (const [name, value] of Object.entries(process.env)) {

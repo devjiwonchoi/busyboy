@@ -65,6 +65,12 @@ test('typing a command should show its output', async ({ page }) => {
   await expect(terminal.locator('.xterm-rows')).toContainText('busyboy-42')
 })
 
+test('a shell should not see the server token, port, hostname, or Node environment', async ({ page }) => {
+  const terminal = await openTerminal(page)
+  await run(page, `printf 'busyboy-env token=%s port=%s host=%s node=%s end\\n' "$BUSYBOY_TOKEN" "$PORT" "$HOSTNAME" "$NODE_ENV"`)
+  await expect(terminal.locator('.xterm-rows')).toContainText('busyboy-env token= port= host= node= end')
+})
+
 test('exiting the shell should offer a new terminal', async ({ page }) => {
   const terminal = await openTerminal(page)
   await run(page, 'exit 3')

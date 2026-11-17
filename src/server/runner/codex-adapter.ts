@@ -179,8 +179,6 @@ class AppServerConnection {
 }
 
 function spawnAppServer(executable: string, cwd: string, onMessage: (message: CodexRawMessage) => void) {
-  // The app server and every command it runs get the agent environment, without BusyBoy's own variables.
-  // Next types NODE_ENV as required in ProcessEnv; the agent environment leaves it out on purpose.
   const env = agentEnvironment() as NodeJS.ProcessEnv
   const script = /\.[cm]?js$/i.test(executable)
   const command = script ? (findExecutable('node') ?? 'node') : executable

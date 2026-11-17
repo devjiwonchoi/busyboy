@@ -247,10 +247,8 @@ function slug(text: string) {
   )
 }
 
-/** Runs git with the agent environment, so repository hooks never see busyboy's own variables. */
 async function git(cwd: string, ...args: string[]) {
   try {
-    // Next.js types NODE_ENV as required on ProcessEnv; the agent environment drops it on purpose.
     const env = agentEnvironment() as NodeJS.ProcessEnv
     return (await run('git', ['-C', cwd, ...args], { env })).stdout.trim()
   } catch (error) {
