@@ -55,6 +55,8 @@ export default defineConfig({
         BUSYBOY_DIRECTOR_COMPACT_CHARS: '1000',
         ...testHome(port),
         BUSYBOY_CODEX_PATH: join(__dirname, 'tests/fake-codex/codex.mjs'),
+        // Merge clicks run this instead of the real GitHub CLI, and it only records the command.
+        BUSYBOY_GH_PATH: join(__dirname, 'tests/fake-gh/gh'),
         FAKE_CODEX_PID_FILE: fakeCodexPidFile,
       },
       // Never reuse: another worktree may be serving a different build on the same port, or a

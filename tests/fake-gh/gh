@@ -1,0 +1,4 @@
+#!/bin/sh
+# Test double for the GitHub CLI. Records each invocation in the working directory
+# and does not talk to GitHub, so a journey can see that a merge ran, and in which order.
+printf '%s\n' "$*" >> .gh-merge.log

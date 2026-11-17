@@ -6,6 +6,7 @@ import { getManagerAt } from '@/server/managers'
 import { busyboyMcpServers } from '@/server/mcp-tools'
 import { defaultProvider, providerState } from '@/server/providers'
 import type { ProviderId } from '@/server/runner/contract'
+import { mergePullRequests, readTaskPlan } from '@/server/cards/work-cards'
 import { answerCard, approveCard } from '@/server/task-cards'
 import { archiveTask, restoreTask, stopTask, TaskError } from '@/server/tasks'
 
@@ -71,6 +72,18 @@ export async function answerCardAction(cardId: string, choices: string[][]) {
 export async function approveCardAction(cardId: string) {
   checkId(cardId, 'The card')
   approveCard({ folder: await dataFolder(), cardId })
+}
+
+/** The task's saved plan, for a done card's View plan link. Null when it has none. */
+export async function readTaskPlanAction(taskId: string) {
+  checkId(taskId, 'The task')
+  return readTaskPlan({ folder: await dataFolder(), taskId })
+}
+
+/** Merges the pull requests on an open card, base of the stack first. Nothing merges until this runs. */
+export async function mergePullRequestsAction(cardId: string) {
+  checkId(cardId, 'The card')
+  await mergePullRequests({ folder: await dataFolder(), cardId })
 }
 
 /** Sends a composer message to the task agent behind an open card instead of the Director. */
