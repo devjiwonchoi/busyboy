@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { SERVER_TOKEN_ENV } from '@/lib/server-token'
 import { claudeAdapter } from './claude-adapter'
 import { codexAdapter } from './codex-adapter'
+import { grokAdapter } from './grok-adapter'
 import type {
   AgentAnswer,
   AgentEvent,
@@ -63,8 +64,8 @@ export async function stopAllAgents() {
 
 /**
  * Whether an error says the session to resume no longer exists. Codex reports
- * the `lost-session` code; Claude (and the scripted provider) only says so in
- * its message.
+ * the `lost-session` code; Grok does too. Claude (and the scripted provider)
+ * only says so in its message.
  */
 export function isLostSessionError(event: Extract<AgentEvent, { type: 'error' }>) {
   return event.code === 'lost-session' || /No conversation found with session ID/i.test(event.message)
@@ -95,7 +96,9 @@ function hookShutdown() {
 function adapterFor(provider: ProviderId): ProviderAdapter {
   const scripts = process.env[SCRIPTS_ENV]
   if (scripts && !process.env[SERVER_TOKEN_ENV] && hasScripts(scripts, provider)) return createScriptedAdapter(scripts)
-  return provider === 'codex' ? codexAdapter : claudeAdapter
+  if (provider === 'codex') return codexAdapter
+  if (provider === 'grok') return grokAdapter
+  return claudeAdapter
 }
 
 function getRecord(agentId: string) {

@@ -69,7 +69,7 @@ function mergePaths(...values: Array<string | undefined>) {
 
 /**
  * Apps opened from Finder or the Dock get launchd's minimal PATH, so spawning
- * `claude`, `codex`, or `git` by name fails. Read the PATH the user's login
+ * `claude`, `codex`, `grok`, or `git` by name fails. Read the PATH the user's login
  * shell sets up and put it first in this process's PATH, which the server and
  * every agent it spawns inherit.
  */

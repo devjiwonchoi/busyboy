@@ -50,7 +50,7 @@ type SignIn = 'signed-in' | 'signed-out' | 'not-installed' | 'outdated'
 export async function useTestHome(
   context: BrowserContext,
   baseURL: string,
-  signIn: Partial<Record<'claude' | 'codex', SignIn>> = {},
+  signIn: Partial<Record<'claude' | 'codex' | 'grok', SignIn>> = {},
 ) {
   const home = createTempFolder('home')
   const cookies = [{ name: TEST_HOME_COOKIE, value: encodeURIComponent(home), url: baseURL }]

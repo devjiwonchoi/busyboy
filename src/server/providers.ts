@@ -10,6 +10,7 @@ import type { ProviderId, SignInStatus } from './runner/contract'
 export const PROVIDERS: { id: ProviderId; name: string }[] = [
   { id: 'claude', name: 'Claude Code' },
   { id: 'codex', name: 'Codex' },
+  { id: 'grok', name: 'Grok' },
 ]
 
 /**
@@ -18,8 +19,8 @@ export const PROVIDERS: { id: ProviderId; name: string }[] = [
  */
 export const TEST_SIGN_IN_COOKIE = 'busyboy-test-sign-in'
 
-const LOGIN_COMMANDS: Record<ProviderId, string> = { claude: 'claude /login', codex: 'codex login' }
-const UPDATE_COMMANDS: Record<ProviderId, string> = { claude: 'claude update', codex: 'codex update' }
+const LOGIN_COMMANDS: Record<ProviderId, string> = { claude: 'claude /login', codex: 'codex login', grok: 'grok login' }
+const UPDATE_COMMANDS: Record<ProviderId, string> = { claude: 'claude update', codex: 'codex update', grok: 'grok update' }
 const CACHE_MS = 30_000
 
 type CacheEntry = { at: number; state: Promise<SignInStatus> }
@@ -101,6 +102,7 @@ export type SkillsState = { installed: boolean; installCommand: string }
 const INSTALL_COMMANDS: Record<ProviderId, string> = {
   claude: 'claude plugin marketplace add devjiwonchoi/skills && claude plugin install jwn@jwn',
   codex: 'codex plugin marketplace add devjiwonchoi/skills && codex plugin add jwn@jwn',
+  grok: 'grok plugin marketplace add devjiwonchoi/skills && grok plugin add jwn@jwn',
 }
 
 async function readText(file: string) {
@@ -141,7 +143,27 @@ async function codexHasPlugin() {
   return found
 }
 
+/** Looks for the skills plugin under `GROK_HOME` (default `~/.grok`), in the table Codex uses. */
+async function grokHasPlugin() {
+  const grokHome = process.env.GROK_HOME || join(homedir(), '.grok')
+  const lines = (await readText(join(grokHome, 'config.toml'))).split('\n')
+  let inTable = false
+  let found = false
+  for (const raw of lines) {
+    const line = raw.trim()
+    if (line.startsWith('[')) {
+      if (inTable) return true
+      inTable = new RegExp(`^\\[plugins\\."${SKILLS_PLUGIN}@[^"]+"\\]$`).test(line)
+      found ||= inTable
+      continue
+    }
+    if (inTable && /^enabled\s*=\s*false\b/.test(line)) inTable = found = false
+  }
+  return found
+}
+
 export async function skillsState(provider: ProviderId): Promise<SkillsState> {
-  const installed = provider === 'claude' ? await claudeHasPlugin() : await codexHasPlugin()
+  const installed =
+    provider === 'claude' ? await claudeHasPlugin() : provider === 'codex' ? await codexHasPlugin() : await grokHasPlugin()
   return { installed, installCommand: INSTALL_COMMANDS[provider] }
 }

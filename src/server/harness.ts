@@ -1,9 +1,7 @@
 import type { ProviderId } from './runner/contract'
 
 // Harnesses a chat can run. A harness lists model and effort only when it
-// accepts them, so a later one (Grok is the next) can add itself here with
-// whichever of those fields it has. `id` stays a ProviderId until that
-// harness has an adapter.
+// accepts them. The picker offers a harness only while that provider is signed in.
 
 export type HarnessField =
   | { id: 'model'; label: string; kind: 'text'; placeholder: string }
@@ -48,6 +46,24 @@ export const HARNESSES: Harness[] = [
         kind: 'choice',
         // Codex calls this the reasoning effort. `minimal` is its lowest.
         options: [{ value: 'minimal', label: 'Minimal' }, ...EFFORT],
+      },
+    ],
+  },
+  {
+    id: 'grok',
+    name: 'Grok',
+    fields: [
+      { id: 'model', label: 'Model', kind: 'text', placeholder: 'grok-4.5' },
+      {
+        id: 'effort',
+        label: 'Effort',
+        kind: 'choice',
+        // Grok's reasoning effort. The CLI flag is `--reasoning-effort`.
+        options: [
+          { value: 'low', label: 'Low' },
+          { value: 'medium', label: 'Medium' },
+          { value: 'high', label: 'High' },
+        ],
       },
     ],
   },

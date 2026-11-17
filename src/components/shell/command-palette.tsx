@@ -47,7 +47,16 @@ export function CommandPalette() {
   const [hits, setHits] = useState<SearchHit[]>([])
   const [active, setActive] = useState(0)
 
-  useShortcut({ id: 'command-palette', label: 'Command palette', ...COMMAND_PALETTE_KEYS, run: () => setOpen((value) => !value) })
+  useShortcut({
+    id: 'command-palette',
+    label: 'Command palette',
+    ...COMMAND_PALETTE_KEYS,
+    // The opening key can land in the search box. Start from an empty query so Settings stays listed.
+    run: () => {
+      setQuery('')
+      setOpen((value) => !value)
+    },
+  })
   useShortcut({
     id: 'new-task',
     label: 'New task',

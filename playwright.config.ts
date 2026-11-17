@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import { defineConfig, devices } from '@playwright/test'
 import { fakeClaudePidFile, fakeClaudePort, fakeClaudeURL } from './tests/fake-claude/fake-claude'
 import { fakeCodexPidFile } from './tests/fake-codex/fake-codex'
+import { fakeGrokPort, fakeGrokURL } from './tests/fake-grok/fake-grok'
 import { prepareDefaultHome } from './tests/support/test-home'
 
 const port = Number(process.env.PLAYWRIGHT_PORT ?? 3100)
@@ -74,6 +75,21 @@ export default defineConfig({
         BUSYBOY_CLAUDE_PATH: join(__dirname, 'tests/fake-claude/claude.sh'),
         FAKE_CLAUDE_PID_FILE: fakeClaudePidFile,
         ...testHome(fakeClaudePort),
+      },
+      reuseExistingServer: false,
+      timeout: 60_000,
+    },
+    {
+      // The real Grok adapter, with a fake `grok agent stdio` that speaks ACP and uses no network.
+      command: 'pnpm start',
+      url: fakeGrokURL,
+      env: {
+        PORT: String(fakeGrokPort),
+        BUSYBOY_TEST_MODE: '1',
+        BUSYBOY_GROK_PATH: join(__dirname, 'tests/fake-grok/grok.mjs'),
+        BUSYBOY_TEST_SHELL: process.platform === 'win32' ? (process.env.COMSPEC ?? 'cmd.exe') : '/bin/sh',
+        BUSYBOY_DIRECTOR_BATCH_MS: '200',
+        ...testHome(fakeGrokPort),
       },
       reuseExistingServer: false,
       timeout: 60_000,

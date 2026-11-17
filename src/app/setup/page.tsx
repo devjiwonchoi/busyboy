@@ -72,7 +72,7 @@ const HEADINGS: Record<StepId, { title: string; description: string }> = {
   },
   agents: {
     title: 'Sign in to an agent',
-    description: 'BusyBoy uses the Claude Code and Codex CLIs you already have. It never signs in for you.',
+    description: 'BusyBoy uses the Claude Code, Codex, and Grok CLIs you already have. It never signs in for you.',
   },
   skills: {
     title: 'Add skills',
@@ -229,7 +229,7 @@ async function SkillsPage() {
   return (
     <>
       {runnable.length === 0 ? (
-        <p className="text-muted-foreground text-sm">Install Claude Code or Codex first.</p>
+        <p className="text-muted-foreground text-sm">Install Claude Code, Codex, or Grok first.</p>
       ) : (
         <ItemGroup aria-label="Skills" className="gap-2">
           {runnable.map(({ id, name, skills }) => (
