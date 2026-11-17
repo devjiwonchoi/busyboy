@@ -129,7 +129,7 @@ export type ChatSummary = {
   /** The start of the latest message, or empty before the first one. */
   preview: string
   status: DirectorStatus
-  /** Open cards waiting for the user in this chat. */
+  /** Question, approval, and plan cards waiting for the user in this chat. */
   waiting: number
 }
 
@@ -994,7 +994,8 @@ async function chatSummaries(folder: string): Promise<{ chats: ChatSummary[]; di
     project: index === 0 ? null : managers[index - 1].project,
     preview: previewOf(director),
     status: director.status,
-    waiting: cardsOf(director).length,
+    // A progress, done, or pull-request card is the task reporting. Only a question, an approval, or a plan waits on the user.
+    waiting: cardsOf(director).filter((card) => card.kind === 'question' || card.kind === 'approval' || card.kind === 'plan').length,
   }))
   return { chats, directors: all }
 }

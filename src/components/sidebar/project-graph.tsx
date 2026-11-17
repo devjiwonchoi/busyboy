@@ -7,6 +7,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useShellState } from '@/components/shell/shell-state'
 import { cn } from '@/lib/utils'
 import type { GraphTask, GraphTodo, NodeStatus, ProjectGraph as Graph } from '@/server/records/project-graph'
+import { PHASE_WORD, type TaskPhase } from '@/server/records/task-phase'
 import { BaseNode } from '@/components/base-node'
 import { useTaskSelection } from '@/components/shell/shell-state'
 import { Alert, AlertDescription } from '@/components/ui/alert'
@@ -32,15 +33,27 @@ const STATUS_LABELS: Record<DisplayStatus, string> = {
   error: 'Could not read the records',
 }
 
-// Tinted border and fill per state, from the theme's status tokens: green = done, amber = in
-// progress, blue = waiting on the user, muted = not started or stopped, red = unreadable records.
+// Same meaning as the task-row badges: blue is in progress, amber needs a person, green is done,
+// red is stopped or unreadable. Muted is not started or idle.
 const PILL_TONE: Record<DisplayStatus, string> = {
   done: 'border-success/40 bg-success/10 text-success-foreground',
-  running: 'border-warning/40 bg-warning/10 text-warning-foreground',
-  'needs-you': 'border-info/50 bg-info/10 text-info-foreground',
+  running: 'border-info/50 bg-info/10 text-info-foreground',
+  'needs-you': 'border-warning/40 bg-warning/10 text-warning-foreground',
   'not-started': 'border-border bg-muted text-muted-foreground',
-  stopped: 'border-border bg-muted text-muted-foreground',
+  stopped: 'border-destructive/50 bg-destructive/10 text-destructive',
   error: 'border-destructive/50 bg-destructive/10 text-destructive',
+}
+
+const PHASE_TONE: Record<TaskPhase, string> = {
+  planning: PILL_TONE.running,
+  working: PILL_TONE.running,
+  verifying: PILL_TONE.running,
+  aligning: PILL_TONE['needs-you'],
+  'needs-you': PILL_TONE['needs-you'],
+  done: PILL_TONE.done,
+  pr: PILL_TONE.done,
+  stopped: PILL_TONE.stopped,
+  idle: PILL_TONE['not-started'],
 }
 
 /**
@@ -69,6 +82,7 @@ function Pill({
   maxWidth,
   tone,
   status,
+  phase,
   dimmed,
   buildsOn,
   selected,
@@ -80,6 +94,8 @@ function Pill({
   maxWidth: string
   tone: string
   status?: string
+  /** The phase word, with a dot, after the title. */
+  phase?: string
   dimmed: boolean
   buildsOn?: boolean
   /** The task the terminal opens in; ringed so the user can see which one it is. */
@@ -113,8 +129,14 @@ function Pill({
       <Handles buildsOn={buildsOn} />
       <Icon aria-hidden className="size-3.5 shrink-0" />
       <span className="truncate">{label}</span>
-      {/* The color carries the status for sighted users; this carries it for everyone else. */}
-      {status && <span className="sr-only">, {status}</span>}
+      {phase && (
+        <span className="inline-flex shrink-0 items-center gap-1">
+          <span className="size-1.5 rounded-full bg-current" aria-hidden />
+          {phase}
+        </span>
+      )}
+      {/* The color and the phase word carry the status; this names it when the pill has no word. */}
+      {status && !phase && <span className="sr-only">, {status}</span>}
     </BaseNode>
   )
 }
@@ -204,8 +226,9 @@ function TaskNode({ data }: NodeProps<TaskFlowNode>) {
           icon={status === 'error' ? TriangleAlert : GitBranch}
           label={task.title}
           maxWidth="max-w-56"
-          tone={PILL_TONE[status]}
+          tone={status === 'error' ? PILL_TONE.error : PHASE_TONE[task.phase]}
           status={STATUS_LABELS[status]}
+          phase={status === 'error' ? undefined : PHASE_WORD[task.phase]}
           dimmed={dimmed}
           buildsOn
           selected={selectedTask?.id === task.id}
