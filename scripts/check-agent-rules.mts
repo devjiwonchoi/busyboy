@@ -1,15 +1,15 @@
-import { gitText } from './git-text.mts';
+import { gitText } from "./git-text.mts";
 
 const kebab = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const recordFiles = new Set([
-  'ALIGN.md',
-  'ALIGN.approved.md',
-  'STATUS.md',
-  'VERIFY.md',
-  'REVIEW.md',
-  'REMEMBER.md',
+  "ALIGN.md",
+  "ALIGN.approved.md",
+  "STATUS.md",
+  "VERIFY.md",
+  "REVIEW.md",
+  "REMEMBER.md",
 ]);
-const toolFiles = new Set(['README.md', 'AGENTS.md']);
+const toolFiles = new Set(["README.md", "AGENTS.md"]);
 
 export function segmentIsKebab(segment: string): boolean {
   if (recordFiles.has(segment) || toolFiles.has(segment)) return true;
@@ -18,35 +18,35 @@ export function segmentIsKebab(segment: string): boolean {
   if (/^\[(?:\.\.\.)?[a-z0-9]+(?:-[a-z0-9]+)*\]$/.test(segment)) return true;
   if (/^\[\[\.\.\.[a-z0-9]+(?:-[a-z0-9]+)*\]\]$/.test(segment)) return true;
   if (/^\(\.{1,3}\)[a-z0-9]+(?:-[a-z0-9]+)*$/.test(segment)) return true;
-  const bare = segment.startsWith('.') ? segment.slice(1) : segment;
+  const bare = segment.startsWith(".") ? segment.slice(1) : segment;
   if (!bare) return false;
-  return bare.split('.').every((part) => kebab.test(part));
+  return bare.split(".").every((part) => kebab.test(part));
 }
 
 export function pathIsKebab(file: string): boolean {
-  return file.split('/').every((segment) => segment.length > 0 && segmentIsKebab(segment));
+  return file.split("/").every((segment) => segment.length > 0 && segmentIsKebab(segment));
 }
 
 function suggestedName(file: string): string {
   return file
-    .split('/')
+    .split("/")
     .map((segment) =>
       segment
-        .replaceAll(/([a-z0-9])([A-Z])/g, '$1-$2')
-        .replaceAll(/[\s_]+/g, '-')
+        .replaceAll(/([a-z0-9])([A-Z])/g, "$1-$2")
+        .replaceAll(/[\s_]+/g, "-")
         .toLowerCase(),
     )
-    .join('/');
+    .join("/");
 }
 
 function pathsOf(line: string): { status: string; paths: string[] } | null {
   if (!line) return null;
-  const parts = line.split('\t');
-  return { status: parts[0] ?? '', paths: parts.slice(1) };
+  const parts = line.split("\t");
+  return { status: parts[0] ?? "", paths: parts.slice(1) };
 }
 
 function isTestPath(file: string) {
-  return file === 'playwright.config.ts' || file.startsWith('tests/');
+  return file === "playwright.config.ts" || file.startsWith("tests/");
 }
 
 type Pattern = {
@@ -57,34 +57,34 @@ type Pattern = {
 
 const patterns: Pattern[] = [
   {
-    label: 'test.skip, it.skip, or describe.skip',
+    label: "test.skip, it.skip, or describe.skip",
     count: (line) => line.match(/\b(?:test|it|describe)\.skip\b/g)?.length ?? 0,
-    instead: 'Find the root cause, or delete the journey and say why in the commit message.',
+    instead: "Find the root cause, or delete the journey and say why in the commit message.",
   },
   {
-    label: 'test.fixme, it.fixme, or describe.fixme',
+    label: "test.fixme, it.fixme, or describe.fixme",
     count: (line) => line.match(/\b(?:test|it|describe)\.fixme\b/g)?.length ?? 0,
-    instead: 'Find the root cause, or delete the journey and say why in the commit message.',
+    instead: "Find the root cause, or delete the journey and say why in the commit message.",
   },
   {
-    label: 'waitForTimeout',
+    label: "waitForTimeout",
     count: (line) => line.match(/\bwaitForTimeout\b/g)?.length ?? 0,
-    instead: 'Find the root cause, or delete the journey and say why in the commit message.',
+    instead: "Find the root cause, or delete the journey and say why in the commit message.",
   },
   {
-    label: 'sleep',
+    label: "sleep",
     count: (line) => line.match(/\bsleep\b/g)?.length ?? 0,
-    instead: 'Find the root cause, or delete the journey and say why in the commit message.',
+    instead: "Find the root cause, or delete the journey and say why in the commit message.",
   },
   {
-    label: 'retries',
+    label: "retries",
     count: (line) =>
       (line.match(/\bretries\b/g)?.length ?? 0) - (line.match(/\bretries\s*:\s*0\b/g)?.length ?? 0),
     instead:
-      'Keep retries at 0. Find the root cause, or delete the journey and say why in the commit message.',
+      "Keep retries at 0. Find the root cause, or delete the journey and say why in the commit message.",
   },
   {
-    label: '/opt/cursor/artifacts',
+    label: "/opt/cursor/artifacts",
     count: (line) => line.match(/\/opt\/cursor\/artifacts/g)?.length ?? 0,
     instead:
       "Keep the journey's files in a temporary directory, and leave screenshots out of the committed test.",
@@ -92,8 +92,8 @@ const patterns: Pattern[] = [
 ];
 
 function snapshotFailure(file: string, failures: string[]) {
-  if (!file.includes('-snapshots/')) return;
-  const body = process.env.PULL_REQUEST_BODY ?? '';
+  if (!file.includes("-snapshots/")) return;
+  const body = process.env.PULL_REQUEST_BODY ?? "";
   if (/screenshot/i.test(body)) return;
   failures.push(
     `This pull request changes a screenshot baseline (${file}). Say in the pull request description that the UI change is intentional, or revert the baseline.`,
@@ -103,23 +103,23 @@ function snapshotFailure(file: string, failures: string[]) {
 function main() {
   const base = process.argv[2];
   if (!base) {
-    console.error('Usage: node scripts/check-agent-rules.mts <base-ref>');
+    console.error("Usage: node scripts/check-agent-rules.mts <base-ref>");
     process.exit(1);
   }
 
-  const nameStatus = gitText(['diff', '--name-status', '--find-renames', base, 'HEAD']);
-  const diff = gitText(['diff', '--unified=0', '--no-color', '--find-renames', base, 'HEAD']);
+  const nameStatus = gitText(["diff", "--name-status", "--find-renames", base, "HEAD"]);
+  const diff = gitText(["diff", "--unified=0", "--no-color", "--find-renames", base, "HEAD"]);
   const failures: string[] = [];
 
-  for (const line of nameStatus.split('\n')) {
+  for (const line of nameStatus.split("\n")) {
     const entry = pathsOf(line);
     if (!entry) continue;
-    if (entry.paths.includes('README.md')) {
-      failures.push('README.md is maintained by its owner. Revert the README.md change.');
+    if (entry.paths.includes("README.md")) {
+      failures.push("README.md is maintained by its owner. Revert the README.md change.");
     }
     for (const file of entry.paths) snapshotFailure(file, failures);
     const added =
-      entry.status.startsWith('A') || entry.status.startsWith('R') || entry.status.startsWith('C');
+      entry.status.startsWith("A") || entry.status.startsWith("R") || entry.status.startsWith("C");
     if (!added) continue;
     const file = entry.paths[entry.paths.length - 1];
     if (!file) continue;
@@ -130,17 +130,17 @@ function main() {
     }
     if (
       /\.(?:md|mdx|rst)$/.test(file) &&
-      !file.startsWith('tests/') &&
-      !file.startsWith('.agents/skills/') &&
-      file !== 'AGENTS.md'
+      !file.startsWith("tests/") &&
+      !file.startsWith(".agents/skills/") &&
+      file !== "AGENTS.md"
     ) {
       failures.push(
         `Do not add "${file}". Put the note in the pull request description. A skill and its feature map belong under .agents/skills/.`,
       );
     }
     const unitTest =
-      file.includes('/__tests__/') ||
-      file.startsWith('__tests__/') ||
+      file.includes("/__tests__/") ||
+      file.startsWith("__tests__/") ||
       (/\.(?:test|spec)\.(?:tsx?|mts|jsx?|mjs)$/.test(file) && !/^tests\/.*\.spec\.ts$/.test(file));
     if (unitTest) {
       failures.push(
@@ -154,27 +154,27 @@ function main() {
   let file: string | null = null;
   let inHunk = false;
 
-  for (const line of diff.split('\n')) {
-    if (line.startsWith('diff --git ')) {
+  for (const line of diff.split("\n")) {
+    if (line.startsWith("diff --git ")) {
       file = null;
       inHunk = false;
       continue;
     }
-    if (line.startsWith('+++ ')) {
+    if (line.startsWith("+++ ")) {
       const raw = line.slice(4);
-      let next = raw === '/dev/null' ? null : raw.startsWith('b/') ? raw.slice(2) : raw;
+      let next = raw === "/dev/null" ? null : raw.startsWith("b/") ? raw.slice(2) : raw;
       if (next?.startsWith('"') && next.endsWith('"')) next = next.slice(1, -1);
       file = next && isTestPath(next) ? next : null;
       continue;
     }
-    if (line.startsWith('@@')) {
+    if (line.startsWith("@@")) {
       inHunk = true;
       continue;
     }
     if (!inHunk || !file) continue;
-    if (line.startsWith('\\')) continue;
-    const added = line.startsWith('+');
-    const removed = line.startsWith('-');
+    if (line.startsWith("\\")) continue;
+    const added = line.startsWith("+");
+    const removed = line.startsWith("-");
     if (!added && !removed) continue;
     const text = line.slice(1);
     if (added) {
@@ -197,7 +197,7 @@ function main() {
       }
     }
     failures.push(
-      `Do not add ${pattern.label}. ${pattern.instead}${hits.length > 0 ? `\n${hits.join('\n')}` : ''}`,
+      `Do not add ${pattern.label}. ${pattern.instead}${hits.length > 0 ? `\n${hits.join("\n")}` : ""}`,
     );
   }
 
@@ -206,8 +206,8 @@ function main() {
     console.log(`Agent rules hold against ${base}.`);
     process.exit(0);
   }
-  console.error(unique.join('\n\n'));
+  console.error(unique.join("\n\n"));
   process.exit(1);
 }
 
-if (process.argv[1]?.endsWith('check-agent-rules.mts')) main();
+if (process.argv[1]?.endsWith("check-agent-rules.mts")) main();
