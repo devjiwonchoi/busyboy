@@ -63,6 +63,8 @@ import type { ChatSummary } from "@/server/director/chat";
 import type { TaskProgress } from "@/server/records/progress";
 import type { Room } from "@/server/rooms";
 
+import { useShortcut } from "./shortcut-registry";
+
 const NEW_FOLDER = "\0new-folder";
 const ROOM = "\0room";
 
@@ -101,6 +103,10 @@ export function ChatSidebar({
   const visibleRooms = needle
     ? rooms.filter((room) => matches(needle, room.name, room.projects.join(" ")))
     : rooms;
+  const chatHrefs = [
+    "/",
+    ...visibleManagers.flatMap((manager) => (manager.chat ? [managerHref(manager.chat)] : [])),
+  ];
 
   return (
     <nav
@@ -108,6 +114,9 @@ export function ChatSidebar({
       data-loaded={chats !== null}
       className="hidden h-full w-[17rem] shrink-0 flex-col border-r bg-background text-foreground md:flex dark:border-white/8 dark:bg-[#161617] dark:text-white"
     >
+      {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((index) => (
+        <OpenChatShortcut key={index} index={index} href={chatHrefs[index - 1]} />
+      ))}
       <div className="flex h-10 items-center justify-end gap-1 px-2">
         <Button
           variant="ghost"
@@ -176,6 +185,21 @@ export function ChatSidebar({
       </div>
     </nav>
   );
+}
+
+function OpenChatShortcut({ index, href }: { index: number; href: string | undefined }) {
+  const router = useRouter();
+  useShortcut({
+    id: `open-chat-${index}`,
+    key: String(index),
+    mod: true,
+    label: `Open chat ${index}`,
+    handles: () => Boolean(href),
+    run: () => {
+      if (href) router.push(href);
+    },
+  });
+  return null;
 }
 
 function matches(needle: string, ...parts: Array<string | null | undefined>) {
