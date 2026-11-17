@@ -13,6 +13,7 @@ import { locateTaskRecords } from "./records/record-location";
 import { getAgent, isStoppingAllAgents } from "./runner/agent-runner";
 import { findExecutable } from "./runner/find-executable";
 import { onServerShutdown } from "./shutdown";
+import { autoArchiveDecision, type AutoArchiveFacts } from "./task-lifecycle";
 import { archiveTask, readTasksAt, TaskError, taskView, type TaskRecord } from "./tasks";
 
 const run = promisify(execFile);
@@ -139,51 +140,87 @@ async function pullRequestsSettled(checkout: string, numbers: number[]) {
   return states.every((state) => state !== null && SETTLED.has(state));
 }
 
-async function consider(folder: string, taskId: string) {
-  if (isStoppingAllAgents()) return;
-  const task = (await readTasksAt(folder)).find(({ id }) => id === taskId);
-  if (!task || task.archivedAt || task.kind === "subagent") {
-    forgetPullWatch(folder, taskId);
-    return;
-  }
-  if (
-    !turnFinished(task) ||
-    taskView(task).status === "running" ||
-    taskView(task).status === "needs-you"
-  )
-    return;
-  if (await readDraftPlan(folder, task)) return;
+function archiveFacts(
+  task: TaskRecord | undefined,
+  extra: Pick<
+    AutoArchiveFacts,
+    "stoppingAll" | "draft" | "recordDone" | "openPulls" | "pullsSettled"
+  >,
+): AutoArchiveFacts {
+  const view = task ? taskView(task) : null;
+  return {
+    stoppingAll: extra.stoppingAll,
+    present: Boolean(task),
+    archived: Boolean(task?.archivedAt),
+    subagent: task?.kind === "subagent",
+    turnFinished: task ? turnFinished(task) : false,
+    runningOrNeedsYou: view?.status === "running" || view?.status === "needs-you",
+    draft: extra.draft,
+    recordDone: extra.recordDone,
+    openPulls: extra.openPulls,
+    pullsSettled: extra.pullsSettled,
+  };
+}
 
-  const status = await readStatus(folder, task);
-  if (!status || status.state !== "done") {
-    forgetPullWatch(folder, taskId);
-    return;
-  }
-  if (status.pulls.length > 0) {
+function readyToRead(task: TaskRecord | undefined) {
+  if (!task || task.archivedAt || task.kind === "subagent" || !turnFinished(task)) return false;
+  const { status } = taskView(task);
+  return status !== "running" && status !== "needs-you";
+}
+
+async function consider(folder: string, taskId: string) {
+  const stoppingAll = isStoppingAllAgents();
+  const task = stoppingAll
+    ? undefined
+    : (await readTasksAt(folder)).find(({ id }) => id === taskId);
+  const readable = !stoppingAll && readyToRead(task);
+  const draft = readable && task ? Boolean(await readDraftPlan(folder, task)) : false;
+  const status = readable && task && !draft ? await readStatus(folder, task) : null;
+  const openPulls = (status?.pulls.length ?? 0) > 0;
+  let pullsSettled = false;
+  if (readable && task && status?.state === "done" && openPulls) {
     const project = await getProject(task.project);
-    if (
-      !project ||
-      !(await pullRequestsSettled(
+    if (project) {
+      pullsSettled = await pullRequestsSettled(
         project.path,
         status.pulls.map((pull) => pull.number),
-      ))
-    ) {
-      watchPulls(folder, taskId);
-      return;
+      );
     }
   }
+  const decision = autoArchiveDecision(
+    archiveFacts(task, {
+      stoppingAll,
+      draft,
+      recordDone: status?.state === "done",
+      openPulls,
+      pullsSettled,
+    }),
+  );
+  if (decision === "forget") {
+    forgetPullWatch(folder, taskId);
+    return;
+  }
+  if (decision === "watch") {
+    watchPulls(folder, taskId);
+    return;
+  }
+  if (decision !== "archive") return;
 
   // Read again: a message can start the agent while the pull requests are checked.
   const latest = (await readTasksAt(folder)).find(({ id }) => id === taskId);
-  if (
-    !latest ||
-    latest.archivedAt ||
-    !turnFinished(latest) ||
-    taskView(latest).status === "running" ||
-    taskView(latest).status === "needs-you"
-  )
-    return;
-  if (await readDraftPlan(folder, latest)) return;
+  const latestReadable = readyToRead(latest);
+  const latestDraft =
+    latestReadable && latest ? Boolean(await readDraftPlan(folder, latest)) : false;
+  const again = autoArchiveDecision(
+    archiveFacts(latest, {
+      stoppingAll: false,
+      draft: latestDraft,
+      recordDone: true,
+      openPulls: false,
+      pullsSettled: true,
+    }),
+  );
+  if (again !== "archive") return;
   try {
     await archiveTask(taskId);
   } catch (error) {

@@ -9,6 +9,7 @@ import { taskPhase } from "../records/task-phase";
 import { getAgent, subscribeToAgent } from "../runner/agent-runner";
 import { findExecutable } from "../runner/find-executable";
 import { CardError, isArchiveStop, openCards, presentCard, settleCard } from "../task-cards";
+import { cardClosedOnStop } from "../task-lifecycle";
 import type { TaskStatus } from "../tasks";
 import type {
   CardKind,
@@ -47,7 +48,7 @@ export function trackWorkCards({ folder, task }: { folder: string; task: WorkTas
       if (isArchiveStop(task.id)) {
         for (const id of [progressId(task.id), doneId(task.id), prId(task.id)]) {
           const card = openCards(folder).find((item) => item.id === id);
-          if (card?.kind === "done") continue;
+          if (card && !cardClosedOnStop(card.kind, true)) continue;
           settleIfOpen(folder, id, "Stopped");
         }
         return;

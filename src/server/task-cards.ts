@@ -8,6 +8,7 @@ import {
   subscribeToAgent,
 } from "./runner/agent-runner";
 import type { AgentAnswer, AgentEvent, Question } from "./runner/contract";
+import { cardClosedOnStop, planCardOpens } from "./task-lifecycle";
 
 export type { CardOption, CardQuestion, TaskCard } from "./cards/model";
 
@@ -155,7 +156,15 @@ export function trackTaskCards({
         }
         void readDraftPlan(folder, task)
           .then((draft) => {
-            if (!draft || latestSeq !== seq || getAgent(task.agentId)?.status !== "idle") {
+            if (
+              !draft ||
+              !planCardOpens({
+                more: event.more === true,
+                draft: true,
+                latest: latestSeq === seq,
+                idle: getAgent(task.agentId)?.status === "idle",
+              })
+            ) {
               return;
             }
             const card: TaskCard = {
@@ -426,7 +435,7 @@ export async function stopTaskAgent({ folder, agentId }: { folder: string; agent
     .filter(
       (entry) =>
         entry.agentId === agentId &&
-        !(entry.card.kind === "done" && archiveStops.has(entry.card.taskId)),
+        cardClosedOnStop(entry.card.kind, archiveStops.has(entry.card.taskId)),
     )
     .map(({ card }) => card.id);
   for (const cardId of cardIds) {

@@ -2200,7 +2200,52 @@ function pushesDefaultBranch(fact: Fact) {
   });
 }
 
+const PUBLISHERS = new Set([
+  "aws",
+  "cargo",
+  "docker",
+  "firebase",
+  "fly",
+  "flyctl",
+  "gem",
+  "gh",
+  "helm",
+  "heroku",
+  "kubectl",
+  "netlify",
+  "npm",
+  "pnpm",
+  "pulumi",
+  "railway",
+  "serverless",
+  "sls",
+  "terraform",
+  "tofu",
+  "twine",
+  "vc",
+  "vercel",
+  "wrangler",
+  "yarn",
+]);
+
+function publisherHasUnresolvedVerb(argv: Word[]) {
+  const command = argv[0];
+  if (!command || command.dynamic || !PUBLISHERS.has(command.text)) return false;
+  const sub = argv[1];
+  if (sub?.dynamic) return true;
+  const third = argv[2];
+  if (!third?.dynamic) return false;
+  const verb = sub?.text;
+  return (
+    (command.text === "wrangler" && (verb === "pages" || verb === "versions")) ||
+    (command.text === "yarn" && verb === "npm") ||
+    (command.text === "gh" && (verb === "release" || verb === "workflow")) ||
+    (command.text === "aws" && (verb === "s3" || verb === "cloudformation"))
+  );
+}
+
 function deploys({ argv }: Fact) {
+  if (publisherHasUnresolvedVerb(argv)) return true;
   const [command, sub, third] = argv.map(({ text }) => text);
   switch (command) {
     case "vercel":
