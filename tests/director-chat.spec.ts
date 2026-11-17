@@ -45,6 +45,7 @@ test('asking a question should answer without creating a task', async ({ page, c
   await expect(transcript.getByLabel('Your message')).toHaveText(QUESTION)
   await expect(transcript.getByLabel('Reply', { exact: true })).toContainText('check out more than one branch')
   await expect(transcript).toHaveAttribute('data-status', 'idle')
+  await expect(page.getByRole('meter', { name: 'Context usage' })).toHaveCount(0)
   await expect(transcript.getByRole('group', { name: 'Tasks' })).toHaveCount(0)
   expect(storedTasks(home)).toEqual([])
   expect(readFileSync(join(home, 'director', 'transcript.jsonl'), 'utf8')).toContain('check out more than one branch')

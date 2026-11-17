@@ -73,8 +73,6 @@ export type ChatEntry =
 
 export type DirectorStatus = 'idle' | 'answering' | 'compacting'
 
-export type ContextUsage = { usedTokens: number; contextWindow?: number }
-
 export type DirectorUpdate =
   | {
       type: 'reset'
@@ -84,10 +82,7 @@ export type DirectorUpdate =
       status: DirectorStatus
       draft: string
       queue: string[]
-      usage: ContextUsage | null
     }
-  /** The latest context report, or null when a new conversation starts. */
-  | { type: 'usage'; usage: ContextUsage | null }
   /** Appends the entry, or replaces the one with the same id. */
   | { type: 'entry'; entry: ChatEntry }
   /** Replaces the transcript, after a message is edited away. */
@@ -149,8 +144,6 @@ type Director = {
   instructions?: string
   /** The always-ask list the running agent was started with, as JSON. */
   alwaysAsk?: string
-  /** The latest context report for the running session. */
-  usage: ContextUsage | null
   status: DirectorStatus
   /** The reply streaming in the turn in progress: `blocks` joined, as the user sees it. */
   draft: string
@@ -265,7 +258,6 @@ function getDirector(folder: string, chat: string | null = null): Director {
     probing: 0,
     turn: 0,
     charsSinceCompact: 0,
-    usage: null,
     writes: Promise.resolve(),
     transcriptFile: {},
     listeners: new Set(),
@@ -463,8 +455,6 @@ async function ensureAgent(director: Director, provider: ProviderId, mcp: McpSer
   } else if (existing) {
     // The harness changed: its conversation cannot carry over.
     director.agentId = undefined
-    director.usage = null
-    broadcast(director, { type: 'usage', usage: null })
     void stopAgent(existing.id)
     saveEntry(director, newEntry('note', { text: `Started a new conversation on ${provider}.`, tone: 'info' }))
   }
@@ -569,10 +559,6 @@ function onAgentEvent(director: Director, agentId: string, { event }: AgentEvent
         saveEntry(director, newEntry('director', { text: director.draft, interrupted: Boolean(event.interrupted) || undefined }))
       }
       endTurn(director)
-      break
-    case 'usage':
-      director.usage = { usedTokens: event.usedTokens, ...(event.contextWindow ? { contextWindow: event.contextWindow } : {}) }
-      broadcast(director, { type: 'usage', usage: director.usage })
       break
     case 'stopped':
       closeDirectorApproval(director.folder, agentId)
@@ -947,7 +933,6 @@ export async function subscribeToDirector(folder: string, listener: (update: Dir
     status: director.status,
     draft: director.draft,
     queue: director.pending.map((turn) => displayText(turn)),
-    usage: director.usage,
   })
   director.listeners.add(listener)
   return () => {
