@@ -1,4 +1,4 @@
-import { execFileSync } from 'node:child_process';
+import { gitText } from './git-text.mts';
 
 const kebab = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const recordFiles = new Set([
@@ -37,17 +37,6 @@ function suggestedName(file: string): string {
         .toLowerCase(),
     )
     .join('/');
-}
-
-function git(args: string[]): string {
-  try {
-    return execFileSync('git', args, { encoding: 'utf8' });
-  } catch (error) {
-    const stderr =
-      error && typeof error === 'object' && 'stderr' in error ? String(error.stderr) : '';
-    console.error(stderr.trim() || (error instanceof Error ? error.message : String(error)));
-    process.exit(1);
-  }
 }
 
 function pathsOf(line: string): { status: string; paths: string[] } | null {
@@ -118,8 +107,8 @@ function main() {
     process.exit(1);
   }
 
-  const nameStatus = git(['diff', '--name-status', '--find-renames', base, 'HEAD']);
-  const diff = git(['diff', '--unified=0', '--no-color', '--find-renames', base, 'HEAD']);
+  const nameStatus = gitText(['diff', '--name-status', '--find-renames', base, 'HEAD']);
+  const diff = gitText(['diff', '--unified=0', '--no-color', '--find-renames', base, 'HEAD']);
   const failures: string[] = [];
 
   for (const line of nameStatus.split('\n')) {
