@@ -75,7 +75,8 @@ test('clicking Merge in order should merge pull requests from the base of the st
   const task = await createTask(context.request, home, 'Add a footer', REQUEST)
   await expect(openCard(page, 'Progress from web · Add a footer')).toBeVisible()
   // The progress card does not take the composer, so the task can be told to ship.
-  await expect(transcript(page).getByLabel('web · Add a footer', { exact: true })).toContainText('Idle')
+  // The turn ended, and the record still says the work is running, so the row says Working.
+  await expect(transcript(page).getByLabel('web · Add a footer', { exact: true })).toContainText('Working')
 
   await transcript(page).getByRole('group', { name: 'Tasks' }).getByRole('button', { name: 'Message web · Add a footer' }).click()
   await page.getByRole('textbox', { name: 'Message' }).fill(SHIP)

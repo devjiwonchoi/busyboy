@@ -11,7 +11,9 @@ import { Button } from '@/components/ui/button'
 import { Bubble, BubbleContent } from '@/components/ui/bubble'
 import { Message, MessageContent } from '@/components/ui/message'
 import { Toggle } from '@/components/ui/toggle'
+import type { TaskPhase } from '@/server/records/task-phase'
 import type { TaskStatus, TaskView } from '@/server/tasks'
+import { PhaseMark } from './phase-mark'
 
 // Status colors follow the app's scheme (amber needs you, blue running, gray
 // idle, red stopped). Badge has no amber or blue variant, so those two add
@@ -39,12 +41,15 @@ const ARCHIVED = { label: 'Archived', variant: 'outline' as const, className: 't
 export function TaskGroup({
   taskIds,
   tasks,
+  phases,
   messaging,
   currentJump = null,
   onMessage,
 }: {
   taskIds: string[]
   tasks: Map<string, TaskView>
+  /** The phase from the project graph, by task id. Absent until the graph has loaded. */
+  phases: Map<string, TaskPhase>
   /** The task the composer's next message goes to, if any. */
   messaging: string | null
   /** The command-palette hit to mark, `task-<id>`. */
@@ -76,7 +81,9 @@ export function TaskGroup({
                 const task = tasks.get(id)
                 // A subagent that finished its turn has done its one action.
                 const done = Boolean(task?.subagent && task.status === 'idle')
-                const status = task ? (task.archived ? ARCHIVED : done ? DONE : STATUS[task.status]) : undefined
+                // A subagent and an archived task stay on the agent badge. A live task says its phase.
+                const phase = task && !task.subagent && !task.archived ? phases.get(task.id) : undefined
+                const status = task ? (task.archived ? ARCHIVED : done ? DONE : phase && phase !== 'idle' ? undefined : STATUS[task.status]) : undefined
                 const working = task?.status === 'running' || task?.status === 'needs-you'
                 return (
                   <li
@@ -111,10 +118,14 @@ export function TaskGroup({
                         </Toggle>
                       )}
                       {task?.subagent && <Badge variant="secondary">Subagent</Badge>}
-                      {status && (
-                        <Badge variant={status.variant} className={status.className} data-status={task?.status}>
-                          {status.label}
-                        </Badge>
+                      {phase && phase !== 'idle' ? (
+                        <PhaseMark phase={phase} status={task?.status} />
+                      ) : (
+                        status && (
+                          <Badge variant={status.variant} className={status.className} data-status={task?.status}>
+                            {status.label}
+                          </Badge>
+                        )
                       )}
                       {/* A subagent does one action, and a task that waits on a card is answered on that card. */}
                       {task && !task.subagent && !task.archived && task.status !== 'needs-you' && (

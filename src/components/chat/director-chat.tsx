@@ -14,6 +14,8 @@ import { EscapeShortcut } from '@/components/shell/shortcut-registry'
 import { cn } from '@/lib/utils'
 import type { ChatEntry, DirectorStatus, DirectorUpdate } from '@/server/director/chat'
 import type { TaskCard } from '@/server/cards/model'
+import type { ProjectGraph } from '@/server/records/project-graph'
+import type { TaskPhase } from '@/server/records/task-phase'
 import type { TaskView } from '@/server/tasks'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Bubble, BubbleContent } from '@/components/ui/bubble'
@@ -142,6 +144,7 @@ export function DirectorChat({
   greeting: string
 }) {
   const [view, setView] = useState(initialView)
+  const [phases, setPhases] = useState<Map<string, TaskPhase>>(() => new Map())
   // The card the composer replies to, picked only by the user with a card's Reply. A card
   // never takes the composer by itself: a message typed for the Director must not reach a
   // task agent because a card opened meanwhile. The choice ends when its card closes.
@@ -169,6 +172,25 @@ export function DirectorChat({
   const honoredJump = useRef<string | null>(null)
   const [jumpId, setJumpId] = useState<string | null>(null)
   const name = persona.name
+
+  useEffect(() => {
+    const source = new EventSource('/api/records/events')
+    source.onmessage = (message) => {
+      const graph = JSON.parse(message.data) as ProjectGraph
+      if (graph.error) return
+      const next = new Map<string, TaskPhase>()
+      for (const project of graph.projects) {
+        for (const task of project.tasks) {
+          if (task.errors.length === 0) next.set(task.id, task.phase)
+        }
+      }
+      setPhases((current) => {
+        if (current.size === next.size && [...next].every(([id, phase]) => current.get(id) === phase)) return current
+        return next
+      })
+    }
+    return () => source.close()
+  }, [])
 
   useEffect(() => {
     const source = new EventSource(chat ? `/api/director/events?chat=${encodeURIComponent(chat)}` : '/api/director/events')
@@ -394,6 +416,7 @@ export function DirectorChat({
               <EntryView
                 entry={row.entry}
                 tasks={view.tasks}
+                phases={phases}
                 persona={persona}
                 messaging={messageTask?.id ?? null}
                 turn={turn}
@@ -520,6 +543,7 @@ export function DirectorMessage({ persona, header, children }: { persona: Person
 function EntryView({
   entry,
   tasks,
+  phases,
   persona,
   messaging,
   turn,
@@ -531,6 +555,7 @@ function EntryView({
 }: {
   entry: ChatEntry
   tasks: Map<string, TaskView>
+  phases: Map<string, TaskPhase>
   persona: Persona
   messaging: string | null
   turn: ReturnType<typeof latestTurn>
@@ -581,7 +606,7 @@ function EntryView({
         </DirectorMessage>
       )
     case 'tasks':
-      return <TaskGroup taskIds={entry.taskIds} tasks={tasks} messaging={messaging} currentJump={currentJump} onMessage={onMessage} />
+      return <TaskGroup taskIds={entry.taskIds} tasks={tasks} phases={phases} messaging={messaging} currentJump={currentJump} onMessage={onMessage} />
     case 'card':
       return <ClosedCard entry={entry} />
     case 'note':

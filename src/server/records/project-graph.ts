@@ -1,9 +1,12 @@
 import { lstat, readdir, readFile } from 'node:fs/promises'
 import { join } from 'node:path'
+import type { CardKind } from '../cards/model'
 import { SETTINGS_FILE } from '../config'
 import { sameEntryName } from '../paths'
+import { openCards } from '../task-cards'
 import { readTasksAt, taskView, type TaskRecord, type TaskStatus } from '../tasks'
 import { parseRecords, RECORD_FILES, type BuildsOn, type ParsedRecords, type RecordError, type RecordTexts } from './parse-records'
+import { taskPhase, type TaskPhase } from './task-phase'
 
 // project → task → todo, built from the task list, each task's `.jwn` records,
 // and its agent's live status. Plain data, so it can be sent to the window and
@@ -23,6 +26,8 @@ export type GraphTask = {
   /** When a record file last changed, or when the task was created if it has none (ISO 8601). */
   updatedAt: string
   status: NodeStatus
+  /** The word on the task row and the project pill. */
+  phase: TaskPhase
   stage: string | null
   stateText: string | null
   /** Why the task stopped when it could not resume after a restart. */
@@ -115,6 +120,11 @@ function taskStatus(records: ParsedRecords, agent: TaskStatus): NodeStatus {
       return 'needs-you'
     case 'stopped':
       return 'stopped'
+    case 'running':
+      // The turn ended and the record still says the work is running. That is
+      // the work continuing between turns, not a request for the user.
+      if (agent === 'idle') return 'running'
+      break
   }
   // The process is gone (or never came back after a restart), whatever the record last said.
   if (agent === 'stopped') return 'stopped'
@@ -125,11 +135,13 @@ function taskStatus(records: ParsedRecords, agent: TaskStatus): NodeStatus {
 /** A task that could not resume has no agent, whatever its records last said. */
 const resumeFailed = (task: TaskRecord) => Boolean(task.note) && taskView(task).status === 'stopped'
 
-async function readTask(task: TaskRecord) {
+async function readTask(task: TaskRecord, cards: readonly CardKind[]) {
   const folder = await recordFolderOf(task)
   const read = folder && 'folder' in folder ? await readRecordTexts(folder.folder) : { texts: {}, changedAt: null }
   const records = parseRecords(read.texts)
   if (folder && 'error' in folder) records.errors.push({ file: RECORDS_FOLDER, message: folder.error })
+  const view = taskView(task)
+  const failed = resumeFailed(task)
   return {
     id: task.id,
     project: task.project,
@@ -137,7 +149,8 @@ async function readTask(task: TaskRecord) {
     branch: task.branch,
     worktree: task.worktree,
     updatedAt: read.changedAt === null ? task.createdAt : new Date(read.changedAt).toISOString(),
-    status: resumeFailed(task) && records.state !== 'done' ? 'stopped' : taskStatus(records, taskView(task).status),
+    status: failed && records.state !== 'done' ? 'stopped' : taskStatus(records, view.status),
+    phase: taskPhase({ agent: view.status, records, cards, resumeFailed: failed }),
     note: task.note ?? null,
     stage: records.stage,
     stateText: records.stateText,
@@ -181,9 +194,16 @@ export async function readProjectGraph(folder: string): Promise<ProjectGraph> {
     return { projects: [], error: 'The task list could not be read: an entry is missing its id, project, or worktree.' }
   }
   const projects = new Map<string, Awaited<ReturnType<typeof readTask>>[]>(names.map((name) => [name, []]))
+  const cardsOf = new Map<string, CardKind[]>()
+  for (const card of openCards(folder)) {
+    const kinds = cardsOf.get(card.taskId)
+    if (kinds) kinds.push(card.kind)
+    else cardsOf.set(card.taskId, [card.kind])
+  }
   // A subagent runs in the project's own checkout and writes no records; any `.jwn` there is the user's.
   // An archived task is out of the way until it is restored.
-  for (const task of await Promise.all(tasks.filter(({ kind, archivedAt }) => kind !== 'subagent' && !archivedAt).map(readTask))) {
+  const shown = tasks.filter(({ kind, archivedAt }) => kind !== 'subagent' && !archivedAt)
+  for (const task of await Promise.all(shown.map((task) => readTask(task, cardsOf.get(task.id) ?? [])))) {
     // A task whose project was removed from settings still shows under its own name.
     let list = projects.get(task.project)
     if (!list) projects.set(task.project, (list = []))
