@@ -278,7 +278,7 @@ export function killTerminal(id: string) {
 }
 
 export function killAllTerminals() {
-  for (const [id, terminal] of [...registry.terminals]) {
+  for (const [id, terminal] of registry.terminals) {
     if (!terminal.exited) killTerminal(id)
   }
 }

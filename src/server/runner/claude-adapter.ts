@@ -345,7 +345,7 @@ function startClaude(options: ProviderStartOptions): ProviderSession {
         request.resolve({ behavior: 'deny', message: 'The user interrupted.', interrupt: true })
         emit({ type: 'answered', requestId })
       }
-      for (const [requestId, resolve] of [...asks.entries()]) {
+      for (const [requestId, resolve] of asks.entries()) {
         resolve(null)
         emit({ type: 'answered', requestId })
       }

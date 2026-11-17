@@ -24,7 +24,6 @@ import {
 import {
   type ComposerEditorController,
   type ComposerItemValue,
-  type ComposerQuery,
   type ComposerValue,
   type UseComposerEditorOptions,
   useComposerEditor,
@@ -381,7 +380,10 @@ function useComposerInputLayout() {
   useLayoutEffect(() => {
     for (const host of editor?.tokenHosts ?? []) {
       const fallback = host.previousElementSibling;
-      if (fallback instanceof HTMLElement) fallback.hidden = true;
+      if (fallback instanceof HTMLElement) {
+        // oxlint-disable-next-line react/immutability -- hide the token's plain-text fallback node, which is not React state
+        fallback.hidden = true
+      }
     }
   }, [editor?.tokenHosts]);
   useLayoutEffect(() => {

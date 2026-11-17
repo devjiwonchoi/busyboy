@@ -175,7 +175,7 @@ export function openDirectorApproval({
 
 export function closeDirectorApproval(folder: string, agentId: string, requestId?: string) {
   const store = storeFor(folder)
-  for (const [id, entry] of [...store.open]) {
+  for (const [id, entry] of store.open) {
     if (entry.agentId !== agentId || entry.card.stopsTask !== false) continue
     if (requestId !== undefined && id !== `${agentId}:${requestId}`) continue
     closeCard(store, id)

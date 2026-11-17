@@ -310,6 +310,7 @@ export const ChatComposer = forwardRef<
     })
     commit([{ type: 'text', text: seedText }])
     rootRef.current?.querySelector<HTMLElement>('[data-slot="composer-input"]')?.focus()
+    // oxlint-disable-next-line react/exhaustive-deps -- appliedSeed runs this once per seed token, and commit is a new function every render
   }, [seedToken, seedText])
 
   useEffect(() => {
@@ -423,6 +424,7 @@ export const ChatComposer = forwardRef<
           {attachments.map((attachment) => (
             <li key={attachment.id} className="flex items-center gap-1 rounded-xl bg-white/10 p-1">
               {attachment.previewUrl ? (
+                // oxlint-disable-next-line nextjs/no-img-element -- a blob preview is not a next/image source
                 <img src={attachment.previewUrl} alt={attachment.name} className="size-14 rounded-lg object-cover" />
               ) : (
                 <span className="max-w-36 truncate px-2 text-xs text-zinc-200">{attachment.name}</span>

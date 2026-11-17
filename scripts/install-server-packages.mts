@@ -229,8 +229,8 @@ function removeForeignNativePackages(serverDir: string, platform: string, arch: 
       const path = join(dir, entry.name)
       const name = packageNameAt(path)
       const drop =
-        (/^@anthropic-ai\/claude-agent-sdk-/.test(name) && mentionsPlatform(name)) ||
-        ((/^@next\/swc-/.test(name) || /^@esbuild\//.test(name)) && isForeignPlatformPackage(name, platform, arch))
+        (name.startsWith('@anthropic-ai/claude-agent-sdk-') && mentionsPlatform(name)) ||
+        ((name.startsWith('@next/swc-') || name.startsWith('@esbuild/')) && isForeignPlatformPackage(name, platform, arch))
       if (drop) {
         rmSync(path, { recursive: true, force: true })
         continue

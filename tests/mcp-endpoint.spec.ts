@@ -15,12 +15,16 @@ test('calling list_projects should return the projects', async ({ context, baseU
   const initialize = await rpc(context.request, 'initialize', { protocolVersion: '2025-06-18' })
   expect(initialize.result).toMatchObject({ protocolVersion: '2025-06-18', serverInfo: { name: 'busyboy' } })
   const list = await rpc(context.request, 'tools/list')
-  expect((list.result?.tools as { name: string }[]).map(({ name }) => name)).toContain('list_projects')
+  expect(list.result?.tools).toBeTruthy()
+  const tools = list.result?.tools as { name: string }[] | undefined
+  expect(tools?.map(({ name }) => name)).toContain('list_projects')
 
   const call = await rpc(context.request, 'tools/call', { name: 'list_projects', arguments: {} })
 
-  const text = (call.result?.content as { text: string }[])[0].text
-  expect(JSON.parse(text)).toEqual([
+  const content = call.result?.content as { text: string }[] | undefined
+  const text = content?.[0]?.text
+  expect(text).toBeTruthy()
+  expect(JSON.parse(String(text))).toEqual([
     { name: 'web', path: projects.web },
     { name: 'api', path: projects.api },
   ])

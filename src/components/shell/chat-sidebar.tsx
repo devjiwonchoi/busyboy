@@ -327,6 +327,9 @@ function subscribeNothing() {
 function NewManager({ projects, taken }: { projects: string[]; taken: Set<string | undefined> }) {
   const router = useRouter()
   const [open, setOpen] = useState(false)
+  const [project, setProject] = useState<string | null>(null)
+  const [folder, setFolder] = useState('')
+  const [roomProjects, setRoomProjects] = useState<string[]>([])
   const [state, action, pending] = useActionState<CreateManagerResult, FormData>(async (previous, form) => {
     const result = await createManagerAction(previous, form)
     if (result.id) {
@@ -340,10 +343,7 @@ function NewManager({ projects, taken }: { projects: string[]; taken: Set<string
     return result
   }, {})
   const free = projects.filter((name) => !taken.has(name.toLowerCase()))
-  const [project, setProject] = useState<string | null>(null)
   const choice = project ?? (free.length === 0 && projects.length < 2 ? NEW_FOLDER : null)
-  const [folder, setFolder] = useState('')
-  const [roomProjects, setRoomProjects] = useState<string[]>([])
   // Read after hydration: the server never has the bridge, so the first render matches it.
   const bridge = useSyncExternalStore(subscribeNothing, desktopBridge, () => undefined)
 

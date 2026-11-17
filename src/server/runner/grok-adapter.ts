@@ -322,7 +322,7 @@ function startGrok(options: ProviderStartOptions): ProviderSession {
   }
 
   const dropAsks = () => {
-    for (const [requestId, resolve] of [...asks]) {
+    for (const [requestId, resolve] of asks) {
       asks.delete(requestId)
       resolve(null)
       emit({ type: 'answered', requestId })

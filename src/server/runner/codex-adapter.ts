@@ -263,7 +263,7 @@ function startCodex(options: ProviderStartOptions): ProviderSession {
   }
 
   const dropAsks = () => {
-    for (const [requestId, resolve] of [...asks.entries()]) {
+    for (const [requestId, resolve] of asks.entries()) {
       asks.delete(requestId)
       resolve(null)
       emit({ type: 'answered', requestId })
@@ -367,7 +367,9 @@ function startCodex(options: ProviderStartOptions): ProviderSession {
     const messageThread = message.params?.threadId
     if (threadId && typeof messageThread === 'string' && messageThread !== threadId) return
     if (message.method === 'turn/started') {
-      turnId = (message.params?.turn as { id: string }).id
+      const startedTurn = message.params?.turn as { id: string } | undefined
+      if (!startedTurn) throw new Error('Codex turn/started had no turn id.')
+      turnId = startedTurn.id
       if (interruptPending) interruptTurn()
     }
     mapper.push(message)

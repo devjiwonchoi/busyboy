@@ -18,7 +18,14 @@ const TERMINAL_MARKER = 'busyboy-terminal-ok'
 const terminalCommand = process.platform === 'win32' ? 'echo busyboy-terminal^-ok\r' : `echo busyboy-"terminal"-ok\r`
 
 function stripAnsi(text: string) {
-  return text.replace(/\u001b\[\d*(;\d*)?H/g, '\n').replace(/\u001b\[[0-?]*[ -\/]*[@-~]|\u001b\][^\u0007\u001b]*(\u0007|\u001b\\)|\u001b[@-_]/g, '')
+  const escape = String.fromCharCode(0x1b)
+  const bell = String.fromCharCode(0x07)
+  const cursor = new RegExp(`${escape}\\[\\d*(;\\d*)?H`, 'g')
+  const sequence = new RegExp(
+    `${escape}\\[[0-?]*[ -/]*[@-~]|${escape}\\][^${bell}${escape}]*(?:${bell}|${escape}\\\\)|${escape}[@-_]`,
+    'g',
+  )
+  return text.replace(cursor, '\n').replace(sequence, '')
 }
 
 const PROCESS_EXIT_TIMEOUT_MS = 6_000

@@ -1,0 +1,26 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["eslint", "typescript", "unicorn", "oxc", "react", "nextjs", "import"],
+  "categories": {
+    "correctness": "error"
+  },
+  "env": {
+    "browser": true,
+    "node": true
+  },
+  "settings": {
+    "react": {
+      "version": "19.3.1"
+    },
+    "next": {
+      "rootDir": "."
+    }
+  },
+  "options": {
+    "maxWarnings": 0
+  },
+  "rules": {
+    "react/refs": "off",
+    "react/set-state-in-effect": "off"
+  }
+}

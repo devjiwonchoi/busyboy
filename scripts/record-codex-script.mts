@@ -43,7 +43,7 @@ function keepError(error: Record<string, any> | null | undefined) {
 function keep(message: Message): Message | undefined {
   const { method, params = {} } = message
   if (message.id !== undefined && method && REQUESTS.has(method)) {
-    const { threadId, turnId, itemId, startedAtMs, ...rest } = params
+    const { threadId: _threadId, turnId: _turnId, itemId: _itemId, startedAtMs: _startedAtMs, ...rest } = params
     return { id: message.id, method, params: rest }
   }
   switch (method) {

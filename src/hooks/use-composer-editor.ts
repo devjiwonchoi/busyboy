@@ -231,6 +231,7 @@ export function useComposerEditor({
       document.removeEventListener("selectionchange", onSelectionChange);
   }, []);
 
+  // oxlint-disable-next-line react/exhaustive-deps -- write the value back into the field after every commit, including the commit that attaches the node
   useLayoutEffect(() => {
     const input = inputRef.current;
     if (!input || composing.current) return;

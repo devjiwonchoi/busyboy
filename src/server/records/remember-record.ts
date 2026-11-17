@@ -226,7 +226,7 @@ export function endStateItems(align: string): EndStateItem[] {
   const start = lines.findIndex((line) => /^# Success criteria\s*$/i.test(line))
   if (start !== -1) {
     const rest = lines.slice(start + 1)
-    const end = rest.findIndex((line) => /^# /.test(line))
+    const end = rest.findIndex((line) => line.startsWith('# '))
     const section = end === -1 ? rest : rest.slice(0, end)
     return section.flatMap((line) => {
       const heading = /^##\s+(.+?)\s*#*$/.exec(line)

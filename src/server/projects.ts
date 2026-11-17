@@ -22,14 +22,30 @@ export async function getProject(name: string): Promise<Project | undefined> {
   return (await listProjects()).find((project) => sameName(project.name, name))
 }
 
-const INVALID_CHARACTERS = /[/\\:<>"|?*\u0000-\u001f]/g
 const RESERVED_NAMES = /^(con|prn|aux|nul|com[0-9]|lpt[0-9])(\..*)?$/i
+const INVALID_NAME_MARK = '/\\:<>"|?*'
+
+function isInvalidNameCharacter(character: string) {
+  const code = character.codePointAt(0) ?? 0
+  return code < 32 || INVALID_NAME_MARK.includes(character)
+}
+
+function hasInvalidCharacter(name: string) {
+  for (const character of name) if (isInvalidNameCharacter(character)) return true
+  return false
+}
+
+function replaceInvalidCharacters(name: string) {
+  let next = ''
+  for (const character of name) next += isInvalidNameCharacter(character) ? '-' : character
+  return next
+}
 
 function checkName(name: string) {
   const trimmed = name.trim()
   if (!trimmed) throw new ProjectError('Enter a project name.')
   if (trimmed.length > MAX_NAME_LENGTH) throw new ProjectError(`Use at most ${MAX_NAME_LENGTH} characters.`)
-  if (new RegExp(INVALID_CHARACTERS.source).test(trimmed)) {
+  if (hasInvalidCharacter(trimmed)) {
     throw new ProjectError('A project name cannot contain / \\ : < > " | ? * or control characters.')
   }
   if (trimmed.startsWith('@')) throw new ProjectError('A project name cannot start with @.')
@@ -39,7 +55,7 @@ function checkName(name: string) {
 }
 
 function nameFromFolder(folder: string) {
-  let name = folder.replace(INVALID_CHARACTERS, '-').replace(/^[@\s]+/, '')
+  let name = replaceInvalidCharacters(folder).replace(/^[@\s]+/, '')
   name = name.slice(0, MAX_NAME_LENGTH).replace(/[.\s]+$/, '').trim()
   if (!name) name = 'project'
   if (RESERVED_NAMES.test(name)) name = `${name.split('.')[0]}-project`
