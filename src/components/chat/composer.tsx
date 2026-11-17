@@ -495,7 +495,9 @@ export const ChatComposer = forwardRef<
             </ComposerList>
           </div>
         </ComposerPopup>
-        <ComposerActions className="w-full items-center justify-between">
+        {/* No w-full here: ComposerActions already has side margins, so 100% width
+            plus the margin pushed the send button past the box's right edge. */}
+        <ComposerActions className="items-center justify-between">
           <ComposerActionGroup align="start">
             <input
               id={pickerId}
