@@ -8,9 +8,11 @@ name: Release
 # With dry_run, the installers stay as run artifacts and nothing is published.
 #
 # The Next.js app and the Electron bundle are JavaScript, so they are built
-# once. macOS and Windows download that bundle, install the native modules for
-# their own architecture, and package. Publishing still waits for every
-# platform, so one release keeps one update feed.
+# once. macOS downloads that bundle with pnpm's symlinks. Windows downloads a
+# second archive of the same tree with the symlinks turned into real files,
+# because Windows tar cannot create them. Each platform installs the native
+# modules for its own architecture and packages. Publishing still waits for
+# every platform, so one release keeps one update feed.
 on:
   workflow_dispatch:
     inputs:
@@ -83,14 +85,16 @@ jobs:
           pnpm exec next build
           node scripts/prepare-standalone.mts --assets-only
           node scripts/build-electron.mts
-          # The standalone tree is pnpm symlinks. A tar keeps them; the artifact
-          # zip would not. posix tar extracts on macOS and Windows.
-          tar --format=posix -cf desktop-bundle.tar .next/standalone dist-electron
+          # Two archives: macOS keeps pnpm's symlinks, Windows gets real files.
+          # The artifact zip would drop the symlinks, so each archive is a tar.
+          node scripts/pack-desktop-bundle.mts
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           # Not release-*: the publish job downloads every artifact named release-*.
           name: desktop-bundle
-          path: desktop-bundle.tar
+          path: |
+            desktop-bundle.tar
+            desktop-bundle-windows.tar
           if-no-files-found: error
           retention-days: 1
 
@@ -109,18 +113,15 @@ jobs:
         with:
           name: desktop-bundle
           path: .
-      - name: Unpack the shared app bundle
-        run: |
-          tar -xf desktop-bundle.tar && rm desktop-bundle.tar
-          # pnpm's layout is symlinks. Losing them makes the server unable to load.
-          if [ "$(find .next/standalone -type l | wc -l)" -lt 1 ]; then
-            echo "::error::The app bundle has no symlinks. The standalone server would not start."
-            exit 1
-          fi
       - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: ${{ env.NODE_VERSION }}
+      - name: Unpack the shared app bundle
+        run: |
+          tar -xf desktop-bundle.tar
+          rm -f desktop-bundle.tar desktop-bundle-windows.tar
+          node scripts/check-shared-bundle.mts
       - uses: ./.github/actions/cache-pnpm-store
       - uses: ./.github/actions/cache-electron-tools
       - run: node scripts/install-packaging-tools.mts
@@ -214,18 +215,16 @@ jobs:
         with:
           name: desktop-bundle
           path: .
-      - name: Unpack the shared app bundle
-        run: |
-          tar -xf desktop-bundle.tar && rm desktop-bundle.tar
-          # pnpm's layout is symlinks. Losing them makes the server unable to load.
-          if [ "$(find .next/standalone -type l | wc -l)" -lt 1 ]; then
-            echo "::error::The app bundle has no symlinks. The standalone server would not start."
-            exit 1
-          fi
       - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: ${{ env.NODE_VERSION }}
+      - name: Unpack the shared app bundle
+        run: |
+          # Real files, not symlinks: Windows tar cannot create the pnpm links.
+          tar -xf desktop-bundle-windows.tar
+          rm -f desktop-bundle.tar desktop-bundle-windows.tar
+          node scripts/check-shared-bundle.mts
       - uses: ./.github/actions/cache-pnpm-store
       - uses: ./.github/actions/cache-electron-tools
       - run: node scripts/install-packaging-tools.mts

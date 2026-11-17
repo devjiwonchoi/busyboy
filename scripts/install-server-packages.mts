@@ -13,10 +13,16 @@
 // machine's native binary. `sharp` is not a direct dependency, so it is added
 // here and installed for the machine doing the packaging. Binaries for any
 // other platform are then removed.
+//
+// node-pty publishes prebuilds and ConPTY binaries for every operating system.
+// The shared release bundle is built on Linux, which also compiles node-pty
+// into build/Release. Each packaging machine strips the other platforms before
+// the app is signed: codesign rejects the Windows executables, and node-pty
+// loads build/Release ahead of the host prebuild.
 import { execFileSync } from 'node:child_process'
-import { chmodSync, copyFileSync, cpSync, existsSync, lstatSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { chmodSync, closeSync, copyFileSync, cpSync, existsSync, lstatSync, mkdtempSync, openSync, readdirSync, readFileSync, readSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { dirname, join, relative, sep } from 'node:path'
+import { basename, dirname, join, relative, sep } from 'node:path'
 import { serverExternalPackages } from '../src/lib/server-external-packages.ts'
 import { trimLockfile } from './trim-lockfile.mts'
 
@@ -112,6 +118,56 @@ function pruneForeignPrebuilds(packageDir: string, platform: string, arch: strin
   }
 }
 
+/**
+ * node-pty's npm package also ships `third_party/conpty` (OpenConsole.exe and
+ * conpty.dll for every Windows architecture). The Windows prebuild already
+ * contains the copy the host loads. A Linux shared bundle additionally leaves
+ * its compiled `build/Release` in the tree, which node-pty loads before the
+ * host prebuild and which codesign will not sign.
+ */
+function pruneNodePtyLayout(packageDir: string, platform: string, arch: string) {
+  pruneForeignPrebuilds(packageDir, platform, arch)
+  rmSync(join(packageDir, 'third_party'), { recursive: true, force: true })
+  if (existsSync(join(packageDir, 'prebuilds', `${platform}-${arch}`))) {
+    rmSync(join(packageDir, 'build'), { recursive: true, force: true })
+  }
+  makeSpawnHelperExecutable(packageDir, platform, arch)
+}
+
+function looksLikeNodePty(dir: string, entryName: string): boolean {
+  if (entryName !== 'node-pty' && !/^node-pty-[0-9a-f]+$/.test(entryName)) return false
+  const manifestPath = join(dir, 'package.json')
+  if (!existsSync(manifestPath)) return existsSync(join(dir, 'prebuilds')) || existsSync(join(dir, 'third_party'))
+  try {
+    return (JSON.parse(readFileSync(manifestPath, 'utf8')) as { name?: string }).name === 'node-pty'
+  } catch {
+    return false
+  }
+}
+
+/** The shared bundle's traced and `.pnpm` copies are not the package just installed. */
+function pruneNodePtyPackages(serverDir: string, platform: string, arch: string) {
+  const stack = [serverDir]
+  while (stack.length > 0) {
+    const dir = stack.pop()!
+    let entries
+    try {
+      entries = readdirSync(dir, { withFileTypes: true })
+    } catch {
+      continue
+    }
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue
+      const path = join(dir, entry.name)
+      if (looksLikeNodePty(path, entry.name)) {
+        pruneNodePtyLayout(path, platform, arch)
+        continue
+      }
+      stack.push(path)
+    }
+  }
+}
+
 // node-pty 1.1.0 publishes spawn-helper without the executable bit, and it
 // runs that helper for every terminal on macOS and Linux.
 function makeSpawnHelperExecutable(packageDir: string, platform: string, arch: string) {
@@ -177,6 +233,116 @@ function removeForeignSharpPackages(serverDir: string, platform: string, arch: s
   }
 }
 
+// Package names that encode the platform they were built for. `arm` must not
+// match inside `arm64`, so the arch is a whole token.
+const PLATFORM_TOKEN = /(?:^|[^A-Za-z0-9])((?:aix|android|darwin|freebsd|linux|netbsd|openbsd|openharmony|sunos|win32)-(?:arm64|arm|ia32|loong64|mips64el|ppc64le|ppc64|riscv64|s390x|x64))(?=$|[^A-Za-z0-9])/g
+
+function isForeignPlatformPackage(name: string, platform: string, arch: string): boolean {
+  const host = `${platform}-${arch}`
+  const tokens = name.match(PLATFORM_TOKEN)
+  if (!tokens) return false
+  return !tokens.some((token) => token.replace(/^[^A-Za-z0-9]+/, '') === host)
+}
+
+function packageNameAt(dir: string): string {
+  const parent = basename(dirname(dir))
+  const name = basename(dir)
+  return parent.startsWith('@') ? `${parent}/${name}` : name
+}
+
+/**
+ * Drops native packages the Linux shared bundle traced for another machine.
+ * The Agent SDK's platform packages are the bundled `claude` executable; the
+ * app runs the user's own, so every one of them goes, including the host's.
+ */
+function removeForeignNativePackages(serverDir: string, platform: string, arch: string) {
+  const stack = [serverDir]
+  while (stack.length > 0) {
+    const dir = stack.pop()!
+    let entries
+    try {
+      entries = readdirSync(dir, { withFileTypes: true })
+    } catch {
+      continue
+    }
+    for (const entry of entries) {
+      if (!entry.isDirectory() && !entry.isSymbolicLink()) continue
+      const path = join(dir, entry.name)
+      const name = packageNameAt(path)
+      const drop =
+        /^@anthropic-ai\/claude-agent-sdk-/.test(name) ||
+        ((/^@next\/swc-/.test(name) || /^@esbuild\//.test(name)) && isForeignPlatformPackage(name, platform, arch))
+      if (drop) {
+        rmSync(path, { recursive: true, force: true })
+        continue
+      }
+      if (entry.isDirectory()) stack.push(path)
+    }
+  }
+}
+
+type BinaryKind = 'elf' | 'macho' | 'pe'
+
+function nativeBinaryKind(path: string): BinaryKind | null {
+  let fd: number | undefined
+  try {
+    fd = openSync(path, 'r')
+    const header = Buffer.alloc(4)
+    if (readSync(fd, header, 0, 4, 0) < 4) return null
+    if (header[0] === 0x7f && header[1] === 0x45 && header[2] === 0x4c && header[3] === 0x46) return 'elf'
+    const big = header.readUInt32BE(0)
+    const little = header.readUInt32LE(0)
+    if (big === 0xfeedface || big === 0xfeedfacf || little === 0xfeedface || little === 0xfeedfacf) return 'macho'
+    if (header[0] !== 0x4d || header[1] !== 0x5a) return null
+    const offsetBuf = Buffer.alloc(4)
+    if (readSync(fd, offsetBuf, 0, 4, 0x3c) < 4) return null
+    const offset = offsetBuf.readUInt32LE(0)
+    if (offset < 0x40 || offset > 1024) return null
+    const signature = Buffer.alloc(4)
+    if (readSync(fd, signature, 0, 4, offset) < 4) return null
+    return signature.toString('latin1') === 'PE\0\0' ? 'pe' : null
+  } catch {
+    return null
+  } finally {
+    if (fd !== undefined) closeSync(fd)
+  }
+}
+
+function hostBinaryKind(platform: string): BinaryKind {
+  if (platform === 'win32') return 'pe'
+  if (platform === 'darwin') return 'macho'
+  return 'elf'
+}
+
+const BINARY_KIND_LABEL: Record<BinaryKind, string> = { elf: 'Linux', macho: 'macOS', pe: 'Windows' }
+
+/** Fails the build while the foreign file is still a path, rather than a codesign error. */
+function assertHostBinaries(serverDir: string, platform: string) {
+  const host = hostBinaryKind(platform)
+  const foreign: string[] = []
+  const stack = [serverDir]
+  while (stack.length > 0) {
+    const dir = stack.pop()!
+    let entries
+    try {
+      entries = readdirSync(dir, { withFileTypes: true })
+    } catch {
+      continue
+    }
+    for (const entry of entries) {
+      const path = join(dir, entry.name)
+      if (entry.isDirectory()) stack.push(path)
+      else if (entry.isFile()) {
+        const kind = nativeBinaryKind(path)
+        if (kind && kind !== host) foreign.push(`${path} (${BINARY_KIND_LABEL[kind]})`)
+      }
+    }
+  }
+  if (foreign.length > 0) {
+    throw new Error(`The server still contains binaries for another operating system:\n${foreign.join('\n')}`)
+  }
+}
+
 export function installServerPackages(serverDir: string, platform: string, arch: string) {
   const manifest = readManifest(root)
   for (const name of serverExternalPackages) {
@@ -224,7 +390,8 @@ export function installServerPackages(serverDir: string, platform: string, arch:
     for (const name of dependencyClosure(installed, roots)) {
       const from = join(installed, name)
       const to = join(target, name)
-      pruneForeignPrebuilds(from, platform, arch)
+      if (name === 'node-pty') pruneNodePtyLayout(from, platform, arch)
+      else pruneForeignPrebuilds(from, platform, arch)
       // Tracing leaves a partial copy, and a shared build leaves another platform's
       // sharp. Replace those with the package installed for this machine.
       const replace = name === 'sharp' || name.startsWith('@img/') || (serverExternalPackages as readonly string[]).includes(name)
@@ -240,7 +407,11 @@ export function installServerPackages(serverDir: string, platform: string, arch:
     rmSync(staging, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 })
   }
   removeForeignSharpPackages(serverDir, platform, arch)
+  removeForeignNativePackages(serverDir, platform, arch)
+  // Traced copies and the `.pnpm` store still carry the build machine's node-pty.
+  pruneNodePtyPackages(serverDir, platform, arch)
   pointAliasesAtInstalledPackages(serverDir, platform)
+  assertHostBinaries(serverDir, platform)
 }
 
 /**
