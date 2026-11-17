@@ -82,8 +82,8 @@ async function Body({ searchParams }: Pick<PageProps<'/settings'>, 'searchParams
 
 const HEADINGS: Record<SectionId, { title: string; description: string }> = {
   companion: {
-    title: 'Companion',
-    description: 'Your director, the agent you chat with. Its personality shapes how it talks to you.',
+    title: 'Director',
+    description: 'The main agent who leads every manager. Pick a character. You can change it any time.',
   },
   agents: {
     title: 'Agents',

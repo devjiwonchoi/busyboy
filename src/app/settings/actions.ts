@@ -12,7 +12,7 @@ import type { ProviderId } from '@/server/runner/contract'
 // Server actions are public endpoints, so every argument is checked at runtime.
 
 export async function setCompanionAction(id: unknown) {
-  if (typeof id !== 'string' || !findCompanion(id)) throw new Error('Unknown companion.')
+  if (typeof id !== 'string' || !findCompanion(id)) throw new Error('Unknown director.')
   await chooseCompanion(id)
   refresh()
 }

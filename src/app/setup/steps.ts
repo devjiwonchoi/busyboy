@@ -2,7 +2,7 @@
 // Back, Continue, and reloads all land on the same step without client state.
 
 export const STEPS = [
-  { id: 'companion', title: 'Companion' },
+  { id: 'companion', title: 'Director' },
   { id: 'agents', title: 'Agents' },
   { id: 'skills', title: 'Skills' },
   { id: 'approvals', title: 'Approvals' },

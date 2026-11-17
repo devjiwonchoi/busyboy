@@ -1,11 +1,11 @@
 'use client'
 
-import { Plus, Trash2 } from 'lucide-react'
+import { Plus, Search, Trash2 } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useActionState, useEffect, useState, useSyncExternalStore } from 'react'
 import { createManagerAction, removeManagerAction, type CreateManagerResult } from '@/app/(main)/manager-actions'
-import { managerPersona, PersonaAvatar, type Persona } from '@/components/chat/persona'
+import { LetterMark, LetterStack, letterOf, PersonaAvatar, type Persona } from '@/components/chat/persona'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -21,25 +21,43 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Field, FieldContent, FieldDescription, FieldError, FieldLabel, FieldTitle } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
-import { Item, ItemActions, ItemContent, ItemDescription, ItemGroup, ItemMedia, ItemTitle } from '@/components/ui/item'
+import { ItemGroup } from '@/components/ui/item'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { desktopBridge } from '@/lib/desktop-bridge'
+import { cn } from '@/lib/utils'
 import type { ChatSummary } from '@/server/director/chat'
+import type { Room } from '@/server/rooms'
 
 /** The radio value for a repository BusyBoy does not know yet. */
 const NEW_FOLDER = '\0new-folder'
+/** The radio value for a row that covers several projects. */
+const ROOM = '\0room'
 
 const managerHref = (id: string) => `/?manager=${encodeURIComponent(id)}`
 
 /**
- * The chat list on the left: the Director on top, then one manager per
- * project, each with the start of its latest message. The list follows
- * /api/chats/events; `projects` are the projects BusyBoy knows, for New manager.
+ * The chat list on the left, in the shape of the dark sidebar mockup: search
+ * and new at the top right, the Director pinned under them, then one row per
+ * project and per room, and the user at the bottom left. Rows are plain
+ * links rather than Item, so the 40px circles, 15/13 type, and #161617 panel
+ * match that mockup. The list follows /api/chats/events.
  */
-export function ChatSidebar({ director, projects }: { director: Persona; projects: string[] }) {
+export function ChatSidebar({
+  director,
+  projects,
+  rooms,
+  userName,
+}: {
+  director: Persona
+  projects: string[]
+  rooms: Room[]
+  userName: string
+}) {
   const [chats, setChats] = useState<ChatSummary[] | null>(null)
+  const [query, setQuery] = useState('')
+  const [searching, setSearching] = useState(false)
   const active = useSearchParams().get('manager')
 
   useEffect(() => {
@@ -51,65 +69,140 @@ export function ChatSidebar({ director, projects }: { director: Persona; project
   const directorChat = chats?.find(({ chat }) => chat === null)
   const managers = chats?.filter(({ chat }) => chat !== null) ?? []
   const managed = new Set(managers.map(({ project }) => project?.toLowerCase()))
+  const needle = query.trim().toLowerCase()
+  const visibleManagers = needle ? managers.filter((manager) => matches(needle, manager.name, manager.preview, manager.project)) : managers
+  const visibleRooms = needle ? rooms.filter((room) => matches(needle, room.name, room.projects.join(' '))) : rooms
 
   return (
-    <nav aria-label="Chats" data-loaded={chats !== null} className="hidden w-64 shrink-0 flex-col gap-2 overflow-y-auto border-r p-2 md:flex">
-      <div className="flex items-center justify-between pl-2">
-        <h2 className="text-muted-foreground text-xs font-medium">Managers</h2>
-        <NewManager projects={projects.filter((name) => !managed.has(name.toLowerCase()))} />
+    <nav
+      aria-label="Chats"
+      data-loaded={chats !== null}
+      className="hidden h-full w-[17rem] shrink-0 flex-col border-r bg-background text-foreground md:flex dark:border-white/8 dark:bg-[#161617] dark:text-white"
+    >
+      <div className="flex h-10 items-center justify-end gap-0.5 px-2">
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          aria-label="Search chats"
+          aria-pressed={searching}
+          className="text-[#8d8d93] hover:bg-white/5 hover:text-white"
+          onClick={() => {
+            setSearching((open) => !open)
+            if (searching) setQuery('')
+          }}
+        >
+          <Search />
+        </Button>
+        <NewManager projects={projects} taken={managed} />
       </div>
-      <Item
-        variant={active === null ? 'muted' : 'default'}
-        // A link styled as an item, so the Director's chat opens like any page.
-        render={<Link href="/" aria-current={active === null ? 'page' : undefined} aria-label={`${director.name}, director`} />}
-        className="flex-col items-center gap-1 py-3"
-      >
-        {director.mark && <PersonaAvatar persona={director} className="size-14 text-3xl" />}
-        <ItemTitle>{director.name}</ItemTitle>
-        <ChatState chat={directorChat} />
-      </Item>
-      <ItemGroup aria-label="Managers" className="gap-1">
-        {managers.map((manager) => (
-          <ManagerItem key={manager.chat} manager={manager} active={manager.chat === active} />
-        ))}
-      </ItemGroup>
-      {chats !== null && managers.length === 0 && (
-        <p className="text-muted-foreground px-2 text-xs">No managers yet. Create one for a project to talk to it here.</p>
+      {searching && (
+        <div className="px-2 pb-1">
+          <Input
+            aria-label="Search chats"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Search"
+            autoFocus
+            className="h-8 border-white/10 bg-white/5 text-sm"
+          />
+        </div>
       )}
+      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-2 pb-1">
+        {/* Stays at the top of the list while the rows below scroll. */}
+        <div className="sticky top-0 z-10 bg-background pb-1 dark:bg-[#161617]">
+          <DirectorRow director={director} chat={directorChat} active={active === null} />
+        </div>
+        <ItemGroup aria-label="Managers" className="gap-0.5">
+          {visibleManagers.map((manager) => (
+            <ManagerItem key={manager.chat} manager={manager} active={manager.chat === active} />
+          ))}
+          {visibleRooms.map((room) => (
+            <RoomItem key={room.id} room={room} managers={managers} />
+          ))}
+        </ItemGroup>
+        {chats !== null && managers.length === 0 && rooms.length === 0 && (
+          <p className="text-muted-foreground px-2 py-2 text-xs">No managers yet. Create one for a project to talk to it here.</p>
+        )}
+      </div>
+      <div className="flex items-center gap-2.5 px-3 py-3">
+        <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-[#3a3a40] text-xs font-medium text-white" aria-hidden>
+          {letterOf(userName)}
+        </span>
+        <span className="truncate text-sm text-foreground dark:text-zinc-200">{userName}</span>
+      </div>
     </nav>
   )
 }
 
-/** What a chat is doing, when that is worth a glance: cards waiting for the user, or a reply being written. */
-function ChatState({ chat }: { chat: ChatSummary | undefined }) {
-  if (!chat) return null
-  if (chat.waiting > 0) return <Badge variant="outline">{chat.waiting} waiting for you</Badge>
-  if (chat.status === 'answering') return <span className="text-muted-foreground animate-pulse text-xs">Replying…</span>
-  return null
+function matches(needle: string, ...parts: Array<string | null | undefined>) {
+  return parts.some((part) => part?.toLowerCase().includes(needle))
+}
+
+/** One muted line: work waiting, a reply in progress, or the latest message. */
+function statusLine(chat: ChatSummary | undefined, fallback: string) {
+  const waiting = chat?.waiting ?? 0
+  if (waiting > 0) return waiting === 1 ? '1 thing waiting for you' : `${waiting} things waiting for you`
+  if (chat?.status === 'answering') return 'Replying…'
+  return chat?.preview || fallback
+}
+
+function DirectorRow({ director, chat, active }: { director: Persona; chat: ChatSummary | undefined; active: boolean }) {
+  const line = statusLine(chat, 'Leads every manager')
+  return (
+    <Link
+      href="/"
+      aria-current={active ? 'page' : undefined}
+      aria-label={`${director.name}, director`}
+      className={cn('flex items-center gap-2.5 rounded-xl px-2 py-1.5', active && 'bg-muted dark:bg-[#232325]')}
+    >
+      {director.mark && <PersonaAvatar persona={director} className="size-10 text-xl" />}
+      <span className="min-w-0">
+        <span className="flex min-w-0 items-center gap-1.5">
+          <span className="truncate text-[15px] leading-5 font-semibold">{director.name}</span>
+          <Badge className="h-[18px] shrink-0 border-transparent bg-violet-500/25 px-1.5 text-[10px] font-medium text-violet-200">Director</Badge>
+        </span>
+        <span className={cn('block truncate text-[13px] leading-4 text-[#8d8d93]', chat?.status === 'answering' && chat.waiting === 0 && 'animate-pulse')}>
+          {line}
+        </span>
+      </span>
+    </Link>
+  )
 }
 
 function ManagerItem({ manager, active }: { manager: ChatSummary; active: boolean }) {
   const id = manager.chat!
   return (
-    <Item role="listitem" aria-label={manager.name} size="sm" variant={active ? 'muted' : 'default'} className="group/manager relative">
-      <ItemMedia>
-        <PersonaAvatar persona={managerPersona(manager.name)} />
-      </ItemMedia>
-      <ItemContent className="min-w-0">
-        <ItemTitle>
-          {/* The link covers the whole item (after:inset-0), so the row opens the chat wherever it is clicked. */}
-          <Link href={managerHref(id)} aria-current={active ? 'page' : undefined} className="after:absolute after:inset-0">
-            {manager.name}
-          </Link>
-        </ItemTitle>
-        <ItemDescription className="truncate">{manager.preview || manager.project}</ItemDescription>
-        <ChatState chat={manager} />
-      </ItemContent>
+    <div role="listitem" aria-label={manager.name} className="group/manager relative">
+      <Link
+        href={managerHref(id)}
+        aria-current={active ? 'page' : undefined}
+        className={cn('flex items-center gap-2.5 rounded-xl px-2 py-1.5', active && 'bg-muted dark:bg-[#232325]')}
+      >
+        <LetterMark name={manager.name} />
+        <span className="min-w-0">
+          <span className="block truncate text-[15px] leading-5 font-semibold">{manager.name}</span>
+          <span className="block truncate text-[13px] leading-4 text-[#8d8d93]">{statusLine(manager, manager.project ?? '')}</span>
+        </span>
+      </Link>
       {/* Above the row's link, and shown on hover or keyboard focus. */}
-      <ItemActions className="relative z-10 opacity-0 group-focus-within/manager:opacity-100 group-hover/manager:opacity-100">
+      <div className="absolute top-1/2 right-2 z-10 -translate-y-1/2 opacity-0 group-focus-within/manager:opacity-100 group-hover/manager:opacity-100">
         <RemoveManager id={id} name={manager.name} project={manager.project ?? ''} active={active} />
-      </ItemActions>
-    </Item>
+      </div>
+    </div>
+  )
+}
+
+/** A room covers several projects, so their letter avatars overlap. */
+function RoomItem({ room, managers }: { room: Room; managers: ChatSummary[] }) {
+  const names = room.projects.map((project) => managers.find((manager) => manager.project?.toLowerCase() === project.toLowerCase())?.name ?? project)
+  return (
+    <div role="listitem" aria-label={room.name} className="flex items-center gap-2.5 rounded-xl px-2 py-1.5">
+      <LetterStack names={names} />
+      <span className="min-w-0">
+        <span className="block truncate text-[15px] leading-5 font-semibold">{room.name}</span>
+        <span className="block truncate text-[13px] leading-4 text-[#8d8d93]">{room.projects.join(' · ')}</span>
+      </span>
+    </div>
   )
 }
 
@@ -151,8 +244,8 @@ function subscribeNothing() {
   return () => {}
 }
 
-/** The + button and its form: a name, and the project the manager looks after. */
-function NewManager({ projects }: { projects: string[] }) {
+/** The + button and its form: one project, a new folder, or a room for several projects. */
+function NewManager({ projects, taken }: { projects: string[]; taken: Set<string | undefined> }) {
   const router = useRouter()
   const [open, setOpen] = useState(false)
   const [state, action, pending] = useActionState<CreateManagerResult, FormData>(async (previous, form) => {
@@ -162,23 +255,28 @@ function NewManager({ projects }: { projects: string[] }) {
       // The next manager starts from an empty form, not this one's project.
       setProject(null)
       setFolder('')
-      // Refreshed too: a repository added with the manager is a new project for the next form.
-      router.push(managerHref(result.id))
+      setRoomProjects([])
+      // A room stays in the list; a manager opens its chat. Refreshed too, so a new folder is offered next time.
+      if (result.kind !== 'room') router.push(managerHref(result.id))
       router.refresh()
     }
     return result
   }, {})
+  const free = projects.filter((name) => !taken.has(name.toLowerCase()))
   // With no project left to pick, the form asks for a folder at once.
   const [project, setProject] = useState<string | null>(null)
-  const choice = project ?? (projects.length === 0 ? NEW_FOLDER : null)
+  const choice = project ?? (free.length === 0 && projects.length < 2 ? NEW_FOLDER : null)
   const [folder, setFolder] = useState('')
+  const [roomProjects, setRoomProjects] = useState<string[]>([])
   // Read after hydration: the server never has the bridge, so the first render matches it.
   const bridge = useSyncExternalStore(subscribeNothing, desktopBridge, () => undefined)
 
   return (
     <Sheet open={open} onOpenChange={setOpen}>
       <Tooltip>
-        <TooltipTrigger render={<SheetTrigger render={<Button variant="ghost" size="icon-sm" aria-label="New manager" />} />}>
+        <TooltipTrigger
+          render={<SheetTrigger render={<Button variant="ghost" size="icon-sm" aria-label="New manager" className="text-[#8d8d93] hover:bg-white/5 hover:text-white" />} />}
+        >
           <Plus />
         </TooltipTrigger>
         <TooltipContent>New manager</TooltipContent>
@@ -191,7 +289,7 @@ function NewManager({ projects }: { projects: string[] }) {
         <form id="new-manager" action={action} className="flex flex-col gap-4 px-6">
           <Field>
             <FieldLabel htmlFor="manager-name">Name</FieldLabel>
-            <Input id="manager-name" name="name" maxLength={40} autoComplete="off" placeholder="The project's name" />
+            <Input id="manager-name" name="name" maxLength={40} autoComplete="off" required={choice === ROOM} placeholder="The project's name" />
           </Field>
           <RadioGroup
             aria-label="Project"
@@ -199,7 +297,7 @@ function NewManager({ projects }: { projects: string[] }) {
             value={choice}
             onValueChange={(next) => setProject(next as string)}
           >
-            {projects.map((name) => (
+            {free.map((name) => (
               <FieldLabel key={name} htmlFor={`manager-project-${name}`}>
                 <Field orientation="horizontal">
                   <FieldContent>
@@ -209,6 +307,17 @@ function NewManager({ projects }: { projects: string[] }) {
                 </Field>
               </FieldLabel>
             ))}
+            {projects.length >= 2 && (
+              <FieldLabel htmlFor="manager-project-room">
+                <Field orientation="horizontal">
+                  <FieldContent>
+                    <FieldTitle>Several projects</FieldTitle>
+                    <FieldDescription>A room. Its row stacks those projects&apos; letters.</FieldDescription>
+                  </FieldContent>
+                  <RadioGroupItem value={ROOM} id="manager-project-room" />
+                </Field>
+              </FieldLabel>
+            )}
             <FieldLabel htmlFor="manager-project-new">
               <Field orientation="horizontal">
                 <FieldContent>
@@ -219,7 +328,27 @@ function NewManager({ projects }: { projects: string[] }) {
               </Field>
             </FieldLabel>
           </RadioGroup>
-          {choice !== null && choice !== NEW_FOLDER && <input type="hidden" name="project" value={choice} />}
+          {choice !== null && choice !== NEW_FOLDER && choice !== ROOM && <input type="hidden" name="project" value={choice} />}
+          {choice === ROOM && (
+            <fieldset className="flex flex-col gap-2">
+              <legend className="text-sm font-medium">Projects in the room</legend>
+              <input type="hidden" name="kind" value="room" />
+              {projects.map((name) => (
+                <label key={name} className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    name="projects"
+                    value={name}
+                    checked={roomProjects.includes(name)}
+                    onChange={(event) =>
+                      setRoomProjects((current) => (event.target.checked ? [...current, name] : current.filter((project) => project !== name)))
+                    }
+                  />
+                  {name}
+                </label>
+              ))}
+            </fieldset>
+          )}
           {choice === NEW_FOLDER && (
             <Field>
               <FieldLabel htmlFor="manager-folder">Folder path</FieldLabel>
@@ -250,8 +379,8 @@ function NewManager({ projects }: { projects: string[] }) {
           {state.error && <FieldError>{state.error}</FieldError>}
         </form>
         <SheetFooter>
-          <Button type="submit" form="new-manager" disabled={pending || choice === null}>
-            Create manager
+          <Button type="submit" form="new-manager" disabled={pending || choice === null || (choice === ROOM && roomProjects.length < 2)}>
+            {choice === ROOM ? 'Create room' : 'Create manager'}
           </Button>
         </SheetFooter>
       </SheetContent>

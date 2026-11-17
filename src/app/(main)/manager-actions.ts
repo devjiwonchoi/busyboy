@@ -3,9 +3,10 @@
 import { dataFolder } from '@/server/config'
 import { adoptTasks, closeChat } from '@/server/director/chat'
 import { createManager, ManagerError, removeManager } from '@/server/managers'
+import { createRoom, RoomError } from '@/server/rooms'
 import { releaseTasksOf } from '@/server/tasks'
 
-export type CreateManagerResult = { error?: string; id?: string }
+export type CreateManagerResult = { error?: string; id?: string; kind?: 'manager' | 'room' }
 
 /**
  * Creates a manager for a project BusyBoy knows (`project`) or for a git
@@ -17,9 +18,19 @@ export async function createManagerAction(_previous: CreateManagerResult, form: 
     const entry = form.get(key)
     return typeof entry === 'string' ? entry : undefined
   }
+  if (form.get('kind') === 'room') {
+    const projects = form.getAll('projects').filter((entry): entry is string => typeof entry === 'string')
+    try {
+      const room = await createRoom({ name: value('name'), projects })
+      return { id: room.id, kind: 'room' }
+    } catch (error) {
+      if (error instanceof RoomError) return { error: error.message }
+      throw error
+    }
+  }
   try {
     const manager = await createManager({ name: value('name'), project: value('project'), folder: value('folder') })
-    return { id: manager.id }
+    return { id: manager.id, kind: 'manager' }
   } catch (error) {
     if (error instanceof ManagerError) return { error: error.message }
     throw error

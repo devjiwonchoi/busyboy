@@ -13,9 +13,9 @@ export function CompanionAvatar({
   className?: string
 }) {
   return (
-    <Avatar aria-hidden className={cn('size-10 text-xl', className)}>
+    <Avatar aria-hidden data-emoji={companion.emoji} className={cn('size-10 text-xl', className)}>
       {imageUrl && <AvatarImage src={imageUrl} alt="" />}
-      <AvatarFallback>{companion.emoji}</AvatarFallback>
+      <AvatarFallback className={companion.tone}>{companion.emoji}</AvatarFallback>
     </Avatar>
   )
 }
