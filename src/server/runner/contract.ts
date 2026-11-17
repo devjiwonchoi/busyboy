@@ -116,12 +116,6 @@ export type AgentEvent =
   /** The agent process ended. `finished` is false when it ended mid-turn or crashed. */
   | { type: 'stopped'; finished: boolean }
   | { type: 'error'; message: string; code?: AgentErrorCode }
-  /**
-   * How full the context is, when the harness reports it. `usedTokens` is the
-   * latest turn's input (including cache), and `contextWindow` is the model's
-   * window when the harness sends one.
-   */
-  | { type: 'usage'; usedTokens: number; contextWindow?: number }
 
 /** `lost-session`: the session to resume no longer exists, so only a new conversation can continue. */
 export type AgentErrorCode = 'signed-out' | 'not-installed' | 'no-script' | 'provider' | 'lost-session'

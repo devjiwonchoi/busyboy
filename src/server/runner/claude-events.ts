@@ -26,14 +26,6 @@ export type ClaudeRawMessage = {
   parent_tool_use_id?: string | null
   /** MCP servers Claude reports on `system` `init`, including ones inherited from the user's config. */
   mcp_servers?: { name?: string; status?: string }[]
-  /** Per-turn token counts on a result. The context meter uses input plus cache. */
-  usage?: {
-    input_tokens?: number
-    cache_creation_input_tokens?: number
-    cache_read_input_tokens?: number
-  }
-  /** Per-model totals. `contextWindow` is the model's window. */
-  modelUsage?: Record<string, { contextWindow?: number }>
 }
 
 /** A `canUseTool` call, as the adapter receives it and as recordings store it. */
@@ -113,30 +105,6 @@ export function claudeResultError(message: ClaudeRawMessage): string | undefined
   return message.result?.trim() || 'Claude ended the turn with an error.'
 }
 
-function tokenCount(value: unknown) {
-  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : 0
-}
-
-/**
- * Context occupancy from a result, when Claude reported usage. Input tokens
- * plus cache reads and writes are what the latest turn sent. The window is
- * taken from any model usage entry that includes one.
- */
-export function claudeContextUsage(message: ClaudeRawMessage): { usedTokens: number; contextWindow?: number } | undefined {
-  if (!message.usage && !message.modelUsage) return undefined
-  const used = message.usage
-    ? tokenCount(message.usage.input_tokens) +
-      tokenCount(message.usage.cache_creation_input_tokens) +
-      tokenCount(message.usage.cache_read_input_tokens)
-    : 0
-  let contextWindow: number | undefined
-  for (const entry of Object.values(message.modelUsage ?? {})) {
-    if (typeof entry?.contextWindow === 'number' && entry.contextWindow > 0) contextWindow = entry.contextWindow
-  }
-  if (used <= 0) return undefined
-  return { usedTokens: used, ...(contextWindow ? { contextWindow } : {}) }
-}
-
 type ContentBlock = { type?: string; text?: string; name?: string; input?: Record<string, unknown> }
 
 /**
@@ -188,8 +156,6 @@ export class ClaudeEventMapper {
       case 'result': {
         const error = claudeResultError(message)
         if (error) this.send({ type: 'error', code: 'provider', message: error })
-        const usage = claudeContextUsage(message)
-        if (usage) this.send({ type: 'usage', ...usage })
         const interrupted = Boolean(message.terminal_reason && INTERRUPTED_REASONS.has(message.terminal_reason))
         this.send({ type: 'turn-done', ...(interrupted ? { interrupted } : {}) })
         this.streamedText.clear()

@@ -58,29 +58,6 @@ const SPECIAL_PATHS: Record<string, string> = {
   project_roots: 'the project folders',
 }
 
-function tokenCount(value: unknown) {
-  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : undefined
-}
-
-/**
- * Context occupancy from a Codex token-usage notice. Input plus cached input
- * is what the latest report put in the window. `modelContextWindow` is the
- * model's window when Codex sends it.
- */
-export function codexContextUsage(params: Record<string, unknown>): { usedTokens: number; contextWindow?: number } | undefined {
-  const tokenUsage = params.tokenUsage
-  if (!tokenUsage || typeof tokenUsage !== 'object') return undefined
-  const record = tokenUsage as Record<string, unknown>
-  const total = (record.total && typeof record.total === 'object' ? record.total : record) as Record<string, unknown>
-  const input = tokenCount(total.inputTokens)
-  if (input === undefined) return undefined
-  const cached = tokenCount(total.cachedInputTokens) ?? 0
-  const used = input + cached
-  const contextWindow = tokenCount(record.modelContextWindow)
-  if (used <= 0) return undefined
-  return { usedTokens: used, ...(contextWindow ? { contextWindow } : {}) }
-}
-
 function sandboxPathLabel(path: SandboxPath) {
   if (path.type === 'path') return path.path
   if (path.type === 'glob_pattern') return path.pattern
@@ -285,14 +262,7 @@ export class CodexEventMapper {
         this.send({ type: 'error', code: 'provider', message })
         return
       }
-      case 'thread/tokenUsage/updated': {
-        const usage = codexContextUsage(params)
-        if (usage) this.send({ type: 'usage', ...usage })
-        return
-      }
       case 'turn/completed': {
-        const usage = codexContextUsage(params)
-        if (usage) this.send({ type: 'usage', ...usage })
         const turn = params.turn as Turn
         // The `error` notification repeats the failure with more detail than the completed turn.
         if (turn.status === 'failed') this.send(codexErrorEvent(this.turnError ?? turn.error))
