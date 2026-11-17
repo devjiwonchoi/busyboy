@@ -2,11 +2,16 @@ import { randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
-import type { AttachmentInput } from "@/lib/chat-attachments";
+import {
+  isMessageImages,
+  textWithImages,
+  type AttachmentInput,
+  type MessageImage,
+} from "@/lib/chat-attachments";
 
 import { alwaysAskRulesAt } from "../always-ask-list";
 import { cardRecordTitle, isStoredCardKind, type StoredCardKind } from "../cards/model";
-import { attachmentsTurn } from "../chat-attachments";
+import { AttachmentError, attachmentsTurn, messageImages, readSavedImage } from "../chat-attachments";
 import { getManagerAt, isListedManager, listManagersAt, subscribeToManagers } from "../managers";
 import { pathKey, samePath } from "../paths";
 import { PROVIDERS } from "../providers";
@@ -25,7 +30,7 @@ import {
 import { BUSYBOY_FILES_RULE } from "../runner/always-ask";
 import type { AgentEventEnvelope, McpServer, ProviderId } from "../runner/contract";
 import { rulesFolderFor } from "../runner/user-rules";
-import { combineTurns, displayText, modelText, type UserTurn } from "../runner/user-turn";
+import { combineTurns, displayText, modelText, type TurnImage, type UserTurn } from "../runner/user-turn";
 import {
   closeDirectorApproval,
   openCards,
@@ -48,7 +53,14 @@ export const MANAGERS_FOLDER = "managers";
 const STATE_FILE = "state.json";
 
 export type ChatEntry =
-  | { id: string; at: string; kind: "user"; text: string; to?: string }
+  | {
+      id: string;
+      at: string;
+      kind: "user";
+      text: string;
+      to?: string;
+      images?: MessageImage[];
+    }
   | { id: string; at: string; kind: "director"; text: string; interrupted?: boolean }
   /** Tasks the Director created in one turn. */
   | { id: string; at: string; kind: "tasks"; taskIds: string[] }
@@ -314,7 +326,9 @@ function isEntry(value: unknown): value is ChatEntry {
   switch (entry.kind) {
     case "user":
       return (
-        typeof entry.text === "string" && (entry.to === undefined || typeof entry.to === "string")
+        typeof entry.text === "string" &&
+        (entry.to === undefined || typeof entry.to === "string") &&
+        (entry.images === undefined || isMessageImages(entry.images))
       );
     case "director":
       return typeof entry.text === "string";
@@ -716,24 +730,24 @@ export type SendToDirectorInput = {
   mcp: McpServers;
 };
 
-export async function sendToDirector({
-  folder,
-  chat,
-  text,
-  attachments,
-  resolveProvider,
-  mcp,
-}: SendToDirectorInput) {
-  const director = getDirector(folder, chat ?? null);
+export async function sendToDirector(input: SendToDirectorInput) {
+  const director = getDirector(input.folder, input.chat ?? null);
   await director.ready;
   const turn = await attachmentsTurn({
     folder: directorFolder(director),
-    text,
-    attachments: attachments ?? [],
+    text: input.text,
+    attachments: input.attachments ?? [],
   });
-  const shown = displayText(turn);
-  if (!shown) return;
-  saveEntry(director, newEntry("user", { text: shown }));
+  await sendTurn(director, turn, input);
+}
+
+async function sendTurn(
+  director: Director,
+  turn: UserTurn,
+  { resolveProvider, mcp }: Pick<SendToDirectorInput, "resolveProvider" | "mcp">,
+) {
+  if (!displayText(turn)) return;
+  saveEntry(director, newEntry("user", { text: modelText(turn), images: messageImages(turn) }));
   clearTimeout(director.idleTimer);
   director.idleTimer = undefined;
   if (director.status === "compacting" && director.agentId) {
@@ -796,19 +810,64 @@ export async function sendDirectorQueueNow(folder: string, chat: string | null =
   if (!director.probing) void flush(director);
 }
 
-export async function reviseDirectorMessage(input: SendToDirectorInput & { entryId: string }) {
+async function imageFolder(folder: string, chat: string | null, task: string | null | undefined) {
+  if (task) return (await readTasksAt(folder)).find(({ id }) => id === task)?.worktree ?? null;
+  if (chat && !(await getManagerAt(folder, chat))) return null;
+  return chat ? join(folder, MANAGERS_FOLDER, chat) : join(folder, DIRECTOR_FOLDER);
+}
+
+async function savedImages(director: Director, images: MessageImage[]): Promise<TurnImage[]> {
+  const read = await Promise.all(
+    images.map(async ({ name, file, task }) => {
+      const from = await imageFolder(director.folder, director.chat, task);
+      const saved = from ? await readSavedImage(from, file) : null;
+      return (
+        saved && {
+          name,
+          mediaType: saved.mediaType,
+          data: saved.bytes.toString("base64"),
+          path: saved.path,
+        }
+      );
+    }),
+  );
+  return read.filter((image) => image !== null);
+}
+
+export async function reviseDirectorMessage(
+  input: SendToDirectorInput & { entryId: string; keepImages?: boolean },
+) {
   const director = getDirector(input.folder, input.chat ?? null);
   await director.ready;
   if (director.closed) return;
-  if (director.status !== "idle" || director.pending.length > 0) {
-    throw new Error("Wait for the reply to finish before editing.");
+  const editable = () => {
+    if (director.status !== "idle" || director.pending.length > 0) {
+      throw new Error("Wait for the reply to finish before editing.");
+    }
+    const index = director.entries.findIndex((entry) => entry.id === input.entryId);
+    const entry = director.entries[index];
+    if (!entry || entry.kind !== "user" || entry.to)
+      throw new Error("That message cannot be edited.");
+    const last = director.entries.findLast((item) => item.kind === "user" && !item.to);
+    if (!last || last.id !== entry.id) throw new Error("Only the latest message can be edited.");
+    return { index, entry };
+  };
+  const sent = editable().entry.images ?? [];
+  const again = input.keepImages ? sent : [];
+  const turn = await attachmentsTurn({
+    folder: directorFolder(director),
+    text: input.text,
+    attachments: input.attachments ?? [],
+  });
+  if (again.length) turn.images.unshift(...(await savedImages(director, again)));
+  if (!displayText(turn)) {
+    if (again.length)
+      throw new AttachmentError(
+        again.length > 1 ? "The images are no longer available." : "The image is no longer available.",
+      );
+    throw new Error("A message must be non-empty text of at most 100,000 characters.");
   }
-  const index = director.entries.findIndex((entry) => entry.id === input.entryId);
-  const entry = director.entries[index];
-  if (!entry || entry.kind !== "user" || entry.to)
-    throw new Error("That message cannot be edited.");
-  const last = director.entries.findLast((item) => item.kind === "user" && !item.to);
-  if (!last || last.id !== entry.id) throw new Error("Only the latest message can be edited.");
+  const { index } = editable();
   const removed: ChatEntry[] = [];
   const kept: ChatEntry[] = [];
   director.entries.forEach((item, itemIndex) => {
@@ -819,7 +878,7 @@ export async function reviseDirectorMessage(input: SendToDirectorInput & { entry
   recount(director);
   for (const item of removed) rememberRemoval(director, item.id);
   broadcast(director, { type: "entries", entries: director.entries });
-  await sendToDirector(input);
+  await sendTurn(director, turn, input);
 }
 
 export async function stopDirector(folder: string, chat: string | null = null) {
@@ -864,14 +923,17 @@ export async function replyToTaskCard({
     text,
     attachments: attachments ?? [],
   });
-  const shown = displayText(turn);
-  if (!shown) return;
+  if (!displayText(turn)) return;
   const imagePaths = turn.images.map((image) => `Attached image: ${image.path}`).join("\n");
   replyToCard({ folder, cardId, text: [modelText(turn), imagePaths].filter(Boolean).join("\n") });
   if (card) {
     saveEntry(
       director,
-      newEntry("user", { text: shown, to: `${card.project} · ${card.taskTitle}` }),
+      newEntry("user", {
+        text: modelText(turn),
+        images: messageImages(turn, task?.id),
+        to: `${card.project} · ${card.taskTitle}`,
+      }),
     );
   }
 }
@@ -887,10 +949,34 @@ export async function sendToTask({
   text: string;
   attachments?: AttachmentInput[];
 }) {
-  const { view, shown } = await messageTaskAt(folder, taskId, { text, attachments });
+  const sent = await messageTaskAt(folder, taskId, { text, attachments });
+  const { view } = sent;
   const director = getDirector(folder, chatOf(folder, view.chat));
   await director.ready;
-  saveEntry(director, newEntry("user", { text: shown, to: `${view.project} · ${view.title}` }));
+  saveEntry(
+    director,
+    newEntry("user", {
+      text: sent.text,
+      images: sent.images,
+      to: `${view.project} · ${view.title}`,
+    }),
+  );
+}
+
+export async function readChatImage({
+  folder,
+  chat,
+  task,
+  file,
+}: {
+  folder: string;
+  chat: string | null;
+  task: string | null;
+  file: string;
+}) {
+  const from = await imageFolder(folder, chat, task);
+  return from ? readSavedImage(from, file) : null;
+}
 }
 
 export async function attachTaskToDirector(
@@ -940,7 +1026,8 @@ function previewOf(director: Director) {
   const last = director.entries.findLast(
     (entry) => entry.kind === "user" || entry.kind === "director",
   );
-  const text = last && "text" in last ? last.text.replace(/\s+/g, " ").trim() : "";
+  const shown = last?.kind === "user" ? textWithImages(last.text, last.images) : (last?.text ?? "");
+  const text = shown.replace(/\s+/g, " ").trim();
   return text.length > PREVIEW_LENGTH ? `${text.slice(0, PREVIEW_LENGTH)}…` : text;
 }
 

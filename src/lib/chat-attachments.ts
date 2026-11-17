@@ -4,6 +4,31 @@ export type ImageMediaType = (typeof IMAGE_MEDIA_TYPES)[number];
 
 export type AttachmentInput = { name: string; mediaType: string; data: string };
 
+export type MessageImage = { name: string; file: string; task?: string };
+
+export function isMessageImages(value: unknown): value is MessageImage[] {
+  return (
+    Array.isArray(value) &&
+    value.every(
+      (image: Record<string, unknown> | null) =>
+        image !== null &&
+        typeof image === "object" &&
+        typeof image.name === "string" &&
+        typeof image.file === "string" &&
+        (image.task === undefined || typeof image.task === "string"),
+    )
+  );
+}
+
+export function messageImageUrl(image: MessageImage, chat: string | null) {
+  const owner: Record<string, string> = image.task ? { task: image.task } : chat ? { chat } : {};
+  return `/api/chat-attachment?${new URLSearchParams({ ...owner, file: image.file }).toString()}`;
+}
+
+export function textWithImages(text: string, images: MessageImage[] | undefined) {
+  return [text, ...(images ?? []).map((image) => `Image: ${image.name}`)].filter(Boolean).join("\n\n");
+}
+
 export const MAX_IMAGE_BYTES = 4 * 1024 * 1024;
 export const MAX_FILE_BYTES = 1024 * 1024;
 export const MAX_ATTACHMENTS = 4;

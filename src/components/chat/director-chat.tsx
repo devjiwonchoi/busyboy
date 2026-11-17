@@ -22,6 +22,7 @@ import {
   MessageFooter,
   MessageHeader,
 } from "@/components/ui/message";
+import { textWithImages } from "@/lib/chat-attachments";
 import { cn } from "@/lib/utils";
 import type { TaskCard } from "@/server/cards/model";
 import type { ChatEntry, DirectorStatus, DirectorUpdate } from "@/server/director/chat";
@@ -33,6 +34,7 @@ import { mergeTimeline } from "./cards/timeline";
 import { ChatComposer, type ChatComposerHandle, type ComposerMessage } from "./composer";
 import { Markdown } from "./markdown";
 import { MessageActions } from "./message-actions";
+import { MessageImages } from "./message-images";
 import { PersonaAvatar, type Persona } from "./persona";
 import { ReplyTarget } from "./reply-target";
 import { TaskGroup } from "./task-group";
@@ -218,6 +220,7 @@ export function DirectorChat({
 
   const turn = latestTurn(view.entries);
   const canEdit = view.status === "idle" && view.queue.length === 0;
+  const editable = Boolean(turn?.user.text);
   const queued = view.status === "answering" ? view.queue : [];
 
   function fillComposer(text: string) {
@@ -259,7 +262,10 @@ export function DirectorChat({
   function retry() {
     if (retrying.current || !turn?.retry) return;
     retrying.current = true;
-    void reviseDirectorMessageAction(turn.user.id, turn.user.text, chat)
+    void reviseDirectorMessageAction(turn.user.id, turn.user.text, chat, undefined, true)
+      .then(({ error }) => {
+        if (error) setView((current) => ({ ...current, sendError: error }));
+      })
       .catch(() =>
         setView((current) => ({
           ...current,
@@ -422,6 +428,7 @@ export function DirectorChat({
                   entry={row.entry}
                   tasks={view.tasks}
                   persona={persona}
+                  chat={chat}
                   messaging={messageTask?.id ?? null}
                   turn={turn}
                   canEdit={canEdit}
@@ -503,7 +510,7 @@ export function DirectorChat({
           seed={seed}
           onTextChange={setDraftText}
           onEmptyArrowUp={() => {
-            if (turn && canEdit) beginEdit(turn.user.text, turn.user.id);
+            if (turn && canEdit && editable) beginEdit(turn.user.text, turn.user.id);
           }}
           leading={
             target ? (
@@ -563,6 +570,7 @@ function EntryView({
   entry,
   tasks,
   persona,
+  chat,
   messaging,
   turn,
   canEdit,
@@ -574,6 +582,7 @@ function EntryView({
   entry: ChatEntry;
   tasks: Map<string, TaskView>;
   persona: Persona;
+  chat: string | null;
   messaging: string | null;
   turn: ReturnType<typeof latestTurn>;
   canEdit: boolean;
@@ -594,14 +603,17 @@ function EntryView({
                 role="group"
                 aria-label={entry.to ? `Your reply to ${entry.to}` : "Your message"}
               >
-                <BubbleContent className="whitespace-pre-wrap">{entry.text}</BubbleContent>
+                {entry.images && <MessageImages images={entry.images} chat={chat} />}
+                {entry.text && (
+                  <BubbleContent className="whitespace-pre-wrap">{entry.text}</BubbleContent>
+                )}
               </Bubble>
               <MessageActions
                 align="end"
-                text={entry.text}
+                text={textWithImages(entry.text, entry.images)}
                 at={entry.at}
                 onEdit={
-                  !entry.to && canEdit && turn?.user.id === entry.id
+                  !entry.to && entry.text && canEdit && turn?.user.id === entry.id
                     ? () => onEdit(entry.text, entry.id)
                     : undefined
                 }

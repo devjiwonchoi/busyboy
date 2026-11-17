@@ -1,5 +1,7 @@
 import { join } from "node:path";
 
+import { isMessageImages, textWithImages } from "@/lib/chat-attachments";
+
 import { currentCompanion } from "./companions";
 import { dataFolder } from "./config";
 import { DIRECTOR_FOLDER, MANAGERS_FOLDER } from "./director/chat";
@@ -33,7 +35,11 @@ function snippet(text: string, query: string) {
 }
 
 function entryText(entry: ChatEntry) {
-  if (entry.kind === "user" || entry.kind === "director" || entry.kind === "note")
+  if (entry.kind === "user")
+    return typeof entry.text === "string"
+      ? textWithImages(entry.text, isMessageImages(entry.images) ? entry.images : undefined)
+      : "";
+  if (entry.kind === "director" || entry.kind === "note")
     return typeof entry.text === "string" ? entry.text : "";
   if (entry.kind === "card") return `${entry.title} ${entry.taskTitle} ${entry.outcome}`;
   return "";

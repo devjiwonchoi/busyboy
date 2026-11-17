@@ -4,11 +4,11 @@ import { lstat, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises"
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { promisify } from "node:util";
 
-import type { AttachmentInput } from "@/lib/chat-attachments";
+import type { AttachmentInput, MessageImage } from "@/lib/chat-attachments";
 
 import { alwaysAskRulesAt } from "./always-ask-list";
 import { trackWorkCards } from "./cards/work-cards";
-import { attachmentsTurn } from "./chat-attachments";
+import { attachmentsTurn, messageImages } from "./chat-attachments";
 import { dataFolder } from "./config";
 import { REVERT_AND_REMEMBER } from "./director/context";
 import { memoryPrompt } from "./memory";
@@ -42,7 +42,7 @@ import type {
 } from "./runner/contract";
 import { agentEnvironment } from "./runner/find-executable";
 import { rulesFolderFor } from "./runner/user-rules";
-import { displayText } from "./runner/user-turn";
+import { displayText, modelText } from "./runner/user-turn";
 import {
   APPROVE_MESSAGE,
   clearArchiveStop,
@@ -744,7 +744,7 @@ export function messageTaskAt(
   folder: string,
   taskId: string,
   message: TaskMessage,
-): Promise<{ view: TaskView; shown: string }> {
+): Promise<SentTaskMessage> {
   return inTaskOrder(folder, taskId, () => deliverMessage(folder, taskId, message));
 }
 
@@ -767,18 +767,20 @@ function agentEnded(agentId: string, timeoutMs = 5000): Promise<void> {
 
 type TaskMessage = string | { text: string; attachments?: AttachmentInput[] };
 
+type SentTaskMessage = { view: TaskView; text: string; images?: MessageImage[] };
+
 async function deliverMessage(
   folder: string,
   taskId: string,
   input: TaskMessage,
-): Promise<{ view: TaskView; shown: string }> {
+): Promise<SentTaskMessage> {
   const text = typeof input === "string" ? input : input.text;
   const attachments = typeof input === "string" ? [] : (input.attachments ?? []);
   const task = (await readTasksAt(folder)).find(({ id }) => id === taskId);
   if (!task) throw new TaskError(`There is no task ${taskId}.`);
   const turn = await attachmentsTurn({ folder: task.worktree, text, attachments });
-  const message = displayText(turn);
-  if (!message) throw new TaskError("Give the message to send.");
+  if (!displayText(turn)) throw new TaskError("Give the message to send.");
+  const sent = { text: modelText(turn), images: messageImages(turn, task.id) };
   const name = `${task.project} · ${task.title}`;
   if (task.archivedAt && task.kind !== "subagent") await restore(folder, task);
   if (task.kind === "subagent")
@@ -791,7 +793,7 @@ async function deliverMessage(
   const live = getAgent(task.agentId);
   if (live && live.status !== "stopped") {
     sendMessage(task.agentId, turn);
-    return { view: taskView(task), shown: message };
+    return { view: taskView(task), ...sent };
   }
 
   try {
@@ -818,7 +820,7 @@ async function deliverMessage(
     throw new TaskError(`${name} could not start again: ${startError(agent.id)}`);
   }
   notify(folder, task);
-  return { view: taskView(task), shown: message };
+  return { view: taskView(task), ...sent };
 }
 
 export async function messageTask(taskId: string, text: string) {

@@ -87,7 +87,7 @@ test("pasting an image should send an image block to the harness", async ({
   expect(saved).toContain(join(home, "director", "attachments"));
   expect(saved).toContain("pixel.png");
   expect(readFileSync(saved!).equals(PNG_BYTES)).toBe(true);
-  await expect(page.getByLabel("Your message")).toContainText("Image: pixel.png");
+  await expect(page.getByLabel("Your message").getByRole("img", { name: "pixel.png" })).toBeVisible();
 });
 
 test("dropping an image on the chat should send an image block to the harness", async ({
