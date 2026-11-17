@@ -30,7 +30,7 @@ import { rememberRoot } from './records/remember-root'
 import type { AttachmentInput } from '@/lib/chat-attachments'
 import { attachmentsTurn } from './chat-attachments'
 import { displayText } from './runner/user-turn'
-import { APPROVE_MESSAGE, hasOpenCard, stopTaskAgent, trackTaskCards } from './task-cards'
+import { APPROVE_MESSAGE, clearArchiveStop, hasOpenCard, markArchiveStop, stopTaskAgent, trackTaskCards } from './task-cards'
 import type { AgentEvent, AgentStatus, McpServer, ProviderId, StartAgentInput } from './runner/contract'
 
 // Both folder names are new, so the legacy app's worktrees/ and other files in the data folder are never touched.
@@ -387,6 +387,8 @@ function saveTask(folder: string, task: TaskRecord, change: Partial<TaskRecord>)
 }
 
 function watchAgent(folder: string, task: TaskRecord, { resumed = false, fromRestart = false, fromMessage = false } = {}) {
+  // This agent is new. A stop from here on is the user's, so it may close the done line.
+  clearArchiveStop(task.id)
   let last = taskView(task).status
   let confirmed = !resumed
   // Claude reports signed-out only inside its first reply, after the session.
@@ -700,6 +702,7 @@ export async function archiveTask(taskId: string): Promise<{ task: TaskView; wor
     if (status === 'running' || status === 'needs-you') {
       throw new TaskError(`${task.project} · ${task.title} is still working. Stop it before archiving it.`)
     }
+    markArchiveStop(task.id)
     await stopTaskAgent({ folder, agentId: task.agentId })
     await agentEnded(task.agentId)
     removeAgent(task.agentId)
