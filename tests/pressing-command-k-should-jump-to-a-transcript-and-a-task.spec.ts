@@ -104,6 +104,8 @@ test('the command palette should switch chats and open settings', async ({ page,
 
   await press(page, 'ControlOrMeta+k', 'Commands')
   await expect(page.getByRole('option', { name: 'Switch to BusyBoy' })).toBeVisible()
+  // A leaked shortcut key filters the list. Clear it so Settings is one of the commands.
+  await page.getByRole('textbox', { name: 'Search chats and commands' }).fill('')
   await page.getByRole('option', { name: 'Settings', exact: true }).click({ force: true })
   await expect(page).toHaveURL(/\/settings$/)
   await expect(page.getByRole('main', { name: 'Settings' })).toBeVisible()
