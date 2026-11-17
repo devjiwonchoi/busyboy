@@ -1,18 +1,15 @@
-import { spawn } from 'node:child_process'
-import { execFile } from 'node:child_process'
-import { promisify } from 'node:util'
+import { lstat, readdir, readFile } from 'node:fs/promises'
+import { join } from 'node:path'
 import { readSettingsAt } from '../config'
-import { pathKey } from '../paths'
+import { containsPath, pathKey } from '../paths'
+import { rememberRoot } from './remember-root'
+import { repositoryDirectory, repoSegments } from './record-path'
 
 // End state achievement: the share of agreed end-state items that were met.
 // Agreed items are the numbered `## n ·` lines under `# End state` in an
 // approved ALIGN.md. Whether each one was met is read from REMEMBER.md and
-// STATUS.md. All three are taken from the project's `main` branch, not from a
-// task worktree, so the number is what landed, not what a branch still says.
-
-const run = promisify(execFile)
-
-const RECORD = /^\.jwn\/([^/]+)\/(ALIGN\.md|STATUS\.md|REMEMBER\.md)$/
+// STATUS.md. All three are read from the jwn record root, the same place the
+// skills write them.
 const APPROVED = /^(?:\W*Version:[^·\n]*·)?\W*Status:\s*approved\b/im
 const FENCE = /^\s*(```|~~~)/
 const NUMBERED = /^(\d+[a-z]?)\s*·\s*(.+)$/i
@@ -256,147 +253,60 @@ function weeksOf(tasks: TaskAchievement[]): WeekAchievement[] {
   return [...weeks.values()].sort((a, b) => (a.start < b.start ? 1 : -1))
 }
 
-type GitError = NodeJS.ErrnoException & { stderr?: string }
+const ACHIEVEMENT_FILES = ['ALIGN.approved.md', 'ALIGN.md', 'REMEMBER.md', 'STATUS.md'] as const
 
-function git(repo: string, args: string[]) {
-  return run('git', ['-C', repo, '-c', 'core.quotepath=false', ...args], {
-    encoding: 'buffer',
-    timeout: 15_000,
-    maxBuffer: 10 * 1024 * 1024,
-    windowsHide: true,
-  })
-}
-
-/** One `cat-file --batch` for every record, in the order asked. Null when main has no such file. */
-function catFiles(repo: string, specs: string[]): Promise<(string | null)[]> {
-  if (specs.length === 0) return Promise.resolve([])
-  return new Promise((resolve, reject) => {
-    const child = spawn('git', ['-C', repo, '-c', 'core.quotepath=false', 'cat-file', '--batch'], { stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true })
-    const chunks: Buffer[] = []
-    let stderr = ''
-    const timer = setTimeout(() => child.kill(), 15_000)
-    child.stdout.on('data', (chunk: Buffer) => chunks.push(chunk))
-    child.stderr.on('data', (chunk: Buffer) => {
-      stderr += chunk.toString('utf8')
-    })
-    child.on('error', (error) => {
-      clearTimeout(timer)
-      reject(error)
-    })
-    child.on('close', (code) => {
-      clearTimeout(timer)
-      if (code !== 0) {
-        reject(new Error(stderr.trim() || `git cat-file exited ${code}`))
-        return
-      }
-      try {
-        resolve(parseBatch(Buffer.concat(chunks), specs.length))
-      } catch (error) {
-        reject(error)
-      }
-    })
-    child.stdin.end(specs.map((spec) => `${spec}\n`).join(''))
-  })
-}
-
-function parseBatch(buffer: Buffer, count: number) {
-  const results: (string | null)[] = []
-  let offset = 0
-  while (results.length < count) {
-    const end = buffer.indexOf(0x0a, offset)
-    if (end === -1) break
-    const header = buffer.toString('utf8', offset, end)
-    offset = end + 1
-    if (header.endsWith(' missing')) {
-      results.push(null)
-      continue
-    }
-    const size = Number(header.split(' ').at(-1))
-    if (!Number.isInteger(size) || size < 0) throw new Error(`git cat-file returned "${header}".`)
-    results.push(buffer.subarray(offset, offset + size).toString('utf8'))
-    offset += size
-    if (buffer[offset] === 0x0a) offset += 1
-  }
-  if (results.length !== count) throw new Error('git cat-file returned fewer objects than asked.')
-  return results
-}
-
-/** Latest commit time on main for each `.jwn/<task>/`, from a newest-first log. */
-function datesByTask(log: string) {
-  const dates = new Map<string, string>()
-  let date: string | null = null
-  for (const line of log.split(/\r?\n/)) {
-    if (!line) continue
-    if (/^\d{4}-\d{2}-\d{2}T/.test(line)) {
-      date = line.trim()
-      continue
-    }
-    const id = /^\.jwn\/([^/]+)\//.exec(line)?.[1]
-    if (date && id && !dates.has(id)) dates.set(id, date)
-  }
-  return dates
-}
-
-async function projectTasks(project: string, repo: string): Promise<TaskAchievement[]> {
-  let listed: string
-  let log: string
+async function readText(path: string): Promise<{ text: string; mtimeMs: number } | null> {
   try {
-    const [tree, history] = await Promise.all([
-      git(repo, ['ls-tree', '-r', '--name-only', 'main', '--', '.jwn']),
-      git(repo, ['log', '--format=%cI', '--name-only', 'main', '--', '.jwn']),
-    ])
-    listed = tree.stdout.toString('utf8')
-    log = history.stdout.toString('utf8')
+    const stats = await lstat(path)
+    if (stats.isSymbolicLink() || !stats.isFile()) return null
+    return { text: await readFile(path, 'utf8'), mtimeMs: stats.mtimeMs }
   } catch (error) {
-    if ((error as GitError).code === 'ENOENT') throw error
-    return []
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null
+    throw error
   }
-  const files = new Map<string, { align?: string; remember?: string; status?: string }>()
-  const specs: string[] = []
-  for (const line of listed.split(/\r?\n/)) {
-    const match = RECORD.exec(line)
-    if (!match) continue
-    const kind = match[2] === 'ALIGN.md' ? 'align' : match[2] === 'REMEMBER.md' ? 'remember' : 'status'
-    const entry = files.get(match[1]) ?? {}
-    entry[kind] = `main:${line}`
-    files.set(match[1], entry)
-    specs.push(`main:${line}`)
+}
+
+async function projectTasks(dataFolder: string, project: string, repo: string): Promise<{ tasks: TaskAchievement[]; key: string }> {
+  const root = rememberRoot(dataFolder)
+  const repoDir = repositoryDirectory(root, await repoSegments({ project, worktree: repo }))
+  if (!repoDir) return { tasks: [], key: '' }
+  let names: string[]
+  try {
+    const stats = await lstat(repoDir)
+    if (stats.isSymbolicLink() || !stats.isDirectory()) return { tasks: [], key: `${pathKey(repoDir)}:missing` }
+    names = (await readdir(repoDir, { withFileTypes: true })).filter((entry) => entry.isDirectory() && !entry.isSymbolicLink()).map((entry) => entry.name)
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return { tasks: [], key: `${pathKey(repoDir)}:missing` }
+    throw error
   }
-  if (specs.length === 0) return []
-  const bodies = await catFiles(repo, specs)
-  const bySpec = new Map(specs.map((spec, index) => [spec, bodies[index]]))
-  const dates = datesByTask(log)
   const tasks: TaskAchievement[] = []
-  for (const [taskId, paths] of files) {
-    const align = paths.align ? bySpec.get(paths.align) : null
+  const stamps: string[] = []
+  for (const taskId of names.sort()) {
+    const taskDir = join(/*turbopackIgnore: true*/ repoDir, taskId)
+    if (!containsPath(repoDir, taskDir)) continue
+    const files = await Promise.all(ACHIEVEMENT_FILES.map(async (file) => [file, await readText(join(/*turbopackIgnore: true*/ taskDir, file))] as const))
+    for (const [file, body] of files) {
+      if (body) stamps.push(`${taskId}/${file}@${body.mtimeMs}`)
+    }
+    const byName = new Map(files)
+    const approved = byName.get('ALIGN.approved.md')
+    const align = approved ?? byName.get('ALIGN.md')
     if (!align) continue
-    const at = dates.get(taskId)
-    if (!at) continue
+    const at = new Date(Math.max(...files.flatMap(([, body]) => (body ? [body.mtimeMs] : [])))).toISOString()
     const task = achievementOf({
       project,
       taskId,
-      align,
-      remember: paths.remember ? (bySpec.get(paths.remember) ?? null) : null,
-      status: paths.status ? (bySpec.get(paths.status) ?? null) : null,
+      align: align.text,
+      remember: byName.get('REMEMBER.md')?.text ?? null,
+      status: byName.get('STATUS.md')?.text ?? null,
       at,
     })
     if (task) tasks.push(task)
   }
-  return tasks
+  return { tasks, key: `${pathKey(repoDir)}\n${stamps.join('\n')}` }
 }
 
-async function mainSha(repo: string) {
-  try {
-    const { stdout } = await git(repo, ['rev-parse', '--verify', '--quiet', 'main'])
-    const sha = stdout.toString('utf8').trim()
-    return sha || null
-  } catch (error) {
-    if ((error as GitError).code === 'ENOENT') throw error
-    return null
-  }
-}
-
-/** End state achievement for every project, from the records committed on `main`. */
+/** End state achievement for every project, from the records in the jwn record root. */
 export async function readEndStateAchievement(folder: string): Promise<AchievementResult> {
   let projects: { name: string; path: string }[]
   try {
@@ -405,23 +315,17 @@ export async function readEndStateAchievement(folder: string): Promise<Achieveme
   } catch (error) {
     return { ok: false, error: `Settings could not be read: ${error instanceof Error ? error.message : String(error)}` }
   }
-  let shas: (string | null)[]
   try {
-    shas = await Promise.all(projects.map((project) => mainSha(project.path)))
-  } catch (error) {
-    return { ok: false, error: 'git was not found, so end state achievement could not be read.' }
-  }
-  const key = projects.map((project, index) => `${pathKey(project.path)}@${shas[index] ?? ''}`).join('\n')
-  const cached = cache.get(pathKey(folder))
-  if (cached?.key === key) return cached.result
-  try {
-    const tasks = (await Promise.all(projects.map((project, index) => (shas[index] ? projectTasks(project.name, project.path) : Promise.resolve([]))))).flat()
+    const found = await Promise.all(projects.map((project) => projectTasks(folder, project.name, project.path)))
+    const key = found.map((entry) => entry.key).join('\n')
+    const cached = cache.get(pathKey(folder))
+    if (cached?.key === key) return cached.result
+    const tasks = found.flatMap((entry) => entry.tasks)
     tasks.sort((a, b) => a.project.localeCompare(b.project) || a.taskId.localeCompare(b.taskId))
     const result: AchievementResult = { ok: true, tasks, weeks: weeksOf(tasks) }
     cache.set(pathKey(folder), { key, result })
     return result
   } catch (error) {
-    if ((error as GitError).code === 'ENOENT') return { ok: false, error: 'git was not found, so end state achievement could not be read.' }
     return { ok: false, error: error instanceof Error ? error.message : String(error) }
   }
 }

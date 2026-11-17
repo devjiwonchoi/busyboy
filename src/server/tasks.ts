@@ -25,6 +25,7 @@ import {
 import { agentEnvironment } from './runner/find-executable'
 import { trackWorkCards } from './cards/work-cards'
 import { finishRememberRecord, observeTaskMessage, observeTaskTurn } from './records/remember-record'
+import { taskRecordDirectory } from './records/record-location'
 import { rememberRoot } from './records/remember-root'
 import type { AttachmentInput } from '@/lib/chat-attachments'
 import { attachmentsTurn } from './chat-attachments'
@@ -104,20 +105,20 @@ export class TaskError extends Error {}
 const run = promisify(execFile)
 
 /** The instructions every task agent gets in addition to its provider's own. */
-export function taskInstructions(task: Pick<TaskRecord, 'id' | 'project' | 'worktree' | 'branch'>, alwaysAsk: string[]) {
+export function taskInstructions(task: Pick<TaskRecord, 'id' | 'project' | 'worktree' | 'branch'>, alwaysAsk: string[], recordFolder: string) {
   return [
     `You are a busyboy task agent for the project "${task.project}".`,
     `You work in the git worktree ${task.worktree} on the branch ${task.branch}. Stay inside this worktree.`,
     'Plan the task with the `align` skill before you change anything, and follow the plan once it is approved.',
-    `Keep every record of this task (the plan and any status, verify, or review notes your skills write) under .jwn/${task.id}/ in this worktree.`,
+    `Keep every record of this task (the plan and any status, verify, or review notes your skills write) in ${recordFolder}/. That is this task's folder in the jwn record root. Do not write those files into the worktree.`,
     '',
     'Approval:',
     // BusyBoy turns a draft ALIGN.md at the end of a turn into the user's Align card, so the
     // plan must be on disk before the agent waits; the align skill alone saves it only after approval.
-    `- When the plan is ready for approval, save it as .jwn/${task.id}/ALIGN.md with "Status: draft", present it, and end your turn. BusyBoy shows it to the user as a plan card.`,
+    `- When the plan is ready for approval, save it as ${recordFolder}/ALIGN.md with "Status: draft", present it, and end your turn. BusyBoy shows it to the user as a plan card.`,
     `- The message "${APPROVE_MESSAGE}" approves the plan as saved: change its Status line to approved and carry on. Any other reply asks for changes; revise the draft and end your turn again.`,
     '- Do reversible actions without asking, then say what you did. Ask before irreversible ones.',
-    `- Record progress in .jwn/${task.id}/STATUS.md as you go: a State line (running, or done when the task is finished) and a "| Todo | Result |" table whose rows match the plan's todos. BusyBoy shows a progress card from that table, and a one-line done card once State is done.`,
+    `- Record progress in ${recordFolder}/STATUS.md as you go: a State line (running, or done when the task is finished) and a "| Todo | Result |" table whose rows match the plan's todos. BusyBoy shows a progress card from that table, and a one-line done card once State is done.`,
     '- When you open pull requests, add a "# Pull requests" table to that STATUS.md with columns Number, Title, URL, Check, and Review. One row per pull request, in stack order, the base of the stack first. BusyBoy lists them on a card and does not merge them.',
     // The hooks enforce the list; telling the agent lets it plan for the wait instead of being
     // refused mid-task. Knowing the rules does not help an agent get around them: the matcher
@@ -152,9 +153,15 @@ export function subagentInstructions(task: Pick<TaskRecord, 'project' | 'worktre
 }
 
 /** A task agent's system prompt: its instructions, then the global and project facts. */
-async function taskPrompt(folder: string, task: Pick<TaskRecord, 'id' | 'project' | 'worktree' | 'branch' | 'kind'>, alwaysAsk: string[]) {
-  const instructions = task.kind === 'subagent' ? subagentInstructions(task, alwaysAsk) : taskInstructions(task, alwaysAsk)
+async function taskPrompt(folder: string, task: Pick<TaskRecord, 'id' | 'project' | 'worktree' | 'branch' | 'kind'>, alwaysAsk: string[], recordFolder: string | null) {
+  const instructions = task.kind === 'subagent' ? subagentInstructions(task, alwaysAsk) : taskInstructions(task, alwaysAsk, recordFolder ?? 'the jwn record root')
   return `${instructions}\n\n${await memoryPrompt(folder, { project: task.project })}`
+}
+
+async function recordsFor(folder: string, task: Pick<TaskRecord, 'id' | 'project' | 'worktree' | 'kind'>) {
+  if (task.kind === 'subagent') return null
+  const directory = await taskRecordDirectory(folder, task)
+  return typeof directory === 'string' ? directory : null
 }
 
 // ---- Task list file ----------------------------------------------------------
@@ -351,10 +358,13 @@ export async function createTask(input: CreateTaskInput): Promise<TaskView> {
   let agentId: string | undefined
   try {
     const alwaysAsk = await alwaysAskRulesAt(folder)
+    const taskRef = { id, project: project.name, worktree, branch, kind }
+    const recordFolder = await recordsFor(folder, taskRef)
     const agent = startAgent({
       provider,
       cwd: worktree,
-      instructions: await taskPrompt(folder, { id, project: project.name, worktree, branch, kind }, alwaysAsk),
+      instructions: await taskPrompt(folder, taskRef, alwaysAsk, recordFolder),
+      recordFolder: recordFolder ?? undefined,
       mcpServers: input.taskMcp ? await input.taskMcp(project.name) : undefined,
       alwaysAsk,
       noFileEdits: Boolean(kind),
@@ -676,10 +686,12 @@ async function startAgainInput(folder: string, task: TaskRecord): Promise<StartA
   const { busyboyMcpServers } = await import('./mcp-tools')
   // Read the list again: the user may have edited it since the task's last agent started.
   const alwaysAsk = await alwaysAskRulesAt(folder)
+  const recordFolder = await recordsFor(folder, task)
   return {
     provider: task.provider,
     cwd: task.worktree,
-    instructions: await taskPrompt(folder, task, alwaysAsk),
+    instructions: await taskPrompt(folder, task, alwaysAsk, recordFolder),
+    recordFolder: recordFolder ?? undefined,
     mcpServers: await busyboyMcpServers(task.project, folder),
     resumeSessionId: task.sessionId ?? undefined,
     alwaysAsk,

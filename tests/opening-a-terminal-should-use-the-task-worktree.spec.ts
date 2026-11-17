@@ -8,7 +8,7 @@ const HEALTH = { id: 'add-health-endpoint-d4e5f6', title: 'Add a health endpoint
 
 test('opening a terminal should use the task worktree when its project name differs in case', async ({ context, baseURL }) => {
   const { home, projects } = await useProjectsHome(context, baseURL!, ['api'])
-  const health = addRecordTask(home, { project: 'api', projectPath: projects.api, ...HEALTH })
+  const health = await addRecordTask(home, { project: 'api', projectPath: projects.api, ...HEALTH })
   const file = join(home, 'task-list.json')
   const list = JSON.parse(readFileSync(file, 'utf8')) as { tasks: { project: string }[] }
   // The folder on disk is `api`. A case-insensitive disk still means that folder.

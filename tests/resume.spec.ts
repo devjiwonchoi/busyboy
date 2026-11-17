@@ -147,7 +147,7 @@ function patchTask(home: string, id: string, fields: Partial<StoredTask>) {
 
 test('a task whose session cannot be resumed should stop and record why', async ({ page, context, baseURL }) => {
   const { home, projects } = await useProjectsHome(context, baseURL!, ['web'])
-  addRecordTask(home, { project: 'web', projectPath: projects.web, ...FOOTER })
+  await addRecordTask(home, { project: 'web', projectPath: projects.web, ...FOOTER })
   // The scripted provider fails a `missing-` session the way Claude fails one it no longer has.
   patchTask(home, FOOTER.id, { activity: 'running', sessionId: 'missing-release-notes' })
 
@@ -159,7 +159,7 @@ test('a task whose session cannot be resumed should stop and record why', async 
 
 test('a task whose agent never started should start once on the next start', async ({ page, context, baseURL }) => {
   const { home, projects } = await useProjectsHome(context, baseURL!, ['web'])
-  addRecordTask(home, { project: 'web', projectPath: projects.web, ...FOOTER })
+  await addRecordTask(home, { project: 'web', projectPath: projects.web, ...FOOTER })
   // The server died after saving the task but before the provider confirmed a session.
   patchTask(home, FOOTER.id, { activity: 'running', sessionId: null, request: LONG_REQUEST })
 

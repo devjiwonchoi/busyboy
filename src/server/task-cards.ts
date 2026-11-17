@@ -133,7 +133,7 @@ export function trackTaskCards({ folder, task, onChange }: { folder: string; tas
         if (event.more) {
           break
         }
-        void readDraftPlan(task)
+        void readDraftPlan(folder, task)
           .then((draft) => {
             // Only while the agent still waits on this turn: a message or stop since then moved on.
             if (!draft || latestSeq !== seq || getAgent(task.agentId)?.status !== 'idle') {

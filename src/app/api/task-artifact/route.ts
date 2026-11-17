@@ -2,8 +2,8 @@ import { connection, type NextRequest } from 'next/server'
 import { readTaskArtifact } from '@/server/cards/task-artifact'
 import { dataFolder } from '@/server/config'
 
-// A screenshot or trace cited by VERIFY.md. The note names a file in the task
-// worktree; this serves that file and nothing outside it.
+// A screenshot or trace cited by VERIFY.md. The note names a file in the task's
+// record folder, or in its worktree; this serves that file and nothing outside them.
 export async function GET(request: NextRequest) {
   // Without this, Cache Components would prerender the response at build time.
   await connection()

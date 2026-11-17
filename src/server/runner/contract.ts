@@ -52,6 +52,11 @@ export type StartAgentInput = {
    * (see `user-rules.ts`).
    */
   rulesFolder?: string
+  /**
+   * Where this task's records are written: the jwn record root at
+   * `<owner>/<name>/<task>`. Scripted replays write `.jwn/<task>/` paths here.
+   */
+  recordFolder?: string
 }
 
 export type McpServer = (
@@ -163,7 +168,7 @@ export type SignInStatus =
 // ---- Provider side -------------------------------------------------------
 
 export type ProviderStartOptions = Required<Pick<StartAgentInput, 'cwd' | 'permissionMode'>> &
-  Pick<StartAgentInput, 'instructions' | 'resumeSessionId' | 'provider' | 'mcpServers' | 'forkSessionId' | 'noTools' | 'alwaysAsk' | 'privateFolder' | 'noFileEdits' | 'rulesFolder'> & {
+  Pick<StartAgentInput, 'instructions' | 'resumeSessionId' | 'provider' | 'mcpServers' | 'forkSessionId' | 'noTools' | 'alwaysAsk' | 'privateFolder' | 'noFileEdits' | 'rulesFolder' | 'recordFolder'> & {
     /** Every event the provider produces. Call it in order; the runner stamps seq numbers. */
     emit: (event: AgentEvent) => void
   }
