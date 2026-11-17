@@ -13,7 +13,6 @@ import {
   matchesShortcut,
   NEW_TASK_KEYS,
   TOGGLE_PANEL_KEYS,
-  TOGGLE_SIDEBAR_KEYS,
   useShortcut,
 } from '@/components/shell/shortcut-registry'
 import { Alert, AlertAction, AlertDescription } from '@/components/ui/alert'
@@ -30,15 +29,13 @@ function subscribeNothing() {
 }
 
 /**
- * Keys the terminal passes to the app instead of the shell. The sidebar toggle
- * works from the terminal everywhere, matched exactly as the app matches it.
- * Cmd+J does on macOS; elsewhere Ctrl+J is the shell's line feed, so it stays
- * with the shell and Ctrl+` toggles the panel from inside the terminal so the
- * keyboard is never trapped there.
+ * Keys the terminal passes to the app instead of the shell, matched exactly
+ * as the app matches them. Cmd+J toggles the panel on macOS; elsewhere Ctrl+J
+ * is the shell's line feed, so it stays with the shell and Ctrl+` toggles the
+ * panel from inside the terminal so the keyboard is never trapped there.
  */
 function isAppShortcut(event: KeyboardEvent) {
   const mac = isMacPlatform()
-  if (matchesShortcut(TOGGLE_SIDEBAR_KEYS, event, mac)) return true
   if (matchesShortcut(COMMAND_PALETTE_KEYS, event, mac)) return true
   if (matchesShortcut(NEW_TASK_KEYS, event, mac)) return true
   const mod = mac ? event.metaKey && !event.ctrlKey : event.ctrlKey && !event.metaKey
@@ -55,8 +52,8 @@ function isAppShortcut(event: KeyboardEvent) {
  *
  * Each shell starts in the worktree of the task selected at that moment (home
  * with none). Selecting another task never replaces a running shell: it may
- * be running a command or hold the user's history and variables, and a click
- * in the graph should not throw that away. The header keeps naming the
+ * be running a command or hold the user's history and variables, and selecting
+ * another task should not throw that away. The header keeps naming the
  * shell's own task, and a "New terminal" button appears while the selection
  * differs; it, or closing the terminal (its X) and opening it again, starts a
  * shell in the selected task. Cmd/Ctrl+J only hides the panel, so it keeps

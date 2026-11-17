@@ -3,7 +3,7 @@
 import { createContext, useContext, useEffect, useRef } from 'react'
 
 export type Shortcut = {
-  /** Unique id, for example `toggle-sidebar`. A later registration with the same id wins. */
+  /** Unique id, for example `toggle-panel`. A later registration with the same id wins. */
   id: string
   /**
    * The `KeyboardEvent.key` value, compared case-insensitively. When the layout
@@ -19,7 +19,7 @@ export type Shortcut = {
   /**
    * When several shortcuts match one key, the first whose `handles` returns
    * true runs. Omit it to always handle the key. Escape to stop a reply uses
-   * this so the Director and a side chat can share the key.
+   * this so a key repeat does not stop twice.
    */
   handles?: (event: KeyboardEvent) => boolean
   run: () => void
@@ -29,9 +29,7 @@ type Registry = Map<string, Shortcut>
 
 type Keys = Pick<Shortcut, 'key' | 'mod' | 'shift' | 'alt'>
 
-// Cmd+Option+S (Ctrl+Alt+S elsewhere): B stays with the editors and shells the user also runs,
-// and plain Cmd+S stays Save. Defined here so the terminal lets the same keys through.
-export const TOGGLE_SIDEBAR_KEYS = { key: 's', mod: true, alt: true } as const
+// Plain Cmd/Ctrl+S stays Save in the editors and shells the user also runs.
 export const TOGGLE_PANEL_KEYS = { key: 'j', mod: true } as const
 export const COMMAND_PALETTE_KEYS = { key: 'k', mod: true } as const
 export const NEW_TASK_KEYS = { key: 'n', mod: true } as const

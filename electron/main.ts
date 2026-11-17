@@ -47,7 +47,7 @@ function createWindow(url: string, show: boolean) {
   const window = new BrowserWindow({
     width: 1280,
     height: 820,
-    // The shadcn sidebar turns into a mobile sheet below 768px; stay above it.
+    // The chat list hides below 768px; stay above it.
     minWidth: 800,
     minHeight: 480,
     show: false,

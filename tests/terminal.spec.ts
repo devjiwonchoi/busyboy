@@ -1,7 +1,7 @@
 import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { expect, test, type BrowserContext, type Page } from '@playwright/test'
+import { expect, test, type Page } from '@playwright/test'
 import { useProjectsHome } from './support/projects-home'
 import { addRecordTask } from './support/record-tasks'
 
@@ -90,75 +90,63 @@ test('exiting the shell should offer a new terminal', async ({ page }) => {
 const HEALTH = { id: 'add-health-endpoint-d4e5f6', title: 'Add a health endpoint' }
 const FOOTER = { id: 'show-health-footer-a1b2c3', title: 'Show API health in the footer' }
 
-/** Two tasks with worktrees, as busyboy stores them (tests/fixtures/records/). */
-async function useTaskHome(context: BrowserContext, baseURL: string) {
-  const { home, projects } = await useProjectsHome(context, baseURL, ['web', 'api'])
-  const health = addRecordTask(home, { project: 'api', projectPath: projects.api, ...HEALTH })
-  const footer = addRecordTask(home, { project: 'web', projectPath: projects.web, ...FOOTER })
-  // The shell starts in the resolved folder (the temp folder is behind a symlink on macOS).
-  return { home, health: realpathSync(health.worktree), footer: realpathSync(footer.worktree) }
-}
+const ONE_TASK = 'In @web, add a CONTRIBUTING.md that explains how to run the project.'
+const TWO_TASKS = 'Add a /health endpoint to @api and show its status in the footer of @web.'
 
-async function openGraph(page: Page) {
+async function openChat(page: Page) {
   await page.goto('/')
-  const sidebar = page.getByRole('complementary', { name: 'Sidebar' })
-  await sidebar.getByRole('tab', { name: 'Projects' }).click()
-  return sidebar.getByRole('region', { name: 'Project graph' })
+  await expect(page.getByRole('log', { name: 'Transcript' })).toHaveAttribute('data-connected', 'true')
 }
 
-test('selecting a task then opening the terminal should start in its worktree', async ({ page, context, baseURL }) => {
-  const { health } = await useTaskHome(context, baseURL!)
-  const graph = await openGraph(page)
-  const task = graph.getByRole('group', { name: `Task ${HEALTH.title}` })
-
-  await task.click()
-  await expect(task.getByRole('button', { pressed: true })).toBeVisible()
-  const terminal = await pressOpen(page)
-
-  await expect(page.getByLabel('Task', { exact: true })).toHaveText(`api · ${HEALTH.title}`)
-  await expect(page.getByLabel('Working directory')).toHaveText(health)
-  await terminal.click()
-  await run(page, 'pwd')
-  await expect(terminal.locator('.xterm-rows')).toContainText(`api/${HEALTH.id}`)
-})
+async function send(page: Page, text: string) {
+  await page.getByRole('textbox', { name: 'Message' }).fill(text)
+  await page.getByRole('button', { name: 'Send' }).click()
+}
 
 test('selecting another task should keep the open shell and offer a new terminal there', async ({ page, context, baseURL }) => {
-  const { health, footer } = await useTaskHome(context, baseURL!)
-  const graph = await openGraph(page)
-  await graph.getByRole('group', { name: `Task ${HEALTH.title}` }).click()
+  const { home } = await useProjectsHome(context, baseURL!, ['web', 'api'])
+  await openChat(page)
+  await send(page, TWO_TASKS)
+  const api = page.getByRole('group', { name: 'Tasks' }).getByRole('button', { name: 'Select api · Add /health endpoint' })
+  const web = page.getByRole('group', { name: 'Tasks' }).getByRole('button', { name: 'Select web · Show API health in footer' })
+  await expect(api).toBeVisible()
+  await expect(web).toBeVisible()
+  const tasks = (JSON.parse(readFileSync(join(home, 'task-list.json'), 'utf8')) as { tasks: { project: string; worktree: string }[] }).tasks
+  const health = realpathSync(tasks.find((task) => task.project === 'api')!.worktree)
+  const footer = realpathSync(tasks.find((task) => task.project === 'web')!.worktree)
+
+  await api.click()
   const terminal = await pressOpen(page)
   await expect(page.getByLabel('Working directory')).toHaveText(health)
   await terminal.click()
   await run(page, 'KEPT=yes')
 
-  await graph.getByRole('group', { name: `Task ${FOOTER.title}` }).click()
+  await web.click()
 
   // The running shell stays where it is until the user asks for a new one.
   const panel = page.getByRole('region', { name: 'Bottom panel' })
-  await expect(page.getByLabel('Task', { exact: true })).toHaveText(`api · ${HEALTH.title}`)
+  await expect(page.getByLabel('Task', { exact: true })).toHaveText('api · Add /health endpoint')
   await terminal.click()
   await run(page, 'echo "kept-$KEPT"')
   await expect(terminal.locator('.xterm-rows')).toContainText('kept-yes')
 
   await panel.getByRole('button', { name: 'New terminal' }).click()
-  await expect(page.getByLabel('Task', { exact: true })).toHaveText(`web · ${FOOTER.title}`)
+  await expect(page.getByLabel('Task', { exact: true })).toHaveText('web · Show API health in footer')
   await expect(page.getByLabel('Working directory')).toHaveText(footer)
   await expect(panel.getByRole('button', { name: 'New terminal' })).toBeHidden()
 })
 
 test('pressing the selected task again should open the next terminal in the home folder', async ({ page, context, baseURL }) => {
-  await useTaskHome(context, baseURL!)
-  const graph = await openGraph(page)
-  const toggle = graph.getByRole('group', { name: `Task ${HEALTH.title}` }).getByRole('button')
+  await useProjectsHome(context, baseURL!, ['web'])
+  await openChat(page)
+  await send(page, ONE_TASK)
+  const toggle = page.getByRole('group', { name: 'Tasks' }).getByRole('button', { name: 'Select web · Add CONTRIBUTING.md' })
+  await expect(toggle).toBeVisible()
   await toggle.click()
   await expect(toggle).toHaveAttribute('aria-pressed', 'true')
-
-  // From the keyboard this time. The click's hover opens the details card after a delay; a key
-  // pressed while it opened was sometimes lost (1 run in 5), so wait for it first.
-  await expect(page.getByRole('group', { name: 'Task details' })).toBeVisible()
-  await toggle.press('Enter')
-
+  await toggle.click()
   await expect(toggle).toHaveAttribute('aria-pressed', 'false')
+
   await pressOpen(page)
   // The server and the test run as the same user with the same HOME.
   await expect(page.getByLabel('Working directory')).toHaveText(homedir())

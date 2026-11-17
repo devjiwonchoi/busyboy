@@ -41,7 +41,7 @@ import type { AgentEvent, AgentStatus, McpServer, ProviderId, StartAgentInput } 
 // the project's own checkout with no worktree or branch, asks before anything that could change it, plans nothing,
 // and its reply shows in the chat. Anything that changes files is a task.
 //
-// An archived task is out of the way, not gone: it leaves the project graph and the status
+// An archived task is out of the way, not gone: it leaves the status
 // summary, its agent ends, and its worktree is removed unless it has changed or untracked files.
 // Its branch, its provider session, and its records are kept, so restoring it brings those back.
 // Files git ignores (installed packages, build output, a local env file) go with the worktree:

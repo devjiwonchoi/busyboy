@@ -5,7 +5,7 @@ import { subscribeToProjectGraph } from '@/server/records/record-watcher'
 
 const HEARTBEAT_MS = 15_000
 
-/** Server-sent events for the Projects tab: the whole project graph now and after every change. */
+/** Server-sent events for task phases: the whole project graph now and after every change. */
 export async function GET(request: Request) {
   await connection()
   const folder = await dataFolder()
