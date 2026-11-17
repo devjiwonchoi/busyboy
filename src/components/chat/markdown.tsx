@@ -2,11 +2,14 @@
 
 import { code } from '@streamdown/code'
 import { Streamdown, type ControlsConfig, type LinkSafetyConfig } from 'streamdown'
+import { MermaidBlock } from './mermaid-block'
 
 // Streamdown 2 highlights code only through this plugin; without it every token is one color.
 // Its default themes are github-light and github-dark, and Streamdown switches tokens to the
 // dark colors with the `dark:` variant, which globals.css ties to the `dark` class.
-const plugins = { code }
+// A mermaid fence is drawn by MermaidBlock. Streamdown's own diagram block adds a header
+// and download, fullscreen, and pan controls, which are not part of the plan text.
+const plugins = { code, renderers: [{ language: 'mermaid', component: MermaidBlock }] }
 
 // Code copy stays: it is a single button and the one control a chat reply needs. Every
 // other control (table copy and download menus, fullscreen dialogs, file downloads) is UI
