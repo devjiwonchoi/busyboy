@@ -22,7 +22,7 @@ import { Message, MessageAvatar, MessageContent, MessageFooter, MessageHeader } 
 import { ClosedCard } from './cards/closed-card'
 import { OpenCard } from './cards/open-card'
 import { mergeTimeline } from './cards/timeline'
-import { ChatComposer } from './composer'
+import { ChatComposer, type ChatComposerHandle, type ComposerMessage } from './composer'
 import { Markdown } from './markdown'
 import { MessageActions } from './message-actions'
 import { PersonaAvatar, type Persona } from './persona'
@@ -269,8 +269,73 @@ export function DirectorChat({
       ? `${messageTask.project} · ${messageTask.title}`
       : null
 
+  const composer = useRef<ChatComposerHandle>(null)
+
+  function sendComposer(message: ComposerMessage) {
+    if (replyLost) {
+      setReplyLost(false)
+      setView((current) => ({
+        ...current,
+        sendError: `The card you were replying to closed, so this was not sent. Send again to message ${name}.`,
+      }))
+      return Promise.reject(new Error('The reply card closed.'))
+    }
+    // Also when the choice ended in this very render, before the effect above ran.
+    if (messageLost || choiceEnded) {
+      setMessageLost(false)
+      setMessageChoice(null)
+      setView((current) => ({
+        ...current,
+        sendError: `The task you were messaging stopped taking messages, so this was not sent. Send again to message ${name}.`,
+      }))
+      return Promise.reject(new Error('The task stopped taking messages.'))
+    }
+    const report = (error: string): never => {
+      setView((current) => ({ ...current, sendError: error }))
+      throw new Error(error)
+    }
+    const sent =
+      editingId && !replyCard && !messageTask
+        ? reviseDirectorMessageAction(editingId, message.text, chat, message.attachments).then(({ error }) => {
+            if (error) report(error)
+            setEditingId(null)
+          })
+        : replyCard
+          ? // A delivered reply closes its card; that close must not count as a lost reply.
+            replyToCardAction(replyCard.id, message.text, message.attachments).then(({ error }) => {
+              if (error) report(error)
+              choice.current = null
+              setReplyChoice(null)
+              setReplyLost(false)
+            })
+          : messageTask
+            ? messageTaskAction(messageTask.id, message.text, message.attachments).then(({ error }) => {
+                if (error) report(error)
+                setMessageChoice(null)
+              })
+            : sendToDirectorAction(message.text, chat, message.attachments).then(({ error }) => {
+                if (error) report(error)
+              })
+    // A rejection with no message of its own still tells the user to try again.
+    return sent.catch((error: unknown) => {
+      if (error instanceof Error && error.message) throw error
+      report('The message could not be sent. Try again.')
+    })
+  }
+
   return (
-    <div className="flex h-full flex-col">
+    <div
+      className="flex h-full flex-col"
+      onDragOver={(event) => {
+        if (![...event.dataTransfer.types].includes('Files')) return
+        event.preventDefault()
+      }}
+      onDrop={(event) => {
+        if (!event.dataTransfer.files.length) return
+        event.preventDefault()
+        composer.current?.addFiles(event.dataTransfer.files)
+      }}
+    >
       {view.status === 'answering' && (
         <EscapeShortcut id="stop-director-reply" label="Stop the reply" handles={directorHandlesEscape} run={stopReply} />
       )}
@@ -372,6 +437,7 @@ export function DirectorChat({
           </div>
         )}
         <ChatComposer
+          ref={composer}
           projects={projects}
           filesProject={messageTask?.project ?? managedProject}
           canStop={view.status === 'answering'}
@@ -408,68 +474,7 @@ export function DirectorChat({
           }
           placeholder={target ? `${replyCard ? 'Reply to' : 'Message'} ${target}` : `Message ${name}`}
           onStop={view.status === 'answering' ? stopReply : undefined}
-          onSend={(text) => {
-            if (replyLost) {
-              setReplyLost(false)
-              setView((current) => ({
-                ...current,
-                sendError: `The card you were replying to closed, so this was not sent. Send again to message ${name}.`,
-              }))
-              return Promise.reject(new Error('The reply card closed.'))
-            }
-            // Also when the choice ended in this very render, before the effect above ran.
-            if (messageLost || choiceEnded) {
-              setMessageLost(false)
-              setMessageChoice(null)
-              setView((current) => ({
-                ...current,
-                sendError: `The task you were messaging stopped taking messages, so this was not sent. Send again to message ${name}.`,
-              }))
-              return Promise.reject(new Error('The task stopped taking messages.'))
-            }
-            if (editingId && !replyCard && !messageTask) {
-              return reviseDirectorMessageAction(editingId, text, chat).then(
-                () => setEditingId(null),
-                (error: unknown) => {
-                  setView((current) => ({ ...current, sendError: 'The message could not be sent. Try again.' }))
-                  throw error
-                },
-              )
-            }
-            if (replyCard) {
-              // A delivered reply closes its card; that close must not count as a lost reply.
-              return replyToCardAction(replyCard.id, text).then(
-                () => {
-                  choice.current = null
-                  setReplyChoice(null)
-                  setReplyLost(false)
-                },
-                (error: unknown) => {
-                  setView((current) => ({ ...current, sendError: 'The message could not be sent. Try again.' }))
-                  throw error
-                },
-              )
-            }
-            if (messageTask) {
-              return messageTaskAction(messageTask.id, text).then(
-                ({ error }) => {
-                  if (error) {
-                    setView((current) => ({ ...current, sendError: error }))
-                    throw new Error(error)
-                  }
-                  setMessageChoice(null)
-                },
-                (error: unknown) => {
-                  setView((current) => ({ ...current, sendError: 'The message could not be sent. Try again.' }))
-                  throw error
-                },
-              )
-            }
-            return sendToDirectorAction(text, chat).catch((error: unknown) => {
-              setView((current) => ({ ...current, sendError: 'The message could not be sent. Try again.' }))
-              throw error
-            })
-          }}
+          onSend={(message) => sendComposer(message)}
         />
         {view.sendError && (
           <Alert variant="destructive" className="mt-2">

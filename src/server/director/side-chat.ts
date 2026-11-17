@@ -1,7 +1,10 @@
 import { samePath } from '../paths'
+import type { AttachmentInput } from '@/lib/chat-attachments'
+import { attachmentsTurn } from '../chat-attachments'
 import { directorSession } from './chat'
 import { getAgent, removeAgent, sendMessage, startAgent, stopAgent, subscribeToAgent } from '../runner/agent-runner'
 import type { AgentEventEnvelope } from '../runner/contract'
+import { displayText } from '../runner/user-turn'
 
 // Side chats, like Claude Code's /btw: each one runs in a branch of the
 // Director's provider session, so it sees what the main chat discussed, but
@@ -105,7 +108,10 @@ function stopError(agentId: string) {
  * context). Returns the side agent's id and the last event before the
  * question, so the caller streams only this answer.
  */
-export async function askSideQuestion(folder: string, text: string, agentId?: string, chat: string | null = null) {
+export async function askSideQuestion(folder: string, text: string, agentId?: string, chat: string | null = null, attachments: AttachmentInput[] = []) {
+  const { cwd } = await directorSession(folder, chat)
+  const turn = await attachmentsTurn({ folder: cwd, text, attachments })
+  if (!displayText(turn)) throw new Error('A question must be non-empty text of at most 100,000 characters.')
   const live = agentId ? sideAgents.live.get(agentId) : undefined
   const continues = live !== undefined && samePath(live.folder, folder) && agentId !== undefined && getAgent(agentId)?.status !== 'stopped'
   const id = continues ? agentId : await startSideChat(folder, chat)
@@ -116,7 +122,7 @@ export async function askSideQuestion(folder: string, text: string, agentId?: st
   const side = sideAgents.live.get(id)
   if (side) side.usedAt = Date.now()
   const after = getAgent(id)?.lastSeq ?? 0
-  sendMessage(id, text)
+  sendMessage(id, turn)
   return { agentId: id, after, restarted: agentId !== undefined && !continues }
 }
 

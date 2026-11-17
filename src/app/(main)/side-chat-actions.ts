@@ -1,5 +1,6 @@
 'use server'
 
+import type { AttachmentInput } from '@/lib/chat-attachments'
 import { dataFolder } from '@/server/config'
 import { askSideQuestion, closeSideChat } from '@/server/director/side-chat'
 import { getManagerAt } from '@/server/managers'
@@ -11,9 +12,15 @@ const MAX_QUESTION_LENGTH = 100_000
  * conversation, or from the manager `chat`'s. Returns the side agent's id;
  * the answer streams from /api/side-chat/<id>/events?after=<after>.
  */
-export async function askSideQuestionAction(text: unknown, agentId?: unknown, chat?: unknown): Promise<{ agentId: string; after: number; restarted: boolean } | { error: string }> {
+export async function askSideQuestionAction(
+  text: unknown,
+  agentId?: unknown,
+  chat?: unknown,
+  attachments?: AttachmentInput[],
+): Promise<{ agentId: string; after: number; restarted: boolean } | { error: string }> {
   // Server actions are public endpoints, so the argument is checked at runtime.
-  if (typeof text !== 'string' || !text.trim() || text.length > MAX_QUESTION_LENGTH) {
+  const files = Array.isArray(attachments) ? attachments : []
+  if (typeof text !== 'string' || text.length > MAX_QUESTION_LENGTH || (!text.trim() && files.length === 0)) {
     throw new Error('A question must be non-empty text of at most 100,000 characters.')
   }
   if (agentId !== undefined && (typeof agentId !== 'string' || !agentId || agentId.length > 200)) {
@@ -23,7 +30,7 @@ export async function askSideQuestionAction(text: unknown, agentId?: unknown, ch
   try {
     const folder = await dataFolder()
     if (chat && !(await getManagerAt(folder, chat))) return { error: 'That manager no longer exists.' }
-    return await askSideQuestion(folder, text.trim(), agentId, chat || null)
+    return await askSideQuestion(folder, text.trim(), agentId, chat || null, files)
   } catch (error) {
     // Returned, not thrown: production builds hide thrown messages from the client.
     return { error: error instanceof Error ? error.message : String(error) }

@@ -3,7 +3,7 @@
 import { Plus, X } from 'lucide-react'
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { askSideQuestionAction, closeSideChatAction } from '@/app/(main)/side-chat-actions'
-import { ChatComposer } from '@/components/chat/composer'
+import { ChatComposer, type ChatComposerHandle, type ComposerMessage } from '@/components/chat/composer'
 import { EscapeShortcut } from '@/components/shell/shortcut-registry'
 import { useSearchParams } from 'next/navigation'
 import { DirectorMessage } from '@/components/chat/director-chat'
@@ -180,6 +180,7 @@ function SideChatThread({
   /** This chat's side agent; questions after the first continue its conversation. */
   const agent = useRef<string | undefined>(undefined)
   const scroller = useRef<HTMLDivElement>(null)
+  const composer = useRef<ChatComposerHandle>(null)
   /** Questions stopped before their agent was known; the agent is ended when it arrives. */
   const stoppedEarly = useRef(new Set<string>())
 
@@ -258,14 +259,15 @@ function SideChatThread({
     if (element) element.scrollTop = element.scrollHeight
   }, [exchanges])
 
-  async function ask(question: string) {
+  async function ask(message: ComposerMessage) {
     // One answer at a time per side chat; the text goes back into the box.
     if (current?.state === 'asking') throw new Error('An answer is still coming.')
+    const question = message.text.trim() || message.attachments.map((attachment) => attachment.name).join(', ')
     const id = crypto.randomUUID()
     if (exchanges.length === 0) onTitle(question)
     setExchanges((list) => [...list, { id, question, answer: '', draft: '', state: 'asking' }])
     try {
-      const result = await askSideQuestionAction(question, agent.current, mainChat)
+      const result = await askSideQuestionAction(message.text, agent.current, mainChat, message.attachments)
       if ('error' in result) {
         update(id, () => ({ state: 'failed', error: result.error }))
         return
@@ -295,7 +297,18 @@ function SideChatThread({
   }
 
   return (
-    <div className="flex h-full flex-col">
+    <div
+      className="flex h-full flex-col"
+      onDragOver={(event) => {
+        if (![...event.dataTransfer.types].includes('Files')) return
+        event.preventDefault()
+      }}
+      onDrop={(event) => {
+        if (!event.dataTransfer.files.length) return
+        event.preventDefault()
+        composer.current?.addFiles(event.dataTransfer.files)
+      }}
+    >
       {active && asking && (
         <EscapeShortcut id="stop-side-reply" label="Stop the side reply" handles={sideHandlesEscape} run={stop} />
       )}
@@ -308,6 +321,7 @@ function SideChatThread({
       </div>
       <div className="p-3 pt-0">
         <ChatComposer
+          ref={composer}
           projects={[]}
           showCommands={false}
           label="Side question"

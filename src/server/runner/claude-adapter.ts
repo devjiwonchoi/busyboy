@@ -24,6 +24,7 @@ import type {
   SignInStatus,
 } from './contract'
 import { agentEnvironment, findExecutable } from './find-executable'
+import { claudeContent, modelText, type UserTurn } from './user-turn'
 
 /** Overrides the `claude` executable that is otherwise looked up on PATH. */
 export const CLAUDE_PATH_ENV = 'BUSYBOY_CLAUDE_PATH'
@@ -38,11 +39,12 @@ class MessageQueue implements AsyncIterable<SDKUserMessage> {
   private closed = false
   private held = true
 
-  push(text: string) {
+  push(turn: UserTurn) {
     if (this.closed) return
+    const content = claudeContent(turn)
     const message: SDKUserMessage = {
       type: 'user',
-      message: { role: 'user', content: text },
+      message: { role: 'user', content: content.length > 0 ? content : modelText(turn) },
       parent_tool_use_id: null,
       origin: { kind: 'human' },
     }
@@ -344,9 +346,9 @@ function startClaude(options: ProviderStartOptions): ProviderSession {
     })
 
   return {
-    send(text) {
+    send(turn) {
       inTurn = true
-      input.push(text)
+      input.push(turn)
     },
     async interrupt() {
       // A denial with `interrupt` ends the turn by itself; a second interrupt
@@ -376,7 +378,7 @@ function startClaude(options: ProviderStartOptions): ProviderSession {
     },
     async compact() {
       inTurn = true
-      input.push('/compact')
+      input.push({ text: '/compact', note: '', images: [] })
     },
     answer(requestId, answer) {
       asks.get(requestId)?.(answer)

@@ -1,5 +1,7 @@
 'use server'
 
+import type { AttachmentInput } from '@/lib/chat-attachments'
+import { AttachmentError } from '@/server/chat-attachments'
 import { dataFolder } from '@/server/config'
 import { replyToTaskCard, reviseDirectorMessage, sendDirectorQueueNow, sendToDirector, sendToTask, stopDirector } from '@/server/director/chat'
 import { getManagerAt } from '@/server/managers'
@@ -31,20 +33,42 @@ async function checkChat(chat: unknown) {
   return chat
 }
 
+function attachmentInputs(value: unknown): AttachmentInput[] {
+  if (value === undefined || value === null) return []
+  if (!Array.isArray(value)) throw new AttachmentError('Attachments must be a list of files.')
+  return value.map((item) => {
+    if (!item || typeof item !== 'object') throw new AttachmentError('An attachment is missing its name or contents.')
+    const record = item as Record<string, unknown>
+    if (typeof record.name !== 'string' || typeof record.mediaType !== 'string' || typeof record.data !== 'string') {
+      throw new AttachmentError('An attachment is missing its name or contents.')
+    }
+    return { name: record.name, mediaType: record.mediaType, data: record.data }
+  })
+}
+
 /** Sends a message to the Director, or to the manager `chat`. */
-export async function sendToDirectorAction(text: string, chat?: string | null) {
+export async function sendToDirectorAction(text: string, chat?: string | null, attachments?: AttachmentInput[]): Promise<{ error?: string }> {
   // Server actions are public endpoints, so the argument is checked at runtime.
-  if (typeof text !== 'string' || !text.trim() || text.length > MAX_MESSAGE_LENGTH) {
+  if (typeof text !== 'string' || text.length > MAX_MESSAGE_LENGTH) {
     throw new Error('A message must be non-empty text of at most 100,000 characters.')
   }
-  const manager = await checkChat(chat)
-  await sendToDirector({
-    folder: await dataFolder(),
-    chat: manager,
-    text,
-    resolveProvider: resolveDirectorProvider,
-    mcp: await busyboyMcpServers(undefined, undefined, manager ?? undefined),
-  })
+  try {
+    const files = attachmentInputs(attachments)
+    if (!text.trim() && files.length === 0) throw new Error('A message must be non-empty text of at most 100,000 characters.')
+    const manager = await checkChat(chat)
+    await sendToDirector({
+      folder: await dataFolder(),
+      chat: manager,
+      text,
+      attachments: files,
+      resolveProvider: resolveDirectorProvider,
+      mcp: await busyboyMcpServers(undefined, undefined, manager ?? undefined),
+    })
+    return {}
+  } catch (error) {
+    if (error instanceof AttachmentError) return { error: error.message }
+    throw error
+  }
 }
 
 export async function stopDirectorAction(chat?: string | null) {
@@ -60,20 +84,34 @@ export async function sendDirectorQueueNowAction(chat?: string | null) {
  * Replaces the latest message in the chat with `text` and asks again.
  * Server actions are public endpoints, so every argument is checked at runtime.
  */
-export async function reviseDirectorMessageAction(entryId: string, text: string, chat?: string | null) {
+export async function reviseDirectorMessageAction(
+  entryId: string,
+  text: string,
+  chat?: string | null,
+  attachments?: AttachmentInput[],
+): Promise<{ error?: string }> {
   checkId(entryId, 'The message')
-  if (typeof text !== 'string' || !text.trim() || text.length > MAX_MESSAGE_LENGTH) {
+  if (typeof text !== 'string' || text.length > MAX_MESSAGE_LENGTH) {
     throw new Error('A message must be non-empty text of at most 100,000 characters.')
   }
-  const manager = await checkChat(chat)
-  await reviseDirectorMessage({
-    folder: await dataFolder(),
-    chat: manager,
-    entryId,
-    text,
-    resolveProvider: resolveDirectorProvider,
-    mcp: await busyboyMcpServers(undefined, undefined, manager ?? undefined),
-  })
+  try {
+    const files = attachmentInputs(attachments)
+    if (!text.trim() && files.length === 0) throw new Error('A message must be non-empty text of at most 100,000 characters.')
+    const manager = await checkChat(chat)
+    await reviseDirectorMessage({
+      folder: await dataFolder(),
+      chat: manager,
+      entryId,
+      text,
+      attachments: files,
+      resolveProvider: resolveDirectorProvider,
+      mcp: await busyboyMcpServers(undefined, undefined, manager ?? undefined),
+    })
+    return {}
+  } catch (error) {
+    if (error instanceof AttachmentError) return { error: error.message }
+    throw error
+  }
 }
 
 // Server actions are public endpoints, so every argument is checked at runtime.
@@ -112,12 +150,20 @@ export async function mergePullRequestsAction(cardId: string) {
 }
 
 /** Sends a composer message to the task agent behind an open card instead of the Director. */
-export async function replyToCardAction(cardId: string, text: string) {
+export async function replyToCardAction(cardId: string, text: string, attachments?: AttachmentInput[]): Promise<{ error?: string }> {
   checkId(cardId, 'The card')
-  if (typeof text !== 'string' || !text.trim() || text.length > MAX_MESSAGE_LENGTH) {
+  if (typeof text !== 'string' || text.length > MAX_MESSAGE_LENGTH) {
     throw new Error('A message must be non-empty text of at most 100,000 characters.')
   }
-  await replyToTaskCard({ folder: await dataFolder(), cardId, text })
+  try {
+    const files = attachmentInputs(attachments)
+    if (!text.trim() && files.length === 0) throw new Error('A message must be non-empty text of at most 100,000 characters.')
+    await replyToTaskCard({ folder: await dataFolder(), cardId, text, attachments: files })
+    return {}
+  } catch (error) {
+    if (error instanceof AttachmentError) return { error: error.message }
+    throw error
+  }
 }
 
 export async function stopTaskAction(taskId: string) {
@@ -130,16 +176,18 @@ export async function stopTaskAction(taskId: string) {
  * on (the task waits on a card, its worktree is gone) comes back as `error`: a thrown error's
  * message does not reach the window in a production build.
  */
-export async function messageTaskAction(taskId: string, text: string): Promise<{ error?: string }> {
+export async function messageTaskAction(taskId: string, text: string, attachments?: AttachmentInput[]): Promise<{ error?: string }> {
   checkId(taskId, 'The task')
-  if (typeof text !== 'string' || !text.trim() || text.length > MAX_MESSAGE_LENGTH) {
+  if (typeof text !== 'string' || text.length > MAX_MESSAGE_LENGTH) {
     throw new Error('A message must be non-empty text of at most 100,000 characters.')
   }
   try {
-    await sendToTask({ folder: await dataFolder(), taskId, text })
+    const files = attachmentInputs(attachments)
+    if (!text.trim() && files.length === 0) throw new Error('A message must be non-empty text of at most 100,000 characters.')
+    await sendToTask({ folder: await dataFolder(), taskId, text, attachments: files })
     return {}
   } catch (error) {
-    if (error instanceof TaskError) return { error: error.message }
+    if (error instanceof AttachmentError || error instanceof TaskError) return { error: error.message }
     throw error
   }
 }

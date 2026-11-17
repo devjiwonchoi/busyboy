@@ -2,6 +2,7 @@
 // (routes, actions, UI, Director chat) talks to agents only through these types
 // and the operations in `agent-runner.ts`. Provider adapters translate their
 // own protocol into `AgentEvent` and implement `ProviderAdapter`.
+import type { UserTurn } from './user-turn'
 
 export type ProviderId = 'claude' | 'codex'
 
@@ -157,7 +158,8 @@ export type ProviderStartOptions = Required<Pick<StartAgentInput, 'cwd' | 'permi
 
 /** One running provider conversation. The runner never calls it after `stopped` is emitted. */
 export interface ProviderSession {
-  send(text: string): void
+  /** Sends one user turn. A string is accepted by `sendMessage`, which wraps it. */
+  send(turn: UserTurn): void
   interrupt(): Promise<void>
   /** Ask the provider to compact its context with its own compaction. */
   compact(): Promise<void>

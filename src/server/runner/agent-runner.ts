@@ -15,6 +15,7 @@ import type {
   StartAgentInput,
 } from './contract'
 import { createScriptedAdapter, hasScripts, SCRIPTS_ENV } from './scripted-provider'
+import { asTurn, displayText, type UserTurn } from './user-turn'
 import { onServerShutdown } from '../shutdown'
 
 /** Newest events kept per agent for replay. Live listeners still receive every event. */
@@ -218,12 +219,13 @@ export function startAgent(input: StartAgentInput): AgentSnapshot {
   return snapshot(agent)
 }
 
-export function sendMessage(agentId: string, text: string) {
+export function sendMessage(agentId: string, turn: UserTurn | string) {
   const agent = getRecord(agentId)
   if (!agent.session) throw new Error('The agent is stopped. Resume it first.')
-  record(agent, { type: 'user-message', text })
+  const message = asTurn(turn)
+  record(agent, { type: 'user-message', text: displayText(message) || message.text })
   if (agent.status === 'idle' || agent.status === 'starting') agent.status = 'running'
-  agent.session.send(text)
+  agent.session.send(message)
 }
 
 /** Ends the current turn. The agent stays alive and waits for the next message. */
