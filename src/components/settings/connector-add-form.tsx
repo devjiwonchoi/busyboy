@@ -19,10 +19,10 @@ export function ConnectorAddForm({
 }) {
   const [state, action, pending] = useActionState(addConnectorAction, {} as AddConnectorResult);
   return (
-    <form action={action} className="space-y-2">
+    <form action={action} className="space-y-4">
       <input type="hidden" name="provider" value={provider} />
       <input type="hidden" name="name" value={name} />
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex items-center justify-between gap-4">
         <p className="text-sm font-medium">{title}</p>
         <Button type="submit" size="sm" variant="outline" disabled={pending}>
           Add

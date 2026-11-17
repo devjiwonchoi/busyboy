@@ -92,7 +92,7 @@ function ChoiceOptions({
   return (
     <>
       {card.questions.map(({ question, header, options, multiSelect }, questionIndex) => (
-        <fieldset key={questionIndex} className="space-y-1.5">
+        <fieldset key={questionIndex} className="space-y-2">
           <legend className="mb-1.5 font-medium">
             {header && <span className="text-muted-foreground">{header}: </span>}
             {question}
@@ -102,7 +102,7 @@ function ChoiceOptions({
               {detail}
             </pre>
           )}
-          <ItemGroup className="gap-1">
+          <ItemGroup>
             {options.map((option, index) => (
               <Item
                 key={option.label}

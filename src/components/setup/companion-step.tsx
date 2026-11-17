@@ -36,7 +36,7 @@ export function CompanionStep({
   const chosen = companions.find((companion) => companion.id === value);
   return (
     <>
-      <form id={FORM_ID} action={action} className="space-y-3">
+      <form id={FORM_ID} action={action} className="space-y-4">
         <CompanionChoices
           companions={companions}
           value={value}
@@ -74,7 +74,7 @@ export function CompanionChoices({
       // null, not undefined, keeps the group controlled before the first choice.
       value={value ?? null}
       onValueChange={(next) => onChange(next as string)}
-      className="grid-cols-2 gap-3 sm:grid-cols-5"
+      className="grid-cols-2 gap-4 sm:grid-cols-5"
     >
       {companions.map((companion) => (
         <RadioGroupItem

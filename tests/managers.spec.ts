@@ -251,7 +251,8 @@ test("removing a manager should take it off the list and show its tasks in the D
 
   const item = chatList(page).getByRole("listitem", { name: "Webby" });
   await item.hover();
-  await item.getByRole("button", { name: "Remove Webby" }).click();
+  await item.getByRole("button", { name: "Actions for Webby" }).click();
+  await page.getByRole("menuitem", { name: "Remove" }).click();
   await page
     .getByRole("alertdialog", { name: "Remove Webby?" })
     .getByRole("button", { name: "Remove" })

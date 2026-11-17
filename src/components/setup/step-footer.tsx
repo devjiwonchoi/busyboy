@@ -13,7 +13,7 @@ export function StepFooter({
   children: React.ReactNode;
 }) {
   return (
-    <div className="flex flex-wrap items-center gap-3 border-t pt-6">
+    <div className="flex flex-wrap items-center gap-2 border-t pt-6">
       {previous ? (
         <Link href={stepHref(previous)} className={buttonVariants({ variant: "outline" })}>
           Back
@@ -23,7 +23,7 @@ export function StepFooter({
           Back
         </Button>
       )}
-      <div className="ml-auto flex flex-wrap items-center justify-end gap-3">
+      <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
         {hint && <p className="text-muted-foreground text-sm">{hint}</p>}
         {children}
       </div>

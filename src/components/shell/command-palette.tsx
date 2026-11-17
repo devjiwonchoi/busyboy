@@ -175,7 +175,7 @@ export function CommandPalette() {
           id="command-palette-list"
           role="listbox"
           aria-label="Commands"
-          className="max-h-80 space-y-0.5 overflow-y-auto"
+          className="flex max-h-80 flex-col gap-1 overflow-y-auto"
         >
           {items.map((item, index) => (
             <li key={item.id}>
@@ -199,7 +199,7 @@ export function CommandPalette() {
             </li>
           ))}
           {items.length === 0 && (
-            <li className="text-muted-foreground px-2 py-3 text-xs">No matches.</li>
+            <li className="text-muted-foreground px-2 py-2 text-xs">No matches.</li>
           )}
         </ul>
       </DialogContent>

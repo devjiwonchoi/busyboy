@@ -51,7 +51,7 @@ export function PlanCardView({ card }: CardViewProps<PlanCard>) {
         {/* The shell's section gap is wider than the title-to-summary gap in the mock. */}
         <p className="-mt-2 truncate">{card.summary}</p>
         {card.criteria.length > 0 && (
-          <div className="space-y-3.5 pt-5">
+          <div className="space-y-4 pt-4">
             <p id={endStateId} className="text-muted-foreground text-[0.6875rem]">
               End state
             </p>
@@ -73,7 +73,7 @@ export function PlanCardView({ card }: CardViewProps<PlanCard>) {
         >
           View details
         </Button>
-        <Button type="button" className="px-3" disabled={pending} onClick={approve}>
+        <Button type="button" disabled={pending} onClick={approve}>
           Approve
         </Button>
       </CardShellActions>
@@ -97,7 +97,7 @@ export function PlanCardView({ card }: CardViewProps<PlanCard>) {
           <div className="min-h-0 overflow-y-auto">
             <Markdown text={card.plan} />
           </div>
-          <DialogFooter className="-mx-4 border-t px-4 pt-3">
+          <DialogFooter className="border-t pt-4">
             <Button
               type="button"
               size="sm"

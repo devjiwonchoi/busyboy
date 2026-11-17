@@ -63,7 +63,7 @@ export default function SetupPage({ searchParams }: PageProps<"/setup">) {
           <BackToChat />
         </Suspense>
       </header>
-      <main aria-label="Setup" className="mx-auto w-full max-w-2xl flex-1 space-y-8 px-6 py-10">
+      <main aria-label="Setup" className="mx-auto w-full max-w-2xl flex-1 space-y-6 px-6 py-6">
         <Suspense fallback={<Skeleton className="h-96 w-full" />}>
           <CurrentStep searchParams={searchParams} />
         </Suspense>
@@ -176,7 +176,7 @@ async function AgentsPage() {
   const signedIn = states.filter(({ state }) => state.state === "signed-in");
   return (
     <>
-      <ItemGroup aria-label="Agents" className="gap-2">
+      <ItemGroup aria-label="Agents">
         {states.map(({ id, name, state }) => (
           <Item key={id} role="listitem" variant="outline">
             <Row name={name} status={STATUS_TEXT[state.state]} />
@@ -272,7 +272,7 @@ async function SkillsPage() {
       {runnable.length === 0 ? (
         <p className="text-muted-foreground text-sm">Install Claude Code, Codex, or Grok first.</p>
       ) : (
-        <ItemGroup aria-label="Skills" className="gap-2">
+        <ItemGroup aria-label="Skills">
           {runnable.map(({ id, name, skills }) => (
             <Item key={id} role="listitem" variant="outline">
               <Row name={name} status={skills.installed ? "Installed" : "Not installed"} />
@@ -347,7 +347,7 @@ async function StartPage() {
           </EmptyHeader>
         </Empty>
       ) : (
-        <ItemGroup aria-label="Projects" className="gap-2">
+        <ItemGroup aria-label="Projects">
           {projects.map((project) => (
             <Item key={project.name} role="listitem" variant="outline">
               <ItemContent className="min-w-0">
