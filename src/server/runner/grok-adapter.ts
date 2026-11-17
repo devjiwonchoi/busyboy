@@ -209,19 +209,12 @@ function spawnGrok(executable: string, args: string[], cwd: string, onMessage: (
   return new AcpConnection(child, onMessage)
 }
 
-/** Reasoning efforts Grok accepts. The picker offers the same set. */
-const GROK_EFFORTS = new Set(['low', 'medium', 'high'])
-
 /**
- * `grok --permission-mode <mode> agent [-m model] [--reasoning-effort effort] --no-leader stdio`.
- * Permission mode belongs before `agent`. Model and effort belong between `agent` and `stdio`.
+ * `grok --permission-mode <mode> agent --no-leader stdio`.
+ * Permission mode belongs before `agent`. The harness chooses its model and effort.
  */
-function launchArgs(mode: string, { model, effort }: { model?: string; effort?: string } = {}) {
-  const args = ['--no-auto-update', '--permission-mode', mode, 'agent']
-  if (model) args.push('-m', model)
-  if (effort && GROK_EFFORTS.has(effort)) args.push('--reasoning-effort', effort)
-  args.push('--no-leader', 'stdio')
-  return args
+function launchArgs(mode: string) {
+  return ['--no-auto-update', '--permission-mode', mode, 'agent', '--no-leader', 'stdio']
 }
 
 /** Text the model reads, plus image blocks when this Grok accepts them. */
@@ -500,7 +493,7 @@ function startGrok(options: ProviderStartOptions): ProviderSession {
       emit({ type: 'error', code: 'not-installed', message: 'The `grok` command was not found on PATH.' })
       return false
     }
-    connection = spawnGrok(executable, launchArgs(mode, options), options.cwd, (message) => {
+    connection = spawnGrok(executable, launchArgs(mode), options.cwd, (message) => {
       handle(message).catch((error: unknown) => {
         if (message.id !== undefined && message.id !== null) {
           connection?.respondError(message.id, 'BusyBoy could not read that request.')
@@ -531,12 +524,8 @@ function startGrok(options: ProviderStartOptions): ProviderSession {
         sessionId = created.sessionId
       }
       if (!sessionId) throw new Error('Grok did not return a session id.')
-      if (options.model) await current.request('session/set_model', { sessionId, modelId: options.model }).catch(() => {})
-      // Permission mode and reasoning effort have both been observed on `session/set_mode`.
-      // The CLI flags above are what the process starts with. This repeats the effort when
-      // the chat set one, and otherwise repeats the permission mode.
-      const effort = options.effort && GROK_EFFORTS.has(options.effort) ? options.effort : undefined
-      await current.request('session/set_mode', { sessionId, modeId: effort ?? mode }).catch(() => {})
+      // The CLI flag is what the process starts with. This repeats the permission mode on the session.
+      await current.request('session/set_mode', { sessionId, modeId: mode }).catch(() => {})
       emit({ type: 'session', sessionId })
       startNextTurn()
     })()

@@ -46,10 +46,6 @@ export type StartAgentInput = {
   privateFolder?: string
   /** Ask before anything that could change the folder (see SUBAGENT_EDIT_RULE in `always-ask.ts`). */
   noFileEdits?: boolean
-  /** Model id the harness should use. Left out for the harness's own default. */
-  model?: string
-  /** Effort the harness should use, when that harness has one. Left out for its default. */
-  effort?: string
   /**
    * Folder of blocking user rules (Markdown and YAML). The app uses ~/.jwn;
    * a journey passes its own folder so it never reads the machine's home
@@ -167,7 +163,7 @@ export type SignInStatus =
 // ---- Provider side -------------------------------------------------------
 
 export type ProviderStartOptions = Required<Pick<StartAgentInput, 'cwd' | 'permissionMode'>> &
-  Pick<StartAgentInput, 'instructions' | 'resumeSessionId' | 'provider' | 'mcpServers' | 'forkSessionId' | 'noTools' | 'alwaysAsk' | 'privateFolder' | 'noFileEdits' | 'model' | 'effort' | 'rulesFolder'> & {
+  Pick<StartAgentInput, 'instructions' | 'resumeSessionId' | 'provider' | 'mcpServers' | 'forkSessionId' | 'noTools' | 'alwaysAsk' | 'privateFolder' | 'noFileEdits' | 'rulesFolder'> & {
     /** Every event the provider produces. Call it in order; the runner stamps seq numbers. */
     emit: (event: AgentEvent) => void
   }

@@ -136,14 +136,6 @@ function toSdkMcpServers(servers: Record<string, McpServer>): Record<string, Mcp
  * and leaves the original file untouched, plus `persistSession: false`, so no
  * file is written for the branch at all.
  */
-const CLAUDE_EFFORTS = new Set(['low', 'medium', 'high', 'xhigh', 'max'])
-
-/** Model and effort, included only when this chat set them. */
-function claudeModelOptions({ model, effort }: ProviderStartOptions): Partial<Options> {
-  const level = effort && CLAUDE_EFFORTS.has(effort) ? (effort as 'low' | 'medium' | 'high' | 'xhigh' | 'max') : undefined
-  return { ...(model ? { model } : {}), ...(level ? { effort: level } : {}) }
-}
-
 function sessionOptions({ resumeSessionId, forkSessionId }: ProviderStartOptions): Partial<Options> {
   if (forkSessionId) return { resume: forkSessionId, forkSession: true, persistSession: false }
   return { resume: resumeSessionId }
@@ -334,7 +326,6 @@ function startClaude(options: ProviderStartOptions): ProviderSession {
         abortController: abort,
         includePartialMessages: true,
         ...sessionOptions(options),
-        ...claudeModelOptions(options),
         ...(options.noTools ? NO_TOOLS : {}),
         permissionMode: options.noTools
           ? 'dontAsk'

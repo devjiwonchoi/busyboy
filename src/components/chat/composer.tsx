@@ -1,7 +1,7 @@
 'use client'
 
-import { ArrowUp, Plus, Square, X } from 'lucide-react'
-import { forwardRef, useEffect, useId, useImperativeHandle, useRef, useState, type DragEvent as ReactDragEvent, type ReactNode } from 'react'
+import { ArrowUp, Mic, Plus, Square, X } from 'lucide-react'
+import { forwardRef, useEffect, useId, useImperativeHandle, useRef, useState, type ComponentProps, type DragEvent as ReactDragEvent, type ReactNode } from 'react'
 import { composerSkillsAction, projectFilesAction } from '@/app/(main)/composer-actions'
 import { attachmentProblem, imageMediaType, type AttachmentInput } from '@/lib/chat-attachments'
 import { Button } from '@/components/ui/button'
@@ -17,6 +17,7 @@ import {
   ComposerSubmit,
   type ComposerValue,
   getComposerText,
+  useComposerContext,
 } from '@/components/ui/composer'
 import type { ComposerSkill } from '@/server/skills'
 
@@ -85,8 +86,6 @@ export const ChatComposer = forwardRef<
     onTextChange?: (text: string) => void
     /** When `token` changes, the box is replaced with `text`. */
     seed?: { token: number; text: string } | null
-    /** Rendered on the left of the toolbar. The harness picker uses this slot. */
-    toolbar?: ReactNode
   }
 >(function ChatComposer(
   {
@@ -106,7 +105,6 @@ export const ChatComposer = forwardRef<
     onEmptyArrowUp,
     onTextChange,
     seed,
-    toolbar,
   },
   ref,
 ) {
@@ -115,6 +113,8 @@ export const ChatComposer = forwardRef<
   const [error, setError] = useState<string | null>(null)
   const [dragging, setDragging] = useState(false)
   const [queryCharacter, setQueryCharacter] = useState<string | null>(null)
+  const [canDictate, setCanDictate] = useState(false)
+  const [dictating, setDictating] = useState(false)
   const [skills, setSkills] = useState<ComposerSkill[]>([])
   const [files, setFiles] = useState<{ path: string }[]>([])
   const rootRef = useRef<HTMLDivElement>(null)
@@ -131,9 +131,20 @@ export const ChatComposer = forwardRef<
   const onEmptyArrowUpRef = useRef(onEmptyArrowUp)
   onEmptyArrowUpRef.current = onEmptyArrowUp
   const appliedSeed = useRef<number | null>(null)
+  const dictation = useRef<DictationSession | null>(null)
+  const appendDictationRef = useRef<(transcript: string) => void>(() => {})
 
   useEffect(() => {
+    setCanDictate(dictationConstructor() !== null)
     return () => {
+      const session = dictation.current
+      dictation.current = null
+      if (session) {
+        session.onresult = null
+        session.onerror = null
+        session.onend = null
+        session.abort()
+      }
       for (const attachment of attachmentsRef.current) {
         if (attachment.previewUrl) URL.revokeObjectURL(attachment.previewUrl)
       }
@@ -215,6 +226,66 @@ export const ChatComposer = forwardRef<
         },
       ]
     : []
+
+  appendDictationRef.current = (transcript: string) => {
+    const spoken = transcript.replace(/\s+/g, ' ').trim()
+    if (!spoken) return
+    const current = valueRef.current
+    const existing = getComposerText(current)
+    const gap = existing.length > 0 && !/\s$/.test(existing) ? ' ' : ''
+    commit(withAppendedText(current, gap + spoken))
+  }
+
+  function stopDictation() {
+    const session = dictation.current
+    dictation.current = null
+    setDictating(false)
+    session?.stop()
+  }
+
+  function toggleDictation() {
+    if (dictation.current) {
+      stopDictation()
+      return
+    }
+    const Dictation = dictationConstructor()
+    if (!Dictation) {
+      setCanDictate(false)
+      return
+    }
+    const session = new Dictation()
+    session.continuous = true
+    session.interimResults = false
+    session.lang = navigator.language || 'en-US'
+    session.onresult = (event) => {
+      let spoken = ''
+      for (let index = event.resultIndex; index < event.results.length; index += 1) {
+        const result = event.results[index]
+        if (result?.isFinal) spoken += result[0]?.transcript ?? ''
+      }
+      appendDictationRef.current(spoken)
+    }
+    session.onerror = (event) => {
+      if (event.error === 'not-allowed' || event.error === 'service-not-allowed' || event.error === 'audio-capture') {
+        setError('The microphone could not be used.')
+      }
+      dictation.current = null
+      setDictating(false)
+    }
+    session.onend = () => {
+      if (dictation.current === session) dictation.current = null
+      setDictating(false)
+    }
+    try {
+      session.start()
+    } catch {
+      setCanDictate(false)
+      return
+    }
+    dictation.current = session
+    setDictating(true)
+    setError(null)
+  }
 
   function persist(next: ComposerValue) {
     const text = getComposerText(next)
@@ -319,6 +390,7 @@ export const ChatComposer = forwardRef<
   useImperativeHandle(ref, () => ({ addFiles: (incoming) => void takeFiles(incoming) }))
 
   function send(draft: ComposerValue) {
+    stopDictation()
     const text = getComposerText(draft).trim()
     const sending = attachments.map(({ name, mediaType, data }) => ({ name, mediaType, data }))
     if (!text && sending.length === 0) return
@@ -355,6 +427,7 @@ export const ChatComposer = forwardRef<
   return (
     <div
       ref={rootRef}
+      data-slot="chat-composer"
       className={`w-full rounded-[1.25rem] border border-zinc-700/80 bg-[#141416] text-zinc-100 ${dragging ? 'ring-2 ring-white/30' : ''}`}
       onDragOver={onDragOver}
       onDragLeave={() => setDragging(false)}
@@ -372,9 +445,9 @@ export const ChatComposer = forwardRef<
       {attachments.length > 0 && (
         <ul aria-label="Attachments" className="flex flex-wrap gap-1.5 px-2 pt-2">
           {attachments.map((attachment) => (
-            <li key={attachment.id} className="flex items-center gap-1 rounded-lg bg-white/10 py-0.5 pr-0.5 pl-0.5">
+            <li key={attachment.id} className="flex items-center gap-1 rounded-xl bg-white/10 p-1">
               {attachment.previewUrl ? (
-                <img src={attachment.previewUrl} alt={attachment.name} className="size-9 rounded-md object-cover" />
+                <img src={attachment.previewUrl} alt={attachment.name} className="size-14 rounded-lg object-cover" />
               ) : (
                 <span className="max-w-36 truncate px-2 text-xs text-zinc-200">{attachment.name}</span>
               )}
@@ -386,7 +459,7 @@ export const ChatComposer = forwardRef<
         </ul>
       )}
       <Composer
-        layout="adaptive"
+        layout="stacked"
         value={value}
         onValueChange={change}
         onSubmit={send}
@@ -402,9 +475,15 @@ export const ChatComposer = forwardRef<
           { character: '@', items: fileMentions ? fileItems : projectItems, filter: fileMentions ? fuzzyMatch : undefined },
           { character: '/', items: [...skillItems, ...commandItems], filter: fuzzyMatch },
         ]}
-        className="border-0 bg-transparent text-zinc-100 shadow-none ring-0 [--composer-radius:1.25rem]"
+        className="w-full items-stretch border-0 bg-transparent text-left text-zinc-100 shadow-none ring-0 [--composer-min-rows:1] [--composer-radius:1.25rem]"
       >
-        <ComposerInput aria-label={label} placeholder={placeholder} className="text-zinc-100" />
+        {/* Pin the empty placeholder to the text origin. The field's ::before is absolute
+            and otherwise keeps a static position Chromium centers in the line box. */}
+        <ComposerInput
+          aria-label={label}
+          placeholder={placeholder}
+          className="text-left text-zinc-100 data-empty:before:top-1 data-empty:before:right-auto data-empty:before:bottom-auto data-empty:before:left-[calc(--spacing(3)-1px)] data-empty:before:w-max data-empty:before:text-left"
+        />
         <ComposerPopup className="overflow-hidden border-zinc-700 shadow-xl">
           <div className="mention-menu">
             <ComposerList aria-label={listLabel}>
@@ -416,8 +495,7 @@ export const ChatComposer = forwardRef<
             </ComposerList>
           </div>
         </ComposerPopup>
-        <ComposerActions>
-          {toolbar}
+        <ComposerActions className="w-full items-center justify-between">
           <ComposerActionGroup align="start">
             <input
               id={pickerId}
@@ -431,23 +509,30 @@ export const ChatComposer = forwardRef<
                 event.target.value = ''
               }}
             />
-            <Button type="button" size="icon" variant="ghost" className="text-zinc-300 hover:bg-white/10 hover:text-white" aria-label="Add attachment" onClick={() => picker.current?.click()}>
+            <Button type="button" size="icon" variant="ghost" className="rounded-full text-zinc-300 hover:bg-white/10 hover:text-white" aria-label="Add attachment" onClick={() => picker.current?.click()}>
               <Plus />
             </Button>
           </ComposerActionGroup>
           <ComposerActionGroup align="end">
             {onStop && (
-              <Button type="button" variant="outline" size="icon-sm" className="border-zinc-600 text-zinc-200" aria-label="Stop" onClick={onStop}>
+              <Button type="button" variant="outline" size="icon" className="rounded-full border-zinc-600 text-zinc-200" aria-label="Stop" onClick={onStop}>
                 <Square />
               </Button>
             )}
-            <ComposerSubmit
-              render={
-                <Button size="icon-lg" className="rounded-full bg-white text-black hover:bg-zinc-200" aria-label={sendLabel}>
-                  <ArrowUp />
-                </Button>
-              }
-            />
+            {canDictate && (
+              <Button
+                type="button"
+                size="icon"
+                variant="ghost"
+                className={dictating ? 'rounded-full text-red-400 hover:bg-white/10' : 'rounded-full text-zinc-300 hover:bg-white/10 hover:text-white'}
+                aria-label="Dictate"
+                aria-pressed={dictating}
+                onClick={toggleDictation}
+              >
+                <Mic />
+              </Button>
+            )}
+            <ComposerSubmit render={<RoundSendButton label={sendLabel} />} />
           </ComposerActionGroup>
         </ComposerActions>
       </Composer>
@@ -492,6 +577,53 @@ function fuzzyMatch(item: ComposerItemValue, query: string) {
     from = found + 1
   }
   return named || (item.description ?? '').toLowerCase().includes(needle)
+}
+
+/** Round send control. Accent (white on the dark box) only when the message can be sent. */
+function RoundSendButton({ label, className, ...props }: { label: string } & ComponentProps<typeof Button>) {
+  const { canSubmit } = useComposerContext()
+  return (
+    <Button
+      {...props}
+      size="icon-lg"
+      aria-label={label}
+      className={`${className ?? ''} rounded-full disabled:opacity-100 ${canSubmit ? 'bg-white text-black hover:bg-zinc-200' : 'bg-white/15 text-zinc-500 hover:bg-white/15'}`}
+    >
+      <ArrowUp />
+    </Button>
+  )
+}
+
+function withAppendedText(current: ComposerValue, addition: string): ComposerValue {
+  const last = current.at(-1)
+  if (last && last.type === 'text') return [...current.slice(0, -1), { type: 'text', text: last.text + addition }]
+  return [...current, { type: 'text', text: addition }]
+}
+
+type DictationResult = { isFinal: boolean; 0?: { transcript: string } }
+
+type DictationEvent = { resultIndex: number; results: ArrayLike<DictationResult> }
+
+type DictationSession = {
+  continuous: boolean
+  interimResults: boolean
+  lang: string
+  onresult: ((event: DictationEvent) => void) | null
+  onerror: ((event: { error?: string }) => void) | null
+  onend: (() => void) | null
+  start: () => void
+  stop: () => void
+  abort: () => void
+}
+
+/** The Web Speech API, when this browser can dictate into the box. */
+function dictationConstructor(): (new () => DictationSession) | null {
+  if (typeof window === 'undefined') return null
+  const host = window as Window & {
+    SpeechRecognition?: new () => DictationSession
+    webkitSpeechRecognition?: new () => DictationSession
+  }
+  return host.SpeechRecognition ?? host.webkitSpeechRecognition ?? null
 }
 
 function release(drafts: DraftAttachment[]) {
