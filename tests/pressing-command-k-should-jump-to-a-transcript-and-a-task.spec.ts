@@ -13,10 +13,15 @@ async function openChat(page: Page) {
 }
 
 async function press(page: Page, key: string, dialog: string) {
-  // A key pressed before hydration is dropped, so press again until the dialog opens.
+  const commands = page.getByRole('dialog', { name: dialog })
+  // A closing dialog stays visible through its exit animation. Press only once
+  // it is gone, or the key is skipped and the palette finishes closing with no
+  // command to choose. A key pressed before hydration is dropped, so press again
+  // until it opens.
+  await expect(commands).toBeHidden()
   await expect(async () => {
-    if (await page.getByRole('dialog', { name: dialog }).isHidden()) await page.keyboard.press(key)
-    await expect(page.getByRole('dialog', { name: dialog })).toBeVisible({ timeout: 1_000 })
+    if (await commands.isHidden()) await page.keyboard.press(key)
+    await expect(commands).toBeVisible({ timeout: 1_000 })
   }).toPass()
 }
 
@@ -104,9 +109,8 @@ test('the command palette should switch chats and open settings', async ({ page,
 
   await press(page, 'ControlOrMeta+k', 'Commands')
   await expect(page.getByRole('option', { name: 'Switch to BusyBoy' })).toBeVisible()
-  // A leaked shortcut key filters the list. Clear it so Settings is one of the commands.
-  await page.getByRole('textbox', { name: 'Search chats and commands' }).fill('')
-  await page.getByRole('option', { name: 'Settings', exact: true }).click({ force: true })
+  await expect(page.getByRole('textbox', { name: 'Search chats and commands' })).toHaveValue('')
+  await page.getByRole('option', { name: 'Settings', exact: true }).click()
   await expect(page).toHaveURL(/\/settings$/)
   await expect(page.getByRole('main', { name: 'Settings' })).toBeVisible()
 })
@@ -116,7 +120,7 @@ test('pressing Cmd+N should start a new manager', async ({ page, context, baseUR
   await openChat(page)
 
   await press(page, 'ControlOrMeta+k', 'Commands')
-  await page.getByRole('option', { name: 'New task' }).click({ force: true })
+  await page.getByRole('option', { name: 'New task' }).click()
   await expect(page.getByRole('dialog', { name: 'New manager' })).toBeVisible()
   await page.keyboard.press('Escape')
   await expect(page.getByRole('dialog', { name: 'New manager' })).toBeHidden()
