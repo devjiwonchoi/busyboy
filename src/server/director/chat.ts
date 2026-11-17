@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { appendTranscriptLine, readTranscript, type TranscriptCursor } from './transcript-log'
 import { alwaysAskRulesAt } from '../always-ask-list'
 import { readChatHarness } from '../chat-harness'
+import { rulesFolderFor } from '../runner/user-rules'
 import { pathKey, samePath } from '../paths'
 import { BUSYBOY_FILES_RULE } from '../runner/always-ask'
 import { directorTiming } from './context'
@@ -493,6 +494,7 @@ async function ensureAgent(director: Director, provider: ProviderId, mcp: McpSer
     privateFolder: director.folder,
     model,
     effort,
+    rulesFolder: rulesFolderFor(director.folder),
   })
   director.agentId = agent.id
   director.instructions = instructions

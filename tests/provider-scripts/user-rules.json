@@ -1,0 +1,96 @@
+{
+  "provider": "claude",
+  "description": "Hand-written: task agents whose tool calls are checked against rules in ~/.jwn.",
+  "turns": [
+    {
+      "prompt": "Print the secret token.",
+      "steps": [
+        {
+          "toolCall": {
+            "name": "Bash",
+            "input": {
+              "command": "echo secret-token"
+            }
+          },
+          "then": {
+            "allow": [
+              {
+                "event": {
+                  "type": "text",
+                  "itemId": "token-allow",
+                  "text": "Printed the token."
+                }
+              }
+            ],
+            "deny": [
+              {
+                "event": {
+                  "type": "text",
+                  "itemId": "token-deny",
+                  "text": "I did not print the token."
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "prompt": "Print the working directory.",
+      "steps": [
+        {
+          "toolCall": {
+            "name": "Bash",
+            "input": {
+              "command": "pwd"
+            }
+          },
+          "then": {
+            "allow": [
+              {
+                "event": {
+                  "type": "text",
+                  "itemId": "pwd-allow",
+                  "text": "Printed the working directory."
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "prompt": "Say hello in the terminal.",
+      "steps": [
+        {
+          "toolCall": {
+            "name": "Bash",
+            "input": {
+              "command": "echo hello"
+            }
+          },
+          "then": {
+            "allow": [
+              {
+                "event": {
+                  "type": "text",
+                  "itemId": "hello-allow",
+                  "text": "Said hello."
+                }
+              }
+            ],
+            "deny": [
+              {
+                "event": {
+                  "type": "text",
+                  "itemId": "hello-deny",
+                  "text": "I did not say hello."
+                }
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

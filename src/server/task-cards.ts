@@ -220,6 +220,20 @@ export function presentCard({
   openCard(storeFor(folder), { card, agentId, requestId })
 }
 
+/**
+ * Replaces an open card and keeps the agent it belongs to. Used when the end-state
+ * share arrives for a done card the task agent already opened.
+ */
+export function replaceOpenCard({ folder, card }: { folder: string; card: TaskCard }) {
+  const store = storeFor(folder)
+  const entry = store.open.get(card.id)
+  if (!entry) return false
+  const next = { ...card, openedAt: entry.card.openedAt }
+  if (JSON.stringify(entry.card) === JSON.stringify(next)) return true
+  openCard(store, { ...entry, card: next })
+  return true
+}
+
 /** Closes a card with `outcome`, the same path as answering one. */
 export function settleCard({ folder, cardId, outcome }: { folder: string; cardId: string; outcome: string }) {
   const store = storeFor(folder)

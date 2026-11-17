@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { promisify } from 'node:util'
 import { getAgent, subscribeToAgent } from '../runner/agent-runner'
 import { findExecutable } from '../runner/find-executable'
+import { readEndStateAchievement } from '../records/end-state'
 import { parseRecords, type RecordTexts, type TodoResult } from '../records/parse-records'
 import { CardError, openCards, presentCard, settleCard } from '../task-cards'
 import type { ProgressStep, ProgressStepState, PullRequestCheck, PullRequestRow, TaskCard } from './model'
@@ -71,7 +72,16 @@ async function syncWorkCards(folder: string, task: WorkTask, fresh: () => boolea
   if (finished) {
     // Replace the progress card in place. Settling it would also write a second closed card.
     const progress = openCards(folder).find((card) => card.id === progressId(task.id))
-    show(folder, task, { ...source(task, progress?.id ?? doneId(task.id), progress?.openedAt ?? now), kind: 'done', title: task.title })
+    const report = await readEndStateAchievement(folder).catch(() => null)
+    if (!fresh()) return
+    const found = report?.ok ? report.tasks.find((item) => item.project === task.project && item.taskId === task.id && item.agreed > 0) : undefined
+    show(folder, task, {
+      ...source(task, progress?.id ?? doneId(task.id), progress?.openedAt ?? now),
+      kind: 'done',
+      title: task.title,
+      // The share of agreed end-state items met on main. Null keeps the line as check, name, and Done.
+      achievement: found ? { met: found.met, agreed: found.agreed } : null,
+    })
   } else {
     settleIfOpen(folder, doneId(task.id), 'Reopened')
     const progress = openCards(folder).find((card) => card.id === progressId(task.id))

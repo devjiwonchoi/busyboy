@@ -10,12 +10,13 @@ import type { CardViewProps } from '../card-view-props'
 import { useCardActions } from '../card-actions'
 import { CardShell, CardShellHeader } from '../card-shell'
 
-/** One compact line: a check, the task name, Done, and a link to the plan. */
+/** One compact line: a check, the task name, Done, the end-state share, and a link to the plan. */
 export function DoneCardView({ card }: CardViewProps<DoneCard>) {
   const { replying } = useCardActions()
   const [open, setOpen] = useState(false)
   const [plan, setPlan] = useState<{ title: string; plan: string } | null>(null)
   const [missing, setMissing] = useState(false)
+  const share = card.achievement
 
   async function viewPlan() {
     setOpen(true)
@@ -38,7 +39,10 @@ export function DoneCardView({ card }: CardViewProps<DoneCard>) {
               <Check className="size-2.5" strokeWidth={3} />
             </span>
             <span className="font-semibold">{card.taskTitle}</span>
-            <span className="text-muted-foreground font-normal"> · Done</span>
+            <span className="text-muted-foreground font-normal">
+              {' · Done'}
+              {share ? ` · ${share.met}/${share.agreed} end state` : ''}
+            </span>
           </span>
         }
         meta={

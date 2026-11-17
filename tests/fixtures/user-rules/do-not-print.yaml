@@ -1,0 +1,4 @@
+rules:
+  - name: Do not print the secret token
+    block: "Bash(echo secret-token*)"
+    reason: The token must stay out of the terminal.

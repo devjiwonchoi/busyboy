@@ -12,6 +12,7 @@ import {
   type SDKUserMessage,
 } from '@anthropic-ai/claude-agent-sdk'
 import { alwaysAskApproval, createAllowedCalls, matchAlwaysAsk } from './always-ask'
+import { checkUserRules, userRuleApproval, userRulesHookNeeded } from './user-rules'
 import { ClaudeEventMapper, claudePermissionToEvent, type ClaudeRawMessage } from './claude-events'
 import { spawnClaudeProcess, type ClaudeProcess } from './claude-process'
 import type {
@@ -176,23 +177,8 @@ function startClaude(options: ProviderStartOptions): ProviderSession {
    * canUseTool only for calls it would ask about itself, and it does not ask
    * about some irreversible ones; a hook runs for every call.
    */
-  const alwaysAsk: HookCallback = async (hookInput, toolUseID, { signal }) => {
-    if (hookInput.hook_event_name !== 'PreToolUse') {
-      return {}
-    }
-    const { tool_name: toolName, tool_input: toolInput } = hookInput
-    const rule = matchAlwaysAsk({ rules: options.alwaysAsk ?? [], toolName, input: toolInput, folder: options.cwd, privateFolder: options.privateFolder, noFileEdits: options.noFileEdits })
-    if (!rule) {
-      return {}
-    }
-    // The hook names the shell's current folder, which a `cd` in an earlier call may have changed.
-    const call = { toolName, input: toolInput, rule, cwd: hookInput.cwd || options.cwd }
-    if (allowedCalls.has(call)) {
-      return { hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'allow', permissionDecisionReason: 'The user approved this exact action before.' } }
-    }
-
-    const requestId = `always-ask-${toolUseID ?? randomUUID()}`
-    const answer = await new Promise<AgentAnswer | null>((resolve) => {
+  const waitForApproval = (requestId: string, event: Extract<AgentEvent, { type: 'approval' }>, signal: AbortSignal) =>
+    new Promise<AgentAnswer | null>((resolve) => {
       const onAbort = () => {
         asks.delete(requestId)
         resolve(null)
@@ -205,8 +191,51 @@ function startClaude(options: ProviderStartOptions): ProviderSession {
         resolve(value)
       })
       mapper.flush()
-      emit(alwaysAskApproval({ requestId, toolName, input: toolInput, rule }))
+      emit(event)
     })
+
+  const deny = (reason: string) => ({
+    hookSpecificOutput: {
+      hookEventName: 'PreToolUse' as const,
+      permissionDecision: 'deny' as const,
+      permissionDecisionReason: reason,
+    },
+  })
+
+  const alwaysAsk: HookCallback = async (hookInput, toolUseID, { signal }) => {
+    if (hookInput.hook_event_name !== 'PreToolUse') {
+      return {}
+    }
+    const { tool_name: toolName, tool_input: toolInput } = hookInput
+    // The hook names the shell's current folder, which a `cd` in an earlier call may have changed.
+    const cwd = hookInput.cwd || options.cwd
+    // User rules run first and fail closed: a check that throws or cannot be read blocks and asks.
+    const userRule = await checkUserRules({ rulesFolder: options.rulesFolder, toolName, input: toolInput, cwd })
+    if (userRule.ask) {
+      const call = { toolName, input: toolInput, rule: userRule.ruleKey, cwd }
+      if (!(userRule.remember && allowedCalls.has(call))) {
+        const requestId = `user-rule-${toolUseID ?? randomUUID()}`
+        const answer = await waitForApproval(
+          requestId,
+          userRuleApproval({ requestId, toolName, input: toolInput, detail: userRule.detail, remember: userRule.remember }),
+          signal,
+        )
+        const allowed = answer?.kind === 'approval' && answer.allow
+        if (allowed && answer.forSession && userRule.remember) allowedCalls.add(call)
+        if (!allowed) return deny((answer?.kind === 'approval' && answer.message) || 'The user declined this action.')
+      }
+    }
+    const rule = matchAlwaysAsk({ rules: options.alwaysAsk ?? [], toolName, input: toolInput, folder: options.cwd, privateFolder: options.privateFolder, noFileEdits: options.noFileEdits })
+    if (!rule) {
+      return {}
+    }
+    const call = { toolName, input: toolInput, rule, cwd }
+    if (allowedCalls.has(call)) {
+      return { hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'allow', permissionDecisionReason: 'The user approved this exact action before.' } }
+    }
+
+    const requestId = `always-ask-${toolUseID ?? randomUUID()}`
+    const answer = await waitForApproval(requestId, alwaysAskApproval({ requestId, toolName, input: toolInput, rule }), signal)
     const allowed = answer?.kind === 'approval' && answer.allow
     if (allowed && answer.forSession) allowedCalls.add(call)
     const declined = (answer?.kind === 'approval' && answer.message) || 'The user declined this action.'
@@ -317,7 +346,7 @@ function startClaude(options: ProviderStartOptions): ProviderSession {
         canUseTool,
         // `block`: a hook that fails or times out stops the tool call instead of letting it run unasked.
         hooks:
-          (options.alwaysAsk?.length || options.privateFolder || options.noFileEdits) && !options.noTools
+          (options.alwaysAsk?.length || options.privateFolder || options.noFileEdits || userRulesHookNeeded(options.rulesFolder)) && !options.noTools
             ? { PreToolUse: [{ hooks: [alwaysAsk], timeout: ALWAYS_ASK_TIMEOUT_S, onFailure: 'block' }] }
             : undefined,
         // The servers are added after start (registerMcpServers), but the rule

@@ -193,6 +193,7 @@ function launch(agent: AgentRecord, resumeSessionId?: string) {
       noFileEdits: agent.input.noFileEdits,
       model: agent.input.model,
       effort: agent.input.effort,
+      rulesFolder: agent.input.rulesFolder,
       emit: (event) => record(agent, event),
     })
     if (agent.status === 'starting') agent.status = 'idle'

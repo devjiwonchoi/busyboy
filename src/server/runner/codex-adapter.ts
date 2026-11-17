@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto'
 import { createInterface } from 'node:readline'
 // Not Claude-specific: it spawns any CLI as the leader of its own process group.
 import { alwaysAskApproval, createAllowedCalls, matchAlwaysAsk } from './always-ask'
+import { checkUserRules, userRuleApproval, userRulesHookNeeded } from './user-rules'
 import { folderKey, registerGate, threadKey, trustedHookConfig, type HookDecision } from './codex-always-ask'
 import { spawnClaudeProcess as spawnProcessGroup, type ClaudeProcess as GroupProcess } from './claude-process'
 import {
@@ -250,18 +251,12 @@ function startCodex(options: ProviderStartOptions): ProviderSession {
   const asks = new Map<string, (answer: AgentAnswer | null) => void>()
   const allowedCalls = createAllowedCalls()
   const unregisterGates: (() => void)[] = []
-  const alwaysAsk = !options.noTools && ((options.alwaysAsk?.length ?? 0) > 0 || Boolean(options.privateFolder) || Boolean(options.noFileEdits))
+  const alwaysAsk =
+    !options.noTools &&
+    ((options.alwaysAsk?.length ?? 0) > 0 || Boolean(options.privateFolder) || Boolean(options.noFileEdits) || userRulesHookNeeded(options.rulesFolder))
 
-  /** Answers this thread's always-ask hook: allowed at once unless a rule matches, then the user decides. */
-  const gate = async ({ toolName, input, cwd, signal }: { toolName: string; input: unknown; cwd?: string; signal: AbortSignal }): Promise<HookDecision> => {
-    const rule = matchAlwaysAsk({ rules: options.alwaysAsk ?? [], toolName, input, folder: options.cwd, privateFolder: options.privateFolder, noFileEdits: options.noFileEdits })
-    // The folder the hook reports the call runs in; a folder named in the input is part of the key too.
-    const call = { toolName, input, rule: rule ?? '', cwd: cwd || options.cwd }
-    if (!rule || allowedCalls.has(call)) {
-      return { allow: true, reason: '' }
-    }
-    const requestId = `${requestPrefix}always-ask-${randomUUID()}`
-    const answer = await new Promise<AgentAnswer | null>((resolve) => {
+  const ask = (requestId: string, event: Extract<AgentEvent, { type: 'approval' }>, signal: AbortSignal) =>
+    new Promise<AgentAnswer | null>((resolve) => {
       // The hook went away, so nobody waits for this answer any more: close its card.
       signal.addEventListener(
         'abort',
@@ -275,8 +270,37 @@ function startCodex(options: ProviderStartOptions): ProviderSession {
       )
       asks.set(requestId, resolve)
       mapper.flush()
-      emit(alwaysAskApproval({ requestId, toolName, input, rule }))
+      emit(event)
     })
+
+  /** Answers this thread's hook: user rules first (fail closed), then the always-ask list. */
+  const gate = async ({ toolName, input, cwd, signal }: { toolName: string; input: unknown; cwd?: string; signal: AbortSignal }): Promise<HookDecision> => {
+    // The folder the hook reports the call runs in; a folder named in the input is part of the key too.
+    const folder = cwd || options.cwd
+    const userRule = await checkUserRules({ rulesFolder: options.rulesFolder, toolName, input, cwd: folder })
+    if (userRule.ask) {
+      const call = { toolName, input, rule: userRule.ruleKey, cwd: folder }
+      if (!(userRule.remember && allowedCalls.has(call))) {
+        const requestId = `${requestPrefix}user-rule-${randomUUID()}`
+        const answer = await ask(
+          requestId,
+          userRuleApproval({ requestId, toolName, input, detail: userRule.detail, remember: userRule.remember }),
+          signal,
+        )
+        asks.delete(requestId)
+        if (!(answer?.kind === 'approval' && answer.allow)) {
+          return { allow: false, reason: (answer?.kind === 'approval' && answer.message) || 'The user declined this action.' }
+        }
+        if (answer.forSession && userRule.remember) allowedCalls.add(call)
+      }
+    }
+    const rule = matchAlwaysAsk({ rules: options.alwaysAsk ?? [], toolName, input, folder: options.cwd, privateFolder: options.privateFolder, noFileEdits: options.noFileEdits })
+    const call = { toolName, input, rule: rule ?? '', cwd: folder }
+    if (!rule || allowedCalls.has(call)) {
+      return { allow: true, reason: '' }
+    }
+    const requestId = `${requestPrefix}always-ask-${randomUUID()}`
+    const answer = await ask(requestId, alwaysAskApproval({ requestId, toolName, input, rule }), signal)
     asks.delete(requestId)
     if (answer?.kind === 'approval' && answer.allow) {
       if (answer.forSession) allowedCalls.add(call)

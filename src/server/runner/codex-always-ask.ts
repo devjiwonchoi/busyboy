@@ -6,6 +6,7 @@ import { resolveDataFolder } from '../config'
 import { containsPath } from '../paths'
 import { listProjects } from '../projects'
 import { matchAlwaysAsk } from './always-ask'
+import { checkUserRules, resolveRulesFolder } from './user-rules'
 
 // Codex's Auto mode lets its auto reviewer approve escalations without the
 // user, so the always-ask list reaches Codex through a PreToolUse command hook
@@ -66,6 +67,14 @@ export function decideHookCall({ call, signal }: { call: HookCall; signal: Abort
 }
 
 async function decideUnowned(call: HookCall): Promise<HookDecision> {
+  // No session to show a card. A matching rule, or a check that cannot be read, is still blocked.
+  const userRule = await checkUserRules({
+    rulesFolder: resolveRulesFolder(undefined),
+    toolName: call.toolName,
+    input: call.input,
+    cwd: call.cwd ?? '',
+  })
+  if (userRule.ask) return { allow: false, reason: userRule.detail }
   const cwd = call.cwd
   if (!cwd) return { allow: true, reason: '' }
   const folders = [resolveDataFolder(), ...(await listProjects()).map(({ path }) => path)]
