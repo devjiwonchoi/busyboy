@@ -541,10 +541,10 @@ function EntryView({
         <Message align="end">
           <MessageContent>
             {entry.to && <MessageHeader>To {entry.to}</MessageHeader>}
-            <div className="relative flex w-full min-w-0 flex-col items-end pt-7">
-              <Bubble role="group" aria-label={entry.to ? `Your reply to ${entry.to}` : 'Your message'}>
-                <BubbleContent className="whitespace-pre-wrap">{entry.text}</BubbleContent>
-              </Bubble>
+            <Bubble role="group" aria-label={entry.to ? `Your reply to ${entry.to}` : 'Your message'}>
+              <BubbleContent className="whitespace-pre-wrap">{entry.text}</BubbleContent>
+            </Bubble>
+            <MessageFooter className="h-6">
               <MessageActions
                 align="end"
                 text={entry.text}
@@ -552,27 +552,28 @@ function EntryView({
                 onEdit={!entry.to && canEdit && turn?.user.id === entry.id ? () => onEdit(entry.text, entry.id) : undefined}
                 onRetry={turn?.retry && !turn.reply && turn.user.id === entry.id ? onRetry : undefined}
               />
-            </div>
+            </MessageFooter>
           </MessageContent>
         </Message>
       )
     case 'director':
       return (
         <DirectorMessage persona={persona}>
-          <div className="relative flex w-full min-w-0 flex-col items-start pt-7">
-            <Bubble variant="muted" role="group" aria-label="Reply" data-interrupted={entry.interrupted || undefined}>
-              <BubbleContent>
-                <Markdown text={entry.text} />
-              </BubbleContent>
-            </Bubble>
+          <Bubble variant="muted" role="group" aria-label="Reply" data-interrupted={entry.interrupted || undefined}>
+            <BubbleContent>
+              <Markdown text={entry.text} />
+            </BubbleContent>
+          </Bubble>
+          {/* h-6 plus the content gap matches the 2rem the avatar lifts when a footer is present. */}
+          <MessageFooter className="h-6 gap-1.5">
+            {entry.interrupted && <span>Interrupted</span>}
             <MessageActions
               align="start"
               text={entry.text}
               at={entry.at}
               onRetry={turn?.retry && turn.reply?.id === entry.id ? onRetry : undefined}
             />
-          </div>
-          {entry.interrupted && <MessageFooter>Interrupted</MessageFooter>}
+          </MessageFooter>
         </DirectorMessage>
       )
     case 'tasks':
