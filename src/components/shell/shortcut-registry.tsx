@@ -33,6 +33,8 @@ type Keys = Pick<Shortcut, 'key' | 'mod' | 'shift' | 'alt'>
 // and plain Cmd+S stays Save. Defined here so the terminal lets the same keys through.
 export const TOGGLE_SIDEBAR_KEYS = { key: 's', mod: true, alt: true } as const
 export const TOGGLE_PANEL_KEYS = { key: 'j', mod: true } as const
+export const COMMAND_PALETTE_KEYS = { key: 'k', mod: true } as const
+export const NEW_TASK_KEYS = { key: 'n', mod: true } as const
 
 const ShortcutRegistryContext = createContext<Registry | null>(null)
 

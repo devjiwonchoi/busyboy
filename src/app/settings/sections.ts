@@ -3,6 +3,7 @@
 
 export const SECTIONS = [
   { id: 'companion', title: 'Director' },
+  { id: 'appearance', title: 'Appearance' },
   { id: 'agents', title: 'Agents' },
   { id: 'connectors', title: 'Connectors' },
   { id: 'approvals', title: 'Approvals' },

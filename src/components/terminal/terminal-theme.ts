@@ -58,7 +58,7 @@ function tokenColor(host: HTMLElement, token: string, context: CanvasRenderingCo
 }
 
 function prefersDark() {
-  return window.matchMedia('(prefers-color-scheme: dark)').matches
+  return document.documentElement.classList.contains('dark')
 }
 
 /** Builds the terminal theme from the app's current color tokens. */

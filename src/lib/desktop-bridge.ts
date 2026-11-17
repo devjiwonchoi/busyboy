@@ -17,6 +17,12 @@ export const UPDATE_STATE_CHANNEL = 'busyboy:update-state'
 /** IPC channel that restarts the app into the downloaded update. */
 export const INSTALL_UPDATE_CHANNEL = 'busyboy:install-update'
 
+/** IPC channel that opens a task worktree in the user's editor. */
+export const OPEN_IN_EDITOR_CHANNEL = 'busyboy:open-in-editor'
+
+/** IPC channel that shows a task worktree in the file manager. */
+export const REVEAL_IN_FOLDER_CHANNEL = 'busyboy:reveal-in-folder'
+
 /** Name of the bridge on `window`. */
 export const DESKTOP_BRIDGE_KEY = 'busyboyDesktop'
 
@@ -37,6 +43,10 @@ export type DesktopBridge = {
   onUpdateReady(listener: (version: string) => void): () => void
   /** Restarts the app into the downloaded update. */
   installUpdate(): Promise<void>
+  /** Opens a folder in the user's editor. */
+  openInEditor(path: string): Promise<void>
+  /** Shows a folder in the file manager. */
+  revealInFolder(path: string): Promise<void>
 }
 
 export function desktopBridge(): DesktopBridge | undefined {

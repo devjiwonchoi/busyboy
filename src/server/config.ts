@@ -6,6 +6,7 @@ import { cookies } from 'next/headers'
 import { unstable_rethrow } from 'next/navigation'
 import { SERVER_TOKEN_ENV, TEST_MODE_ENV } from '@/lib/server-token'
 import { pathKey } from './paths'
+import { isThemeName, type ThemeName } from '@/lib/theme'
 import type { ProviderId } from './runner/contract'
 
 // The data folder is shared with the legacy app, which keeps its own files
@@ -46,6 +47,8 @@ export type Settings = {
   setupCompletedAt: string | null
   /** Used when more than one provider is signed in. */
   defaultProvider: ProviderId | null
+  /** System follows the device. Dark is the default, including when this is missing on disk. */
+  theme: ThemeName
   /** The companion id the user picked in setup (see server/companions.ts). */
   companion: string | null
   /** File name of the user's own companion picture inside the data folder. */
@@ -66,6 +69,7 @@ const EMPTY_SETTINGS: Settings = {
   version: 1,
   setupCompletedAt: null,
   defaultProvider: null,
+  theme: 'dark',
   companion: null,
   companionImage: null,
   projects: [],
@@ -140,6 +144,7 @@ function parseSettings(text: string): Settings | undefined {
     version: typeof value.version === 'number' && value.version > 1 ? value.version : 1,
     setupCompletedAt: typeof value.setupCompletedAt === 'string' ? value.setupCompletedAt : null,
     defaultProvider: value.defaultProvider === 'claude' || value.defaultProvider === 'codex' ? value.defaultProvider : null,
+    theme: isThemeName(value.theme) ? value.theme : 'dark',
     companion: typeof value.companion === 'string' ? value.companion : null,
     companionImage: typeof value.companionImage === 'string' ? value.companionImage : null,
     projects: Array.isArray(value.projects)

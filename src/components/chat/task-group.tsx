@@ -4,6 +4,7 @@ import { Archive, ArchiveRestore, MessageSquare, Square } from 'lucide-react'
 import { useState } from 'react'
 import { archiveTaskAction, restoreTaskAction, stopTaskAction } from '@/app/(main)/director-actions'
 import { useTaskSelection } from '@/components/shell/shell-state'
+import { cn } from '@/lib/utils'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -39,12 +40,15 @@ export function TaskGroup({
   taskIds,
   tasks,
   messaging,
+  currentJump = null,
   onMessage,
 }: {
   taskIds: string[]
   tasks: Map<string, TaskView>
   /** The task the composer's next message goes to, if any. */
   messaging: string | null
+  /** The command-palette hit to mark, `task-<id>`. */
+  currentJump?: string | null
   onMessage: (taskId: string | null) => void
 }) {
   const { selectedTask, toggleTask } = useTaskSelection()
@@ -75,7 +79,13 @@ export function TaskGroup({
                 const status = task ? (task.archived ? ARCHIVED : done ? DONE : STATUS[task.status]) : undefined
                 const working = task?.status === 'running' || task?.status === 'needs-you'
                 return (
-                  <li key={id} aria-label={task ? `${task.project} · ${task.title}` : id} className="space-y-1">
+                  <li
+                    key={id}
+                    aria-label={task ? `${task.project} · ${task.title}` : id}
+                    data-jump-id={`task-${id}`}
+                    data-current={currentJump === `task-${id}` ? 'true' : undefined}
+                    className={cn('space-y-1', currentJump === `task-${id}` && 'rounded-md ring-2 ring-ring')}
+                  >
                     <div className="flex items-center gap-3">
                       {task?.subagent ? (
                         // A subagent has no worktree, so there is nothing to select for the terminal.

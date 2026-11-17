@@ -224,6 +224,13 @@ async function callMcpTool({ url, headers, tool, input }: McpCall) {
 
 function startScripted(folder: string, options: ProviderStartOptions): ProviderSession {
   const { provider } = options
+  // Journeys read this to see the model and effort the chat asked the harness to use.
+  if (options.model || options.effort) {
+    writeFileSync(
+      join(options.cwd, 'harness-start.json'),
+      `${JSON.stringify({ provider, ...(options.model ? { model: options.model } : {}), ...(options.effort ? { effort: options.effort } : {}) }, null, 2)}\n`,
+    )
+  }
   const lost = [options.resumeSessionId, options.forkSessionId].find((id) => id?.startsWith(MISSING_SESSION_PREFIX))
   const { sessionId, history } = lost ? { sessionId: lost, history: [] } : openHistory(options)
   let turnDone = false

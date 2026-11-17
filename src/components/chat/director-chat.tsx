@@ -12,7 +12,9 @@ import {
 } from '@/app/(main)/director-actions'
 import { EscapeShortcut } from '@/components/shell/shortcut-registry'
 import { cn } from '@/lib/utils'
+import type { ChatHarness } from '@/server/chat-harness'
 import type { ChatEntry, DirectorStatus, DirectorUpdate } from '@/server/director/chat'
+import type { ProviderId } from '@/server/runner/contract'
 import type { TaskCard } from '@/server/cards/model'
 import type { TaskView } from '@/server/tasks'
 import { Alert, AlertDescription } from '@/components/ui/alert'
@@ -22,6 +24,8 @@ import { Message, MessageAvatar, MessageContent, MessageFooter, MessageHeader } 
 import { ClosedCard } from './cards/closed-card'
 import { OpenCard } from './cards/open-card'
 import { mergeTimeline } from './cards/timeline'
+import { ContextMeter, type ContextUsage } from './context-meter'
+import { HarnessPicker } from './harness-picker'
 import { ChatComposer, type ChatComposerHandle, type ComposerMessage } from './composer'
 import { Markdown } from './markdown'
 import { MessageActions } from './message-actions'
@@ -38,11 +42,12 @@ type View = {
   status: DirectorStatus
   draft: string
   queue: string[]
+  usage: ContextUsage | null
   connected: boolean
   sendError?: string
 }
 
-const initialView: View = { entries: [], tasks: new Map(), cards: [], status: 'idle', draft: '', queue: [], connected: false }
+const initialView: View = { entries: [], tasks: new Map(), cards: [], status: 'idle', draft: '', queue: [], usage: null, connected: false }
 
 type UserEntry = Extract<ChatEntry, { kind: 'user' }>
 type DirectorReply = Extract<ChatEntry, { kind: 'director' }>
@@ -100,6 +105,7 @@ function apply(view: View, update: DirectorUpdate): View {
         status: update.status,
         draft: update.draft,
         queue: update.queue,
+        usage: update.usage,
         connected: true,
       }
     case 'entry': {
@@ -117,6 +123,8 @@ function apply(view: View, update: DirectorUpdate): View {
       return { ...view, draft: update.text }
     case 'status':
       return { ...view, status: update.status }
+    case 'usage':
+      return { ...view, usage: update.usage }
     case 'task':
       return { ...view, tasks: new Map(view.tasks).set(update.task.id, update.task) }
     case 'card-opened':
@@ -138,6 +146,8 @@ export function DirectorChat({
   managedProject = null,
   header,
   greeting,
+  harnessFallback,
+  initialHarness,
 }: {
   projects: string[]
   persona: Persona
@@ -148,6 +158,9 @@ export function DirectorChat({
   /** Shown above the greeting in place of the name. */
   header?: string
   greeting: string
+  /** Harness shown until this chat stores its own. */
+  harnessFallback: ProviderId
+  initialHarness: ChatHarness | null
 }) {
   const [view, setView] = useState(initialView)
   // The card the composer replies to, picked only by the user with a card's Reply. A card
@@ -174,6 +187,8 @@ export function DirectorChat({
   const seedToken = useRef(0)
   const retrying = useRef(false)
   const scroller = useRef<HTMLDivElement>(null)
+  const honoredJump = useRef<string | null>(null)
+  const [jumpId, setJumpId] = useState<string | null>(null)
   const name = persona.name
 
   useEffect(() => {
@@ -197,12 +212,29 @@ export function DirectorChat({
     return () => source.close()
   }, [chat])
 
-  // Keep the newest message in view. Set scrollTop directly (scrollIntoView
-  // returns a Promise in this Chromium, which an effect must not return).
+  useEffect(() => {
+    const read = () => setJumpId(decodeURIComponent(window.location.hash.replace(/^#/, '')) || null)
+    read()
+    window.addEventListener('hashchange', read)
+    return () => window.removeEventListener('hashchange', read)
+  }, [])
+
+  // Keep the newest message in view, unless a command-palette hit asked for a line.
+  // Set scrollTop directly (scrollIntoView returns a Promise in this Chromium,
+  // which an effect must not return).
   useLayoutEffect(() => {
     const element = scroller.current
-    if (element) element.scrollTop = element.scrollHeight
-  }, [view.entries, view.draft, view.tasks, view.cards])
+    if (!element) return
+    const target = jumpId ? element.querySelector<HTMLElement>(`[data-jump-id="${CSS.escape(jumpId)}"]`) : null
+    if (jumpId && target && honoredJump.current !== jumpId) {
+      target.scrollIntoView({ block: 'center' })
+      honoredJump.current = jumpId
+      return
+    }
+    // Stay on a hit. A cleared hash (the next message) follows the bottom again.
+    if (jumpId && target) return
+    element.scrollTop = element.scrollHeight
+  }, [view.entries, view.draft, view.tasks, view.cards, jumpId])
 
   const turn = latestTurn(view.entries)
   const canEdit = view.status === 'idle' && view.queue.length === 0
@@ -272,6 +304,11 @@ export function DirectorChat({
   const composer = useRef<ChatComposerHandle>(null)
 
   function sendComposer(message: ComposerMessage) {
+    if (window.location.hash) {
+      history.replaceState(null, '', `${window.location.pathname}${window.location.search}`)
+      honoredJump.current = null
+      setJumpId(null)
+    }
     if (replyLost) {
       setReplyLost(false)
       setView((current) => ({
@@ -370,8 +407,13 @@ export function DirectorChat({
                 }}
               />
             ) : (
-              <EntryView
+              <div
                 key={row.key}
+                data-jump-id={`entry-${row.entry.id}`}
+                data-current={jumpId === `entry-${row.entry.id}` ? 'true' : undefined}
+                className={jumpId === `entry-${row.entry.id}` ? 'rounded-md ring-2 ring-ring' : undefined}
+              >
+              <EntryView
                 entry={row.entry}
                 tasks={view.tasks}
                 persona={persona}
@@ -380,6 +422,7 @@ export function DirectorChat({
                 canEdit={canEdit}
                 onEdit={beginEdit}
                 onRetry={retry}
+                currentJump={jumpId}
                 onMessage={(taskId) => {
                   // One target at a time: a task replaces a card reply.
                   choice.current = null
@@ -389,6 +432,7 @@ export function DirectorChat({
                   setMessageChoice(taskId)
                 }}
               />
+              </div>
             ),
           )}
           {view.draft && (
@@ -408,6 +452,7 @@ export function DirectorChat({
         </section>
       </div>
       <div className="mx-auto w-full max-w-3xl px-6 pb-4">
+        <ContextMeter usage={view.usage} />
         {suggestions.length > 0 && (
           <div role="group" aria-label="Suggested replies" className="mb-2 flex flex-wrap gap-1.5">
             {suggestions.map((text) => (
@@ -458,6 +503,7 @@ export function DirectorChat({
           onEmptyArrowUp={() => {
             if (turn && canEdit) beginEdit(turn.user.text, turn.user.id)
           }}
+          toolbar={<HarnessPicker chat={chat} fallback={harnessFallback} initial={initialHarness} />}
           leading={
             target ? (
               <ReplyTarget
@@ -512,6 +558,7 @@ function EntryView({
   canEdit,
   onEdit,
   onRetry,
+  currentJump,
   onMessage,
 }: {
   entry: ChatEntry
@@ -522,6 +569,7 @@ function EntryView({
   canEdit: boolean
   onEdit: (text: string, id: string) => void
   onRetry: () => void
+  currentJump: string | null
   onMessage: (taskId: string | null) => void
 }) {
   switch (entry.kind) {
@@ -565,7 +613,7 @@ function EntryView({
         </DirectorMessage>
       )
     case 'tasks':
-      return <TaskGroup taskIds={entry.taskIds} tasks={tasks} messaging={messaging} onMessage={onMessage} />
+      return <TaskGroup taskIds={entry.taskIds} tasks={tasks} messaging={messaging} currentJump={currentJump} onMessage={onMessage} />
     case 'card':
       return <ClosedCard entry={entry} />
     case 'note':

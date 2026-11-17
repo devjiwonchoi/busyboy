@@ -4,8 +4,8 @@
 /* Tailwind does not scan node_modules; Streamdown's markup uses its classes. */
 @source '../../node_modules/streamdown/dist/*.js';
 
-/* Dark mode follows the operating system. */
-@custom-variant dark (@media (prefers-color-scheme: dark));
+/* Dark mode follows the `dark` class on <html>. Settings chooses system, dark, or light. */
+@custom-variant dark (&:is(.dark *));
 
 :root {
   color-scheme: light;
@@ -57,8 +57,7 @@
   --status-stopped: oklch(0.6 0.22 25);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
+.dark {
     color-scheme: dark;
     --background: oklch(0.145 0 0);
     --foreground: oklch(0.985 0 0);
@@ -100,7 +99,6 @@
     --status-done: oklch(0.72 0.12 175);
     --status-idle: oklch(0.55 0 0);
     --status-stopped: oklch(0.7 0.19 22);
-  }
 }
 
 @theme inline {
