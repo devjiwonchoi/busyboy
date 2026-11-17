@@ -8,6 +8,7 @@ import { readEndStateAchievement } from '../records/end-state'
 import { parseRecords, type RecordTexts, type TodoResult } from '../records/parse-records'
 import { CardError, openCards, presentCard, settleCard } from '../task-cards'
 import type { ProgressStep, ProgressStepState, PullRequestCheck, PullRequestRow, TaskCard } from './model'
+import { linkTaskArtifacts } from './task-artifact'
 
 // Progress, done, and pull-request cards. Question, approval, and plan cards are
 // opened by trackTaskCards. These three come from the task's records: STATUS.md
@@ -258,8 +259,15 @@ export function parsePullRequests(status: string): PullRequestRow[] {
   return rows
 }
 
-/** The task's ALIGN.md, for the done card's View plan link. Null when the task has no plan. */
-export async function readTaskPlan({ folder, taskId }: { folder: string; taskId: string }) {
+export type TaskPlan = {
+  title: string
+  plan: string
+  /** VERIFY.md as written, or null when the task has none. Local files are addressed for this app. */
+  verify: string | null
+}
+
+/** The task's ALIGN.md and VERIFY.md, for the done card's View plan link. Null when the task has no plan. */
+export async function readTaskPlan({ folder, taskId }: { folder: string; taskId: string }): Promise<TaskPlan | null> {
   const { readTasksAt } = await import('../tasks')
   const task = (await readTasksAt(folder)).find((item) => item.id === taskId)
   if (!task) throw new CardError('The task for this card is gone.')
@@ -271,7 +279,21 @@ export async function readTaskPlan({ folder, taskId }: { folder: string; taskId:
     if ((await lstat(/*turbopackIgnore: true*/ path)).isSymbolicLink()) return null
     const plan = await readFile(/*turbopackIgnore: true*/ path, 'utf8')
     const title = /^#\s+ALIGN:\s*(.+?)\s*$/m.exec(plan)?.[1] ?? task.title
-    return { title, plan }
+    return { title, plan, verify: await readVerify(located.folder, task) }
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null
+    throw error
+  }
+}
+
+/** VERIFY.md beside the plan. A missing file or a symbolic link is no note, not an error. */
+async function readVerify(recordFolder: string, task: { id: string; worktree: string }) {
+  const path = join(/*turbopackIgnore: true*/ recordFolder, 'VERIFY.md')
+  try {
+    if ((await lstat(/*turbopackIgnore: true*/ path)).isSymbolicLink()) return null
+    const text = await readFile(/*turbopackIgnore: true*/ path, 'utf8')
+    if (!text.trim()) return null
+    return linkTaskArtifacts(text, { taskId: task.id, recordFolder, worktree: task.worktree })
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null
     throw error
