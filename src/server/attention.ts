@@ -2,7 +2,7 @@ import { subscribeToDirector } from "./director/chat";
 import type { GraphTask, NodeStatus, ProjectGraph } from "./records/project-graph";
 import { subscribeToProjectGraph } from "./records/record-watcher";
 
-// Only ids, project names, and task titles leave here, never replies or tool output.
+// why: Only ids, project names, and task titles leave here, never replies or tool output.
 
 export type AttentionTask = { taskId: string; project: string; title: string };
 
@@ -26,7 +26,7 @@ const toAttention = (task: GraphTask): AttentionTask => ({
 const statusOf = (task: GraphTask): NodeStatus | "error" =>
   task.errors.length > 0 ? "error" : task.status;
 
-// Connecting reports what waits now and does not replay old news as new.
+// why: Connecting reports what waits now and does not replay old news as new.
 export async function subscribeToAttention(
   folder: string,
   listener: (update: AttentionUpdate) => void,
@@ -42,8 +42,8 @@ export async function subscribeToAttention(
   const onGraph = (graph: ProjectGraph) => {
     if (graph.error) return;
     const tasks = graph.projects.flatMap((project) => project.tasks);
-    // Agents rewrite records in place, so a read can catch a half-written file;
-    // keep the last readable status, or done → error → done would announce twice.
+    // why: Agents rewrite records in place, so a read can catch a half-written file;
+    // why: keep the last readable status, or done → error → done would announce twice.
     const current = new Map(
       tasks.map((task) => {
         const status = statusOf(task);

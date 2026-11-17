@@ -52,7 +52,7 @@ import { appendTranscriptLine, readTranscript, type TranscriptCursor } from "./t
 
 type McpServers = Record<string, McpServer>;
 
-// The display transcript is our own file, so it does not depend on what the provider still holds after compaction.
+// why: The display transcript is our own file, so it does not depend on what the provider still holds after compaction.
 
 export const DIRECTOR_FOLDER = "director";
 export const MANAGERS_FOLDER = "managers";
@@ -68,7 +68,7 @@ export type ChatEntry =
       images?: MessageImage[];
     }
   | { id: string; at: string; kind: "director"; text: string; interrupted?: boolean }
-  /** Tasks the Director created in one turn. */
+  /*why: * Tasks the Director created in one turn. */
   | { id: string; at: string; kind: "tasks"; taskIds: string[] }
   | {
       id: string;
@@ -78,7 +78,7 @@ export type ChatEntry =
       tone: "info" | "error";
       compacted?: boolean;
     }
-  /** A task agent's card once it closed: what it asked and how it ended. */
+  /*why: * A task agent's card once it closed: what it asked and how it ended. */
   | {
       id: string;
       at: string;
@@ -102,28 +102,28 @@ export type DirectorUpdate =
       draft: string;
       queue: string[];
     }
-  /** Appends the entry, or replaces the one with the same id. */
+  /*why: * Appends the entry, or replaces the one with the same id. */
   | { type: "entry"; entry: ChatEntry }
-  /** Replaces the transcript, after a message is edited away. */
+  /*why: * Replaces the transcript, after a message is edited away. */
   | { type: "entries"; entries: ChatEntry[] }
-  /** Messages waiting to be sent after the current reply. Empty when nothing is queued. */
+  /*why: * Messages waiting to be sent after the current reply. Empty when nothing is queued. */
   | { type: "queue"; messages: string[] }
-  /** The Director's reply as it streams; empty when no reply is streaming. */
+  /*why: * The Director's reply as it streams; empty when no reply is streaming. */
   | { type: "draft"; text: string }
   | { type: "status"; status: DirectorStatus }
   | { type: "task"; task: TaskView }
-  /** A task agent's card opened; it stays in the timeline until `card-closed`. */
+  /*why: * A task agent's card opened; it stays in the timeline until `card-closed`. */
   | { type: "card-opened"; card: TaskCard }
   | { type: "card-closed"; cardId: string };
 
 type DirectorState = {
   provider?: ProviderId;
   sessionId?: string;
-  // A turn that a quit cut off stays marked, so the next start can say so.
+  // why: A turn that a quit cut off stays marked, so the next start can say so.
   turnOpen?: boolean;
 };
 
-// A cut-off turn may have created tasks already, so BusyBoy does not send it again.
+// why: A cut-off turn may have created tasks already, so BusyBoy does not send it again.
 export const REPLY_CUT_OFF_NOTE =
   "BusyBoy restarted before the Director finished replying. Send your message again if you still need an answer.";
 
@@ -169,7 +169,7 @@ type Director = {
   listeners: Set<(update: DirectorUpdate) => void>;
 };
 
-// Kept on globalThis so `next dev` reloads keep the running director.
+// why: Kept on globalThis so `next dev` reloads keep the running director.
 const DIRECTORS_KEY = Symbol.for("busyboy.directors");
 const globalStore = globalThis as typeof globalThis & { [DIRECTORS_KEY]?: Map<string, Director> };
 const directors = (globalStore[DIRECTORS_KEY] ??= new Map());
@@ -287,7 +287,7 @@ async function load(director: Director) {
       }
       if (isEntry(value)) byId.set(value.id, value);
     } catch {
-      // A line cut short by a crash; skip it.
+      // why: A line cut short by a crash; skip it.
     }
   }
   director.entries = [...byId.values()];
@@ -479,7 +479,7 @@ async function ensureAgent(
   const resumeSessionId =
     director.state.provider === provider ? director.state.sessionId : undefined;
   director.unconfirmedResume = Boolean(resumeSessionId);
-  // A connector write waits. Every other always-ask match is refused, because this folder sits next to settings.
+  // why: A connector write waits. Every other always-ask match is refused, because this folder sits next to settings.
   const agent = startAgent({
     provider,
     cwd,
@@ -603,7 +603,7 @@ function onAgentEvent(director: Director, agentId: string, { event }: AgentEvent
   }
 }
 
-// Claude says a missing session in its message. Codex reports the lost-session code.
+// why: Claude says a missing session in its message. Codex reports the lost-session code.
 const LOST_SESSION = /No conversation found with session ID/i;
 
 function recoverLostSession(director: Director, agentId: string, { resend = true } = {}) {
@@ -645,7 +645,7 @@ function endTurn(director: Director) {
   else scheduleCompaction(director);
 }
 
-// Read through a call so TypeScript does not keep status narrowed to idle from before an await.
+// why: Read through a call so TypeScript does not keep status narrowed to idle from before an await.
 function isAnswering(director: Director) {
   return director.status === "answering";
 }
@@ -684,8 +684,8 @@ async function flush(director: Director) {
       endTurn(director);
       return;
     }
-    // It stopped while starting: a lost session was already recovered and the
-    // turn queued again, and any other failure was reported by its events.
+    // why: It stopped while starting: a lost session was already recovered and the
+    // why: turn queued again, and any other failure was reported by its events.
     if (director.agentId !== agentId || getAgent(agentId)?.status === "stopped") return;
     sendMessage(agentId, outgoing);
   } catch (error) {

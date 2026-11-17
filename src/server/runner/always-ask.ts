@@ -20,10 +20,10 @@ const BUILT_IN_RULES = [
   CONNECTOR_RULE,
 ];
 
-// The Director's folder sits inside BusyBoy's data folder, next to the task list and settings.
+// why: The Director's folder sits inside BusyBoy's data folder, next to the task list and settings.
 export const BUSYBOY_FILES_RULE = "Change BusyBoy's own files";
 
-// A subagent runs in the project's own checkout, which the user works in.
+// why: A subagent runs in the project's own checkout, which the user works in.
 export const SUBAGENT_EDIT_RULE = "Change the project checkout as a subagent";
 
 const READ_ONLY_COMMANDS = new Set([
@@ -132,8 +132,8 @@ function onlyReads({ argv, written }: Fact) {
   const code = inlineCode(name, argv.slice(1), true);
   if (typeof code === "string") return !INLINE_WRITES.test(code);
   if (!READ_ONLY_COMMANDS.has(name)) return false;
-  // `sort -o` and `tree -o` write their output to a file; `uniq in out` writes to its second file.
-  // GNU takes any unambiguous start of a long option (`--out=f`), so every `--o…` counts.
+  // why: `sort -o` and `tree -o` write their output to a file; `uniq in out` writes to its second file.
+  // why: GNU takes any unambiguous start of a long option (`--out=f`), so every `--o…` counts.
   if ((name === "sort" || name === "tree") && args.some((arg) => /^(-[a-zA-Z]*o|--o)/.test(arg)))
     return false;
   if (name === "uniq" && args.filter((arg) => arg === "-" || !arg.startsWith("-")).length > 1)
@@ -150,7 +150,7 @@ function onlyReads({ argv, written }: Fact) {
     );
   }
   if (name === "git") {
-    // A git -c value can name a command git runs. Global options come before the subcommand.
+    // why: A git -c value can name a command git runs. Global options come before the subcommand.
     if (written.some(({ text }) => /^-c|^--config-env/.test(text))) return false;
     let index = 0;
     while (index < args.length && args[index].startsWith("-")) {
@@ -247,7 +247,7 @@ export const DEFAULT_ALWAYS_ASK = [
   "mcp__*notion*__*update*",
 ];
 
-// Claude says Bash. Codex's hook also reports shell_command and container.exec.
+// why: Claude says Bash. Codex's hook also reports shell_command and container.exec.
 const SHELL_TOOLS = new Set([
   "bash",
   "shell",
@@ -267,7 +267,7 @@ function isPatchTool(toolName: string) {
 
 const SHELLS = new Set(["sh", "bash", "zsh", "dash", "ksh", "fish", "tcsh", "csh", "mksh", "yash"]);
 
-// Any option this table does not list means the command cannot be read, so it asks.
+// why: Any option this table does not list means the command cannot be read, so it asks.
 const WRAPPERS: Record<string, { value: string[]; flags: string[]; operands?: number }> = {
   sudo: {
     value: [
@@ -362,7 +362,7 @@ const WRAPPERS: Record<string, { value: string[]; flags: string[]; operands?: nu
   npx: { value: ["-p", "--package"], flags: ["-y", "--yes", "--no", "-q", "--quiet"] },
   bunx: { value: ["-p", "--package"], flags: ["--bun"] },
   stdbuf: { value: ["-i", "-o", "-e", "--input", "--output", "--error"], flags: [] },
-  // GNU parallel has too many options to list; with any of them the command cannot be read.
+  // why: GNU parallel has too many options to list; with any of them the command cannot be read.
   parallel: { value: [], flags: [] },
   builtin: { value: [], flags: [] },
   "cross-env": { value: [], flags: [] },
@@ -564,7 +564,7 @@ const MAX_DEPTH = 4;
 
 const MAX_STEPS = 400;
 
-// The matcher is synchronous and runs one tool call at a time, so one module-level record cannot be shared.
+// why: The matcher is synchronous and runs one tool call at a time, so one module-level record cannot be shared.
 let run = { steps: 0, files: new Map<string, Analysis>(), git: new Map<string, string | null>() };
 
 const MAX_FILE_BYTES = 512 * 1024;
@@ -608,7 +608,7 @@ const literal = (text: string): Word => ({ text, dynamic: false });
 const unknownOnly = (unknown: string): Analysis => ({ facts: [], unknown });
 const NOTHING: Analysis = { facts: [], unknown: null };
 
-// A ${…} runs no command itself, but its body can hold $(git push -f).
+// why: A ${…} runs no command itself, but its body can hold $(git push -f).
 function readDollar(
   script: string,
   start: number,
@@ -647,7 +647,7 @@ function readDollar(
   return { end: script.length - 1, inner: arithmetic ? null : script.slice(start + 2) };
 }
 
-// Split the way a POSIX shell reads quotes and escapes. A substitution makes the word dynamic.
+// why: Split the way a POSIX shell reads quotes and escapes. A substitution makes the word dynamic.
 function tokenize(script: string): {
   commands: Word[][];
   substitutions: string[];
@@ -835,7 +835,7 @@ function tokenize(script: string): {
   return { commands, substitutions, heredocs };
 }
 
-// A git alias, a planted PATH entry, or a shell startup file means the command cannot be read.
+// why: A git alias, a planted PATH entry, or a shell startup file means the command cannot be read.
 const RISKY_VARIABLE =
   /^(PATH|GIT_CONFIG\w*|GIT_EXEC_PATH|GIT_SSH_COMMAND|GIT_SSH|BASH_ENV|ENV|LD_PRELOAD|DYLD_\w+)=/;
 
@@ -844,7 +844,7 @@ function unwrap(words: Word[]): { argv: Word[]; viaXargs: boolean } | null {
   let viaXargs = false;
   for (;;) {
     const [first, second] = argv;
-    // Checked before the dynamic return: `PATH=/tmp:$PATH` is dynamic and still changes which program runs.
+    // why: Checked before the dynamic return: `PATH=/tmp:$PATH` is dynamic and still changes which program runs.
     if (first && RISKY_VARIABLE.test(first.text)) {
       return null;
     }
@@ -959,11 +959,11 @@ function analyzeFile(path: string, context: Context): Analysis {
     return NOTHING;
   }
   const lines = text
-    // Make runs `$(shell …)` as a command line, like `$(…)` in a shell.
+    // why: Make runs `$(shell …)` as a command line, like `$(…)` in a shell.
     .replaceAll("$(shell ", "$(")
     .replace(/\\\n/g, " ")
     .split("\n")
-    // Make recipe prefixes: `@` (quiet), `-` (ignore errors), `+` (always run).
+    // why: Make recipe prefixes: `@` (quiet), `-` (ignore errors), `+` (always run).
     .map((line) => line.trim().replace(/^[@+-]+/, ""))
     .filter((line) => line && !line.startsWith("#"));
   const analysis = merge(
@@ -1134,7 +1134,7 @@ function packageScripts({
           }
         ).scripts ?? {};
     } catch {
-      // No readable package.json: the command fails, or runs a binary that is matched as itself.
+      // why: No readable package.json: the command fails, or runs a binary that is matched as itself.
     }
     const keys =
       names.length === 4 && names[0] === "preinstall"
@@ -1192,7 +1192,7 @@ const XARGS_SAFE = new Set([
   "true",
 ]);
 
-// AppleScript has no entry to read by: osascript drives other apps in plain words.
+// why: AppleScript has no entry to read by: osascript drives other apps in plain words.
 const INLINE_CODE: Record<string, { flags: string[]; before?: string; modules?: string[] }> = {
   node: {
     flags: ["-e", "-p", "--eval", "--print"],
@@ -1259,7 +1259,7 @@ const interpreterOf = (name: string) => {
   return plain === "bun" || plain === "tsx" || plain === "ts-node" ? "node" : plain;
 };
 
-// Matched with comments and string literals taken out, so a word inside a string is not a call.
+// why: Matched with comments and string literals taken out, so a word inside a string is not a call.
 const INLINE_RUNS =
   /\b(?:exec(?:Sync|File|FileSync|vp|v)?|spawn(?:Sync)?|system|popen|proc_open|readpipe|fork|eval|subprocess|child_process|shutil|remove|delete|rmtree|rmdir|socket|sock|https?|fetch|urllib|request|ctypes|pickle|marshal|syscall|passthru|dofile|loadfile|loadstring|include|getattr|globals|builtins|binding|dlopen|kill|worker|constructor|mainmodule|import|require)\b|link\b|open[^;]*\||__|`|\bqx\b|%x|\bload\s*\(?\s*['"]|\b(?:use|do|os|fs|io|net|tls|dns|dgram|cluster|repl|inspector|vm|sh|deno|bun|mail|rm\w*|mv|cp)\b/i;
 
@@ -1369,7 +1369,7 @@ const OPENS_COMMAND = /\bopen\s*\([^;]*['"]\s*(?:\|-?|-\|)|\bload\s*\(?\s*['"]/;
 const INLINE_WRITES =
   /open|write|append|truncate|rename|copy|move|mkdir|chmod|chown|touch|put_contents|utime|file\.new|splfileobject/i;
 
-// node gen.mjs -p 3000 is not code: the interpreter option has to come before the first plain word.
+// why: node gen.mjs -p 3000 is not code: the interpreter option has to come before the first plain word.
 function inlineCode(name: string, args: Word[], strict = false) {
   const interpreter = interpreterOf(name);
   const known = INLINE_CODE[interpreter];
@@ -1426,8 +1426,8 @@ function inlineCode(name: string, args: Word[], strict = false) {
     return " ";
   };
   const read = maskCode(codes.join("\n"), interpreter, "comments")
-    // Reading a file the usual ways (Python's one-argument open, Node's readFileSync), and
-    // printing through the terminal's own streams.
+    // why: Reading a file the usual ways (Python's one-argument open, Node's readFileSync), and
+    // why: printing through the terminal's own streams.
     .replace(/\bopen\(\s*(['"])[^'"|<>]*\1\s*\)/g, " ")
     .replace(/\brequire\((['"])(?:node:)?fs\1\)\.readFileSync\b/g, " ")
     .replace(/\bstd(?:out|err)\.write\b/g, " ")
@@ -1449,7 +1449,7 @@ const GIT_GLOBAL_OPTIONS =
 
 const ASSIGNMENT = /^([A-Za-z_][A-Za-z0-9_]*)=(.*)$/s;
 
-// A verb, a short cluster with r, f, or d (`-rf`, `-R`), or a forced refspec. An unresolved command asks only with one of these.
+// why: A verb, a short cluster with r, f, or d (`-rf`, `-R`), or a forced refspec. An unresolved command asks only with one of these.
 const UNRESOLVED_RISK =
   /^(?:push|deploy|publish|merge|delete|destroy|apply|up|release|rm|rmdir)$|^(?:--(?:force|force-with-lease|force-if-includes|delete|mirror|prod)(?:=|$)|-[A-Za-z]*[rfdRFD][A-Za-z]*)$|^[+:]/;
 
@@ -1457,7 +1457,7 @@ function unresolvedCommandCouldMatch(args: Word[]) {
   return args.some(({ text }) => UNRESOLVED_RISK.test(text));
 }
 
-// `$NAME` and `${NAME}` from assignments already recorded. A single-quoted word is not dynamic, so it stays literal.
+// why: `$NAME` and `${NAME}` from assignments already recorded. A single-quoted word is not dynamic, so it stays literal.
 function expandWord(word: Word, bindings: ReadonlyMap<string, Word>): Word {
   if (!word.dynamic || !word.text.includes("$")) return word;
   let unresolved = false;
@@ -1486,7 +1486,7 @@ function persistedAssignment(
   return { name: match[1], value: { text: match[2], dynamic: expanded.dynamic } };
 }
 
-// Assignments that stay in the shell for later commands. A prefix (`A=/path rm $A`) does not: the shell expands `$A` first. `export` is what a child shell sees.
+// why: Assignments that stay in the shell for later commands. A prefix (`A=/path rm $A`) does not: the shell expands `$A` first. `export` is what a child shell sees.
 function recordPersistedAssignments(
   words: Word[],
   bindings: Map<string, Word>,
@@ -1602,7 +1602,7 @@ function analyzeCommands(
 
   for (let commandIndex = 0; commandIndex < commands.length; commandIndex++) {
     const original = commands[commandIndex]!;
-    // Expand before recording, so a prefix assignment does not change this command's own words.
+    // why: Expand before recording, so a prefix assignment does not change this command's own words.
     const written = original.map((word) => expandWord(word, bindings));
     recordPersistedAssignments(original, bindings, exported);
     const unwrapped = unwrap(written);
@@ -1765,8 +1765,8 @@ function analyzeCommands(
       }
     }
     if (name === "just" && cwd !== null) {
-      // A justfile's recipes are command lines, read like a Makefile's. The folder is the agent's,
-      // known only when it runs; without the ignore comment Turbopack traces the whole project.
+      // why: A justfile's recipes are command lines, read like a Makefile's. The folder is the agent's,
+      // why: known only when it runs; without the ignore comment Turbopack traces the whole project.
       const path = ["justfile", "Justfile", ".justfile"]
         .map((file) => join(/*turbopackIgnore: true*/ cwd as string, file))
         .find((file) => readScript(file) !== null);
@@ -1963,7 +1963,7 @@ const PATCH_KINDS: Record<string, PatchFile["kind"]> = {
   "move to": "move",
 };
 
-// Codex sometimes wraps a patch as JSON, with newlines written as the two characters \\n.
+// why: Codex sometimes wraps a patch as JSON, with newlines written as the two characters \\n.
 function filesInPatch(parts: string[], depth = 0): PatchFile[] {
   if (depth > 4) return [];
   const found: PatchFile[] = [];
@@ -1998,7 +1998,7 @@ function filesInPatch(parts: string[], depth = 0): PatchFile[] {
         walk(JSON.parse(trimmed) as unknown, 0);
         continue;
       } catch {
-        // The text is a patch, not JSON. A backslash-n below may still be its newlines.
+        // why: The text is a patch, not JSON. A backslash-n below may still be its newlines.
       }
     }
     if (part.includes("\\n"))
@@ -2025,7 +2025,7 @@ function patchAnalysis(input: unknown, folder: string): Analysis {
   };
 }
 
-// A regular expression would let a rule with many * take exponential time.
+// why: A regular expression would let a rule with many * take exponential time.
 function globMatches({ glob, text }: { glob: string; text: string }) {
   const parts = glob.toLowerCase().split("*");
   const subject = text.toLowerCase();
@@ -2335,7 +2335,7 @@ function isConnectorWrite(toolName: string) {
   return creates && words.some((word) => CONNECTOR_CREATED.has(word.replace(/s$/, "")));
 }
 
-/** A path with symlinks resolved in the part of it that exists, so a link inside the folder that points out is seen as outside. */
+/*why: * A path with symlinks resolved in the part of it that exists, so a link inside the folder that points out is seen as outside. */
 function realPath(path: string) {
   let existing = path;
   while (!existsSync(existing) && dirname(existing) !== existing) {
@@ -2432,7 +2432,7 @@ const FILE_TOOLS: Record<string, string> = {
   NotebookEdit: "notebook_path",
 };
 
-/** A path and, when it exists in part, the same path with symlinks resolved. */
+/*why: * A path and, when it exists in part, the same path with symlinks resolved. */
 function pathForms(path: string) {
   return [...new Set([path, realPath(path)])];
 }
@@ -2441,7 +2441,7 @@ function expandPath(path: string, cwd: string) {
   return expandShellPath(path, cwd);
 }
 
-// Reads go through the Read tool, so a shell command never needs to touch the private folder.
+// why: Reads go through the Read tool, so a shell command never needs to touch the private folder.
 function touchesPrivateFolder({
   toolName,
   input,
@@ -2490,7 +2490,7 @@ function touchesPrivateFolder({
   ) {
     return true;
   }
-  // Matching words, not the raw text, keeps ~/.busyboy-backup apart from ~/.busyboy.
+  // why: Matching words, not the raw text, keeps ~/.busyboy-backup apart from ~/.busyboy.
   const folders = [folder, ...facts.map((fact) => fact.cwd ?? folder)];
   const words = script
     .replace(/["']/g, "")
@@ -2555,8 +2555,8 @@ export function matchAlwaysAsk({
     .filter((rule) => rule && !rule.startsWith("#") && !ruleError(rule));
   const script = shellCommand(toolName, input);
   run = { steps: 0, files: new Map(), git: new Map() };
-  // A shell tool whose input has no command BusyBoy can read is treated as unreadable, not as a
-  // tool call that runs nothing: matching fails closed.
+  // why: A shell tool whose input has no command BusyBoy can read is treated as unreadable, not as a
+  // why: tool call that runs nothing: matching fails closed.
   const unreadableShell: Analysis = {
     facts: [],
     unknown: "the shell tool call has no command BusyBoy can read",
@@ -2569,14 +2569,14 @@ export function matchAlwaysAsk({
         : NOTHING,
     isPatchTool(toolName) ? patchAnalysis(input, folder) : NOTHING,
   ]);
-  // The worktree and the record folder, as given and with symlinks resolved (/var and /private/var on macOS).
+  // why: The worktree and the record folder, as given and with symlinks resolved (/var and /private/var on macOS).
   const roots = recordFolder ? [folder, recordFolder] : [folder];
   const folders = [...roots];
   for (const root of roots) {
     try {
       folders.push(realpathSync(root));
     } catch {
-      // A folder that does not exist yet is compared as given.
+      // why: A folder that does not exist yet is compared as given.
     }
   }
 
@@ -2628,7 +2628,7 @@ function placeOf(cwd: string) {
   try {
     folder = realpathSync(cwd);
   } catch {
-    // A folder that does not exist yet is named as given.
+    // why: A folder that does not exist yet is named as given.
   }
   const place = pathKey(folder);
   if (!existsSync(join(folder, ".git")) && !isInsideRepository(folder)) return `${place}@none`;
@@ -2655,7 +2655,7 @@ function isInsideRepository(folder: string) {
   return false;
 }
 
-// The same command text can push a different branch after checkout, so an allow is remembered with the branch.
+// why: The same command text can push a different branch after checkout, so an allow is remembered with the branch.
 export function createAllowedCalls() {
   const allowed = new Set<string>();
   const key = ({ toolName, input, rule, cwd }: AllowedCall) => {

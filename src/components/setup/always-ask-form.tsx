@@ -8,7 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 
 export type AlwaysAskResult = { error?: string; saved?: boolean };
 
-// A form action resets its fields, which would throw away edits when a line is refused.
+// why: A form action resets its fields, which would throw away edits when a line is refused.
 export function AlwaysAskForm({
   id,
   rules,
@@ -71,8 +71,8 @@ export function AlwaysAskForm({
             onClick={() =>
               startRestore(async () => {
                 await restore.action();
-                // Set here, not by remounting on new props: after a Save the page's props still
-                // hold the list it first rendered, so they would not change.
+                // why: Set here, not by remounting on new props: after a Save the page's props still
+                // why: hold the list it first rendered, so they would not change.
                 setText(restore.rules.join("\n"));
                 setNote("Restored the defaults.");
               })

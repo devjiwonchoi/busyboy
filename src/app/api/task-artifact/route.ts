@@ -4,7 +4,7 @@ import { readTaskArtifact } from "@/server/cards/task-artifact";
 import { dataFolder } from "@/server/config";
 
 export async function GET(request: NextRequest) {
-  // Without this, Cache Components would prerender the response at build time.
+  // why: Without this, Cache Components would prerender the response at build time.
   await connection();
   const task = request.nextUrl.searchParams.get("task");
   const file = request.nextUrl.searchParams.get("file");

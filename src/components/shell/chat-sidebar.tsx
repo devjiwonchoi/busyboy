@@ -3,7 +3,7 @@
 import { AlertTriangle, CircleCheck, CircleHelp, MoreHorizontal, Plus, Search } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useActionState, useEffect, useState, useSyncExternalStore } from "react";
+import { useActionState, useState, useSyncExternalStore } from "react";
 
 import {
   createManagerAction,
@@ -57,6 +57,7 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { useExternalSync } from "@/hooks/use-external-sync";
 import { desktopBridge } from "@/lib/desktop-bridge";
 import { cn } from "@/lib/utils";
 import type { ChatSummary } from "@/server/director/chat";
@@ -87,7 +88,7 @@ export function ChatSidebar({
   const active = useSearchParams().get("manager");
   const recordProgress = useProjectProgress();
 
-  useEffect(() => {
+  useExternalSync(() => {
     const source = new EventSource("/api/chats/events");
     source.onmessage = (message) => setChats(JSON.parse(message.data) as ChatSummary[]);
     return () => source.close();
@@ -146,7 +147,7 @@ export function ChatSidebar({
         </div>
       )}
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-2 pb-1">
-        {/* Stays at the top of the list while the rows below scroll. */}
+        {/* why: Stays at the top of the list while the rows below scroll. */}
         <div className="sticky top-0 z-10 bg-background pb-1 dark:bg-[#161617]">
           <DirectorRow
             director={director}
@@ -373,12 +374,14 @@ function ManagerItem({
             {statusLine(manager, manager.project ?? "")}
           </span>
         </span>
+        {/* why: Hover brings the remove control up over this corner. Focusing the row itself leaves the count in place. */}
         {progress && progress.total > 0 && (
           <span className="group-hover/manager:invisible">
             <ManagerProgress progress={progress} />
           </span>
         )}
       </Link>
+      {/* why: Above the row's link. Shown on hover, or when the control itself is focused. */}
       <div className="pointer-events-none absolute top-1/2 right-2 z-10 -translate-y-1/2 opacity-0 group-hover/manager:pointer-events-auto group-hover/manager:opacity-100 focus-within:pointer-events-auto focus-within:opacity-100 has-data-[popup-open]:pointer-events-auto has-data-[popup-open]:opacity-100">
         <RemoveManager
           id={id}
@@ -498,7 +501,7 @@ function NewManager({ projects, taken }: { projects: string[]; taken: Set<string
   );
   const free = projects.filter((name) => !taken.has(name.toLowerCase()));
   const choice = project ?? (free.length === 0 && projects.length < 2 ? NEW_FOLDER : null);
-  // Read after hydration: the server never has the bridge, so the first render matches it.
+  // why: Read after hydration: the server never has the bridge, so the first render matches it.
   const bridge = useSyncExternalStore(subscribeNothing, desktopBridge, () => undefined);
 
   return (
@@ -543,7 +546,7 @@ function NewManager({ projects, taken }: { projects: string[]; taken: Set<string
           </Field>
           <RadioGroup
             aria-label="Project"
-            // null, not undefined, keeps the group controlled before the first choice.
+            // why: null, not undefined, keeps the group controlled before the first choice.
             value={choice}
             onValueChange={(next) => setProject(next as string)}
           >

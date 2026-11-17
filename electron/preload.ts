@@ -12,12 +12,12 @@ import {
   type DesktopBridge,
 } from "../src/lib/desktop-bridge";
 
-// Sandboxed, with context isolation, so the page gets these functions and nothing else from Electron.
+// why: Sandboxed, with context isolation, so the page gets these functions and nothing else from Electron.
 const bridge: DesktopBridge = {
   pickFolders: () => ipcRenderer.invoke(PICK_FOLDERS_CHANNEL),
   pathForFile: (file) => webUtils.getPathForFile(file),
   onFocus: (listener) => {
-    // Only the target text reaches the page, never the IPC event and its sender.
+    // why: Only the target text reaches the page, never the IPC event and its sender.
     const handler = (_event: Electron.IpcRendererEvent, target: unknown) => {
       if (typeof target === "string") listener(target);
     };

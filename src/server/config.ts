@@ -12,7 +12,7 @@ import { isThemeName, type ThemeName } from "@/lib/theme";
 import { pathKey } from "./paths";
 import type { ProviderId } from "./runner/contract";
 
-// The data folder is shared with the legacy app, which keeps its own files there.
+// why: The data folder is shared with the legacy app, which keeps its own files there.
 
 export const HOME_ENV = "BUSYBOY_HOME";
 
@@ -20,7 +20,7 @@ export { TEST_MODE_ENV };
 
 export const TEST_HOME_COOKIE = "busyboy-test-home";
 
-/** Named so it never collides with the legacy app's `settings.json`. */
+/*why: * Named so it never collides with the legacy app's `settings.json`. */
 export const SETTINGS_FILE = "app-settings.json";
 
 export type ProjectEntry = {
@@ -45,7 +45,7 @@ export type Settings = {
   companionImage: string | null;
   projects: ProjectEntry[];
   managers: ManagerEntry[];
-  // Null until the user edits the list, so a newer BusyBoy's defaults still apply.
+  // why: Null until the user edits the list, so a newer BusyBoy's defaults still apply.
   alwaysAsk: string[] | null;
   [unknownKey: string]: unknown;
 };
@@ -86,7 +86,7 @@ const boundStore = globalThis as typeof globalThis & {
 };
 const boundFolder = (boundStore[BOUND_FOLDER_KEY] ??= new AsyncLocalStorage<string>());
 
-// Work that outlives a request has to capture the data folder, because the proxy has no cookies() later.
+// why: Work that outlives a request has to capture the data folder, because the proxy has no cookies() later.
 export function runWithDataFolder<T>(folder: string, work: () => T): T {
   return boundFolder.run(folder, work);
 }

@@ -71,7 +71,7 @@ export function CompanionChoices({
     <RadioGroup
       name="companion"
       aria-label="Director"
-      // null, not undefined, keeps the group controlled before the first choice.
+      // why: null, not undefined, keeps the group controlled before the first choice.
       value={value ?? null}
       onValueChange={(next) => onChange(next as string)}
       className="grid-cols-2 gap-4 sm:grid-cols-5"
@@ -107,7 +107,7 @@ export function CharacterNote({ className }: { className?: string }) {
 export function CompanionImageForm({ hasImage }: { hasImage: boolean }) {
   const [state, action, pending] = useActionState(setCompanionImageAction, {});
   const [tooLarge, setTooLarge] = useState(false);
-  // Checked before sending: a body over the server action limit fails before the action can explain why.
+  // why: Checked before sending: a body over the server action limit fails before the action can explain why.
   const error = tooLarge ? `Choose a picture under ${MAX_IMAGE_TEXT}.` : state.error;
   return (
     <form

@@ -7,9 +7,9 @@ import { expect as baseExpect, test, type APIRequestContext, type Page } from "@
 import { useProjectsHome } from "./support/projects-home";
 import { homeRecordFolder } from "./support/record-tasks";
 
-// A task whose agent finishes with State done and no pull requests puts itself
-// away. The turns are tests/provider-scripts/auto-archive.json. Nothing here
-// clicks Archive.
+// why: A task whose agent finishes with State done and no pull requests puts itself
+// why: away. The turns are tests/provider-scripts/auto-archive.json. Nothing here
+// why: clicks Archive.
 
 const START = "Publish the release checklist.";
 const FINISH = "Mark the release checklist done.";
@@ -79,7 +79,7 @@ test("a finished task should leave the task list on its own", async ({
   const task = storedTask(home, "Release checklist");
   const line = taskLine(page, "web · Release checklist");
 
-  // The first turn is still working, so the task stays in the list.
+  // why: The first turn is still working, so the task stays in the list.
   await expect(line.locator("[data-status]")).toHaveText("Working");
   await line.getByRole("button", { name: "Actions for web · Release checklist" }).click();
   await expect(page.getByRole("menuitem", { name: "Archive" })).toBeVisible();
@@ -91,13 +91,13 @@ test("a finished task should leave the task list on its own", async ({
   await page.getByRole("textbox", { name: "Message" }).fill(FINISH);
   await page.getByRole("button", { name: "Send" }).click();
 
-  // Nobody clicked Archive. The finished task leaves the active list.
+  // why: Nobody clicked Archive. The finished task leaves the active list.
   await expect(line.locator("[data-status]")).toHaveText("Archived");
   await line.getByRole("button", { name: "Actions for web · Release checklist" }).click();
   await expect(page.getByRole("menuitem", { name: "Archive" })).toHaveCount(0);
   await expect(page.getByRole("menuitem", { name: "Restore" })).toBeVisible();
   expect(existsSync(task.worktree)).toBe(false);
-  // The branch and the record stay, so a later message can bring the task back.
+  // why: The branch and the record stay, so a later message can bring the task back.
   expect(
     execFileSync("git", ["-C", projects.web, "branch", "--list", "busyboy/*"], {
       encoding: "utf8",

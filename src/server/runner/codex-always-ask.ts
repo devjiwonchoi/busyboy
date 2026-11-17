@@ -15,7 +15,7 @@ import { listProjects } from "../projects";
 import { matchAlwaysAsk } from "./always-ask";
 import { checkUserRules, resolveRulesFolder } from "./user-rules";
 
-// Codex's auto reviewer approves escalations without the user. Verified with codex-cli 0.167.0: a hook denial blocks the command.
+// why: Codex's auto reviewer approves escalations without the user. Verified with codex-cli 0.167.0: a hook denial blocks the command.
 
 export type HookCall = {
   sessionId: string | undefined;
@@ -30,7 +30,7 @@ type Gate = (
   call: Pick<HookCall, "toolName" | "input" | "cwd"> & { signal: AbortSignal },
 ) => Promise<HookDecision>;
 
-// On globalThis like the runner's registry, so `next dev` reloads keep the open sessions.
+// why: On globalThis like the runner's registry, so `next dev` reloads keep the open sessions.
 const GATES_KEY = Symbol.for("busyboy.codex-always-ask");
 const globalStore = globalThis as typeof globalThis & { [GATES_KEY]?: Map<string, Gate> };
 const gates = (globalStore[GATES_KEY] ??= new Map());
@@ -47,7 +47,7 @@ export function registerGate({ key, gate }: { key: string; gate: Gate }) {
 export const threadKey = (threadId: string) => `thread:${threadId}`;
 export const folderKey = (cwd: string) => `cwd:${cwd}`;
 
-// Codex also runs its own agents, such as memory consolidation in ~/.codex/memories, with the thread's hooks. Those are not ours to ask about.
+// why: Codex also runs its own agents, such as memory consolidation in ~/.codex/memories, with the thread's hooks. Those are not ours to ask about.
 export function decideHookCall({
   call,
   signal,
@@ -99,7 +99,7 @@ function isInside({ folder, path }: { folder: string; path: string }) {
   return containsPath(folder, path);
 }
 
-// A script file on disk could be rewritten by any agent running as the user. Only the token is read from a file.
+// why: A script file on disk could be rewritten by any agent running as the user. Only the token is read from a file.
 const hookScript = ({
   url,
   tokenFile,
@@ -134,7 +134,7 @@ const CANNOT_RUN = JSON.stringify({
   },
 });
 
-// The command is the same for every thread, so Codex's trust hash for it stays the same.
+// why: The command is the same for every thread, so Codex's trust hash for it stays the same.
 export async function hookCommand() {
   const port = process.env.PORT ?? "3000";
   const folder = join(resolveDataFolder(), `always-ask-${port}`);
@@ -160,7 +160,7 @@ type ListedHook = {
 
 const trust = new Map<string, Promise<{ key: string; hash: string }>>();
 
-// Codex trusts hooks by a hash it does not document. Verified with codex-cli 0.167.0.
+// why: Codex trusts hooks by a hash it does not document. Verified with codex-cli 0.167.0.
 export async function trustedHookConfig({
   request,
   cwd,
@@ -209,7 +209,7 @@ export async function trustedHookConfig({
   const { key, hash } = await trusted;
   return {
     config: { hooks: { ...hooks, state: { [key]: { trusted_hash: hash } } } },
-    // An untrusted hook is skipped with no error, which would let every rule through.
+    // why: An untrusted hook is skipped with no error, which would let every rule through.
     verify: async (threadId: string) => {
       const { data } = await request<{ data: { hooks: ListedHook[] }[] }>("hooks/list", {
         threadId,

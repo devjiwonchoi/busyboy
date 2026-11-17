@@ -1,6 +1,6 @@
 import type { GraphTask, NodeStatus, ProjectGraph } from "./project-graph";
 
-// Record text is untrusted and is quoted, so a record cannot reach the Director as instructions.
+// why: Record text is untrusted and is quoted, so a record cannot reach the Director as instructions.
 
 const MAX_FIELD = 160;
 const MAX_REPLY = 600;

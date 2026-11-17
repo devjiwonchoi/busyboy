@@ -95,7 +95,7 @@ function resolveClaude() {
 
 type OpenRequest = {
   input: Record<string, unknown>;
-  // Remembering a suggestion that grants more than this request would leave the agent in a different permission mode.
+  // why: Remembering a suggestion that grants more than this request would leave the agent in a different permission mode.
   sessionPermissions: PermissionUpdate[];
   resolve: (result: PermissionResult) => void;
 };
@@ -124,7 +124,7 @@ function toSdkMcpServers(servers: Record<string, McpServer>): Record<string, Mcp
   );
 }
 
-// forkSession copies the history and persistSession: false writes no file for the branch.
+// why: forkSession copies the history and persistSession: false writes no file for the branch.
 function sessionOptions({
   resumeSessionId,
   forkSessionId,
@@ -133,7 +133,7 @@ function sessionOptions({
   return { resume: resumeSessionId };
 }
 
-// tools: [] leaves the user's MCP servers loaded. Verified with CLI 2.1.311.
+// why: tools: [] leaves the user's MCP servers loaded. Verified with CLI 2.1.311.
 const NO_TOOLS: Partial<Options> = {
   tools: [],
   strictMcpConfig: true,
@@ -153,7 +153,7 @@ function startClaude(options: ProviderStartOptions): ProviderSession {
   const asks = new Map<string, (answer: AgentAnswer | null) => void>();
   const allowedCalls = createAllowedCalls();
 
-  // Auto mode calls canUseTool only for calls it would ask about itself.
+  // why: Auto mode calls canUseTool only for calls it would ask about itself.
   const waitForApproval = (
     requestId: string,
     event: Extract<AgentEvent, { type: "approval" }>,
@@ -447,8 +447,8 @@ function startClaude(options: ProviderStartOptions): ProviderSession {
     },
     async stop() {
       stopRequested = true;
-      // Ends the commands the CLI detached while they are still its descendants,
-      // then the CLI's own process group (see claude-process.ts).
+      // why: Ends the commands the CLI detached while they are still its descendants,
+      // why: then the CLI's own process group (see claude-process.ts).
       await cli?.stop();
       input.close();
       abort.abort();
@@ -456,13 +456,13 @@ function startClaude(options: ProviderStartOptions): ProviderSession {
   };
 }
 
-// claude update only updates the native install, and a Homebrew cask can lag the SDK.
+// why: claude update only updates the native install, and a Homebrew cask can lag the SDK.
 function updateCommandFor(executable: string) {
   let resolved = executable;
   try {
     resolved = realpathSync(executable);
   } catch {
-    // Keep the path as found on PATH.
+    // why: Keep the path as found on PATH.
   }
   return resolved.includes("/Caskroom/claude-code/") ? "claude install latest" : "claude update";
 }
@@ -494,7 +494,7 @@ async function claudeSignInStatus(): Promise<SignInStatus> {
     });
     const { account, hook_on_failure_supported, claude_code_version } =
       await probe.initializationResult();
-    // A CLI that predates onFailure: block would let an always-ask failure run the action.
+    // why: A CLI that predates onFailure: block would let an always-ask failure run the action.
     if (hook_on_failure_supported !== true) {
       const version = claude_code_version ? ` ${claude_code_version}` : "";
       return {

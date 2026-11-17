@@ -38,7 +38,7 @@ const darkAnsi: ITheme = {
   brightWhite: "#f0f6fc",
 };
 
-// xterm.js only understands hex and rgb, and the app's tokens are oklch.
+// why: xterm.js only understands hex and rgb, and the app's tokens are oklch.
 function tokenColor(host: HTMLElement, token: string, context: CanvasRenderingContext2D) {
   const probe = document.createElement("span");
   probe.style.color = `var(${token})`;

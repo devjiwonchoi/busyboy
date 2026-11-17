@@ -27,7 +27,7 @@ import type { TaskStatus, TaskView } from "@/server/tasks";
 import { PhaseMark } from "./phase-mark";
 import { useTaskPhases } from "./task-phases";
 
-// Badge has no amber or blue variant, so those colors are added on the outline variant.
+// why: Badge has no amber or blue variant, so those colors are added on the outline variant.
 const STATUS: Record<
   TaskStatus,
   { label: string; variant: "outline" | "destructive"; className?: string }
@@ -153,7 +153,7 @@ export function TaskGroup({
                           </Badge>
                         )
                       )}
-                      {/* A subagent does one action, and a task that waits on a card is answered on that card. */}
+                      {/* why: A subagent does one action, and a task that waits on a card is answered on that card. */}
                       {task && !task.subagent && !task.archived && task.status !== "needs-you" && (
                         <Toggle
                           size="sm"
@@ -205,7 +205,7 @@ export function TaskGroup({
                         </Button>
                       )}
                     </div>
-                    {/* A subagent's result is its last reply; a task reports through its records instead. */}
+                    {/* why: A subagent's result is its last reply; a task reports through its records instead. */}
                     {task?.reply && (
                       <p
                         aria-label="Result"

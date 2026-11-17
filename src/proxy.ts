@@ -36,7 +36,7 @@ function forbidden(reason: string) {
   return new NextResponse(`Forbidden: ${reason}`, { status: 403 });
 }
 
-// Only loopback hosts are accepted, which blocks DNS rebinding.
+// why: Only loopback hosts are accepted, which blocks DNS rebinding.
 function isAllowedHost(host: string | null) {
   if (!host) return false;
   let url: URL;
@@ -50,7 +50,7 @@ function isAllowedHost(host: string | null) {
   return !port || url.port === port;
 }
 
-// Without a launch token, only next dev and test mode are allowed. Anything else fails closed.
+// why: Without a launch token, only next dev and test mode are allowed. Anything else fails closed.
 export async function proxy(request: NextRequest) {
   const host = request.headers.get("host");
   if (!isAllowedHost(host)) return forbidden("host");
@@ -60,7 +60,7 @@ export async function proxy(request: NextRequest) {
 
   const expected = process.env[SERVER_TOKEN_ENV];
   if (!expected) {
-    // NODE_ENV is inlined at build time, so a production build cannot take the dev path.
+    // why: NODE_ENV is inlined at build time, so a production build cannot take the dev path.
     const open = process.env.NODE_ENV === "development" || process.env[TEST_MODE_ENV] === "1";
     if (!open) return forbidden("token");
   } else {
@@ -72,7 +72,7 @@ export async function proxy(request: NextRequest) {
   return (await setupRedirect(request)) ?? NextResponse.next();
 }
 
-// The MCP token and the always-ask token are derived from the server token and open only their own routes.
+// why: The MCP token and the always-ask token are derived from the server token and open only their own routes.
 function hasMcpToken(request: NextRequest, serverToken: string) {
   if (request.nextUrl.pathname === ALWAYS_ASK_PATH) {
     const provided = request.headers.get(MCP_TOKEN_HEADER);

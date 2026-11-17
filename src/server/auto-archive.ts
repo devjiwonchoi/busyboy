@@ -56,7 +56,7 @@ function forgetPullWatch(folder: string, taskId: string) {
   }
 }
 
-// A pull request can merge after the agent has already finished.
+// why: A pull request can merge after the agent has already finished.
 function watchPulls(folder: string, taskId: string) {
   const watch = watchFor(folder);
   watch.ids.add(taskId);
@@ -69,7 +69,7 @@ function watchPulls(folder: string, taskId: string) {
     }
     for (const id of watch.ids) void considerAutoArchive(folder, id);
   }, PULL_CHECK_MS);
-  // The process can exit while a finished task is waiting on its pull requests.
+  // why: The process can exit while a finished task is waiting on its pull requests.
   timer.unref();
   watch.timer = timer;
 }
@@ -81,9 +81,9 @@ onServerShutdown(() => {
   }
 });
 
-// A live idle agent just ended its turn. With no process, only a stored `idle`
-// counts: that turn finished before this process started. A task with no
-// activity was never run, so it stays.
+// why: A live idle agent just ended its turn. With no process, only a stored `idle`
+// why: counts: that turn finished before this process started. A task with no
+// why: activity was never run, so it stays.
 function turnFinished(task: TaskRecord) {
   const agent = getAgent(task.agentId);
   if (agent && agent.status !== "stopped") return agent.status === "idle";
@@ -126,7 +126,7 @@ async function pullState(gh: string, checkout: string, number: number): Promise<
   }
 }
 
-// An unreadable state is not closed. Guessing would put the task away too soon.
+// why: An unreadable state is not closed. Guessing would put the task away too soon.
 async function pullRequestsSettled(checkout: string, numbers: number[]) {
   const gh = githubCli();
   if (!gh) {
@@ -206,7 +206,7 @@ async function consider(folder: string, taskId: string) {
   }
   if (decision !== "archive") return;
 
-  // Read again: a message can start the agent while the pull requests are checked.
+  // why: Read again: a message can start the agent while the pull requests are checked.
   const latest = (await readTasksAt(folder)).find(({ id }) => id === taskId);
   const latestReadable = readyToRead(latest);
   const latestDraft =
@@ -224,14 +224,14 @@ async function consider(folder: string, taskId: string) {
   try {
     await archiveTask(taskId);
   } catch (error) {
-    // It started working again, or it is already archived. The next finish decides.
+    // why: It started working again, or it is already archived. The next finish decides.
     if (error instanceof TaskError) return;
     throw error;
   }
   forgetPullWatch(folder, taskId);
 }
 
-// A turn ends outside a request, so the data folder is the one the task was created in.
+// why: A turn ends outside a request, so the data folder is the one the task was created in.
 export function considerAutoArchive(folder: string, taskId: string) {
   return runWithDataFolder(folder, () => consider(folder, taskId)).catch((error: unknown) => {
     console.error(`busyboy: could not archive finished task ${taskId}`, error);

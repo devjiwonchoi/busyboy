@@ -16,7 +16,7 @@ export const SELF_CHECK_TIMEOUT_MS = 90_000;
 const TERMINAL_TIMEOUT_MS = 20_000;
 const TERMINAL_MARKER = "busyboy-terminal-ok";
 
-// ConPTY positions the cursor instead of writing newlines, and cmd.exe echoes with a caret escape.
+// why: ConPTY positions the cursor instead of writing newlines, and cmd.exe echoes with a caret escape.
 const terminalCommand =
   process.platform === "win32" ? "echo busyboy-terminal^-ok\r" : `echo busyboy-"terminal"-ok\r`;
 
@@ -58,7 +58,7 @@ function isRunning(pid: number) {
     process.kill(pid, 0);
     return true;
   } catch (error) {
-    // EPERM means the process exists but belongs to someone else.
+    // why: EPERM means the process exists but belongs to someone else.
     return (error as NodeJS.ErrnoException).code === "EPERM";
   }
 }
@@ -132,12 +132,12 @@ export function selfCheckOutputPath(argv: string[]): string | null {
   return value ? resolve(value) : join(tmpdir(), "busyboy-self-check.json");
 }
 
-// The self-check can run while the app is open, so it uses a throwaway profile.
+// why: The self-check can run while the app is open, so it uses a throwaway profile.
 export function isolateSelfCheckProfile() {
   app.setPath("userData", mkdtempSync(join(tmpdir(), "busyboy-self-check-")));
 }
 
-// A throwaway data folder, so the check never touches the real ~/.busyboy.
+// why: A throwaway data folder, so the check never touches the real ~/.busyboy.
 export function createSelfCheckDataFolder() {
   const folder = mkdtempSync(join(tmpdir(), "busyboy-self-check-home-"));
   const at = new Date().toISOString();

@@ -48,7 +48,7 @@ export function startBackground(server: ServerHandle, options: BackgroundOptions
       if (tray.state().directorReplied) tray.update({ directorReplied: false });
       setBadge(0);
     },
-    // Electron may still report the window as focused while it emits the blur.
+    // why: Electron may still report the window as focused while it emits the blur.
     windowBlurred: () => void setImmediate(refreshBadge),
     updateReady: (version: string) => tray.update({ updateVersion: version }),
     stop() {

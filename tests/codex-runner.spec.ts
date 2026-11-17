@@ -16,7 +16,7 @@ const MCP_DEFAULTS_FORM_PROMPT = "Clean up old tickets with the tickets MCP serv
 const USAGE_LIMIT_PROMPT = "Reply with anything.";
 const SLOW_REQUEST = "Write a long story about a lighthouse.";
 const INTERRUPTING_REQUEST = "Never mind, just say hi.";
-// Makes the fake `codex` start child processes and ignore SIGTERM.
+// why: Makes the fake `codex` start child processes and ignore SIGTERM.
 const START_CHILDREN_PROMPT = "Start a command that keeps running.";
 
 const expect = baseExpect.configure({ timeout: 15_000 });
@@ -164,7 +164,7 @@ test("stopping a Codex Director that ignores SIGTERM should still end the proces
 
   await page.getByRole("button", { name: "Stop" }).click();
 
-  // SIGTERM is ignored, so the stop waits for the forced kill after the grace period.
+  // why: SIGTERM is ignored, so the stop waits for the forced kill after the grace period.
   const transcript = page.getByRole("log", { name: "Transcript" });
   await expect(transcript).toHaveAttribute("data-status", "idle", { timeout: 15_000 });
   await expect.poll(() => children.filter(isRunning), { timeout: 15_000 }).toEqual([]);

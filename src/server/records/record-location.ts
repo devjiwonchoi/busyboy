@@ -13,7 +13,7 @@ export async function taskRecordDirectory(
   return folder ?? { error: "The record folder would leave the jwn record root." };
 }
 
-// A symbolic link is an error: it could point anywhere.
+// why: A symbolic link is an error: it could point anywhere.
 export async function locateTaskRecords(
   dataFolder: string,
   task: RecordTask,

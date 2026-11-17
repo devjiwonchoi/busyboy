@@ -43,7 +43,7 @@ async function openChat(page: Page) {
   );
 }
 
-// Hydrating the controlled textarea sets its value again, which drops anything filled before then.
+// why: Hydrating the controlled textarea sets its value again, which drops anything filled before then.
 async function openApprovals(page: Page) {
   await page.goto("/setup?step=approvals");
   const list = page.getByRole("textbox", { name: "Always-ask list" });

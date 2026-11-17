@@ -92,7 +92,7 @@ function doneWhen(lines: Line[]): Item[] {
   return items;
 }
 
-// # Later and # Criteria sit outside # End state, so they are not items.
+// why: # Later and # Criteria sit outside # End state, so they are not items.
 export function endStateItems(align: string): Item[] {
   const lines = toLines(align);
   const endState = section(lines, "end state");

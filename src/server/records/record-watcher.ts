@@ -7,9 +7,9 @@ import { readTasksAt, subscribeToTasks, TASKS_FILE, type TaskRecord } from "../t
 import { readProjectGraph, type ProjectGraph } from "./project-graph";
 import { taskRecordDirectory } from "./record-location";
 
-// Changes arrive in bursts, so one rebuild per burst still lands inside 2 seconds.
+// why: Changes arrive in bursts, so one rebuild per burst still lands inside 2 seconds.
 const DEBOUNCE_MS = 100;
-// On macOS libuv shares one FSEvents stream and drops events when a watch is added.
+// why: On macOS libuv shares one FSEvents stream and drops events when a watch is added.
 const RESCAN_MS = 1_000;
 
 type Listener = (graph: ProjectGraph) => void;
@@ -28,7 +28,7 @@ type Hub = {
   stopTasks: () => void;
 };
 
-// On globalThis so dev reloads of this module keep one hub (and one set of watchers) per folder.
+// why: On globalThis so dev reloads of this module keep one hub (and one set of watchers) per folder.
 const HUBS_KEY = Symbol.for("busyboy.record-hubs");
 const globalStore = globalThis as typeof globalThis & { [HUBS_KEY]?: Map<string, Hub> };
 const hubs = (globalStore[HUBS_KEY] ??= new Map());
@@ -93,7 +93,7 @@ function addWatcher(
     });
     hub.watchers.set(key, watcher);
   } catch {
-    // Not there yet: the parent folder's watcher reports when it appears.
+    // why: Not there yet: the parent folder's watcher reports when it appears.
   }
 }
 

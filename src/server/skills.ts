@@ -6,7 +6,7 @@ import { isTestMode, dataFolder } from "./config";
 import { getProject } from "./projects";
 import type { ProviderId } from "./runner/contract";
 
-// A skill is invoked as /name in a Claude message and $name in a Codex message.
+// why: A skill is invoked as /name in a Claude message and $name in a Codex message.
 
 export type ComposerSkill = {
   name: string;
@@ -106,7 +106,7 @@ async function claudePluginRoots() {
       }
     }
   } catch {
-    // A broken plugin list is no skills, not a failed chat.
+    // why: A broken plugin list is no skills, not a failed chat.
   }
   return roots;
 }

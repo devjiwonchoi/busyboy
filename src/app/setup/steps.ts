@@ -1,5 +1,5 @@
-// The setup steps, in order. The current step lives in the URL (`?step=`), so
-// Back, Continue, and reloads all land on the same step without client state.
+// why: The setup steps, in order. The current step lives in the URL (`?step=`), so
+// why: Back, Continue, and reloads all land on the same step without client state.
 
 export const STEPS = [
   { id: "companion", title: "Director" },

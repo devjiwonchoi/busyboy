@@ -1,5 +1,5 @@
-// A file mention's query may contain a path (`src/app.tsx`). A slash that is
-// not its own trigger still belongs to that query.
+// why: A file mention's query may contain a path (`src/app.tsx`). A slash that is
+// why: not its own trigger still belongs to that query.
 const QUERY_BODY = /^[\p{L}\p{M}\p{N}\p{Zs}_.’'./\\-]*$/u;
 const QUERY_SUFFIX = /^[\p{L}\p{M}\p{N}_.’'./\\-]*/u;
 
@@ -21,7 +21,7 @@ export function getComposerQuery(
   candidates.sort((left, right) => right.start - left.start);
 
   for (const { start, character } of candidates) {
-    // A trigger in the middle of a word is part of the text, not a picker.
+    // why: A trigger in the middle of a word is part of the text, not a picker.
     if (start > 0 && !/\s/u.test(text.charAt(start - 1))) continue;
     const beforeCaret = text.slice(start + character.length, caret);
     if (/^\s/u.test(beforeCaret) || !QUERY_BODY.test(beforeCaret)) continue;

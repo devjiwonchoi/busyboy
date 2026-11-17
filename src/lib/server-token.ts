@@ -14,14 +14,14 @@ export const MCP_PATH = "/api/mcp";
 
 export const ALWAYS_ASK_PATH = "/api/always-ask";
 
-// Agents never get the server token, which opens every route.
+// why: Agents never get the server token, which opens every route.
 export function mcpTokenFor(serverToken: string) {
   return createHmac("sha256", serverToken).update("busyboy-mcp-endpoint").digest("hex");
 }
 
 export const MCP_TASK_PROJECT_PARAM = "project";
 
-// A task agent reads untrusted content, so its token cannot reach every later prompt.
+// why: A task agent reads untrusted content, so its token cannot reach every later prompt.
 export function taskMcpTokenFor(serverToken: string, project: string) {
   return createHmac("sha256", serverToken).update(`busyboy-mcp-task:${project}`).digest("hex");
 }
@@ -32,7 +32,7 @@ export function managerMcpTokenFor(serverToken: string, manager: string) {
   return createHmac("sha256", serverToken).update(`busyboy-mcp-manager:${manager}`).digest("hex");
 }
 
-// The hook file is readable by a task agent, so this token opens only the always-ask path.
+// why: The hook file is readable by a task agent, so this token opens only the always-ask path.
 export function alwaysAskTokenFor(serverToken: string) {
   return createHmac("sha256", serverToken).update("busyboy-always-ask").digest("hex");
 }

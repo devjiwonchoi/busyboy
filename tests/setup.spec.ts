@@ -355,7 +355,7 @@ test("opening the app after setup should skip setup", async ({ page, context, ba
   await page.getByRole("button", { name: "Start chatting" }).click();
   await expect(page.getByRole("region", { name: "Chat" })).toBeVisible();
 
-  // Two open main screens fill Chromium's six connections per host, which stalls the next navigation.
+  // why: Two open main screens fill Chromium's six connections per host, which stalls the next navigation.
   await page.close();
   const reopened = await context.newPage();
   await reopened.goto("/");

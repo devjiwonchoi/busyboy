@@ -7,7 +7,7 @@ import { isTestMode } from "../config";
 import { alwaysAskApproval, matchAlwaysAsk, ruleError, UNREADABLE } from "./always-ask";
 import type { AgentEvent } from "./contract";
 
-// A check that cannot be read blocks too. In test mode each journey has its own folder, so it never reads the real ~/.jwn.
+// why: A check that cannot be read blocks too. In test mode each journey has its own folder, so it never reads the real ~/.jwn.
 
 const RULE_FILE = /\.(md|ya?ml)$/i;
 const MAX_FILES = 100;
@@ -34,7 +34,7 @@ export function resolveRulesFolder(given: string | undefined) {
   return join(homedir(), ".jwn");
 }
 
-/** Whether the hook must be installed so a rules check cannot be skipped. A folder that cannot be read still needs the hook: the check then fails closed. */
+/*why: * Whether the hook must be installed so a rules check cannot be skipped. A folder that cannot be read still needs the hook: the check then fails closed. */
 export function userRulesHookNeeded(rulesFolder: string | undefined) {
   const folder = resolveRulesFolder(rulesFolder);
   if (!folder) return false;
@@ -83,7 +83,7 @@ export async function checkUserRules({
   toolName: string;
   input: unknown;
   cwd: string;
-  /** The task's jwn record folder, counted as inside the task folder by the delete rule. */
+  /*why: * The task's jwn record folder, counted as inside the task folder by the delete rule. */
   recordFolder?: string;
 }): Promise<UserRuleCheck> {
   try {
@@ -179,7 +179,7 @@ function finish(
   return { name: partial.name ?? "", block, reason: partial.reason ?? "", file };
 }
 
-// Anything that only looks like rules is an error, so it cannot be treated as an empty file.
+// why: Anything that only looks like rules is an error, so it cannot be treated as an empty file.
 function parseYaml(text: string, file: string): UserRule[] {
   const rules: UserRule[] = [];
   let current: {

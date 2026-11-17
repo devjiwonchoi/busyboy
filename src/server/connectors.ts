@@ -6,7 +6,7 @@ import { join } from "node:path";
 import type { ProviderId } from "./runner/contract";
 import { agentEnvironment, findExecutable } from "./runner/find-executable";
 
-// BusyBoy does not keep connector tokens. The harness config is the list, and login is the harness CLI.
+// why: BusyBoy does not keep connector tokens. The harness config is the list, and login is the harness CLI.
 
 export type ConnectorStatus = "connected" | "needs-login" | "failed";
 
@@ -176,7 +176,7 @@ async function codexServers(): Promise<Listed[]> {
         if (Array.isArray(parsed) && parsed.every((arg) => typeof arg === "string"))
           current.args = parsed;
       } catch {
-        // A value this parser cannot read is left out; the server is still listed from its command or url.
+        // why: A value this parser cannot read is left out; the server is still listed from its command or url.
       }
     }
   }
@@ -286,7 +286,7 @@ async function probeStdio(server: Listed): Promise<Pick<ConnectorServer, "status
         clientInfo: { name: "busyboy", version: "0.0.0" },
       },
     });
-    // Closing stdin ends an MCP stdio handshake before the server answers.
+    // why: Closing stdin ends an MCP stdio handshake before the server answers.
     child.stdin?.on("error", () => {});
     child.stdin?.write(`${body}\n`);
     setTimeout(

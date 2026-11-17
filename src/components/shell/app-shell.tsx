@@ -2,7 +2,7 @@
 
 import { PanelBottom, Settings } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useRef, useSyncExternalStore } from "react";
+import { useRef, useSyncExternalStore } from "react";
 import { usePanelRef } from "react-resizable-panels";
 
 import { buttonVariants } from "@/components/ui/button";
@@ -10,6 +10,7 @@ import { Kbd } from "@/components/ui/kbd";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
 import { Toggle } from "@/components/ui/toggle";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { useExternalSync } from "@/hooks/use-external-sync";
 
 import { CommandPalette } from "./command-palette";
 import { FocusHandler } from "./focus-handler";
@@ -48,7 +49,7 @@ const PANEL_MIN_SIZE = 120;
 function useBottomPanel(panelOpen: boolean, setPanelOpen: (open: boolean) => void) {
   const panelRef = usePanelRef();
   const lastSize = useRef(PANEL_DEFAULT_SIZE);
-  useEffect(() => {
+  useExternalSync(() => {
     const handle = panelRef.current;
     if (!handle) return;
     if (panelOpen && handle.isCollapsed()) handle.resize(lastSize.current);
@@ -93,7 +94,7 @@ function ShellLayout({ children, chats, panel }: AppShellProps) {
           />
           <Tooltip>
             <TooltipTrigger
-              // A link styled as a button: Base UI's Button would give it role="button".
+              // why: A link styled as a button: Base UI's Button would give it role="button".
               render={
                 <Link
                   href="/settings"

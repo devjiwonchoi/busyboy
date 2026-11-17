@@ -1,6 +1,6 @@
 import type { Question, QuestionOption } from "./contract";
 
-// Claude and Codex question payloads do not match their own tool schemas.
+// why: Claude and Codex question payloads do not match their own tool schemas.
 
 const QUESTION_TEXT = ["question", "title", "prompt", "text"] as const;
 const OPTION_LABEL = ["label", "text", "name", "value", "title"] as const;
@@ -21,7 +21,7 @@ function flagged(value: unknown) {
   return value === true || value === "true";
 }
 
-// A choice whose words merely include "recommended" is left as written.
+// why: A choice whose words merely include "recommended" is left as written.
 function normalizeLabel(label: string, marked = false) {
   const prefix = RECOMMENDED_PREFIX.exec(label);
   const suffix = RECOMMENDED_SUFFIX.exec(label);

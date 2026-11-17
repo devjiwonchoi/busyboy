@@ -17,7 +17,7 @@ async function openChat(page: Page) {
 
 async function press(page: Page, key: string, dialog: string) {
   const commands = page.getByRole("dialog", { name: dialog });
-  // A closing dialog stays through its exit animation and swallows the next key. A key pressed before hydration is dropped.
+  // why: A closing dialog stays through its exit animation and swallows the next key. A key pressed before hydration is dropped.
   await expect(commands).toBeHidden();
   await expect(async () => {
     if (await commands.isHidden()) await page.keyboard.press(key);

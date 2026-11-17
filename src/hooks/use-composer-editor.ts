@@ -2,8 +2,9 @@
 
 import { Autocomplete as AutocompletePrimitive } from "@base-ui/react/autocomplete";
 import type { ComponentProps, FormEvent, KeyboardEvent, RefObject } from "react";
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useLayoutEffect, useRef, useState } from "react";
 
+import { useExternalSync } from "@/hooks/use-external-sync";
 import { COMPOSER_CLIPBOARD_TYPE, parseComposerClipboard } from "@/lib/composer-clipboard";
 import {
   type ActiveQuery,
@@ -156,7 +157,7 @@ export function useComposerEditor({
     );
   }, []);
 
-  useEffect(() => {
+  useExternalSync(() => {
     onQueryChangeRef.current?.(
       queryCharacter && queryText !== undefined && queryKey
         ? { character: queryCharacter, text: queryText, key: queryKey }
@@ -164,15 +165,14 @@ export function useComposerEditor({
     );
   }, [queryCharacter, queryText, queryKey]);
 
-  useEffect(() => {
-    if (
-      query &&
-      (disabled || readOnly || !triggers.some((item) => item.character === query.character))
-    )
-      setQuery(null);
-  }, [disabled, readOnly, query, triggers]);
+  if (
+    query &&
+    (disabled || readOnly || !triggers.some((item) => item.character === query.character))
+  ) {
+    setQuery(null);
+  }
 
-  useEffect(() => {
+  useExternalSync(() => {
     const input = inputElement;
     if (!input || input instanceof HTMLTextAreaElement) return;
     const beforeInput = (event: InputEvent) => {
@@ -195,7 +195,7 @@ export function useComposerEditor({
     return () => input.removeEventListener("beforeinput", beforeInput);
   }, [inputElement, disabled, readOnly]);
 
-  useEffect(() => {
+  useExternalSync(() => {
     const onSelectionChange = () => {
       const input = inputRef.current;
       if (input && document.activeElement === input && !composing.current) {

@@ -22,8 +22,8 @@ export async function setThemeAction(theme: unknown) {
   await updateSettings((settings) => {
     settings.theme = theme;
   });
-  // The page already applied the class and the cookie. A refresh here would reload Settings
-  // under the click that chose the theme.
+  // why: The page already applied the class and the cookie. A refresh here would reload Settings
+  // why: under the click that chose the theme.
 }
 
 export async function setDefaultProviderAction(id: unknown) {

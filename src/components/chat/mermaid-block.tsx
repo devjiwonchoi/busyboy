@@ -1,10 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { CodeBlock, CodeBlockCopyButton, type CustomRendererProps } from "streamdown";
 
-// Mermaid is large and only needed once a fence is on screen, so the browser
-// loads it on demand. A failed import can be tried again the next time.
+import { useExternalSync } from "@/hooks/use-external-sync";
+
+// why: Mermaid is large and only needed once a fence is on screen, so the browser
+// why: loads it on demand. A failed import can be tried again the next time.
 let mermaidModule: Promise<typeof import("mermaid").default> | null = null;
 
 function loadMermaid() {
@@ -17,8 +19,8 @@ function loadMermaid() {
   return mermaidModule;
 }
 
-// initialize() is global, and render() writes a temporary node, so one diagram
-// finishes before the next starts.
+// why: initialize() is global, and render() writes a temporary node, so one diagram
+// why: finishes before the next starts.
 let renderQueue: Promise<unknown> = Promise.resolve();
 
 function enqueue<T>(task: () => Promise<T>) {
@@ -30,7 +32,7 @@ function enqueue<T>(task: () => Promise<T>) {
   return result;
 }
 
-// getComputedStyle returns lab() for an oklch token, and Mermaid rejects that.
+// why: getComputedStyle returns lab() for an oklch token, and Mermaid rejects that.
 function tokenColor(name: string) {
   const probe = document.createElement("span");
   probe.style.color = `var(${name})`;
@@ -51,7 +53,7 @@ function tokenColor(name: string) {
 
 let nextDiagram = 0;
 
-// Mermaid's defaults are a light cream diagram. Labels stay SVG text so the result is the diagram.
+// why: Mermaid's defaults are a light cream diagram. Labels stay SVG text so the result is the diagram.
 async function drawDiagram(source: string, dark: boolean) {
   const text = source.trim();
   if (!text) throw new Error("The diagram is empty.");
@@ -66,7 +68,7 @@ async function drawDiagram(source: string, dark: boolean) {
     suppressErrorRendering: true,
     htmlLabels: false,
     flowchart: { htmlLabels: false },
-    // Keep the site theme. A diagram directive must not replace it.
+    // why: Keep the site theme. A diagram directive must not replace it.
     secure: [
       "secure",
       "securityLevel",
@@ -97,7 +99,7 @@ async function drawDiagram(source: string, dark: boolean) {
   });
   try {
     await mermaid.parse(text);
-    // bindFunctions would attach click handlers to nodes. The diagram is a picture.
+    // why: bindFunctions would attach click handlers to nodes. The diagram is a picture.
     const { svg } = await mermaid.render(id, text);
     if (!/<svg[\s>]/i.test(svg)) throw new Error("Mermaid did not return a diagram.");
     return svg;
@@ -107,7 +109,7 @@ async function drawDiagram(source: string, dark: boolean) {
   }
 }
 
-/** The fence as Streamdown already shows every other code block. */
+/*why: * The fence as Streamdown already shows every other code block. */
 function MermaidSource({ code, isIncomplete }: { code: string; isIncomplete: boolean }) {
   return (
     <div data-mermaid="code">
@@ -122,7 +124,7 @@ export function MermaidBlock({ code, isIncomplete }: CustomRendererProps) {
   const [svg, setSvg] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
 
-  useEffect(() => {
+  useExternalSync(() => {
     if (isIncomplete) return;
     let active = true;
     let drawnDark: boolean | null = null;
@@ -160,7 +162,7 @@ export function MermaidBlock({ code, isIncomplete }: CustomRendererProps) {
     <div
       data-mermaid="diagram"
       className="my-2 overflow-x-auto [&_svg]:h-auto [&_svg]:max-w-full"
-      // Mermaid returns the SVG for this fence. securityLevel "strict" sanitizes it.
+      // why: Mermaid returns the SVG for this fence. securityLevel "strict" sanitizes it.
       dangerouslySetInnerHTML={{ __html: svg }}
     />
   );

@@ -10,7 +10,7 @@ import { isTestMode } from "./working-directory";
 
 const SCROLLBACK_LIMIT = 256 * 1024;
 const DETACHED_GRACE_MS = 15_000;
-/** Waits between SIGHUP, SIGTERM, and SIGKILL when a shell will not exit. */
+/*why: * Waits between SIGHUP, SIGTERM, and SIGKILL when a shell will not exit. */
 const KILL_ESCALATION_MS = 1_000;
 const STOP_ALL_TIMEOUT_MS = 3_000;
 const MIN_SIZE = 2;
@@ -18,7 +18,7 @@ const MAX_SIZE = 1000;
 
 export type TerminalEvent =
   | { type: "data"; data: string }
-  /** `killed` is set when Busyboy ended the shell rather than the shell exiting by itself. */
+  /*why: * `killed` is set when Busyboy ended the shell rather than the shell exiting by itself. */
   | { type: "exit"; exitCode: number; signal?: number; killed?: boolean };
 
 type Listener = (event: TerminalEvent) => void;
@@ -42,8 +42,8 @@ type Registry = {
   exitHookInstalled: boolean;
 };
 
-// Kept on globalThis so `next dev` reloads of this module reuse the same
-// registry instead of orphaning live shells.
+// why: Kept on globalThis so `next dev` reloads of this module reuse the same
+// why: registry instead of orphaning live shells.
 const registryKey = Symbol.for("busyboy.terminals");
 const registry: Registry = ((globalThis as Record<symbol, unknown>)[registryKey] as
   | Registry
@@ -54,7 +54,7 @@ const registry: Registry = ((globalThis as Record<symbol, unknown>)[registryKey]
 };
 (globalThis as Record<symbol, unknown>)[registryKey] = registry;
 
-// node-pty 1.1.0 ships spawn-helper without the executable bit. Turbopack compiles createRequire().resolve() into a module id, not a path.
+// why: node-pty 1.1.0 ships spawn-helper without the executable bit. Turbopack compiles createRequire().resolve() into a module id, not a path.
 let spawnHelperChecked = false;
 function ensureSpawnHelperExecutable() {
   if (spawnHelperChecked || process.platform === "win32") return;
@@ -71,7 +71,7 @@ function ensureSpawnHelperExecutable() {
       return;
     }
   } catch {
-    // Spawning reports the real problem if the helper is unusable.
+    // why: Spawning reports the real problem if the helper is unusable.
   }
 }
 
@@ -83,7 +83,7 @@ function accountShell() {
   }
 }
 
-// Journeys pin a plain shell with BUSYBOY_TEST_SHELL so the developer's profile cannot change what they see.
+// why: Journeys pin a plain shell with BUSYBOY_TEST_SHELL so the developer's profile cannot change what they see.
 export function loginShell(): { file: string; args: string[] } {
   const testShell = process.env.BUSYBOY_TEST_SHELL;
   if (testShell && isTestMode()) return { file: testShell, args: [] };
@@ -108,7 +108,7 @@ function shellEnvironment(cwd: string): Record<string, string> {
   env.TERM = "xterm-256color";
   env.COLORTERM = "truecolor";
   env.TERM_PROGRAM = "busyboy";
-  // Without a matching PWD, shells print the resolved path (/private/var/...) instead of the folder they were opened in.
+  // why: Without a matching PWD, shells print the resolved path (/private/var/...) instead of the folder they were opened in.
   env.PWD = cwd;
   return env;
 }
@@ -130,10 +130,10 @@ function installExitHook() {
     killAllTerminals();
     for (const terminal of stubborn) signal(terminal, "SIGKILL");
   });
-  // Output streams stay open while their shell lives, so the shells have to end or the Next server never exits.
+  // why: Output streams stay open while their shell lives, so the shells have to end or the Next server never exits.
   process.once("SIGTERM", killAllTerminals);
   process.once("SIGINT", killAllTerminals);
-  // On Windows the desktop app then terminates the process, which runs none of the signal hooks.
+  // why: On Windows the desktop app then terminates the process, which runs none of the signal hooks.
   onServerShutdown(stopAllTerminals);
 }
 
@@ -254,14 +254,14 @@ function finish(terminal: Terminal, event: Extract<TerminalEvent, { type: "exit"
 function signal(terminal: Terminal, name?: "SIGHUP" | "SIGTERM" | "SIGKILL") {
   if (terminal.exited) return;
   try {
-    // node-pty on Windows takes no signal. Its kill ends the console's process tree.
+    // why: node-pty on Windows takes no signal. Its kill ends the console's process tree.
     terminal.pty.kill(process.platform === "win32" ? undefined : name);
   } catch {
-    // Already gone.
+    // why: Already gone.
   }
 }
 
-// SIGHUP is what a closed terminal window sends, and the shell passes it on to its jobs.
+// why: SIGHUP is what a closed terminal window sends, and the shell passes it on to its jobs.
 export function killTerminal(id: string) {
   const terminal = registry.terminals.get(id);
   if (!terminal) return false;

@@ -1,4 +1,4 @@
-// pnpm siblings only resolve through the package symlink, and Windows tar cannot create those links.
+// why: pnpm siblings only resolve through the package symlink, and Windows tar cannot create those links.
 import {
   copyFileSync,
   cpSync,
@@ -35,8 +35,8 @@ function siblings(packageReal: string): Array<[string, string]> {
   return deps;
 }
 
-// `stack` is the packages currently being nested. A dependency cycle stops
-// there; Node then finds the earlier copy by walking up from the inner file.
+// why: `stack` is the packages currently being nested. A dependency cycle stops
+// why: there; Node then finds the earlier copy by walking up from the inner file.
 function placePackage(packageReal: string, dest: string, stack: Set<string>) {
   if (stack.has(packageReal)) return;
   mkdirSync(dest, { recursive: true });

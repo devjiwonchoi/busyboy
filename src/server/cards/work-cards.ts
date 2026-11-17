@@ -21,7 +21,7 @@ import type {
 } from "./model";
 import { linkTaskArtifacts } from "./task-artifact";
 
-// Nothing here merges a pull request. That runs only when the user clicks.
+// why: Nothing here merges a pull request. That runs only when the user clicks.
 
 const run = promisify(execFile);
 
@@ -44,7 +44,7 @@ export function trackWorkCards({ folder, task }: { folder: string; task: WorkTas
   let epoch = 0;
   subscribeToAgent(task.agentId, 0, ({ event }) => {
     if (event.type === "stopped") {
-      // Bumping the epoch would drop the done line an in-flight sync is still opening.
+      // why: Bumping the epoch would drop the done line an in-flight sync is still opening.
       if (isArchiveStop(task.id)) {
         for (const id of [progressId(task.id), doneId(task.id), prId(task.id)]) {
           const card = openCards(folder).find((item) => item.id === id);
@@ -73,7 +73,7 @@ function settleIfOpen(folder: string, cardId: string, outcome: string) {
 
 async function syncWorkCards(folder: string, task: WorkTask, fresh: () => boolean) {
   const read = await readWorkRecords(folder, task);
-  // An archive stops the agent while this sync is still reading. The done line is the record of that finish.
+  // why: An archive stops the agent while this sync is still reading. The done line is the record of that finish.
   if (
     !fresh() ||
     (getAgent(task.agentId)?.status === "stopped" && !isArchiveStop(task.id)) ||
@@ -284,7 +284,7 @@ function pullUrl(value: string) {
   return url;
 }
 
-// Rows stay in stack order: the base of the stack is first and is merged first.
+// why: Rows stay in stack order: the base of the stack is first and is merged first.
 export function parsePullRequests(status: string): PullRequestRow[] {
   const lines = sectionLines(status, "Pull requests");
   let header: string[] | null = null;
@@ -363,7 +363,7 @@ function githubCli() {
   return process.env.BUSYBOY_GH_PATH || findExecutable("gh");
 }
 
-// Opening the card does not merge. Only the Merge button does.
+// why: Opening the card does not merge. Only the Merge button does.
 export async function mergePullRequests({ folder, cardId }: { folder: string; cardId: string }) {
   const card = openCards(folder).find((item) => item.id === cardId);
   if (!card || card.kind !== "pr") throw new CardError("Only a pull request card can be merged.");
@@ -401,7 +401,7 @@ export async function mergePullRequests({ folder, cardId }: { folder: string; ca
       agentId: task.agentId,
     });
   }
-  // Merged here, so a task whose record is already done can put itself away without waiting for the next look.
+  // why: Merged here, so a task whose record is already done can put itself away without waiting for the next look.
   const { considerAutoArchive } = await import("../auto-archive");
   await considerAutoArchive(folder, task.id);
 }

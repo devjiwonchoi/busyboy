@@ -6,7 +6,7 @@ import type { TaskProgress } from "@/server/records/progress";
 import type { ProjectGraph } from "@/server/records/project-graph";
 import type { TaskPhase } from "@/server/records/task-phase";
 
-// One graph stream for the window, so a graph update does not re-render the composer or the terminal.
+// why: One graph stream for the window, so a graph update does not re-render the composer or the terminal.
 
 const empty = new Map<string, TaskPhase>();
 const calm: TaskProgress = { total: 0, verified: 0, state: "calm" };

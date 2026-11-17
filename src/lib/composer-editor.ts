@@ -15,7 +15,6 @@ import {
   createElement,
   useCallback,
   useContext,
-  useEffect,
   useId,
   useLayoutEffect,
   useRef,
@@ -29,6 +28,7 @@ import {
   type UseComposerEditorOptions,
   useComposerEditor,
 } from "@/hooks/use-composer-editor";
+import { useExternalSync } from "@/hooks/use-external-sync";
 
 type ComposerEditorOptions = Omit<UseComposerEditorOptions, "value" | "onValueChange"> & {
   value?: ComposerValue;
@@ -101,7 +101,7 @@ function ComposerEditorProvider({
   const reset = () => editor.reset(defaultValue);
   const resetRef = useRef(reset);
   resetRef.current = reset;
-  useEffect(() => {
+  useExternalSync(() => {
     const form = editor.rootRef.current?.closest("form");
     if (!form) return;
     const onReset = (event: Event) => {
@@ -369,8 +369,8 @@ function useComposerInputLayout() {
 
     function measure(): void {
       if (!scroll || !input) return;
-      // Observe the groups themselves: their wrapper has no box in compact mode.
-      // Reconcile here so conditional controls don't require a new observer.
+      // why: Observe the groups themselves: their wrapper has no box in compact mode.
+      // why: Reconcile here so conditional controls don't require a new observer.
       const nextControls = new Set(
         frame?.querySelectorAll<HTMLElement>(
           ':scope > [data-slot="composer-actions"] > [data-slot="composer-action-group"]',
@@ -410,8 +410,8 @@ function useComposerInputLayout() {
         return;
       }
 
-      // Measure at the narrow, one-line width even after the actions move below.
-      // This keeps the layout from oscillating when full-width text fits one line.
+      // why: Measure at the narrow, one-line width even after the actions move below.
+      // why: This keeps the layout from oscillating when full-width text fits one line.
       frame.removeAttribute("data-multiline");
       const minHeight = input.style.getPropertyValue("min-height");
       const minHeightPriority = input.style.getPropertyPriority("min-height");

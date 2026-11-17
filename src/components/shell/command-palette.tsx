@@ -1,12 +1,13 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useState, useSyncExternalStore } from "react";
 
 import { commandPaletteAction } from "@/app/(main)/palette-actions";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Kbd } from "@/components/ui/kbd";
+import { useExternalSync } from "@/hooks/use-external-sync";
 import type { PaletteChat, SearchHit } from "@/server/search-chats";
 
 import {
@@ -63,7 +64,7 @@ export function CommandPalette() {
     },
   });
 
-  useEffect(() => {
+  useExternalSync(() => {
     if (!open) return;
     let cancelled = false;
     const handle = setTimeout(() => {

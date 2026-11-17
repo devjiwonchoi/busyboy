@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 
 import {
   archiveTaskAction,
@@ -22,6 +22,7 @@ import {
   MessageFooter,
   MessageHeader,
 } from "@/components/ui/message";
+import { useExternalSync } from "@/hooks/use-external-sync";
 import { textWithImages } from "@/lib/chat-attachments";
 import { cn } from "@/lib/utils";
 import type { TaskCard } from "@/server/cards/model";
@@ -149,15 +150,13 @@ export function DirectorChat({
   greeting: string;
 }) {
   const [view, setView] = useState(initialView);
-  // A card never takes the composer by itself, so a message typed for the Director cannot reach a task agent.
+  // why: A card never takes the composer by itself, so a message typed for the Director cannot reach a task agent.
   const [replyChoice, setReplyChoice] = useState<string | null>(null);
-  // Set when the chosen card closed before the reply was sent. The reply is then refused, not sent
-  // to the Director: "yes, delete it" meant for a task agent must not become a Director prompt.
+  // why: Set when the chosen card closed before the reply was sent. The reply is then refused, not sent
+  // why: to the Director: "yes, delete it" meant for a task agent must not become a Director prompt.
   const [replyLost, setReplyLost] = useState(false);
   const choice = useRef(replyChoice);
-  useEffect(() => {
-    choice.current = replyChoice;
-  }, [replyChoice]);
+  choice.current = replyChoice;
   const [messageChoice, setMessageChoice] = useState<string | null>(null);
   const [messageLost, setMessageLost] = useState(false);
   const [seed, setSeed] = useState<{ token: number; text: string } | null>(null);
@@ -171,15 +170,15 @@ export function DirectorChat({
   const [jumpId, setJumpId] = useState<string | null>(null);
   const name = persona.name;
 
-  useEffect(() => {
+  useExternalSync(() => {
     const source = new EventSource(
       chat ? `/api/director/events?chat=${encodeURIComponent(chat)}` : "/api/director/events",
     );
     source.onmessage = (message) => {
       const update = JSON.parse(message.data) as DirectorUpdate;
       setView((current) => apply(current, update));
-      // The reply choice ends with its card. It is checked per update, not per render: a plan card
-      // that closes and opens again keeps its id, and both updates can land in the same render.
+      // why: The reply choice ends with its card. It is checked per update, not per render: a plan card
+      // why: that closes and opens again keeps its id, and both updates can land in the same render.
       const lost =
         choice.current !== null &&
         ((update.type === "card-closed" && update.cardId === choice.current) ||
@@ -194,7 +193,7 @@ export function DirectorChat({
     return () => source.close();
   }, [chat]);
 
-  useEffect(() => {
+  useExternalSync(() => {
     const read = () =>
       setJumpId(decodeURIComponent(window.location.hash.replace(/^#/, "")) || null);
     read();
@@ -202,7 +201,7 @@ export function DirectorChat({
     return () => window.removeEventListener("hashchange", read);
   }, []);
 
-  // scrollIntoView returns a Promise in this Chromium, which an effect must not return.
+  // why: scrollIntoView returns a Promise in this Chromium, which an effect must not return.
   useLayoutEffect(() => {
     const element = scroller.current;
     if (!element) return;
@@ -285,13 +284,12 @@ export function DirectorChat({
     chosenTask && !chosenTask.subagent && !chosenTask.archived && chosenTask.status !== "needs-you"
       ? chosenTask
       : undefined;
-  // The choice ends when it stops applying, so the composer never points back at the task by itself later.
+  // why: The choice ends when it stops applying, so the composer never points back at the task by itself later.
   const choiceEnded = messageChoice !== null && view.connected && !messageTask && !replyCard;
-  useEffect(() => {
-    if (!choiceEnded) return;
+  if (choiceEnded) {
     setMessageChoice(null);
     setMessageLost(true);
-  }, [choiceEnded]);
+  }
   const target = replyCard
     ? `${replyCard.project} · ${replyCard.taskTitle}`
     : messageTask
@@ -665,7 +663,7 @@ function EntryView({
     case "note":
       return (
         <p
-          // Errors are announced; other notes are read in place.
+          // why: Errors are announced; other notes are read in place.
           role={entry.tone === "error" ? "alert" : "note"}
           className={cn(
             "text-xs",

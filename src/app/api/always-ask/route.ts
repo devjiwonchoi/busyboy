@@ -2,10 +2,10 @@ import { connection } from "next/server";
 
 import { decideHookCall } from "@/server/runner/codex-always-ask";
 
-/** How often a waiting response sends a space, well inside fetch's five-minute idle timeout. */
+/*why: * How often a waiting response sends a space, well inside fetch's five-minute idle timeout. */
 const KEEP_ALIVE_MS = 30_000;
 
-// The response sends spaces until the user answers, because fetch's idle timeout is five minutes.
+// why: The response sends spaces until the user answers, because fetch's idle timeout is five minutes.
 export async function POST(request: Request) {
   await connection();
   const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
@@ -22,7 +22,7 @@ export async function POST(request: Request) {
       toolName: body.tool_name,
       input: body.tool_input,
     },
-    // Aborts when the hook disconnects, so its approval card closes instead of waiting for nobody.
+    // why: Aborts when the hook disconnects, so its approval card closes instead of waiting for nobody.
     signal: request.signal,
   });
 
@@ -42,7 +42,7 @@ export async function POST(request: Request) {
           controller.close();
         })
         .catch(() => {
-          // The hook went away (its turn was interrupted); the session already dropped the request.
+          // why: The hook went away (its turn was interrupted); the session already dropped the request.
         });
     },
     cancel() {

@@ -1,9 +1,10 @@
 "use client";
 
 import { Check, Copy, Pencil, RotateCcw } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import { useExternalSync } from "@/hooks/use-external-sync";
 import { cn } from "@/lib/utils";
 
 function formatMessageTime(at: string) {
@@ -27,17 +28,21 @@ export function MessageActions({
 }) {
   const [copied, setCopied] = useState(false);
   const time = formatMessageTime(at);
+  const copiedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  useEffect(() => {
-    if (!copied) return;
-    const timer = setTimeout(() => setCopied(false), 1500);
-    return () => clearTimeout(timer);
-  }, [copied]);
+  useExternalSync(
+    () => () => {
+      if (copiedTimer.current) clearTimeout(copiedTimer.current);
+    },
+    [],
+  );
 
   async function copy() {
     try {
       await navigator.clipboard.writeText(text);
       setCopied(true);
+      if (copiedTimer.current) clearTimeout(copiedTimer.current);
+      copiedTimer.current = setTimeout(() => setCopied(false), 1500);
     } catch {
       setCopied(false);
     }

@@ -86,7 +86,7 @@ export function DoneCardView({ card }: CardViewProps<DoneCard>) {
             <DialogTitle>{plan?.title ?? card.taskTitle}</DialogTitle>
             <DialogDescription>{card.project}</DialogDescription>
           </DialogHeader>
-          {/* The title stays put while the note scrolls, the same pane View details uses for a plan. */}
+          {/* why: The title stays put while the note scrolls, the same pane View details uses for a plan. */}
           {plan ? (
             <div className="min-h-0 overflow-y-auto">
               <Markdown text={plan.plan} />

@@ -15,8 +15,8 @@ import { useProjectsHome } from "./support/projects-home";
 
 const REQUEST = "Add a health check that reports whether the service is up.";
 const FOLLOW_UP = "Also include the service version in the health response.";
-// Vendored from devjiwonchoi/skills@f179d4d3 skills/utils/retro/delegation-rate.
-// A named file is checked whatever it is called, so it accepts REMEMBER.md.
+// why: Vendored from devjiwonchoi/skills@f179d4d3 skills/utils/retro/delegation-rate.
+// why: A named file is checked whatever it is called, so it accepts REMEMBER.md.
 const DELEGATION_RATE = join(__dirname, "fixtures", "delegation-rate.sh");
 
 type StoredTask = { id: string; title: string; worktree: string };
@@ -159,7 +159,7 @@ test("finishing a task should write REMEMBER.md the delegation rate accepts", as
   expect(rated).toContain(`week_start: ${week.weekStart}`);
   expect(rated).toContain(`week_end: ${week.weekEnd}`);
 
-  // The old name still counts, and a leftover RETRO.md does not replace REMEMBER.md in the same task.
+  // why: The old name still counts, and a leftover RETRO.md does not replace REMEMBER.md in the same task.
   const legacyDir = join(root, "example", "health-app", "legacy-task");
   mkdirSync(legacyDir, { recursive: true });
   writeFileSync(

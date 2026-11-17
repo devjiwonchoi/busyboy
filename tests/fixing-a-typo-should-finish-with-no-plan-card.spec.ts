@@ -6,8 +6,8 @@ import { expect as baseExpect, test, type APIRequestContext, type Page } from "@
 import { useProjectsHome } from "./support/projects-home";
 import { homeRecordFolder } from "./support/record-tasks";
 
-// A trivial typo fix records an approved plan and finishes in one turn.
-// The script is tests/provider-scripts/trivial-task.json.
+// why: A trivial typo fix records an approved plan and finishes in one turn.
+// why: The script is tests/provider-scripts/trivial-task.json.
 const REQUEST = "Fix the typo recieve in the welcome heading.";
 
 const expect = baseExpect.configure({ timeout: 15_000 });

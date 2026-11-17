@@ -20,7 +20,7 @@ test("opening a terminal should use the task worktree when its project name diff
   });
   const file = join(home, "task-list.json");
   const list = JSON.parse(readFileSync(file, "utf8")) as { tasks: { project: string }[] };
-  // The folder on disk is `api`. A case-insensitive disk still means that folder.
+  // why: The folder on disk is `api`. A case-insensitive disk still means that folder.
   list.tasks[0].project = "Api";
   writeFileSync(file, `${JSON.stringify(list, null, 2)}\n`);
 

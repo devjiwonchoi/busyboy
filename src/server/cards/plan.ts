@@ -3,7 +3,7 @@ import { join } from "node:path";
 
 import { locateTaskRecords } from "../records/record-location";
 
-// The align template writes status after Version:, so prose that mentions an approval never counts.
+// why: The align template writes status after Version:, so prose that mentions an approval never counts.
 const APPROVED = /^(?:\W*Version:[^·\n]*·)?\W*Status:\s*approved\b/im;
 
 const FENCE = /^\s*(```|~~~)/;
@@ -19,7 +19,7 @@ function headingOf(line: string) {
   return match ? { level: match[1].length, title: match[2].trim() } : null;
 }
 
-// Fenced code is left out, so a heading inside a diagram is not an end-state item.
+// why: Fenced code is left out, so a heading inside a diagram is not an end-state item.
 function sectionLines(text: string, name: string) {
   const lines = text.split(/\r?\n/);
   const wanted = name.toLowerCase();
@@ -67,7 +67,7 @@ export function alignCriteria(plan: string) {
   return captured(sectionLines(plan, "Todos"), DONE_WHEN);
 }
 
-// A # comment line in a fence can end the section early; View details still shows the whole plan.
+// why: A # comment line in a fence can end the section early; View details still shows the whole plan.
 function topSection(text: string, name: string) {
   const match = new RegExp(`^#\\s+${name}\\s*$([\\s\\S]*?)(?=^#\\s|(?![\\s\\S]))`, "im").exec(text);
   return match?.[1] ?? "";

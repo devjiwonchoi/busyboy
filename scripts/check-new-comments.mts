@@ -18,6 +18,8 @@ function isComment(text: string) {
 function isAllowed(text: string) {
   const trimmed = text.trim();
   if (trimmed.startsWith("#!")) return true;
+  if (/^\/\/\s*why:/.test(trimmed) || /^\/\*\s*why:/.test(trimmed) || /^\*\s*why:/.test(trimmed))
+    return true;
   if (trimmed.startsWith("/// <reference")) return true;
   if (/^\/\/\s*@ts-(?:expect-error|ignore|nocheck|check)\b/.test(trimmed)) return true;
   if (/^\/\/\s*(?:eslint|oxlint)-(?:disable|enable)(?:-next-line|-line)?\b/.test(trimmed))
@@ -94,9 +96,8 @@ if (fresh.length === 0) {
   process.exit(0);
 }
 
-console.error("Remove the new comment. Put the name in the code, or say it in the commit message.");
 console.error(
-  "Allowed on their own line: // @ts-expect-error, /// <reference, eslint/oxlint disable lines, and shebangs.",
+  "Delete the comment, or mark a non-obvious reason with `// why:`. A tool directive (`// @ts-expect-error`, `/// <reference`, an eslint/oxlint disable line, or a shebang) can stay.",
 );
 for (const entry of fresh) console.error(`${entry.file}:${entry.line}: ${entry.text}`);
 process.exit(1);

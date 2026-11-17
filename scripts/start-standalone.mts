@@ -7,7 +7,7 @@ if (!existsSync(server)) {
   throw new Error("No .next/standalone/server.js. Run `pnpm build` first.");
 }
 
-// server.js binds to HOSTNAME, falling back to 0.0.0.0.
+// why: server.js binds to HOSTNAME, falling back to 0.0.0.0.
 process.env.HOSTNAME = "127.0.0.1";
 process.env.PORT ??= "3000";
 

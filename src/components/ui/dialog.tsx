@@ -40,8 +40,8 @@ function DialogContent({
   className,
   children,
   showCloseButton = true,
-  // The registry dialog is a small confirm pane. A plan is a document, so `lg`
-  // is the centered reading pane the plan card opens.
+  // why: The registry dialog is a small confirm pane. A plan is a document, so `lg`
+  // why: is the centered reading pane the plan card opens.
   size = "default",
   ...props
 }: DialogPrimitive.Popup.Props & {

@@ -25,7 +25,7 @@ function RadioGroupItem({ className, children, ...props }: RadioPrimitive.Root.P
       {...props}
     >
       {children}
-      {/* The dot is the control when the item has no content. A card passed as children is the control, so the dot stays out of it. */}
+      {/* why: The dot is the control when the item has no content. A card passed as children is the control, so the dot stays out of it. */}
       <RadioPrimitive.Indicator
         data-slot="radio-group-indicator"
         className={cn("flex size-4 items-center justify-center", children && "hidden")}

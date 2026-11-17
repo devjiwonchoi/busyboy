@@ -9,7 +9,7 @@ export function formatFocusTarget(target: FocusTarget) {
 export function parseFocusTarget(value: string | null | undefined): FocusTarget | null {
   if (!value) return null;
   if (value === "director") return { kind: "director" };
-  // Task ids never contain a slash (a slug plus hex); project names might, so split at the last one.
+  // why: Task ids never contain a slash (a slug plus hex); project names might, so split at the last one.
   const match = /^task:(.+)\/([^/]+)$/.exec(value);
   return match ? { kind: "task", project: match[1], taskId: match[2] } : null;
 }

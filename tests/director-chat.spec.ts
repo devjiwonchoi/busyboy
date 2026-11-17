@@ -347,7 +347,7 @@ test("a long chat should compact while idle", async ({ page, context, baseURL })
   await expect(transcript.getByRole("note")).toHaveText("Context compacted", { timeout: 10_000 });
   await expect(transcript).toHaveAttribute("data-status", "idle");
 
-  // The display transcript does not depend on the compacted provider session.
+  // why: The display transcript does not depend on the compacted provider session.
   await page.reload();
   await expect(transcript.getByLabel("Your message")).toHaveText(LONG_REQUEST);
   await expect(reply.getByRole("listitem")).toHaveCount(12);
@@ -360,7 +360,7 @@ test("a Director reply with Markdown should show highlighted code and matched te
   baseURL,
 }) => {
   await useProjectsHome(context, baseURL!, ["web"]);
-  // The app follows the system theme; check that code takes Shiki's dark colors, not the light ones.
+  // why: The app follows the system theme; check that code takes Shiki's dark colors, not the light ones.
   await page.emulateMedia({ colorScheme: "dark" });
   await openChat(page);
 
@@ -389,12 +389,12 @@ test("a Director reply with Markdown should show highlighted code and matched te
   const tasks = reply.getByRole("listitem").filter({ has: page.getByRole("checkbox") });
   await expect(tasks).toHaveCount(2);
   await expect(tasks.first()).toHaveCSS("list-style-type", "none");
-  // A plain link: the desktop app opens it in the browser, so no Streamdown link check.
+  // why: A plain link: the desktop app opens it in the browser, so no Streamdown link check.
   await expect(reply.getByRole("link", { name: "the docs" })).toHaveAttribute(
     "href",
     "https://example.com/docs",
   );
-  // Only the code block's copy button; the table and the link get no Streamdown controls.
+  // why: Only the code block's copy button; the table and the link get no Streamdown controls.
   await expect(reply.getByRole("button")).toHaveCount(1);
   await expect(reply.getByRole("button", { name: /copy/i })).toHaveCount(1);
 });

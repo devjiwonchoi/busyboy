@@ -135,7 +135,7 @@ function answerFor(message: Message): unknown {
 }
 
 const cwd = mkdtempSync(join(tmpdir(), "busyboy-record-"));
-// Look `codex` up on the login-shell PATH (an alias such as `codex --flag` must not win).
+// why: Look `codex` up on the login-shell PATH (an alias such as `codex --flag` must not win).
 const shellPath = execFileSync(process.env.SHELL || "/bin/zsh", ["-ilc", 'printf "\n%s" "$PATH"'], {
   encoding: "utf8",
 })
@@ -180,7 +180,7 @@ createInterface({ input: child.stdout }).on("line", (line) => {
     pending.get(Number(message.id))?.(message);
     return;
   }
-  // Only this thread's messages are recorded: the fake replays a single thread.
+  // why: Only this thread's messages are recorded: the fake replays a single thread.
   const ownThread = !threadId || !message.params?.threadId || message.params.threadId === threadId;
   if (message.id !== undefined) {
     const step = keep(message);
@@ -194,7 +194,7 @@ createInterface({ input: child.stdout }).on("line", (line) => {
   if (step) turns.at(-1)?.steps.push({ raw: step });
   if (message.method === "turn/started") turnId = message.params?.turn.id;
   if (message.method === "turn/completed") onTurnCompleted();
-  // In Default mode Codex asks in an agent message and waits; the answer steers the running turn.
+  // why: In Default mode Codex asks in an agent message and waits; the answer steers the running turn.
   const item = message.params?.item;
   if (
     message.method === "item/completed" &&
@@ -215,7 +215,7 @@ createInterface({ input: child.stdout }).on("line", (line) => {
   }
 });
 
-// A run that never completes its turn (for example one waiting on a tool the client did not answer) ends here.
+// why: A run that never completes its turn (for example one waiting on a tool the client did not answer) ends here.
 const timeout = setTimeout(() => {
   console.error("The run did not finish in time.");
   child.kill();
