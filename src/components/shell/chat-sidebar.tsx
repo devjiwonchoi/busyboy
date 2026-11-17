@@ -1,11 +1,12 @@
 'use client'
 
-import { Plus, Search, Trash2 } from 'lucide-react'
+import { AlertTriangle, CircleCheck, CircleHelp, Plus, Search, Trash2 } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useActionState, useEffect, useState, useSyncExternalStore } from 'react'
 import { createManagerAction, removeManagerAction, type CreateManagerResult } from '@/app/(main)/manager-actions'
 import { LetterMark, LetterStack, letterOf, PersonaAvatar, type Persona } from '@/components/chat/persona'
+import { useProjectProgress, type ProjectProgress } from '@/components/chat/task-phases'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -28,6 +29,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { desktopBridge } from '@/lib/desktop-bridge'
 import { cn } from '@/lib/utils'
 import type { ChatSummary } from '@/server/director/chat'
+import type { TaskProgress } from '@/server/records/progress'
 import type { Room } from '@/server/rooms'
 
 /** The radio value for a repository BusyBoy does not know yet. */
@@ -59,6 +61,7 @@ export function ChatSidebar({
   const [query, setQuery] = useState('')
   const [searching, setSearching] = useState(false)
   const active = useSearchParams().get('manager')
+  const recordProgress = useProjectProgress()
 
   useEffect(() => {
     const source = new EventSource('/api/chats/events')
@@ -110,11 +113,11 @@ export function ChatSidebar({
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-2 pb-1">
         {/* Stays at the top of the list while the rows below scroll. */}
         <div className="sticky top-0 z-10 bg-background pb-1 dark:bg-[#161617]">
-          <DirectorRow director={director} chat={directorChat} active={active === null} />
+          <DirectorRow director={director} chat={directorChat} active={active === null} progress={recordProgress} />
         </div>
         <ItemGroup aria-label="Managers" className="gap-0.5">
           {visibleManagers.map((manager) => (
-            <ManagerItem key={manager.chat} manager={manager} active={manager.chat === active} />
+            <ManagerItem key={manager.chat} manager={manager} active={manager.chat === active} progress={progressOf(recordProgress.projects, manager.project)} />
           ))}
           {visibleRooms.map((room) => (
             <RoomItem key={room.id} room={room} managers={managers} />
@@ -146,17 +149,101 @@ function statusLine(chat: ChatSummary | undefined, fallback: string) {
   return chat?.preview || fallback
 }
 
-function DirectorRow({ director, chat, active }: { director: Persona; chat: ChatSummary | undefined; active: boolean }) {
+function progressOf(projects: ProjectProgress[], name: string | null) {
+  if (!name) return undefined
+  const key = name.toLowerCase()
+  return projects.find((project) => project.name.toLowerCase() === key)?.progress
+}
+
+// Badge and PhaseMark always add a chip or a phase word. The row is an icon and a muted count.
+type ProgressMark = 'complete' | 'at-risk' | 'decision'
+
+const MARK: Record<ProgressMark, { icon: typeof CircleCheck; label: string; className: string }> = {
+  complete: { icon: CircleCheck, label: 'All verified', className: 'text-success-foreground' },
+  'at-risk': { icon: AlertTriangle, label: 'At risk', className: 'text-destructive' },
+  decision: { icon: CircleHelp, label: 'Needs a decision', className: 'text-warning-foreground' },
+}
+
+/** One icon per attention state, or a check when every aligned item is verified and nothing needs attention. */
+function directorMarks(total: TaskProgress, projects: ProjectProgress[]): ProgressMark[] {
+  const states = new Set(projects.filter((project) => project.progress.total > 0).map((project) => project.progress.state))
+  const marks: ProgressMark[] = []
+  if (states.has('at-risk')) marks.push('at-risk')
+  if (states.has('decision')) marks.push('decision')
+  if (marks.length === 0 && total.total > 0 && total.verified === total.total) marks.push('complete')
+  return marks
+}
+
+/** A check only when the project is fully verified. Unfinished calm work is just the count. */
+function projectMark(progress: TaskProgress): ProgressMark | null {
+  if (progress.total === 0) return null
+  if (progress.state === 'at-risk') return 'at-risk'
+  if (progress.state === 'decision') return 'decision'
+  if (progress.verified === progress.total) return 'complete'
+  return null
+}
+
+function directorLabel(name: string, total: TaskProgress, marks: ProgressMark[]) {
+  if (total.total === 0) return `${name}, director`
+  return [`${name}, director`, ...marks.map((mark) => MARK[mark].label), `${total.verified}/${total.total}`].join(', ')
+}
+
+function Fraction({ progress }: { progress: TaskProgress }) {
+  return (
+    <span className="tabular-nums">
+      {progress.verified}/{progress.total}
+    </span>
+  )
+}
+
+function StatusIcon({ mark }: { mark: ProgressMark }) {
+  const { icon: Icon, label, className } = MARK[mark]
+  return (
+    <Icon data-state={mark} role="img" aria-label={label} className={cn('size-3.5 shrink-0', className)}>
+      <title>{label}</title>
+    </Icon>
+  )
+}
+
+function ManagerProgress({ progress }: { progress: TaskProgress }) {
+  const mark = projectMark(progress)
+  return <ProgressReadout progress={progress} marks={mark ? [mark] : []} />
+}
+
+function ProgressReadout({ progress, marks }: { progress: TaskProgress; marks: ProgressMark[] }) {
+  if (progress.total === 0) return null
+  return (
+    <span data-progress={`${progress.verified}/${progress.total}`} className="inline-flex shrink-0 items-center gap-1 text-[11px] leading-none whitespace-nowrap text-[#8d8d93]">
+      {marks.map((mark) => (
+        <StatusIcon key={mark} mark={mark} />
+      ))}
+      <Fraction progress={progress} />
+    </span>
+  )
+}
+
+function DirectorRow({
+  director,
+  chat,
+  active,
+  progress,
+}: {
+  director: Persona
+  chat: ChatSummary | undefined
+  active: boolean
+  progress: { projects: ProjectProgress[]; total: TaskProgress }
+}) {
   const line = statusLine(chat, 'Leads every manager')
+  const marks = directorMarks(progress.total, progress.projects)
   return (
     <Link
       href="/"
       aria-current={active ? 'page' : undefined}
-      aria-label={`${director.name}, director`}
+      aria-label={directorLabel(director.name, progress.total, marks)}
       className={cn('flex items-center gap-2.5 rounded-xl px-2 py-1.5', active && 'bg-muted dark:bg-[#232325]')}
     >
       {director.mark && <PersonaAvatar persona={director} className="size-10 text-xl" />}
-      <span className="min-w-0">
+      <span className="min-w-0 flex-1">
         <span className="flex min-w-0 items-center gap-1.5">
           <span className="truncate text-[15px] leading-5 font-semibold">{director.name}</span>
           <Badge className="h-[18px] shrink-0 border-transparent bg-violet-500/25 px-1.5 text-[10px] font-medium text-violet-200">Director</Badge>
@@ -165,11 +252,12 @@ function DirectorRow({ director, chat, active }: { director: Persona; chat: Chat
           {line}
         </span>
       </span>
+      <ProgressReadout progress={progress.total} marks={marks} />
     </Link>
   )
 }
 
-function ManagerItem({ manager, active }: { manager: ChatSummary; active: boolean }) {
+function ManagerItem({ manager, active, progress }: { manager: ChatSummary; active: boolean; progress: TaskProgress | undefined }) {
   const id = manager.chat!
   return (
     <div role="listitem" aria-label={manager.name} className="group/manager relative">
@@ -179,13 +267,19 @@ function ManagerItem({ manager, active }: { manager: ChatSummary; active: boolea
         className={cn('flex items-center gap-2.5 rounded-xl px-2 py-1.5', active && 'bg-muted dark:bg-[#232325]')}
       >
         <LetterMark name={manager.name} />
-        <span className="min-w-0">
+        <span className="min-w-0 flex-1">
           <span className="block truncate text-[15px] leading-5 font-semibold">{manager.name}</span>
           <span className="block truncate text-[13px] leading-4 text-[#8d8d93]">{statusLine(manager, manager.project ?? '')}</span>
         </span>
+        {/* Hover brings the remove control up over this corner. Focusing the row itself leaves the count in place. */}
+        {progress && progress.total > 0 && (
+          <span className="group-hover/manager:invisible">
+            <ManagerProgress progress={progress} />
+          </span>
+        )}
       </Link>
-      {/* Above the row's link, and shown on hover or keyboard focus. */}
-      <div className="absolute top-1/2 right-2 z-10 -translate-y-1/2 opacity-0 group-focus-within/manager:opacity-100 group-hover/manager:opacity-100">
+      {/* Above the row's link. Shown on hover, or when the control itself is focused. */}
+      <div className="pointer-events-none absolute top-1/2 right-2 z-10 -translate-y-1/2 opacity-0 group-hover/manager:pointer-events-auto group-hover/manager:opacity-100 focus-within:pointer-events-auto focus-within:opacity-100">
         <RemoveManager id={id} name={manager.name} project={manager.project ?? ''} active={active} />
       </div>
     </div>
