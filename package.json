@@ -15,6 +15,8 @@
     "lint": "oxlint",
     "format": "oxfmt",
     "format:check": "oxfmt --check",
+    "check:lifecycle": "node scripts/run-check.mts scripts/check-task-lifecycle.mts",
+    "check:always-ask": "node scripts/run-check.mts scripts/check-always-ask.mts",
     "test:e2e": "playwright test",
     "drive": "node --experimental-strip-types scripts/drive.mts"
   },
@@ -46,6 +48,7 @@
     "electron": "45.3.2",
     "electron-builder": "26.18.0",
     "esbuild": "0.28.2",
+    "fast-check": "4.10.2",
     "oxfmt": "0.79.0",
     "oxlint": "1.94.0",
     "shadcn": "4.23.0",

@@ -44,6 +44,10 @@ Every file and folder name is kebab-case, for example `server-process.ts` or `bo
 
 A change to what a person sees or operates in BusyBoy is proven with the `verify-busyboy` skill before the pull request opens. Follow `.agents/skills/verify-busyboy/SKILL.md`: launch, run doctor, drive the feature that changed, and capture a screenshot of that path. Attach the screenshot to the pull request. Evidence is written to `.verify/evidence`, which git ignores, and cleanup leaves that folder in place.
 
+## Check the risky logic
+
+Two checks in the Model CI job cover logic a journey cannot exhaust. `scripts/check-task-lifecycle.mts` enumerates the task lifecycle: an archived task never shows a plan card, a waiting draft never runs work, auto-archive never archives an open pull request or a running turn, and a done card survives an archive stop. `scripts/check-always-ask.mts` generates always-ask commands: deletes outside the worktree and the record folder, force pushes, and unresolved publishes always ask; ordinary commands inside the worktree, the record folder, and `.busyboy-scratch` never ask; shell assignments are resolved before matching.
+
 ## Start from nothing
 
 This branch starts from an empty history. Do not copy code from the `legacy` tag. Reading it for reference (`git show legacy:<path>`) is fine.

@@ -51,6 +51,7 @@ import {
   stopTaskAgent,
   trackTaskCards,
 } from "./task-cards";
+import { archiveBlocked } from "./task-lifecycle";
 
 // Both folder names are new, so the legacy app's worktrees/ and other files in the data folder are never touched.
 // Files git ignores go with the worktree: keeping every worktree that has a node_modules would keep nearly all of them.
@@ -845,7 +846,7 @@ export async function archiveTask(
         worktreeKept: task.kind !== "subagent" && (await exists(task.worktree)),
       };
     const { status } = taskView(task);
-    if (status === "running" || status === "needs-you") {
+    if (archiveBlocked(status)) {
       throw new TaskError(
         `${task.project} · ${task.title} is still working. Stop it before archiving it.`,
       );
