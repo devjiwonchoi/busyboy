@@ -47,33 +47,28 @@ async function finishedTask(request: APIRequestContext, home: string) {
   return task
 }
 
-async function openChatAndGraph(page: Page) {
+async function openChat(page: Page) {
   await page.goto('/')
   await expect(page.getByRole('log', { name: 'Transcript' })).toHaveAttribute('data-connected', 'true')
-  const sidebar = page.getByRole('complementary', { name: 'Sidebar' })
-  await sidebar.getByRole('tab', { name: 'Projects' }).click()
-  return sidebar.getByRole('region', { name: 'Project graph' })
 }
 
 const taskLine = (page: Page, name: string) => page.getByRole('group', { name: 'Tasks' }).getByRole('listitem', { name })
 
 const branches = (repository: string) => execFileSync('git', ['-C', repository, 'branch', '--list', 'busyboy/*'], { encoding: 'utf8' })
 
-test('archiving a finished task should remove its worktree and take it out of the graph, and restoring should bring both back', async ({
+test('archiving a finished task should remove its worktree, and restoring should bring it back', async ({
   page,
   context,
   baseURL,
 }) => {
   const { home, projects } = await useProjectsHome(context, baseURL!, ['web'])
   const task = await finishedTask(context.request, home)
-  const graph = await openChatAndGraph(page)
+  await openChat(page)
   const line = taskLine(page, 'web · Contributing guide')
-  await expect(graph.getByRole('group', { name: 'Task Contributing guide' })).toBeVisible()
 
   await line.getByRole('button', { name: 'Archive web · Contributing guide' }).click()
 
   await expect(line.locator('[data-status]')).toHaveText('Archived')
-  await expect(graph.getByRole('group', { name: 'Task Contributing guide' })).toHaveCount(0)
   expect(existsSync(task.worktree)).toBe(false)
   // Its branch and its records are kept.
   expect(branches(projects.web)).toContain(task.branch)
@@ -85,7 +80,6 @@ test('archiving a finished task should remove its worktree and take it out of th
   await line.getByRole('button', { name: 'Restore web · Contributing guide' }).click()
 
   await expect(line.locator('[data-status]')).not.toHaveText('Archived')
-  await expect(graph.getByRole('group', { name: 'Task Contributing guide' })).toBeVisible()
   expect(readFileSync(join(task.worktree, '.jwn', task.id, 'STATUS.md'), 'utf8')).toBe('Stage: Ship\n')
   expect(execFileSync('git', ['-C', task.worktree, 'branch', '--show-current'], { encoding: 'utf8' }).trim()).toBe(task.branch)
   expect(existsSync(join(home, 'task-archive', 'web', task.id))).toBe(false)
@@ -95,14 +89,13 @@ test('archiving a task with uncommitted changes should keep its worktree and say
   const { home } = await useProjectsHome(context, baseURL!, ['web'])
   const task = await finishedTask(context.request, home)
   writeFileSync(join(task.worktree, 'CONTRIBUTING.md'), 'Run pnpm dev.\n')
-  const graph = await openChatAndGraph(page)
+  await openChat(page)
   const line = taskLine(page, 'web · Contributing guide')
 
   await line.getByRole('button', { name: 'Archive web · Contributing guide' }).click()
 
   await expect(line.locator('[data-status]')).toHaveText('Archived')
   await expect(page.getByRole('group', { name: 'Tasks' })).toContainText(KEPT_NOTICE)
-  await expect(graph.getByRole('group', { name: 'Task Contributing guide' })).toHaveCount(0)
   expect(readFileSync(join(task.worktree, 'CONTRIBUTING.md'), 'utf8')).toBe('Run pnpm dev.\n')
   // The records stay with the worktree that was kept.
   expect(existsSync(join(task.worktree, '.jwn', task.id, 'STATUS.md'))).toBe(true)
@@ -133,7 +126,7 @@ test('a working task should not be archived, and a finished subagent should', as
   const { home } = await useProjectsHome(context, baseURL!, ['web'])
   await callTool(context.request, 'create_task', { project: 'web', title: 'Release notes', request: LONG_REQUEST })
   await callTool(context.request, 'run_subagent', { project: 'web', title: 'Which branch', request: SUBAGENT_REQUEST })
-  await openChatAndGraph(page)
+  await openChat(page)
   const working = taskLine(page, 'web · Release notes')
   const subagent = taskLine(page, 'web · Which branch')
   // The first turn has no records yet, so the phase word is Planning. The agent is still running, so the task cannot be archived.
@@ -172,7 +165,7 @@ test('an archived task that was due to resume should stay put away after a resta
 
     await server.restart()
     const page = await context.newPage()
-    await openChatAndGraph(page)
+    await openChat(page)
 
     await expect(taskLine(page, 'web · Contributing guide').locator('[data-status]')).toHaveText('Archived')
     // No agent was started for it, and nothing was sent to its session.

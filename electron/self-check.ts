@@ -239,12 +239,11 @@ export function createSelfCheck() {
         title: document.title,
         shell: Boolean(document.querySelector('[data-slot="app-shell"]')),
         chatArea: Boolean(document.querySelector('[data-slot="chat-area"]')),
-        sidebar: Boolean(document.querySelector('[data-slot="sidebar"]')),
         bottomPanel: Boolean(document.querySelector('[data-slot="bottom-panel"]')),
       })`)) as Record<string, unknown>
       result.details.page = page
       result.checks.pageLoaded = page.title === app.getName()
-      result.checks.shellRendered = Boolean(page.shell && page.chatArea && page.sidebar && page.bottomPanel)
+      result.checks.shellRendered = Boolean(page.shell && page.chatArea && page.bottomPanel)
     },
     /**
      * The tray follows the server's attention stream and shows its menu, and

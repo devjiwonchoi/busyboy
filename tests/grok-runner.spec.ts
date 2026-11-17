@@ -12,8 +12,6 @@ const FORCE_PUSH_REQUEST = 'Force push the branch to origin.'
 const DIRECTOR_PUSH_REQUEST = 'Force push the main branch yourself.'
 const CLEAN_REQUEST = 'Remove the build folder.'
 const MCP_PROMPT = 'Which MCP servers are connected?'
-const SIDE_QUESTION = 'How was this thread started?'
-
 const expect = baseExpect.configure({ timeout: 15_000 })
 
 test.use({ baseURL: fakeGrokURL })
@@ -133,24 +131,6 @@ test('a lost Grok session should start a new conversation and still answer', asy
   await expect(log.getByLabel('Reply', { exact: true })).toHaveText('Hello from busyboy.')
   const state = JSON.parse(readFileSync(join(home, 'director', 'state.json'), 'utf8')) as { sessionId: string }
   expect(state.sessionId).not.toBe('missing-old-session')
-})
-
-test('a side question to a Grok Director should branch with no tools', async ({ page, context, baseURL }) => {
-  const { home } = await useProjectsHome(context, baseURL!, [], { claude: 'signed-out', grok: 'signed-in' })
-  await openChat(page)
-  await send(page, PLAIN_PROMPT)
-  const log = transcript(page)
-  await expect(log).toHaveAttribute('data-status', 'idle')
-  await expect(log.getByLabel('Reply', { exact: true })).toHaveText('Hello from busyboy.')
-  const { sessionId } = JSON.parse(readFileSync(join(home, 'director', 'state.json'), 'utf8')) as { sessionId: string }
-
-  await page.getByRole('tab', { name: 'Side chat' }).click()
-  await page.getByRole('textbox', { name: 'Side question' }).fill(SIDE_QUESTION)
-  await page.getByRole('button', { name: 'Ask' }).click()
-
-  await expect(page.getByRole('log', { name: 'Side chat' }).getByLabel('Side answer')).toHaveText(
-    `Branched from ${sessionId}. Tools: off.`,
-  )
 })
 
 test('choosing Grok as the default agent should save it', async ({ page, context, baseURL }) => {

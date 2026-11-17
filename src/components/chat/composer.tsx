@@ -74,7 +74,7 @@ export const ChatComposer = forwardRef<
     onSend: (message: ComposerMessage) => Promise<void> | void
     /** Shown as a Stop button while there is work to stop. */
     onStop?: () => void
-    /** Accessible names, so a second composer on the screen (the side chat) is told apart. */
+    /** Accessible names for the box and the send button. */
     label?: string
     sendLabel?: string
     /** Rendered at the start of the box. The reply chip uses this slot. */

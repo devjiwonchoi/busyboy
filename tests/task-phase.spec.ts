@@ -3,7 +3,7 @@ import { join } from 'node:path'
 import { expect as baseExpect, test, type APIRequestContext, type Page } from '@playwright/test'
 import { useProjectsHome } from './support/projects-home'
 
-// The phase word on the task row and the project pill. The verifying turn is
+// The phase word on the task row. The verifying turn is
 // tests/provider-scripts/task-phase.json. The running turn is tests/provider-scripts/work-cards.json.
 const VERIFY = 'Verify the site footer and report each step.'
 const RUNNING = 'Build the site footer and report each step.'
@@ -34,7 +34,7 @@ test.beforeEach(async ({ context, baseURL }) => {
   ;({ home } = await useProjectsHome(context, baseURL!, ['web']))
 })
 
-test('a verifying task should show Verifying on the row and the pill', async ({ page, context }) => {
+test('a verifying task should show Verifying on the row', async ({ page, context }) => {
   await openChat(page)
   await createTask(context.request, home, 'Verify the footer', VERIFY)
 
@@ -42,12 +42,7 @@ test('a verifying task should show Verifying on the row and the pill', async ({ 
   await expect(row.getByText('Verifying', { exact: true })).toBeVisible()
   await expect(row.locator('[data-phase]')).toHaveAttribute('data-phase', 'verifying')
   await expect(transcript(page).getByRole('group', { name: 'Progress from web · Verify the footer' })).toContainText('Verifying')
-
-  const graph = page.getByRole('region', { name: 'Project graph' })
-  const pill = graph.getByRole('group', { name: 'Task Verify the footer' })
-  await expect(pill).toHaveAttribute('data-phase', 'verifying')
-  await expect(pill).toContainText('Verifying')
-  await expect(pill).not.toContainText('Needs you')
+  await expect(row).not.toContainText('Needs you')
 })
 
 test('a progress card should not say someone is waiting', async ({ page, context }) => {
@@ -65,11 +60,6 @@ test('a running record between turns should not say Needs you', async ({ page, c
 
   const row = transcript(page).getByRole('listitem', { name: 'web · Add a footer' })
   await expect(row.getByText('Working', { exact: true })).toBeVisible()
+  await expect(row.locator('[data-phase]')).toHaveAttribute('data-phase', 'working')
   await expect(row).not.toContainText('Needs you')
-
-  const pill = page.getByRole('region', { name: 'Project graph' }).getByRole('group', { name: 'Task Add a footer' })
-  await expect(pill).toHaveAttribute('data-status', 'running')
-  await expect(pill).toHaveAttribute('data-phase', 'working')
-  await expect(pill).toContainText('Working')
-  await expect(pill).not.toContainText('Needs you')
 })

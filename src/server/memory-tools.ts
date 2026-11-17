@@ -2,9 +2,8 @@ import { appendLog, forgetFact, MemoryError, searchMemory, writeFact } from './m
 import type { McpCaller, McpTool } from './mcp-tools'
 
 // The memory tools of busyboy's MCP endpoint. Agents write freely: a write
-// never needs the user's approval, and the user reviews and edits memory in
-// the Memory tab instead. Bad input throws MemoryError, which mcp-tools.ts
-// reports to the agent (a value import from there would be an import cycle).
+// never needs the user's approval. Bad input throws MemoryError, which
+// mcp-tools.ts reports to the agent (a value import from there would be an import cycle).
 
 function optionalText(input: Record<string, unknown>, key: string) {
   const value = input[key]

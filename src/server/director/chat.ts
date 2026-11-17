@@ -955,25 +955,6 @@ export async function subscribeToDirector(folder: string, listener: (update: Dir
   }
 }
 
-/**
- * The Director's provider session, working directory, and system prompt, so a
- * side question can branch from the conversation. No session yet when the
- * Director never answered.
- */
-export async function directorSession(
-  folder: string,
-  chat: string | null = null,
-): Promise<{
-  cwd: string
-  instructions: string
-  provider?: ProviderId
-  sessionId?: string
-}> {
-  const director = getDirector(folder, chat)
-  await director.ready
-  return { cwd: directorFolder(director), instructions: await promptOf(director), ...director.state }
-}
-
 // ---- The chat list ----------------------------------------------------------------
 
 const PREVIEW_LENGTH = 120

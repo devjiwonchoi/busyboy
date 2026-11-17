@@ -10,7 +10,7 @@ import { cn } from '@/lib/utils'
 export type Persona = { name: string; mark?: string; imageUrl?: string; tone?: string }
 
 /**
- * Solid and gradient circles from the sidebar mockup: a pink-to-violet letter,
+ * Solid and gradient circles: a pink-to-violet letter,
  * then teal and orange. Full class strings so Tailwind can see them.
  */
 const LETTER_TONES = [

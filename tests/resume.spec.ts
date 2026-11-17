@@ -47,11 +47,9 @@ async function createTask(context: BrowserContext, title: string, request: strin
   expect(response.status()).toBe(200)
 }
 
-async function openGraph(page: Page) {
+async function openApp(page: Page) {
   await page.goto('/')
-  const sidebar = page.getByRole('complementary', { name: 'Sidebar' })
-  await sidebar.getByRole('tab', { name: 'Projects' }).click()
-  return sidebar.getByRole('region', { name: 'Project graph' })
+  await expect(page.getByRole('log', { name: 'Transcript' })).toHaveAttribute('data-connected', 'true')
 }
 
 test('a server that dies mid-task should resume the agent on its session without sending the request again', async ({ browser }) => {
@@ -68,14 +66,12 @@ test('a server that dies mid-task should resume the agent on its session without
     // Killed mid-turn: no shutdown handler runs, as in a crash.
     await server.stop('SIGKILL')
     await server.restart()
-    const graph = await openGraph(await context.newPage())
+    await openApp(await context.newPage())
 
     // A new agent on the same session, told to check its work instead of getting the request again.
     await expect.poll(() => storedTasks(home)[0]?.agentId).not.toBe(before.agentId)
     expect(storedTasks(home)[0].sessionId).toBe(before.sessionId)
     await expect.poll(() => sessionMessages(before.sessionId)).toEqual([LONG_REQUEST, RESUME_WORKING_MESSAGE])
-    // Its turn ended without a done record, so it waits on the user.
-    await expect(graph.getByRole('group', { name: 'Task Release notes' })).toHaveAttribute('data-status', 'needs-you')
     await expect.poll(() => storedTasks(home)[0]?.activity).toBe('idle')
     await context.close()
   } finally {
@@ -97,12 +93,13 @@ test('quitting while a task waits for approval should ask again after the restar
     expect(storedTasks(home)[0].activity).toBe('needs-you')
 
     await server.restart()
-    const graph = await openGraph(await context.newPage())
+    const page = await context.newPage()
+    await openApp(page)
 
     await expect.poll(() => sessionMessages(before.sessionId)).toEqual([APPROVAL_REQUEST, RESUME_WAITING_MESSAGE])
-    await expect(graph.getByRole('group', { name: 'Task Clean build' })).toHaveAttribute('data-status', 'needs-you')
     // Waiting on the new approval request, not merely idle.
     await expect.poll(() => storedTasks(home)[0]?.activity).toBe('needs-you')
+    await expect(page.getByRole('listitem', { name: 'web · Clean build' }).locator('[data-status]')).toHaveAttribute('data-status', 'needs-you')
     await context.close()
   } finally {
     await server.dispose()
@@ -148,21 +145,16 @@ function patchTask(home: string, id: string, fields: Partial<StoredTask>) {
   writeFileSync(file, JSON.stringify(list))
 }
 
-test('a task whose session cannot be resumed should show as stopped with a note', async ({ page, context, baseURL }) => {
+test('a task whose session cannot be resumed should stop and record why', async ({ page, context, baseURL }) => {
   const { home, projects } = await useProjectsHome(context, baseURL!, ['web'])
   addRecordTask(home, { project: 'web', projectPath: projects.web, ...FOOTER })
   // The scripted provider fails a `missing-` session the way Claude fails one it no longer has.
   patchTask(home, FOOTER.id, { activity: 'running', sessionId: 'missing-release-notes' })
 
-  const graph = await openGraph(page)
+  await openApp(page)
 
   await expect.poll(() => storedTasks(home)[0]?.activity).toBe('stopped')
-  const task = graph.getByRole('group', { name: `Task ${FOOTER.title}` })
-  await expect(task).toHaveAttribute('data-status', 'stopped')
-  await task.hover()
-  await expect(page.getByRole('group', { name: 'Task details' })).toContainText(
-    'Could not resume after BusyBoy restarted: the provider no longer has its conversation.',
-  )
+  expect(storedTasks(home)[0]?.note).toBe('Could not resume after BusyBoy restarted: the provider no longer has its conversation.')
 })
 
 test('a task whose agent never started should start once on the next start', async ({ page, context, baseURL }) => {
@@ -171,7 +163,7 @@ test('a task whose agent never started should start once on the next start', asy
   // The server died after saving the task but before the provider confirmed a session.
   patchTask(home, FOOTER.id, { activity: 'running', sessionId: null, request: LONG_REQUEST })
 
-  await openGraph(page)
+  await openApp(page)
 
   await expect.poll(() => storedTasks(home)[0]?.sessionId).toMatch(/^scripted-/)
   await expect.poll(() => sessionMessages(storedTasks(home)[0].sessionId)).toEqual([LONG_REQUEST])
@@ -191,15 +183,13 @@ test('restarting should leave an idle task idle without starting its agent', asy
 
     await server.stop('SIGKILL')
     await server.restart()
-    const graph = await openGraph(await context.newPage())
+    await openApp(await context.newPage())
 
     // The running task resumes, which also shows the resume pass is over.
     await expect.poll(() => sessionMessages(byTitle('Release notes')?.sessionId)).toEqual([LONG_REQUEST, RESUME_WORKING_MESSAGE])
     // The idle one keeps its old agent id and session, and nothing was sent to it.
     expect(byTitle('Contributing guide')).toMatchObject({ agentId: idle.agentId, sessionId: idle.sessionId, activity: 'idle' })
     expect(sessionMessages(idle.sessionId)).toEqual([QUICK_REQUEST])
-    // Still waiting on the user (no done record), not stopped.
-    await expect(graph.getByRole('group', { name: 'Task Contributing guide' })).toHaveAttribute('data-status', 'needs-you')
     await context.close()
   } finally {
     await server.dispose()
@@ -218,7 +208,7 @@ test('a provider that cannot start after a restart should leave a note and resum
     // The next start has no `claude` anywhere: the real adapter reports it missing once it starts.
     await server.stop('SIGKILL')
     await server.restart({ BUSYBOY_PROVIDER_SCRIPTS: '', BUSYBOY_CLAUDE_PATH: '', PATH: '/usr/bin:/bin' })
-    await openGraph(await context.newPage())
+    await openApp(await context.newPage())
 
     await expect.poll(() => storedTasks(home)[0]?.note).toBe(
       'Could not resume after BusyBoy restarted: The `claude` command was not found on PATH. It is tried again the next time BusyBoy starts.',
@@ -229,7 +219,7 @@ test('a provider that cannot start after a restart should leave a note and resum
     // With the CLI back, the next start resumes it.
     await server.stop('SIGKILL')
     await server.restart()
-    await openGraph(await context.newPage())
+    await openApp(await context.newPage())
     await expect.poll(() => sessionMessages(before.sessionId)).toEqual([LONG_REQUEST, RESUME_WORKING_MESSAGE])
     await expect.poll(() => storedTasks(home)[0]?.note).toBeNull()
     await context.close()
@@ -261,8 +251,9 @@ test('stopping a task and quitting right away should not resume it', async ({ br
     await server.stop('SIGTERM')
 
     await server.restart()
-    const graph = await openGraph(await context.newPage())
-    await expect(graph.getByRole('group', { name: 'Task Release notes' })).toHaveAttribute('data-status', 'stopped')
+    const reopened = await context.newPage()
+    await openApp(reopened)
+    await expect(reopened.getByRole('listitem', { name: 'web · Release notes' }).locator('[data-status]')).toHaveAttribute('data-status', 'stopped')
     expect(storedTasks(home)[0]).toMatchObject({ agentId: before.agentId, activity: 'stopped' })
     expect(sessionMessages(before.sessionId)).toEqual([LONG_REQUEST])
     await context.close()
@@ -320,12 +311,13 @@ test('a provider that signed out while BusyBoy was closed should leave a note an
 
     await server.stop('SIGKILL')
     await server.restart()
-    const graph = await openGraph(await context.newPage())
+    const page = await context.newPage()
+    await openApp(page)
 
     await expect.poll(() => storedTasks(home)[0]?.note).toBe(
       'Could not resume after BusyBoy restarted: Claude is not signed in. Run `claude` and use /login. It is tried again the next time BusyBoy starts.',
     )
-    await expect(graph.getByRole('group', { name: 'Task Open issues' })).toHaveAttribute('data-status', 'stopped')
+    await expect(page.getByRole('listitem', { name: 'web · Open issues' }).locator('[data-status]')).toHaveAttribute('data-status', 'stopped')
     // Still marked as working, so the next start tries again instead of leaving it idle.
     expect(storedTasks(home)[0]).toMatchObject({ activity: 'running', sessionId: before.sessionId })
     await context.close()

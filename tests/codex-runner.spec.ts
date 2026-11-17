@@ -7,7 +7,7 @@ import { useProjectsHome } from './support/projects-home'
 // The real Codex adapter, driven through the Director's chat with only Codex
 // signed in. It plays the runs in tests/provider-scripts/codex/ through
 // tests/fake-codex/codex.mjs: recorded from real runs, except the MCP forms, the
-// usage limit, the interrupt, and the side question, which are hand-written.
+// usage limit, and the interrupt, which are hand-written.
 const PLAIN_PROMPT = 'Reply with exactly this sentence and nothing else: Hello from busyboy.'
 const APPROVAL_PROMPT = 'Run the shell command `touch notes.txt`, then reply with exactly: Created notes.txt.'
 const QUESTION_PROMPT =
@@ -17,7 +17,6 @@ const MCP_DEFAULTS_FORM_PROMPT = 'Clean up old tickets with the tickets MCP serv
 const USAGE_LIMIT_PROMPT = 'Reply with anything.'
 const SLOW_REQUEST = 'Write a long story about a lighthouse.'
 const INTERRUPTING_REQUEST = 'Never mind, just say hi.'
-const SIDE_QUESTION = 'How was this thread started?'
 // Makes the fake `codex` start child processes and ignore SIGTERM.
 const START_CHILDREN_PROMPT = 'Start a command that keeps running.'
 
@@ -171,20 +170,4 @@ test('a lost Codex thread should start a new conversation and still answer', asy
   await expect(transcript.getByLabel('Reply', { exact: true })).toHaveText('Hello from busyboy.')
   const state = JSON.parse(readFileSync(join(home, 'director', 'state.json'), 'utf8')) as { sessionId: string }
   expect(state.sessionId).not.toBe('missing-old-thread')
-})
-
-test('a side question to a Codex Director should branch from its thread with no tools', async ({ page }) => {
-  await sendToCodexDirector(page, PLAIN_PROMPT)
-  const transcript = page.getByRole('log', { name: 'Transcript' })
-  await expect(transcript).toHaveAttribute('data-status', 'idle')
-  await expect(transcript.getByLabel('Reply', { exact: true })).toHaveText('Hello from busyboy.')
-  const { sessionId } = JSON.parse(readFileSync(join(home, 'director', 'state.json'), 'utf8')) as { sessionId: string }
-
-  await page.getByRole('tab', { name: 'Side chat' }).click()
-  await page.getByRole('textbox', { name: 'Side question' }).fill(SIDE_QUESTION)
-  await page.getByRole('button', { name: 'Ask' }).click()
-
-  await expect(page.getByRole('log', { name: 'Side chat' }).getByLabel('Side answer')).toHaveText(
-    `Branched from ${sessionId}. Shell tool: off. Approvals: never. Sandbox: read-only.`,
-  )
 })

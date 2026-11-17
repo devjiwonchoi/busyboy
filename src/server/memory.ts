@@ -120,33 +120,18 @@ async function projectsWithMemory(folder: string) {
 
 // ---- Change listeners and write queue ----------------------------------------------
 
-const LISTENERS_KEY = Symbol.for('busyboy.memory-listeners')
 const QUEUE_KEY = Symbol.for('busyboy.memory-writes')
 const globalStore = globalThis as typeof globalThis & {
-  [LISTENERS_KEY]?: Map<string, Set<() => void>>
   [QUEUE_KEY]?: Map<string, Promise<unknown>>
 }
-const listeners = (globalStore[LISTENERS_KEY] ??= new Map())
 const writeQueues = (globalStore[QUEUE_KEY] ??= new Map())
 
-/** Calls `listener` after any memory in `folder` changes. */
-export function subscribeToMemory(folder: string, listener: () => void) {
-  const key = pathKey(folder)
-  let set = listeners.get(key)
-  if (!set) listeners.set(key, (set = new Set()))
-  set.add(listener)
-  return () => set.delete(listener)
-}
-
-/** Runs memory writes for one data folder one at a time, then tells listeners when facts changed. */
-function queueWrite<T>(folder: string, write: () => Promise<T>, factsChanged = true): Promise<T> {
+/** Runs memory writes for one data folder one at a time. */
+function queueWrite<T>(folder: string, write: () => Promise<T>): Promise<T> {
   const key = pathKey(folder)
   const next = (writeQueues.get(key) ?? Promise.resolve()).catch(() => {}).then(write)
   writeQueues.set(key, next)
-  return next.then((result: T) => {
-    if (factsChanged) for (const listener of listeners.get(key) ?? []) listener()
-    return result
-  })
+  return next
 }
 
 async function writeAtomically(file: string, content: string) {
@@ -296,7 +281,7 @@ export async function appendLog(input: { text: string; project?: string | null }
   await queueWrite(folder, async () => {
     await mkdir(dir, { recursive: true })
     await appendFile(join(dir, `${day}.md`), `- ${time} ${text}\n`)
-  }, false)
+  })
   return `${day}.md`
 }
 

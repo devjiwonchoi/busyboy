@@ -1,34 +1,24 @@
 'use client'
 
-import { PanelBottom, PanelRight, Settings } from 'lucide-react'
+import { PanelBottom, Settings } from 'lucide-react'
 import Link from 'next/link'
 import { useEffect, useRef, useSyncExternalStore } from 'react'
 import { usePanelRef } from 'react-resizable-panels'
 import { buttonVariants } from '@/components/ui/button'
 import { Kbd } from '@/components/ui/kbd'
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable'
-import { Sidebar, SidebarContent, SidebarInset, SidebarRail } from '@/components/ui/sidebar'
 import { Toggle } from '@/components/ui/toggle'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { CommandPalette } from './command-palette'
 import { FocusHandler } from './focus-handler'
 import { ShellStateProvider, useShellState } from './shell-state'
 import { UpdateButton } from './update-button'
-import {
-  formatShortcut,
-  isMacPlatform,
-  ShortcutRegistryProvider,
-  TOGGLE_PANEL_KEYS,
-  TOGGLE_SIDEBAR_KEYS,
-  useShortcut,
-  type Shortcut,
-} from './shortcut-registry'
+import { formatShortcut, isMacPlatform, ShortcutRegistryProvider, TOGGLE_PANEL_KEYS, useShortcut, type Shortcut } from './shortcut-registry'
 
 type AppShellProps = {
   children: React.ReactNode
   /** The chat list on the left. */
   chats: React.ReactNode
-  sidebar: React.ReactNode
   panel: React.ReactNode
 }
 
@@ -43,10 +33,6 @@ export function AppShell(props: AppShellProps) {
     </ShortcutRegistryProvider>
   )
 }
-
-
-// The sidebar holds the project graph, which needs room to read; 20rem (shell-state.tsx) is the default.
-const SIDEBAR_RESIZE = { minWidth: 256, maxWidth: 720, storageKey: 'busyboy:sidebar-width' }
 
 const PANEL_DEFAULT_SIZE = 288
 const PANEL_MIN_SIZE = 120
@@ -74,15 +60,14 @@ function useBottomPanel(panelOpen: boolean, setPanelOpen: (open: boolean) => voi
 
 // The title bar is a layout region rather than a control, so it stays a plain
 // element around library parts.
-function ShellLayout({ children, chats, sidebar, panel }: AppShellProps) {
-  const { sidebarOpen, panelOpen, setPanelOpen, toggleSidebar, togglePanel } = useShellState()
+function ShellLayout({ children, chats, panel }: AppShellProps) {
+  const { panelOpen, setPanelOpen, togglePanel } = useShellState()
   const bottomPanel = useBottomPanel(panelOpen, setPanelOpen)
 
-  useShortcut({ id: 'toggle-sidebar', label: 'Toggle sidebar', ...TOGGLE_SIDEBAR_KEYS, run: toggleSidebar })
   useShortcut({ id: 'toggle-panel', label: 'Toggle bottom panel', ...TOGGLE_PANEL_KEYS, run: togglePanel })
 
   return (
-    <div data-slot="app-shell" className="flex min-h-0 flex-1 flex-col">
+    <div data-slot="app-shell" className="flex h-dvh min-h-0 w-full flex-col overflow-hidden">
       <FocusHandler />
       <CommandPalette />
       <header
@@ -99,13 +84,6 @@ function ShellLayout({ children, chats, sidebar, panel }: AppShellProps) {
             onClick={togglePanel}
             icon={<PanelBottom />}
           />
-          <ToggleButton
-            label="Toggle sidebar"
-            shortcut={TOGGLE_SIDEBAR_KEYS}
-            pressed={sidebarOpen}
-            onClick={toggleSidebar}
-            icon={<PanelRight />}
-          />
           <Tooltip>
             <TooltipTrigger
               // A link styled as a button: Base UI's Button would give it role="button".
@@ -119,7 +97,7 @@ function ShellLayout({ children, chats, sidebar, panel }: AppShellProps) {
       </header>
       <div className="flex min-h-0 flex-1">
         {chats}
-        <SidebarInset className="min-h-0 min-w-0">
+        <main className="min-h-0 min-w-0 flex-1">
           <ResizablePanelGroup orientation="vertical">
             <ResizablePanel id="chat" minSize={160}>
               <div data-slot="chat-area" role="region" aria-label="Chat" className="h-full overflow-auto">
@@ -141,18 +119,7 @@ function ShellLayout({ children, chats, sidebar, panel }: AppShellProps) {
               </section>
             </ResizablePanel>
           </ResizablePanelGroup>
-        </SidebarInset>
-        {/* inert: the closed sidebar slides off-canvas but must not keep focus or screen reader access. */}
-        <Sidebar
-          side="right"
-          role="complementary"
-          aria-label="Sidebar"
-          inert={!sidebarOpen}
-          className="top-10 h-[calc(100svh-2.5rem)]"
-        >
-          <SidebarContent>{sidebar}</SidebarContent>
-          <SidebarRail resize={SIDEBAR_RESIZE} />
-        </Sidebar>
+        </main>
       </div>
     </div>
   )

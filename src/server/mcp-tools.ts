@@ -188,7 +188,7 @@ export const MCP_TOOLS: McpTool[] = [
   {
     name: 'archive_task',
     description:
-      "Put away a task or subagent that is finished or no longer wanted, so it leaves the project graph and task_status. Its agent ends and its worktree is removed unless it has uncommitted changes (files git ignores go with it); its branch, records, and conversation are kept, and message_task brings it back. A task that is still working must be stopped by the user first.",
+      "Put away a task or subagent that is finished or no longer wanted, so it leaves task_status. Its agent ends and its worktree is removed unless it has uncommitted changes (files git ignores go with it); its branch, records, and conversation are kept, and message_task brings it back. A task that is still working must be stopped by the user first.",
     inputSchema: {
       type: 'object',
       properties: { task: { type: 'string', description: 'The task id, as create_task and task_status give it.' } },

@@ -69,14 +69,9 @@ function latestTurn(entries: ChatEntry[]): { user: UserEntry; reply?: DirectorRe
   return { user, reply, retry: Boolean((reply && reply.interrupted) || (!reply && failed)) }
 }
 
-/** Escape stops this chat unless the pointer is in a side chat that is answering. */
+/** Escape stops this chat. A repeated key is the hold, not a second stop. */
 function directorHandlesEscape(event: KeyboardEvent) {
-  if (event.repeat) return false
-  const target = event.target
-  if (!(target instanceof Element)) return true
-  const side = target.closest('[data-side-chat]')
-  if (!side) return true
-  return !side.hasAttribute('data-asking')
+  return !event.repeat
 }
 
 function apply(view: View, update: DirectorUpdate): View {
