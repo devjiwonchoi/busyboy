@@ -121,10 +121,8 @@ export async function readSavedImage(
     if (!(await lstat(/*turbopackIgnore: true*/ attachments)).isDirectory()) return null;
     if (NO_FOLLOW === undefined && !(await lstat(/*turbopackIgnore: true*/ path)).isFile())
       return null;
-    const handle = await open(
-      /*turbopackIgnore: true*/ path,
-      constants.O_RDONLY | (NO_FOLLOW ?? 0),
-    );
+    const flags = constants.O_RDONLY | (NO_FOLLOW ?? 0);
+    const handle = await open(/*turbopackIgnore: true*/ path, flags);
     try {
       const stats = await handle.stat();
       if (!stats.isFile() || stats.size > MAX_IMAGE_BYTES) return null;
