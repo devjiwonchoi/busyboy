@@ -2,6 +2,8 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test, type BrowserContext, type Page } from '@playwright/test'
+import { REPLY_CUT_OFF_NOTE } from '@/server/director/chat'
+import { RESUME_WAITING_MESSAGE, RESUME_WORKING_MESSAGE } from '@/server/tasks'
 import { useProjectsHome } from './support/projects-home'
 import { addRecordTask } from './support/record-tasks'
 import { startStandaloneServer } from './support/standalone-server'
@@ -10,15 +12,8 @@ import { startStandaloneServer } from './support/standalone-server'
 const LONG_REQUEST = 'Write the release notes for this week.'
 const QUICK_REQUEST = 'Add a CONTRIBUTING.md that explains how to run the project.'
 const SLOW_DIRECTOR_REQUEST = 'Write a long story about a lighthouse.'
-// Must match src/server/director/chat.ts.
-const REPLY_CUT_OFF_NOTE = 'BusyBoy restarted before the Director finished replying. Send your message again if you still need an answer.'
 const APPROVAL_REQUEST = 'Delete the build folder.'
 const SIGNED_OUT_REQUEST = 'Summarize the open issues.'
-// Must match src/server/tasks.ts.
-const RESUME_WORKING_MESSAGE =
-  'BusyBoy restarted while you were working, so your last step may not have finished. Check what is already done in the worktree before you continue, so nothing runs twice, then carry on with the task.'
-const RESUME_WAITING_MESSAGE =
-  'BusyBoy restarted while you were waiting for the user, and your request to them was lost. Ask them again the same way, and do nothing else until they answer.'
 
 type StoredTask = { id: string; title: string; request?: string; agentId: string; sessionId: string | null; activity?: string; note?: string | null }
 
