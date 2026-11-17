@@ -1,3 +1,5 @@
+import type { TaskPhase } from '../records/task-phase'
+
 // The timeline card. Question, approval, and plan cards are opened by a task
 // agent (task-cards.ts). Progress, done, and pull-request cards are opened by
 // later work through presentCard; their fields are fixed here so that work
@@ -72,7 +74,7 @@ export type TaskCard = CardBase &
          */
         criteria: string[]
       }
-    | { kind: 'progress'; title: string; steps: ProgressStep[] }
+    | { kind: 'progress'; title: string; steps: ProgressStep[]; phase: TaskPhase }
     | {
         kind: 'done'
         title: string
@@ -81,6 +83,10 @@ export type TaskCard = CardBase &
          * task has no agreed end state there.
          */
         achievement: { met: number; agreed: number } | null
+        /** Where the task is. `pr` while its pull-request card is open. */
+        phase: TaskPhase
+        /** Pull requests whose check is still pending. Zero when none are, or the phase is not `pr`. */
+        pendingChecks: number
       }
     | { kind: 'pr'; title: string; note?: string; pulls: PullRequestRow[] }
   )

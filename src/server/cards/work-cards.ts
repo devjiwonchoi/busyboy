@@ -6,8 +6,10 @@ import { getAgent, subscribeToAgent } from '../runner/agent-runner'
 import { findExecutable } from '../runner/find-executable'
 import { readEndStateAchievement } from '../records/end-state'
 import { parseRecords, type RecordTexts, type TodoResult } from '../records/parse-records'
+import { taskPhase } from '../records/task-phase'
 import { CardError, openCards, presentCard, settleCard } from '../task-cards'
-import type { ProgressStep, ProgressStepState, PullRequestCheck, PullRequestRow, TaskCard } from './model'
+import type { TaskStatus } from '../tasks'
+import type { CardKind, ProgressStep, ProgressStepState, PullRequestCheck, PullRequestRow, TaskCard } from './model'
 import { linkTaskArtifacts } from './task-artifact'
 
 // Progress, done, and pull-request cards. Question, approval, and plan cards are
@@ -62,9 +64,12 @@ async function syncWorkCards(folder: string, task: WorkTask, fresh: () => boolea
   const steps = stepsFrom(read.records.todos)
   const finished = read.records.state === 'done'
   const working = !finished && steps.some((step) => step.state === 'done' || step.state === 'running')
+  const pendingChecks = read.pulls.filter((pull) => pull.check === 'pending').length
+  const cards: CardKind[] = [...(working ? ['progress' as const] : []), ...(finished ? ['done' as const] : []), ...(read.pulls.length > 0 ? ['pr' as const] : [])]
+  const phase = taskPhase({ agent: agentStatus(task.agentId), records: read.records, cards, resumeFailed: false })
 
   if (working) {
-    show(folder, task, { ...source(task, progressId(task.id), now), kind: 'progress', title: task.title, steps })
+    show(folder, task, { ...source(task, progressId(task.id), now), kind: 'progress', title: task.title, steps, phase })
   } else if (!finished) {
     settleIfOpen(folder, progressId(task.id), 'Closed')
   }
@@ -82,6 +87,8 @@ async function syncWorkCards(folder: string, task: WorkTask, fresh: () => boolea
       title: task.title,
       // The share of agreed end-state items met on main. Null keeps the line as check, name, and Done.
       achievement: found ? { met: found.met, agreed: found.agreed } : null,
+      phase,
+      pendingChecks,
     })
   } else {
     settleIfOpen(folder, doneId(task.id), 'Reopened')
@@ -119,6 +126,20 @@ function show(folder: string, task: WorkTask, card: TaskCard) {
   const next: TaskCard = current ? { ...card, openedAt: current.openedAt } : card
   if (current && JSON.stringify(current) === JSON.stringify(next)) return
   presentCard({ folder, card: next, agentId: task.agentId })
+}
+
+function agentStatus(agentId: string): TaskStatus {
+  switch (getAgent(agentId)?.status) {
+    case 'starting':
+    case 'running':
+      return 'running'
+    case 'waiting':
+      return 'needs-you'
+    case 'idle':
+      return 'idle'
+    default:
+      return 'stopped'
+  }
 }
 
 function stepState(result: TodoResult): ProgressStepState {
@@ -331,4 +352,9 @@ export async function mergePullRequests({ folder, cardId }: { folder: string; ca
     }
   }
   settleCard({ folder, cardId, outcome: 'Merged in order' })
+  // The pull-request card is closed, so the done line drops the pending-check phrase.
+  const done = openCards(folder).find((item) => item.taskId === card.taskId && item.kind === 'done')
+  if (done?.kind === 'done' && done.phase === 'pr') {
+    presentCard({ folder, card: { ...done, phase: 'done', pendingChecks: 0 }, agentId: task.agentId })
+  }
 }

@@ -61,6 +61,8 @@ export async function syncEndStateCards(folder: string, tasks: TaskAchievement[]
       kind: 'done',
       title,
       achievement,
+      phase: 'done',
+      pendingChecks: 0,
     }
     const json = JSON.stringify(card)
     if (previous?.json === json) continue
