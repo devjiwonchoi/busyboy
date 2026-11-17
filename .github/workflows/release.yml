@@ -9,8 +9,9 @@ name: Release
 #
 # The Next.js app and the Electron bundle are JavaScript, so they are built
 # once. macOS downloads that bundle with pnpm's symlinks. Windows downloads a
-# second archive of the same tree with the symlinks turned into real files,
-# because Windows tar cannot create them. Each platform installs the native
+# second archive whose packages are real directories, with each package's
+# pnpm siblings nested inside it, because Windows tar cannot create the links.
+# Each platform installs the native
 # modules for its own architecture and packages. Publishing still waits for
 # every platform, so one release keeps one update feed.
 on:

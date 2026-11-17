@@ -11,6 +11,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { serverExternalPackages } from '../src/lib/server-external-packages.ts'
 import { SERVER_TOKEN_ENV, SERVER_TOKEN_HEADER } from '../src/lib/server-token.ts'
+import { assertServerResolves } from './check-server-resolution.mts'
 
 const READY_TIMEOUT_MS = 30_000
 const LOADER_TIMEOUT_MS = 60_000
@@ -90,6 +91,9 @@ export async function checkPackagedServer(serverDir: string) {
   const dir = join(isolated, 'server')
   try {
     cpSync(serverDir, dir, { recursive: true, verbatimSymlinks: true })
+    // The server answers requests while a missing Turbopack alias only fails
+    // inside the render, so the timeout would hide which module is gone.
+    assertServerResolves(dir)
     const loader = join(dir, 'check-server-packages.mjs')
     writeFileSync(
       loader,
