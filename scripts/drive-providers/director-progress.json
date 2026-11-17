@@ -1,0 +1,56 @@
+{
+  "provider": "claude",
+  "description": "The Director starts the footer task whose progress, done, and pull-request cards the verification journeys drive.",
+  "turns": [
+    {
+      "prompt": "In @web, build the site footer and report each step.",
+      "steps": [
+        {
+          "raw": {
+            "type": "system",
+            "subtype": "init",
+            "session_id": "drive-progress-session"
+          }
+        },
+        {
+          "raw": {
+            "type": "assistant",
+            "message": {
+              "content": [
+                {
+                  "type": "tool_use",
+                  "name": "mcp__busyboy__create_task",
+                  "input": {
+                    "project": "web",
+                    "title": "Add a footer",
+                    "request": "Build the site footer and report each step."
+                  }
+                }
+              ]
+            }
+          }
+        },
+        {
+          "raw": {
+            "type": "assistant",
+            "message": {
+              "content": [
+                {
+                  "type": "text",
+                  "text": "I've started a task in @web to build the site footer."
+                }
+              ]
+            }
+          }
+        },
+        {
+          "raw": {
+            "type": "result",
+            "subtype": "success",
+            "is_error": false
+          }
+        }
+      ]
+    }
+  ]
+}

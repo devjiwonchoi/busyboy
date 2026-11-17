@@ -13,6 +13,8 @@ dist-electron/
 .jwn/
 .claude/worktrees/
 
+.verify/
+
 test-results/
 playwright-report/
 blob-report/
