@@ -1,0 +1,56 @@
+{
+  "provider": "claude",
+  "description": "The Director starts the footer task whose plan card the verification journey approves.",
+  "turns": [
+    {
+      "prompt": "In @web, add a footer with the project name to the web app.",
+      "steps": [
+        {
+          "raw": {
+            "type": "system",
+            "subtype": "init",
+            "session_id": "drive-plan-session"
+          }
+        },
+        {
+          "raw": {
+            "type": "assistant",
+            "message": {
+              "content": [
+                {
+                  "type": "tool_use",
+                  "name": "mcp__busyboy__create_task",
+                  "input": {
+                    "project": "web",
+                    "title": "Add a footer",
+                    "request": "Add a footer with the project name to the web app."
+                  }
+                }
+              ]
+            }
+          }
+        },
+        {
+          "raw": {
+            "type": "assistant",
+            "message": {
+              "content": [
+                {
+                  "type": "text",
+                  "text": "I've started a task in @web to add a footer. The plan is ready for you to approve."
+                }
+              ]
+            }
+          }
+        },
+        {
+          "raw": {
+            "type": "result",
+            "subtype": "success",
+            "is_error": false
+          }
+        }
+      ]
+    }
+  ]
+}

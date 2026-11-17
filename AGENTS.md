@@ -40,6 +40,10 @@ Every file and folder name is kebab-case, for example `server-process.ts` or `bo
 - Before opening a PR, run the type check and the affected journeys locally.
 - Screenshot baselines (`toHaveScreenshot`) are only updated when the UI change is intentional, and the PR says so.
 
+## Prove UI changes with verify-busyboy
+
+A change to what a person sees or operates in BusyBoy is proven with the `verify-busyboy` skill before the pull request opens. Follow `.agents/skills/verify-busyboy/SKILL.md`: launch, run doctor, drive the feature that changed, and capture a screenshot of that path. Attach the screenshot to the pull request. Evidence is written to `.verify/evidence`, which git ignores, and cleanup leaves that folder in place.
+
 ## Start from nothing
 
 This branch starts from an empty history. Do not copy code from the `legacy` tag. Reading it for reference (`git show legacy:<path>`) is fine.
