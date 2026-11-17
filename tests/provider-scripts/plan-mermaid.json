@@ -8,7 +8,7 @@
         {
           "writeFile": {
             "path": ".jwn/<cwd-name>/ALIGN.md",
-            "text": "# ALIGN: Add a site footer\n\nVersion: 1 · Status: draft\n\n## E2E workflow\n\n```mermaid\nflowchart TD\n  A[Open the app] --> B[See the footer]\n```\n\n```mermaid\nnot a flowchart\n```\n\n# Goal\n\nEvery page of the web app ends with a footer that shows the project name.\n\n# Summary\n\n- What: a footer with the project name on every page\n"
+            "text": "# ALIGN: Add a site footer\n\nVersion: 1 · Status: draft\n\n# Goal\n\nEvery page of the web app ends with a footer that shows the project name.\n\n# End state\n\n## 1 · Show the project name on every page\n\n- Proof: E2E: see-footer\n\n## E2E workflow\n\n```mermaid\nflowchart LR\n  subgraph see-the-footer.spec.ts [\"see-the-footer.spec.ts\"]\n    open-app[\"Open the app\"] --> see-footer[\"See the footer\"]\n  end\n```\n\n```mermaid\nnot a flowchart\n```\n\n# Summary\n\n- What: a footer with the project name on every page\n"
           }
         },
         {

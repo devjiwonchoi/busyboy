@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync } from 'node:fs'
+import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { expect as baseExpect, test, type APIRequestContext, type Page } from '@playwright/test'
 import { useProjectsHome } from './support/projects-home'
@@ -35,7 +35,6 @@ let home: string
 
 test.beforeEach(async ({ context, baseURL }) => {
   ;({ home } = await useProjectsHome(context, baseURL!, ['web']))
-  mkdirSync('/opt/cursor/artifacts', { recursive: true })
 })
 
 test('viewing plan details should render a mermaid diagram and keep an invalid diagram as code', async ({ page, context }) => {
@@ -52,6 +51,7 @@ test('viewing plan details should render a mermaid diagram and keep an invalid d
   await expect(details.getByRole('heading', { name: 'E2E workflow' })).toBeVisible()
   const diagram = details.locator('[data-mermaid=diagram] svg')
   await expect(diagram).toBeVisible()
+  await expect(diagram).toContainText('see-the-footer.spec.ts')
   await expect(diagram).toContainText('Open the app')
   await expect(diagram).toContainText('See the footer')
 
@@ -60,10 +60,4 @@ test('viewing plan details should render a mermaid diagram and keep an invalid d
   await expect(source).toContainText('not a flowchart')
   await expect(source.locator('[data-mermaid=diagram]')).toHaveCount(0)
   await expect(details.locator('svg', { hasText: 'not a flowchart' })).toHaveCount(0)
-
-  await diagram.scrollIntoViewIfNeeded()
-  await page.evaluate(() => {
-    if (document.activeElement instanceof HTMLElement) document.activeElement.blur()
-  })
-  await details.screenshot({ path: '/opt/cursor/artifacts/plan-details-mermaid.png' })
 })
