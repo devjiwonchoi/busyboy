@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { Check, Circle } from 'lucide-react'
 import { cardGroupLabel, type ProgressCard, type ProgressStepState } from '@/server/cards/model'
+import { PhaseMark } from '../../phase-mark'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Spinner } from '@/components/ui/spinner'
 import type { CardViewProps } from '../card-view-props'
@@ -53,7 +54,12 @@ export function ProgressCardView({ card }: CardViewProps<ProgressCard>) {
     <CardShell label={cardGroupLabel(card)} replying={replying}>
       <CardShellHeader
         title={<span className="font-semibold">{card.title}</span>}
-        meta={<span className="text-muted-foreground text-xs font-normal">{card.project}</span>}
+        meta={
+          <span className="text-muted-foreground inline-flex items-center gap-2 text-xs font-normal">
+            <span>{card.project}</span>
+            <PhaseMark phase={card.phase} />
+          </span>
+        }
       />
       <CardShellBody>
         <StepList steps={card.steps} />

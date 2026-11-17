@@ -55,6 +55,7 @@ test('a running step should show a spinner while earlier steps stay checked', as
   await expect(steps.nth(2).locator('[data-step-mark=pending]')).toBeVisible()
   await expect(steps.nth(2).locator('[data-slot=spinner]')).toHaveCount(0)
   await expect(card.getByText('web', { exact: true })).toBeVisible()
+  await expect(card.getByText('Working', { exact: true })).toBeVisible()
   await expect(card.getByRole('button', { name: 'Reply' })).toHaveCount(0)
   await expect(card.getByRole('button', { name: 'Stop task' })).toHaveCount(0)
 
@@ -85,7 +86,7 @@ test('clicking Merge in order should merge pull requests from the base of the st
   const done = openCard(page, 'Done from web · Add a footer')
   await expect(done).toHaveAttribute('data-variant', 'line')
   await expect(done).toContainText('Add a footer')
-  await expect(done).toContainText('· Done')
+  await expect(done).toContainText('PR · 1 check pending')
   await expect(done.getByRole('button', { name: 'View plan' })).toBeVisible()
   await expect(done.getByRole('button', { name: 'Reply' })).toHaveCount(0)
   await expect(done.getByRole('button', { name: 'Stop task' })).toHaveCount(0)

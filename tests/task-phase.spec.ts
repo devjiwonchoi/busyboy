@@ -41,6 +41,7 @@ test('a verifying task should show Verifying on the row and the pill', async ({ 
   const row = transcript(page).getByRole('listitem', { name: 'web · Verify the footer' })
   await expect(row.getByText('Verifying', { exact: true })).toBeVisible()
   await expect(row.locator('[data-phase]')).toHaveAttribute('data-phase', 'verifying')
+  await expect(transcript(page).getByRole('group', { name: 'Progress from web · Verify the footer' })).toContainText('Verifying')
 
   const graph = page.getByRole('region', { name: 'Project graph' })
   const pill = graph.getByRole('group', { name: 'Task Verify the footer' })

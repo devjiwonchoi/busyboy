@@ -3,6 +3,7 @@
 import { useId, useState } from 'react'
 import { approveCardAction } from '@/app/(main)/director-actions'
 import { cardGroupLabel, type PlanCard } from '@/server/cards/model'
+import { PhaseMark } from '../../phase-mark'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -36,7 +37,12 @@ export function PlanCardView({ card }: CardViewProps<PlanCard>) {
     <CardShell label={cardGroupLabel(card)} replying={replying}>
       <CardShellHeader
         title={<span className="font-bold">{card.title}</span>}
-        meta={<span className="text-muted-foreground text-[0.6875rem] font-normal">{card.project}</span>}
+        meta={
+          <span className="text-muted-foreground inline-flex items-center gap-2 text-[0.6875rem] font-normal">
+            <span>{card.project}</span>
+            <PhaseMark phase="aligning" />
+          </span>
+        }
       />
       <CardShellBody>
         {/* The shell's section gap is wider than the title-to-summary gap in the mock. */}

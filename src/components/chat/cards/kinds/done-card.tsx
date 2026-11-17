@@ -4,13 +4,19 @@ import { useState } from 'react'
 import { Check } from 'lucide-react'
 import { readTaskPlanAction } from '@/app/(main)/director-actions'
 import { cardGroupLabel, type DoneCard } from '@/server/cards/model'
+import { PhaseMark } from '../../phase-mark'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Markdown } from '../../markdown'
 import type { CardViewProps } from '../card-view-props'
 import { useCardActions } from '../card-actions'
 import { CardShell, CardShellHeader } from '../card-shell'
 
-/** One compact line: a check, the task name, Done, the end-state share, and a link to the plan. */
+/** The pending-check note on a done line whose pull requests are still open. */
+function pendingChecks(count: number) {
+  return ` · ${count} ${count === 1 ? 'check' : 'checks'} pending`
+}
+
+/** One compact line: a check, the task name, Done or the open pull requests, and a link to the plan. */
 export function DoneCardView({ card }: CardViewProps<DoneCard>) {
   const { replying } = useCardActions()
   const [open, setOpen] = useState(false)
@@ -39,8 +45,16 @@ export function DoneCardView({ card }: CardViewProps<DoneCard>) {
               <Check className="size-2.5" strokeWidth={3} />
             </span>
             <span className="font-semibold">{card.taskTitle}</span>
-            <span className="text-muted-foreground font-normal">
-              {' · Done'}
+            <span className="text-muted-foreground inline-flex items-center gap-1.5 font-normal">
+              {card.phase === 'pr' ? (
+                <>
+                  <span aria-hidden>·</span>
+                  <PhaseMark phase="pr" />
+                  {card.pendingChecks > 0 && <span>{pendingChecks(card.pendingChecks)}</span>}
+                </>
+              ) : (
+                ' · Done'
+              )}
               {share ? ` · ${share.met}/${share.agreed} end state` : ''}
             </span>
           </span>
