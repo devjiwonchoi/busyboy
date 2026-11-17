@@ -45,7 +45,7 @@ test('fixing a typo should finish with no plan card', async ({ page, context }) 
   await expect(done.getByRole('button', { name: 'View plan' })).toBeVisible()
   await expect(transcript(page).getByRole('group', { name: 'Plan from web · Fix the welcome typo' })).toHaveCount(0)
   await expect(transcript(page).getByRole('group', { name: 'Card from web · Fix the welcome typo' })).toHaveCount(0)
-  await expect(transcript(page).getByLabel('web · Fix the welcome typo', { exact: true })).toContainText('Done')
+  await expect(transcript(page).getByLabel('web · Fix the welcome typo', { exact: true })).toContainText('Archived')
 
   await done.getByRole('button', { name: 'View plan' }).click()
   const details = page.getByRole('dialog', { name: 'Fix the welcome typo' })

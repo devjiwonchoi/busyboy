@@ -7,7 +7,7 @@ import { findExecutable } from '../runner/find-executable'
 import { readEndStateAchievement } from '../records/end-state'
 import { parseRecords, type RecordTexts, type TodoResult } from '../records/parse-records'
 import { taskPhase } from '../records/task-phase'
-import { CardError, openCards, presentCard, settleCard } from '../task-cards'
+import { CardError, isArchiveStop, openCards, presentCard, settleCard } from '../task-cards'
 import type { TaskStatus } from '../tasks'
 import type { CardKind, ProgressStep, ProgressStepState, PullRequestCheck, PullRequestRow, TaskCard } from './model'
 import { linkTaskArtifacts } from './task-artifact'
@@ -35,6 +35,15 @@ export function trackWorkCards({ folder, task }: { folder: string; task: WorkTas
   let epoch = 0
   subscribeToAgent(task.agentId, 0, ({ event }) => {
     if (event.type === 'stopped') {
+      // Bumping the epoch would drop the done line an in-flight sync is still opening.
+      if (isArchiveStop(task.id)) {
+        for (const id of [progressId(task.id), doneId(task.id), prId(task.id)]) {
+          const card = openCards(folder).find((item) => item.id === id)
+          if (card?.kind === 'done') continue
+          settleIfOpen(folder, id, 'Stopped')
+        }
+        return
+      }
       epoch += 1
       for (const id of [progressId(task.id), doneId(task.id), prId(task.id)]) settleIfOpen(folder, id, 'Stopped')
       return
@@ -54,7 +63,8 @@ function settleIfOpen(folder: string, cardId: string, outcome: string) {
 
 async function syncWorkCards(folder: string, task: WorkTask, fresh: () => boolean) {
   const read = await readWorkRecords(folder, task)
-  if (!fresh() || getAgent(task.agentId)?.status === 'stopped' || !read) return
+  // An archive stops the agent while this sync is still reading. The done line is the record of that finish.
+  if (!fresh() || (getAgent(task.agentId)?.status === 'stopped' && !isArchiveStop(task.id)) || !read) return
   const now = new Date().toISOString()
   const steps = stepsFrom(read.records.todos)
   const finished = read.records.state === 'done'
@@ -328,4 +338,7 @@ export async function mergePullRequests({ folder, cardId }: { folder: string; ca
   if (done?.kind === 'done' && done.phase === 'pr') {
     presentCard({ folder, card: { ...done, phase: 'done', pendingChecks: 0 }, agentId: task.agentId })
   }
+  // Merged here, so a task whose record is already done can put itself away without waiting for the next look.
+  const { considerAutoArchive } = await import('../auto-archive')
+  await considerAutoArchive(folder, task.id)
 }

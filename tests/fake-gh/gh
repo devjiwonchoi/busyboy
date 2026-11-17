@@ -1,2 +1,12 @@
 #!/bin/sh
+# `pr view` is not a merge. Recording it would look like one in the merge log.
+if [ "$1" = "pr" ] && [ "$2" = "view" ]; then
+  state=OPEN
+  if [ -f .gh-pr-state ]; then
+    state=$(tr -cd 'A-Za-z' < .gh-pr-state)
+    [ -n "$state" ] || state=OPEN
+  fi
+  printf '%s\n' "{\"state\":\"$state\"}"
+  exit 0
+fi
 printf '%s\n' "$*" >> .gh-merge.log

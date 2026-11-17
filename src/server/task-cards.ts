@@ -302,12 +302,31 @@ export function replyToCard({ folder, cardId, text }: { folder: string; cardId: 
   )
 }
 
+// An archive stops the agent after the work is finished. That stop is not the user
+// cancelling, so the done line stays. A later agent for the same task clears it.
+const ARCHIVE_STOPS_KEY = Symbol.for('busyboy.archive-stops')
+const archiveStops = ((globalThis as typeof globalThis & { [ARCHIVE_STOPS_KEY]?: Set<string> })[ARCHIVE_STOPS_KEY] ??= new Set<string>())
+
+export function markArchiveStop(taskId: string) {
+  archiveStops.add(taskId)
+}
+
+export function clearArchiveStop(taskId: string) {
+  archiveStops.delete(taskId)
+}
+
+export function isArchiveStop(taskId: string) {
+  return archiveStops.has(taskId)
+}
+
 export async function stopTaskAgent({ folder, agentId }: { folder: string; agentId: string }) {
   if (!getAgent(agentId)) {
     return
   }
   const store = storeFor(folder)
-  const cardIds = [...store.open.values()].filter((entry) => entry.agentId === agentId).map(({ card }) => card.id)
+  const cardIds = [...store.open.values()]
+    .filter((entry) => entry.agentId === agentId && !(entry.card.kind === 'done' && archiveStops.has(entry.card.taskId)))
+    .map(({ card }) => card.id)
   for (const cardId of cardIds) {
     store.outcomes.set(cardId, 'Stopped')
   }
