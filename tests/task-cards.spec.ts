@@ -101,12 +101,21 @@ test.describe('Claude task agents', () => {
     await expect(card).toContainText(
       'Every page of the web app ends with a footer that shows the project name. The footer sits below the main content and uses the app\'s muted text color. When done: a footer with the project name on every page.',
     )
+    await expect(card.getByRole('list', { name: 'End state' }).getByRole('listitem')).toHaveText([
+      'Show the project name on every page',
+      'Place the footer below the main content',
+    ])
+    await expect(card.getByRole('button')).toHaveText(['View details', 'Approve'])
     // The agent is idle between turns, but the task waits on the user.
     await expect(transcript(page).getByLabel('web · Add a footer', { exact: true })).toContainText('Needs you')
     await card.getByRole('button', { name: 'View details' }).click()
-    const details = page.getByRole('dialog', { name: 'Plan: Add a site footer' })
+    const details = page.getByRole('dialog', { name: 'Add a site footer' })
+    await expect(details.getByRole('heading', { name: 'Success criteria' })).toBeVisible()
     await expect(details.getByRole('heading', { name: 'Footer component' })).toBeVisible()
+    await expect(details.getByRole('button', { name: 'Request changes' })).toBeVisible()
+    await expect(details.getByRole('button', { name: 'Approve' })).toBeVisible()
     await page.keyboard.press('Escape')
+    await expect(details).toBeHidden()
     await card.getByRole('button', { name: 'Approve' }).click()
 
     await expect(openCards(page)).toHaveCount(0)
@@ -118,16 +127,19 @@ test.describe('Claude task agents', () => {
     await expect(openCards(page)).toHaveCount(0)
   })
 
-  test('clicking Reply on an Align card and sending should send the change to its task agent', async ({ page, context }) => {
+  test('clicking Request changes on a plan should send the change to its task agent', async ({ page, context }) => {
     await openChat(page)
     await createTask(context.request, 'Add a footer', PLAN_REQUEST)
     const card = openCard(page, 'Plan from web · Add a footer')
     await expect(card).toBeVisible()
 
     const composer = page.getByRole('textbox', { name: 'Message' })
-    // The card does not take the composer; the user picks it.
+    // The card does not take the composer; the user opens the plan and asks for a change.
     await expect(composer).toHaveAttribute('aria-placeholder', 'Message BusyBoy')
-    await card.getByRole('button', { name: 'Reply' }).click()
+    await card.getByRole('button', { name: 'View details' }).click()
+    const details = page.getByRole('dialog', { name: 'Add a site footer' })
+    await details.getByRole('button', { name: 'Request changes' }).click()
+    await expect(details).toBeHidden()
     await expect(composer).toHaveAttribute('aria-placeholder', 'Reply to web · Add a footer')
     await composer.fill('Also show the current year.')
     await page.getByRole('button', { name: 'Send' }).click()
@@ -139,9 +151,13 @@ test.describe('Claude task agents', () => {
       'Card from web · Add a footer',
     )
     // The agent revised its draft, so a new plan card asks again.
-    await expect(openCard(page, 'Plan from web · Add a footer')).toContainText(
-      'When done: a footer with the project name on every page and the current year.',
-    )
+    const revised = openCard(page, 'Plan from web · Add a footer')
+    await expect(revised).toContainText('When done: a footer with the project name on every page and the current year.')
+    await expect(revised.getByRole('list', { name: 'End state' }).getByRole('listitem')).toHaveText([
+      'Show the project name on every page',
+      'Place the footer below the main content',
+      'Show the current year beside the project name',
+    ])
     // Nothing went to the Director, and the reply target ended with the card it answered.
     await expect(transcript(page).getByLabel('Your message')).toHaveCount(0)
     await expect(composer).toHaveAttribute('aria-placeholder', 'Message BusyBoy')
@@ -156,7 +172,8 @@ test.describe('Claude task agents', () => {
     await openChat(page)
     await createTask(context.request, 'Add a footer', PLAN_REQUEST)
     const card = openCard(page, 'Plan from web · Add a footer')
-    await card.getByRole('button', { name: 'Reply' }).click()
+    await card.getByRole('button', { name: 'View details' }).click()
+    await page.getByRole('dialog', { name: 'Add a site footer' }).getByRole('button', { name: 'Request changes' }).click()
     const composer = page.getByRole('textbox', { name: 'Message' })
     await composer.fill('Yes, go ahead.')
 

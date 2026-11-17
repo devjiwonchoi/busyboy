@@ -8,7 +8,7 @@
         {
           "writeFile": {
             "path": ".jwn/<cwd-name>/ALIGN.md",
-            "text": "# ALIGN: Add a site footer\n\nVersion: 1 · Status: draft\n\n# Goal\n\nEvery page of the web app ends with a footer that shows the project name. The footer sits below the main content and uses the app's muted text color.\n\nIntention: visitors always see which project they are on.\n\n---\n\n# Todos\n\n## 1 · Footer component        (subagent)\n- Goal: a footer on every page.\n- Done when: the footer journey passes.\n\n---\n\n# Summary\n\n- What: a footer with the project name on every page\n- When you are needed: none\n- Approval authorizes: commits and a PR to the web app\n"
+            "text": "# ALIGN: Add a site footer\n\nVersion: 1 · Status: draft\n\n# Goal\n\nEvery page of the web app ends with a footer that shows the project name. The footer sits below the main content and uses the app's muted text color.\n\nIntention: visitors always see which project they are on.\n\n---\n\n# Success criteria\n\n## 1 · Show the project name on every page\n- Met by: 1\n- Proven by: the footer journey passes.\n\n## 2 · Place the footer below the main content\n- Met by: 1\n- Proven by: the footer journey passes.\n\n---\n\n# Todos\n\n## 1 · Footer component        (subagent)\n- Goal: a footer on every page.\n- Done when: the footer journey passes.\n\n---\n\n# Summary\n\n- What: a footer with the project name on every page\n- When you are needed: none\n- Approval authorizes: commits and a PR to the web app\n"
           }
         },
         {
@@ -27,7 +27,7 @@
         {
           "writeFile": {
             "path": ".jwn/<cwd-name>/ALIGN.md",
-            "text": "# ALIGN: Add a site footer\n\nVersion: 1 · Status: approved by the user on 2026-11-14\n\n# Goal\n\nEvery page of the web app ends with a footer that shows the project name. The footer sits below the main content and uses the app's muted text color.\n\nIntention: visitors always see which project they are on.\n\n---\n\n# Todos\n\n## 1 · Footer component        (subagent)\n- Goal: a footer on every page.\n- Done when: the footer journey passes.\n\n---\n\n# Summary\n\n- What: a footer with the project name on every page\n- When you are needed: none\n- Approval authorizes: commits and a PR to the web app\n"
+            "text": "# ALIGN: Add a site footer\n\nVersion: 1 · Status: approved by the user on 2026-11-14\n\n# Goal\n\nEvery page of the web app ends with a footer that shows the project name. The footer sits below the main content and uses the app's muted text color.\n\nIntention: visitors always see which project they are on.\n\n---\n\n# Success criteria\n\n## 1 · Show the project name on every page\n- Met by: 1\n- Proven by: the footer journey passes.\n\n## 2 · Place the footer below the main content\n- Met by: 1\n- Proven by: the footer journey passes.\n\n---\n\n# Todos\n\n## 1 · Footer component        (subagent)\n- Goal: a footer on every page.\n- Done when: the footer journey passes.\n\n---\n\n# Summary\n\n- What: a footer with the project name on every page\n- When you are needed: none\n- Approval authorizes: commits and a PR to the web app\n"
           }
         },
         {
@@ -46,7 +46,7 @@
         {
           "writeFile": {
             "path": ".jwn/<cwd-name>/ALIGN.md",
-            "text": "# ALIGN: Add a site footer\n\nVersion: 2 · Status: draft\n\n# Goal\n\nEvery page of the web app ends with a footer that shows the project name and the current year. The footer sits below the main content and uses the app's muted text color.\n\nIntention: visitors always see which project they are on.\n\n---\n\n# Todos\n\n## 1 · Footer component        (subagent)\n- Goal: a footer on every page.\n- Done when: the footer journey passes.\n\n---\n\n# Summary\n\n- What: a footer with the project name on every page and the current year\n- When you are needed: none\n- Approval authorizes: commits and a PR to the web app\n"
+            "text": "# ALIGN: Add a site footer\n\nVersion: 2 · Status: draft\n\n# Goal\n\nEvery page of the web app ends with a footer that shows the project name and the current year. The footer sits below the main content and uses the app's muted text color.\n\nIntention: visitors always see which project they are on.\n\n---\n\n# Success criteria\n\n## 1 · Show the project name on every page\n- Met by: 1\n- Proven by: the footer journey passes.\n\n## 2 · Place the footer below the main content\n- Met by: 1\n- Proven by: the footer journey passes.\n\n## 3 · Show the current year beside the project name\n- Met by: 1\n- Proven by: the footer journey passes.\n\n---\n\n# Todos\n\n## 1 · Footer component        (subagent)\n- Goal: a footer on every page.\n- Done when: the footer journey passes.\n\n---\n\n# Summary\n\n- What: a footer with the project name on every page and the current year\n- When you are needed: none\n- Approval authorizes: commits and a PR to the web app\n"
           }
         },
         {
