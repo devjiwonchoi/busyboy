@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { messageTaskAction, replyToCardAction, sendToDirectorAction, stopDirectorAction } from '@/app/(main)/director-actions'
+import { archiveTaskAction, messageTaskAction, replyToCardAction, sendToDirectorAction, stopDirectorAction } from '@/app/(main)/director-actions'
 import { cn } from '@/lib/utils'
 import type { ChatEntry, DirectorStatus, DirectorUpdate } from '@/server/director/chat'
 import type { TaskCard } from '@/server/cards/model'
@@ -71,6 +71,7 @@ export function DirectorChat({
   projects,
   persona,
   chat = null,
+  managedProject = null,
   header,
   greeting,
 }: {
@@ -78,6 +79,8 @@ export function DirectorChat({
   persona: Persona
   /** The manager's id; null for the Director. */
   chat?: string | null
+  /** Set for a manager: `@` lists that project's files instead of every project. */
+  managedProject?: string | null
   /** Shown above the greeting in place of the name. */
   header?: string
   greeting: string
@@ -217,6 +220,23 @@ export function DirectorChat({
       <div className="mx-auto w-full max-w-3xl px-6 pb-4">
         <ChatComposer
           projects={projects}
+          filesProject={messageTask?.project ?? managedProject}
+          canStop={view.status === 'answering'}
+          canArchive={Boolean(messageTask)}
+          onCommand={(command) => {
+            if (command === 'stop') {
+              void stopDirectorAction(chat).catch(() =>
+                setView((current) => ({ ...current, sendError: 'The reply could not be stopped. Try again.' })),
+              )
+            }
+            if (command === 'archive' && messageTask) {
+              const taskId = messageTask.id
+              setMessageChoice(null)
+              void archiveTaskAction(taskId).then(({ error }) => {
+                if (error) setView((current) => ({ ...current, sendError: error }))
+              })
+            }
+          }}
           leading={
             target ? (
               <ReplyTarget

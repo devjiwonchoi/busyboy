@@ -171,3 +171,13 @@
     @apply bg-background text-foreground antialiased;
   }
 }
+
+/* The mention menu is dark even when the page theme is light. The popover token paints over utility classes on the popup itself. */
+.mention-menu {
+  background-color: #18181b !important;
+  color: #f4f4f5 !important;
+}
+.mention-menu [data-slot='composer-item'][data-highlighted] {
+  background-color: #3f3f46 !important;
+  color: #fafafa !important;
+}

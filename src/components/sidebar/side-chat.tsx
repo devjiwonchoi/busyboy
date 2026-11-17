@@ -268,6 +268,7 @@ function SideChatThread({
       <div className="p-3 pt-0">
         <ChatComposer
           projects={[]}
+          showCommands={false}
           label="Side question"
           placeholder={`Ask ${persona.name} a side question`}
           sendLabel="Ask"

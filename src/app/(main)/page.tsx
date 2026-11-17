@@ -42,8 +42,9 @@ async function ManagerChat({ id }: { id: string }) {
     <DirectorChat
       key={manager.id}
       chat={manager.id}
-      // A manager works in one project, so the composer offers no project mentions.
+      // A manager works in one project, so `@` offers that project's files.
       projects={[]}
+      managedProject={manager.project}
       persona={managerPersona(manager.name)}
       header={`${manager.name}, manager of ${manager.project}`}
       greeting={`I look after ${manager.project}. What should we work on?`}

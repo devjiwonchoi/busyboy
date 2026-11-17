@@ -1,31 +1,37 @@
+// A file mention's query may contain a path (`src/app.tsx`). A slash that is
+// not its own trigger still belongs to that query.
+const QUERY_BODY = /^[\p{L}\p{M}\p{N}\p{Zs}_.’'./\\-]*$/u;
+const QUERY_SUFFIX = /^[\p{L}\p{M}\p{N}_.’'./\\-]*/u;
+
 export function getComposerQuery(
   text: string,
   caret: number,
   triggers: readonly string[],
 ): { character: string; text: string; start: number; end: number } | null {
-  let start = -1;
-  let character = "";
+  const candidates: { start: number; character: string }[] = [];
   for (const trigger of triggers) {
     if (!trigger || trigger.length > caret) continue;
-    const index = text.lastIndexOf(trigger, caret - trigger.length);
-    if (index > start) {
-      start = index;
-      character = trigger;
+    let index = text.lastIndexOf(trigger, caret - trigger.length);
+    while (index >= 0) {
+      candidates.push({ start: index, character: trigger });
+      if (index === 0) break;
+      index = text.lastIndexOf(trigger, index - 1);
     }
   }
-  if (start < 0 || (start > 0 && !/\s/u.test(text.charAt(start - 1))))
-    return null;
+  candidates.sort((left, right) => right.start - left.start);
 
-  const beforeCaret = text.slice(start + character.length, caret);
-  if (/^\s/u.test(beforeCaret)) return null;
-  if (!/^[\p{L}\p{M}\p{N}\p{Zs}_.’'-]*$/u.test(beforeCaret)) return null;
-
-  // Complete the word at the caret without consuming subsequent prose.
-  const suffix = /^[\p{L}\p{M}\p{N}_.’'-]*/u.exec(text.slice(caret))?.[0] ?? "";
-  return {
-    character,
-    text: (beforeCaret + suffix).replace(/\p{Zs}+/gu, " ").trim(),
-    start,
-    end: caret + suffix.length,
-  };
+  for (const { start, character } of candidates) {
+    // A trigger in the middle of a word is part of the text, not a picker.
+    if (start > 0 && !/\s/u.test(text.charAt(start - 1))) continue;
+    const beforeCaret = text.slice(start + character.length, caret);
+    if (/^\s/u.test(beforeCaret) || !QUERY_BODY.test(beforeCaret)) continue;
+    const suffix = QUERY_SUFFIX.exec(text.slice(caret))?.[0] ?? "";
+    return {
+      character,
+      text: (beforeCaret + suffix).replace(/\p{Zs}+/gu, " ").trim(),
+      start,
+      end: caret + suffix.length,
+    };
+  }
+  return null;
 }
