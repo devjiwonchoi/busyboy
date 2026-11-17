@@ -1,4 +1,5 @@
-import { readFileSync } from 'node:fs'
+import { execFileSync } from 'node:child_process'
+import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { expect as baseExpect, test, type APIRequestContext, type Page } from '@playwright/test'
 import { useProjectsHome } from './support/projects-home'
@@ -7,6 +8,10 @@ const FORCE_PUSH_REQUEST = 'Force push the branch to origin.'
 const RELEASE_REQUEST = 'Run the release script.'
 const CLEAN_REQUEST = 'Remove the build folder.'
 const DIRECTOR_PUSH_REQUEST = 'Force push the main branch yourself.'
+const ARTIFACT_REQUEST = 'Download the CI screenshots into the task record.'
+const OUTSIDE_REQUEST = 'Delete a folder that is outside this task.'
+const OUTSIDE_VARIABLE_REQUEST = 'Delete a folder named by a variable that points outside this task.'
+const SCRATCH_REQUEST = 'Save a screenshot in the scratch folder and then remove it.'
 
 const expect = baseExpect.configure({ timeout: 15_000 })
 
@@ -147,6 +152,55 @@ test.describe('Claude task agents', () => {
 
     await expect(taskRow(page, 'Clean build')).toContainText('Idle')
     await expect(openCards(page)).toHaveCount(0)
+  })
+
+  test('downloading a CI artifact into the record folder should run without a card', async ({ page, context }) => {
+    await openChat(page)
+    await createTask(context.request, 'CI screenshots', ARTIFACT_REQUEST)
+
+    await expect(taskRow(page, 'CI screenshots')).toContainText('Idle')
+    await expect(openCards(page)).toHaveCount(0)
+  })
+
+  test('deleting outside the worktree and the record folder should ask', async ({ page, context }) => {
+    await openChat(page)
+    await createTask(context.request, 'Delete outside', OUTSIDE_REQUEST)
+
+    const card = openCard(page, 'Approval from web · Delete outside')
+    await expect(card).toContainText('On your always-ask list: Delete outside the task folder')
+    await card.getByRole('button', { name: 'C. Deny' }).click()
+    await expect(taskRow(page, 'Delete outside')).toContainText('Idle')
+  })
+
+  test('a variable that resolves outside the task folders should ask', async ({ page, context }) => {
+    await openChat(page)
+    await createTask(context.request, 'Delete variable', OUTSIDE_VARIABLE_REQUEST)
+
+    const card = openCard(page, 'Approval from web · Delete variable')
+    await expect(card).toContainText('Bash: A=/tmp/busyboy-outside-task; rm -rf $A')
+    await expect(card).toContainText('On your always-ask list: Delete outside the task folder')
+    await card.getByRole('button', { name: 'C. Deny' }).click()
+    await expect(taskRow(page, 'Delete variable')).toContainText('Idle')
+  })
+
+  test('writing and deleting in the scratch folder should run without a card', async ({ page, context }) => {
+    await openChat(page)
+    await createTask(context.request, 'Scratch files', SCRATCH_REQUEST)
+
+    await expect(taskRow(page, 'Scratch files')).toContainText('Idle')
+    await expect(openCards(page)).toHaveCount(0)
+
+    const { tasks } = JSON.parse(readFileSync(join(home, 'task-list.json'), 'utf8')) as { tasks: { title: string; worktree: string }[] }
+    const worktree = tasks.find((task) => task.title === 'Scratch files')?.worktree
+    if (!worktree) throw new Error('The scratch task has no worktree.')
+    expect(existsSync(join(worktree, '.busyboy-scratch'))).toBe(true)
+    const instructions = readFileSync(join(worktree, 'task-instructions.txt'), 'utf8')
+    expect(instructions).toContain('.busyboy-scratch')
+    expect(instructions).toContain('Do not put them in the record folder or elsewhere in the worktree.')
+    const ignored = execFileSync('git', ['-C', worktree, 'check-ignore', '-v', '--', '.busyboy-scratch/shot.png'], { encoding: 'utf8' })
+    expect(ignored).toContain('info/exclude')
+    expect(ignored).toContain('.busyboy-scratch/')
+    expect(execFileSync('git', ['-C', worktree, 'status', '--porcelain', '--', '.gitignore'], { encoding: 'utf8' })).toBe('')
   })
 
   test('adding a rule in Setup should make task agents ask before that action', async ({ page, context }) => {

@@ -76,11 +76,14 @@ export async function checkUserRules({
   toolName,
   input,
   cwd,
+  recordFolder,
 }: {
   rulesFolder: string | undefined
   toolName: string
   input: unknown
   cwd: string
+  /** The task's jwn record folder, counted as inside the task folder by the delete rule. */
+  recordFolder?: string
 }): Promise<UserRuleCheck> {
   try {
     const folder = resolveRulesFolder(rulesFolder)
@@ -92,6 +95,7 @@ export async function checkUserRules({
       toolName,
       input,
       folder: cwd || folder,
+      recordFolder,
     })
     if (!matched) return { ask: false }
     if (matched.startsWith(UNREADABLE)) {

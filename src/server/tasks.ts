@@ -1,7 +1,7 @@
 import { execFile } from 'node:child_process'
 import { randomBytes } from 'node:crypto'
 import { lstat, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
-import { dirname, join } from 'node:path'
+import { dirname, isAbsolute, join, resolve } from 'node:path'
 import { promisify } from 'node:util'
 import { alwaysAskRulesAt } from './always-ask-list'
 import { rulesFolderFor } from './runner/user-rules'
@@ -38,6 +38,7 @@ import type { AgentEvent, AgentStatus, McpServer, ProviderId, StartAgentInput } 
 
 export const TASKS_FILE = 'task-list.json'
 export const WORKTREES_FOLDER = 'task-worktrees'
+export const SCRATCH_FOLDER = '.busyboy-scratch'
 export const ARCHIVE_FOLDER = 'task-archive'
 const RECORDS_FOLDER = '.jwn'
 
@@ -81,6 +82,7 @@ export function taskInstructions(task: Pick<TaskRecord, 'id' | 'project' | 'work
     `You are a busyboy task agent for the project "${task.project}".`,
     `You work in the git worktree ${task.worktree} on the branch ${task.branch}. Stay inside this worktree.`,
     `Keep every record of this task (the plan and any status, verify, or review notes your skills write) in ${recordFolder}/. That is this task's folder in the jwn record root. Do not write those files into the worktree.`,
+    `Put throwaway files (CI artifact downloads, screenshots, and temporary output) in ${join(task.worktree, SCRATCH_FOLDER)}/. That folder is gitignored. Do not put them in the record folder or elsewhere in the worktree.`,
     '',
     'Before you change anything, judge whether the task is trivial.',
     'A task is trivial only when there is exactly one obvious place and way to make the change, there is no design choice for the user, and the change is easy to revert. A typo, a rename, a single config value, and a small bug with a clear cause are trivial. When you are in any doubt, the task is not trivial: save a draft and wait, as below.',
@@ -257,6 +259,24 @@ function slug(text: string) {
   )
 }
 
+// Git reads this from the common git dir, including for a linked worktree, so the tracked gitignore stays untouched.
+async function ensureTaskScratch(worktree: string) {
+  await mkdir(join(worktree, SCRATCH_FOLDER), { recursive: true })
+  const raw = await git(worktree, 'rev-parse', '--path-format=absolute', '--git-path', 'info/exclude')
+  const exclude = isAbsolute(raw) ? raw : resolve(worktree, raw)
+  await mkdir(dirname(exclude), { recursive: true })
+  let text = ''
+  try {
+    text = await readFile(exclude, 'utf8')
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
+  }
+  const pattern = `${SCRATCH_FOLDER}/`
+  if (text.split('\n').some((line) => line.trim() === pattern || line.trim() === SCRATCH_FOLDER)) return
+  const body = text.length === 0 || text.endsWith('\n') ? text : `${text}\n`
+  await writeFile(exclude, `${body}${pattern}\n`)
+}
+
 async function git(cwd: string, ...args: string[]) {
   try {
     const env = agentEnvironment() as NodeJS.ProcessEnv
@@ -308,6 +328,7 @@ export async function createTask(input: CreateTaskInput): Promise<TaskView> {
   if (!kind) {
     await mkdir(dirname(worktree), { recursive: true })
     await git(project.path, 'worktree', 'add', '-b', branch, '--', worktree, head)
+    await ensureTaskScratch(worktree)
   }
 
   let agentId: string | undefined
@@ -570,6 +591,7 @@ async function resumeTask(folder: string, task: TaskRecord) {
 
 async function startAgainInput(folder: string, task: TaskRecord): Promise<StartAgentInput> {
   const { busyboyMcpServers } = await import('./mcp-tools')
+  if (task.kind !== 'subagent') await ensureTaskScratch(task.worktree)
   const alwaysAsk = await alwaysAskRulesAt(folder)
   const recordFolder = await recordsFor(folder, task)
   return {
@@ -763,6 +785,7 @@ async function restore(folder: string, task: TaskRecord) {
     }
   }
   if (task.kind !== 'subagent') {
+    await ensureTaskScratch(task.worktree)
     const records = join(task.worktree, RECORDS_FOLDER)
     const shelf = join(folder, ARCHIVE_FOLDER, task.project, task.id)
     if ((await exists(join(shelf, RECORDS_FOLDER))) && !(await exists(records))) {

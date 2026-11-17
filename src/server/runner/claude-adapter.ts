@@ -174,7 +174,7 @@ function startClaude(options: ProviderStartOptions): ProviderSession {
     }
     const { tool_name: toolName, tool_input: toolInput } = hookInput
     const cwd = hookInput.cwd || options.cwd
-    const userRule = await checkUserRules({ rulesFolder: options.rulesFolder, toolName, input: toolInput, cwd })
+    const userRule = await checkUserRules({ rulesFolder: options.rulesFolder, toolName, input: toolInput, cwd, recordFolder: options.recordFolder })
     if (userRule.ask) {
       const call = { toolName, input: toolInput, rule: userRule.ruleKey, cwd }
       if (!(userRule.remember && allowedCalls.has(call))) {
@@ -189,7 +189,7 @@ function startClaude(options: ProviderStartOptions): ProviderSession {
         if (!allowed) return deny((answer?.kind === 'approval' && answer.message) || 'The user declined this action.')
       }
     }
-    const rule = matchAlwaysAsk({ rules: options.alwaysAsk ?? [], toolName, input: toolInput, folder: options.cwd, privateFolder: options.privateFolder, noFileEdits: options.noFileEdits })
+    const rule = matchAlwaysAsk({ rules: options.alwaysAsk ?? [], toolName, input: toolInput, folder: options.cwd, recordFolder: options.recordFolder, privateFolder: options.privateFolder, noFileEdits: options.noFileEdits })
     if (!rule) {
       return {}
     }

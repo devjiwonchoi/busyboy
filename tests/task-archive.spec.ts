@@ -60,6 +60,7 @@ test('archiving a finished task should remove its worktree, and restoring should
 }) => {
   const { home, projects } = await useProjectsHome(context, baseURL!, ['web'])
   const task = await finishedTask(context.request, home)
+  expect(existsSync(join(task.worktree, '.busyboy-scratch'))).toBe(true)
   await openChat(page)
   const line = taskLine(page, 'web · Contributing guide')
 
@@ -75,6 +76,7 @@ test('archiving a finished task should remove its worktree, and restoring should
   await line.getByRole('button', { name: 'Restore web · Contributing guide' }).click()
 
   await expect(line.locator('[data-status]')).not.toHaveText('Archived')
+  expect(existsSync(join(task.worktree, '.busyboy-scratch'))).toBe(true)
   expect(readFileSync(join(task.worktree, '.jwn', task.id, 'STATUS.md'), 'utf8')).toBe('Stage: Ship\n')
   expect(execFileSync('git', ['-C', task.worktree, 'branch', '--show-current'], { encoding: 'utf8' }).trim()).toBe(task.branch)
   expect(existsSync(join(home, 'task-archive', 'web', task.id))).toBe(false)
