@@ -49,26 +49,26 @@ Doctor is read-only. It checks that the keeper is the process this run started, 
 
 Prefer roles and accessible names. The handles below are the ones the journeys use.
 
-| Handle | Role | Name |
-| --- | --- | --- |
-| Transcript | `log` | `Transcript` |
-| Your message | `group` | `Your message` |
-| Director reply | `group` | `Reply` |
-| Message field | `textbox` | `Message` |
-| Send | `button` | `Send` |
-| Settings | `link` | `Settings` |
-| Director row | `link` | `BusyBoy, director` |
-| Settings page | `main` | `Settings` |
-| Settings sections | `navigation` | `Settings sections` |
-| Plan card | `group` | `Plan from web · Add a footer` |
-| Approve | `button` | `Approve` |
-| Progress card | `group` | `Progress from web · Add a footer` |
-| Done card | `group` | `Done from web · Add a footer` |
-| Pull requests | `group` | `Pull requests from web · Add a footer` |
-| Closed card | `group` | `Card from web · Add a footer` |
-| Task line | `listitem` | `web · Add a footer` |
-| Message the task | `button` | `Message web · Add a footer` |
-| Companion | `radio` | `Ming the seal` |
+| Handle            | Role         | Name                                    |
+| ----------------- | ------------ | --------------------------------------- |
+| Transcript        | `log`        | `Transcript`                            |
+| Your message      | `group`      | `Your message`                          |
+| Director reply    | `group`      | `Reply`                                 |
+| Message field     | `textbox`    | `Message`                               |
+| Send              | `button`     | `Send`                                  |
+| Settings          | `link`       | `Settings`                              |
+| Director row      | `link`       | `BusyBoy, director`                     |
+| Settings page     | `main`       | `Settings`                              |
+| Settings sections | `navigation` | `Settings sections`                     |
+| Plan card         | `group`      | `Plan from web · Add a footer`          |
+| Approve           | `button`     | `Approve`                               |
+| Progress card     | `group`      | `Progress from web · Add a footer`      |
+| Done card         | `group`      | `Done from web · Add a footer`          |
+| Pull requests     | `group`      | `Pull requests from web · Add a footer` |
+| Closed card       | `group`      | `Card from web · Add a footer`          |
+| Task line         | `listitem`   | `web · Add a footer`                    |
+| Message the task  | `button`     | `Message web · Add a footer`            |
+| Companion         | `radio`      | `Ming the seal`                         |
 
 The middle dot in those names is `·` (U+00B7).
 

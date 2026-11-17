@@ -1,11 +1,25 @@
 import { execFileSync, spawn, type ChildProcess } from "node:child_process";
 import { constants } from "node:fs";
-import { accessSync, createWriteStream, mkdirSync, mkdtempSync, openSync, readdirSync, readFileSync, readlinkSync, renameSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import {
+  accessSync,
+  createWriteStream,
+  mkdirSync,
+  mkdtempSync,
+  openSync,
+  readdirSync,
+  readFileSync,
+  readlinkSync,
+  renameSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { createConnection, createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { basename, join, resolve, sep } from "node:path";
+
 import {
   _electron as electron,
   chromium,
@@ -27,7 +41,11 @@ const serverLogPath = join(verifyDir, "server.log");
 const readyMs = 180_000;
 const actionMs = 45_000;
 const host = "127.0.0.1";
-const electronFiles = ["dist-electron/main.cjs", "dist-electron/preload.cjs", ".next/standalone/server.js"];
+const electronFiles = [
+  "dist-electron/main.cjs",
+  "dist-electron/preload.cjs",
+  ".next/standalone/server.js",
+];
 
 const directorQuestion = "What does git worktree do? Answer in one sentence.";
 const directorReply = "check out more than one branch";
@@ -119,7 +137,10 @@ function option(args: string[], name: string) {
 
 function revision() {
   try {
-    return execFileSync("git", ["rev-parse", "--short", "HEAD"], { cwd: root, encoding: "utf8" }).trim();
+    return execFileSync("git", ["rev-parse", "--short", "HEAD"], {
+      cwd: root,
+      encoding: "utf8",
+    }).trim();
   } catch {
     return "unknown";
   }
@@ -167,7 +188,9 @@ function environ(pid: number) {
 
 function envValue(pid: number, key: string) {
   const prefix = `${key}=`;
-  return environ(pid).find((entry) => entry.startsWith(prefix))?.slice(prefix.length);
+  return environ(pid)
+    .find((entry) => entry.startsWith(prefix))
+    ?.slice(prefix.length);
 }
 
 function childPids(pid: number) {
@@ -218,7 +241,9 @@ function isOurDataDir(folder: string) {
 
 function evidenceName(name: string | undefined) {
   if (!name || !/^[a-z0-9][a-z0-9-]*$/.test(name)) {
-    throw new Error("Pass --name with lowercase letters, numbers, and hyphens, such as director-send.");
+    throw new Error(
+      "Pass --name with lowercase letters, numbers, and hyphens, such as director-send.",
+    );
   }
   return name;
 }
@@ -295,10 +320,23 @@ function seedData(dataDir: string) {
   writeFileSync(join(project, "README.md"), "# web\n");
   execFileSync("git", ["init", "-q", "-b", "main"], { cwd: project, stdio: "ignore" });
   execFileSync("git", ["add", "."], { cwd: project, stdio: "ignore" });
-  execFileSync("git", ["-c", "user.name=BusyBoy Verify", "-c", "user.email=verify@example.com", "commit", "-q", "-m", "Initial commit"], {
-    cwd: project,
-    stdio: "ignore",
-  });
+  execFileSync(
+    "git",
+    [
+      "-c",
+      "user.name=BusyBoy Verify",
+      "-c",
+      "user.email=verify@example.com",
+      "commit",
+      "-q",
+      "-m",
+      "Initial commit",
+    ],
+    {
+      cwd: project,
+      stdio: "ignore",
+    },
+  );
   const settings = {
     version: 1,
     setupCompletedAt: new Date(0).toISOString(),
@@ -313,7 +351,10 @@ function seedData(dataDir: string) {
   writeFileSync(join(dataDir, "app-settings.json"), `${JSON.stringify(settings, null, 2)}\n`);
   const scripts = join(dataDir, "provider-scripts");
   mkdirSync(scripts, { recursive: true });
-  for (const source of [join(root, "tests", "provider-scripts"), join(root, "scripts", "drive-providers")]) {
+  for (const source of [
+    join(root, "tests", "provider-scripts"),
+    join(root, "scripts", "drive-providers"),
+  ]) {
     for (const entry of readdirSync(source, { withFileTypes: true })) {
       if (!entry.isFile() || !entry.name.endsWith(".json")) continue;
       const destination = join(scripts, entry.name);
@@ -354,14 +395,21 @@ async function attributeIs(locator: Locator, attribute: string, value: string) {
   return (await locator.getAttribute(attribute).catch(() => null)) === value;
 }
 
-async function waitForAttribute(locator: Locator, attribute: string, value: string, timeout: number) {
+async function waitForAttribute(
+  locator: Locator,
+  attribute: string,
+  value: string,
+  timeout: number,
+) {
   const deadline = Date.now() + timeout;
   while (Date.now() < deadline) {
     if (await attributeIs(locator, attribute, value)) return;
     await delay(100);
   }
   const actual = await locator.getAttribute(attribute).catch(() => null);
-  throw new Error(`Timed out waiting for ${attribute}="${value}". The attribute is ${actual ?? "missing"}.`);
+  throw new Error(
+    `Timed out waiting for ${attribute}="${value}". The attribute is ${actual ?? "missing"}.`,
+  );
 }
 
 async function sendMessage(page: Page, text: string) {
@@ -397,7 +445,9 @@ async function waitForCompanion(dataDir: string, companion: string) {
     if (settingsCompanion(dataDir) === companion) return;
     await delay(100);
   }
-  throw new Error(`Settings did not save companion "${companion}". The file has ${String(settingsCompanion(dataDir))}.`);
+  throw new Error(
+    `Settings did not save companion "${companion}". The file has ${String(settingsCompanion(dataDir))}.`,
+  );
 }
 
 async function approvePlan(page: Page) {
@@ -411,7 +461,9 @@ async function approvePlan(page: Page) {
 async function alignApproved(dataDir: string) {
   const deadline = Date.now() + actionMs;
   while (Date.now() < deadline) {
-    const files = findNamed(dataDir, "ALIGN.md").filter((file) => readFileSync(file, "utf8").includes("Status: approved"));
+    const files = findNamed(dataDir, "ALIGN.md").filter((file) =>
+      readFileSync(file, "utf8").includes("Status: approved"),
+    );
     if (files.length > 0) return files[0] ?? "";
     await delay(150);
   }
@@ -445,11 +497,18 @@ async function mergePulls(drive: Drive) {
   const card = drive.page.getByRole("group", { name: pullCard });
   await card.waitFor({ timeout: actionMs });
   await card.getByRole("button", { name: "Merge in order" }).click();
-  await drive.page.getByRole("group", { name: closedCard }).filter({ hasText: "Merged in order" }).waitFor({ timeout: actionMs });
+  await drive.page
+    .getByRole("group", { name: closedCard })
+    .filter({ hasText: "Merged in order" })
+    .waitFor({ timeout: actionMs });
   const log = join(taskWorktree(drive.dataDir), ".gh-merge.log");
   const deadline = Date.now() + actionMs;
   while (Date.now() < deadline) {
-    if (exists(log) && readFileSync(log, "utf8").includes("pr merge 12 --merge") && readFileSync(log, "utf8").includes("pr merge 13 --merge")) {
+    if (
+      exists(log) &&
+      readFileSync(log, "utf8").includes("pr merge 12 --merge") &&
+      readFileSync(log, "utf8").includes("pr merge 13 --merge")
+    ) {
       return log;
     }
     await delay(150);
@@ -461,8 +520,14 @@ async function directorSend(drive: Drive) {
   await openChat(drive);
   await sendMessage(drive.page, directorQuestion);
   const log = transcript(drive.page);
-  await log.getByLabel("Your message").filter({ hasText: directorQuestion }).waitFor({ timeout: actionMs });
-  await log.getByLabel("Reply", { exact: true }).filter({ hasText: directorReply }).waitFor({ timeout: actionMs });
+  await log
+    .getByLabel("Your message")
+    .filter({ hasText: directorQuestion })
+    .waitFor({ timeout: actionMs });
+  await log
+    .getByLabel("Reply", { exact: true })
+    .filter({ hasText: directorReply })
+    .waitFor({ timeout: actionMs });
   await waitForAttribute(log, "data-status", "idle", actionMs);
   const file = join(drive.dataDir, "director", "transcript.jsonl");
   const deadline = Date.now() + actionMs;
@@ -482,7 +547,10 @@ async function runStep(drive: Drive, command: Command): Promise<Result> {
   if (name === "send-message") {
     if (!command.text) return fail("send-message needs --text.");
     await sendMessage(drive.page, command.text);
-    await transcript(drive.page).getByLabel("Your message").filter({ hasText: command.text }).waitFor({ timeout: actionMs });
+    await transcript(drive.page)
+      .getByLabel("Your message")
+      .filter({ hasText: command.text })
+      .waitFor({ timeout: actionMs });
     return result(true, "The message is in the transcript.");
   }
   if (name === "approve-plan") {
@@ -506,12 +574,16 @@ async function runStep(drive: Drive, command: Command): Promise<Result> {
     const log = await mergePulls(drive);
     return result(true, `Merged in order. ${log} records pr merge 12 and pr merge 13.`);
   }
-  return fail(`Unknown step "${name ?? ""}". Steps: open-chat, send-message, approve-plan, open-settings, show-progress, ship-footer, merge-pulls.`);
+  return fail(
+    `Unknown step "${name ?? ""}". Steps: open-chat, send-message, approve-plan, open-settings, show-progress, ship-footer, merge-pulls.`,
+  );
 }
 
 async function runJourney(drive: Drive, name: string | undefined): Promise<Result> {
   if (drive.surface === "electron") {
-    return fail("Chat and settings journeys run on the Next surface. The desktop server sets a launch token and ignores provider scripts.");
+    return fail(
+      "Chat and settings journeys run on the Next surface. The desktop server sets a launch token and ignores provider scripts.",
+    );
   }
   if (name === "director-send") {
     const file = await directorSend(drive);
@@ -524,7 +596,10 @@ async function runJourney(drive: Drive, name: string | undefined): Promise<Resul
     await waitForCompanion(drive.dataDir, "ming");
     const checked = await drive.page.getByRole("radio", { name: "Ming the seal" }).isChecked();
     if (!checked) return fail("Ming the seal is saved, and the radio is not checked.");
-    return result(true, `Settings saved companion "ming" in ${join(drive.dataDir, "app-settings.json")}, and the Ming the seal radio is checked.`);
+    return result(
+      true,
+      `Settings saved companion "ming" in ${join(drive.dataDir, "app-settings.json")}, and the Ming the seal radio is checked.`,
+    );
   }
   if (name === "approve-plan") {
     await openChat(drive);
@@ -533,16 +608,28 @@ async function runJourney(drive: Drive, name: string | undefined): Promise<Resul
     const file = await alignApproved(drive.dataDir);
     const line = transcript(drive.page).getByRole("listitem", { name: taskLine });
     await line.getByText("Idle").waitFor({ timeout: actionMs });
-    return result(true, `The plan card closed as Approved, the task line is Idle, and ${file} contains Status: approved.`);
+    return result(
+      true,
+      `The plan card closed as Approved, the task line is Idle, and ${file} contains Status: approved.`,
+    );
   }
   if (name === "progress-and-done") {
     await openChat(drive);
     await sendMessage(drive.page, progressMessage);
     await showProgress(drive.page);
     await shipFooter(drive.page);
-    await drive.page.getByRole("group", { name: doneCard }).getByRole("button", { name: "View plan" }).waitFor({ timeout: actionMs });
-    await drive.page.getByRole("group", { name: pullCard }).getByRole("link", { name: "Open" }).waitFor({ timeout: actionMs });
-    return result(true, "The progress card showed a running step, then the done card and the pull request card replaced it.");
+    await drive.page
+      .getByRole("group", { name: doneCard })
+      .getByRole("button", { name: "View plan" })
+      .waitFor({ timeout: actionMs });
+    await drive.page
+      .getByRole("group", { name: pullCard })
+      .getByRole("link", { name: "Open" })
+      .waitFor({ timeout: actionMs });
+    return result(
+      true,
+      "The progress card showed a running step, then the done card and the pull request card replaced it.",
+    );
   }
   if (name === "pr-card") {
     await openChat(drive);
@@ -550,15 +637,24 @@ async function runJourney(drive: Drive, name: string | undefined): Promise<Resul
     await showProgress(drive.page);
     await shipFooter(drive.page);
     const log = await mergePulls(drive);
-    await drive.page.getByRole("group", { name: doneCard }).getByText("Done").waitFor({ timeout: actionMs });
-    return result(true, `Merge in order closed the pull request card. ${log} records both merges, and the done line says Done.`);
+    await drive.page
+      .getByRole("group", { name: doneCard })
+      .getByText("Done")
+      .waitFor({ timeout: actionMs });
+    return result(
+      true,
+      `Merge in order closed the pull request card. ${log} records both merges, and the done line says Done.`,
+    );
   }
-  return fail("Unknown journey. Journeys: director-send, approve-plan, progress-and-done, pr-card, settings.");
+  return fail(
+    "Unknown journey. Journeys: director-send, approve-plan, progress-and-done, pr-card, settings.",
+  );
 }
 
 async function inspect(drive: Drive) {
   const log = transcript(drive.page);
-  const connected = (await log.count()) > 0 ? await log.first().getAttribute("data-connected") : null;
+  const connected =
+    (await log.count()) > 0 ? await log.first().getAttribute("data-connected") : null;
   const status = (await log.count()) > 0 ? await log.first().getAttribute("data-status") : null;
   return {
     url: drive.page.url(),
@@ -587,7 +683,8 @@ async function dump(drive: Drive, name: string) {
 }
 
 async function recordStart(drive: Drive, name: string) {
-  if (drive.recording) throw new Error("A recording is already running. Run pnpm drive record stop first.");
+  if (drive.recording)
+    throw new Error("A recording is already running. Run pnpm drive record stop first.");
   const safe = evidenceName(name);
   const dir = join(framesRoot, safe);
   rmSync(dir, { recursive: true, force: true });
@@ -603,9 +700,17 @@ async function recordStart(drive: Drive, name: string) {
   };
   client.on("Page.screencastFrame", (frame: { data: string; sessionId: number }) => {
     enqueue(Buffer.from(frame.data, "base64"));
-    void client.send("Page.screencastFrameAck", { sessionId: frame.sessionId }).catch(() => undefined);
+    void client
+      .send("Page.screencastFrameAck", { sessionId: frame.sessionId })
+      .catch(() => undefined);
   });
-  await client.send("Page.startScreencast", { format: "jpeg", quality: 70, everyNthFrame: 1, maxWidth: 1280, maxHeight: 820 });
+  await client.send("Page.startScreencast", {
+    format: "jpeg",
+    quality: 70,
+    everyNthFrame: 1,
+    maxWidth: 1280,
+    maxHeight: 820,
+  });
   enqueue(await drive.page.screenshot({ type: "jpeg", quality: 70 }));
   drive.recording = recording;
   return dir;
@@ -613,7 +718,8 @@ async function recordStart(drive: Drive, name: string) {
 
 async function recordStop(drive: Drive) {
   const recording = drive.recording;
-  if (!recording) throw new Error("No recording is running. Run pnpm drive record start --name <name> first.");
+  if (!recording)
+    throw new Error("No recording is running. Run pnpm drive record start --name <name> first.");
   enqueueStopFrame(recording, await drive.page.screenshot({ type: "jpeg", quality: 70 }));
   await recording.client.send("Page.stopScreencast").catch(() => undefined);
   await recording.chain;
@@ -622,12 +728,34 @@ async function recordStop(drive: Drive) {
   if (recording.next < 1) throw new Error("The recording captured no frames.");
   mkdirSync(evidenceDir, { recursive: true });
   const path = join(evidenceDir, `${recording.name}.webm`);
-  const ffmpeg = spawn("ffmpeg", ["-y", "-framerate", "8", "-start_number", "0", "-i", "%05d.jpeg", "-vf", "scale=trunc(iw/2)*2:trunc(ih/2)*2", "-c:v", "libvpx-vp9", "-pix_fmt", "yuv420p", "-an", path], {
-    cwd: recording.dir,
-  });
+  const ffmpeg = spawn(
+    "ffmpeg",
+    [
+      "-y",
+      "-framerate",
+      "8",
+      "-start_number",
+      "0",
+      "-i",
+      "%05d.jpeg",
+      "-vf",
+      "scale=trunc(iw/2)*2:trunc(ih/2)*2",
+      "-c:v",
+      "libvpx-vp9",
+      "-pix_fmt",
+      "yuv420p",
+      "-an",
+      path,
+    ],
+    {
+      cwd: recording.dir,
+    },
+  );
   const stderr: Buffer[] = [];
   ffmpeg.stderr?.on("data", (chunk: Buffer) => stderr.push(chunk));
-  const code = await new Promise<number>((resolveCode) => ffmpeg.once("close", (exit) => resolveCode(exit ?? 1)));
+  const code = await new Promise<number>((resolveCode) =>
+    ffmpeg.once("close", (exit) => resolveCode(exit ?? 1)),
+  );
   if (code !== 0 || !exists(path)) {
     throw new Error(`ffmpeg exited ${code}. ${Buffer.concat(stderr).toString("utf8").slice(-800)}`);
   }
@@ -645,12 +773,16 @@ function enqueueStopFrame(recording: Recording, bytes: Buffer) {
 
 async function handle(drive: Drive, command: Command): Promise<Result> {
   if (command.cmd === "inspect") return result(true, "Read the page.", await inspect(drive));
-  if (command.cmd === "screenshot") return result(true, await screenshot(drive, command.name ?? ""), { path: join(evidenceDir, `${command.name}.png`) });
+  if (command.cmd === "screenshot")
+    return result(true, await screenshot(drive, command.name ?? ""), {
+      path: join(evidenceDir, `${command.name}.png`),
+    });
   if (command.cmd === "dump") {
     const dumped = await dump(drive, command.name ?? "");
     return result(true, dumped.text, { path: dumped.path });
   }
-  if (command.cmd === "record-start") return result(true, `Recording to ${await recordStart(drive, command.name ?? "")}.`);
+  if (command.cmd === "record-start")
+    return result(true, `Recording to ${await recordStart(drive, command.name ?? "")}.`);
   if (command.cmd === "record-stop") return result(true, `Saved ${await recordStop(drive)}.`);
   if (command.cmd === "click") {
     if (!command.role || !command.name) return fail("click needs --role and --name.");
@@ -658,7 +790,8 @@ async function handle(drive: Drive, command: Command): Promise<Result> {
     return result(true, `Clicked ${command.role} "${command.name}".`);
   }
   if (command.cmd === "fill") {
-    if (!command.role || !command.name || command.value === undefined) return fail("fill needs --role, --name, and --value.");
+    if (!command.role || !command.name || command.value === undefined)
+      return fail("fill needs --role, --name, and --value.");
     await roleLocator(drive.page, command.role, command.name).fill(command.value);
     return result(true, `Filled ${command.role} "${command.name}".`);
   }
@@ -673,7 +806,8 @@ async function handle(drive: Drive, command: Command): Promise<Result> {
     const timeout = command.timeout ?? actionMs;
     await locator.first().waitFor({ timeout });
     if (command.text) await locator.filter({ hasText: command.text }).first().waitFor({ timeout });
-    if (command.attribute && command.value !== undefined) await waitForAttribute(locator.first(), command.attribute, command.value, timeout);
+    if (command.attribute && command.value !== undefined)
+      await waitForAttribute(locator.first(), command.attribute, command.value, timeout);
     return result(true, `Found ${command.role} "${command.name}".`);
   }
   if (command.cmd === "step") return runStep(drive, { ...command, name: command.name });
@@ -686,7 +820,10 @@ async function launchBrowser(drive: Drive, cdpPort: number) {
     headless: true,
     args: [`--remote-debugging-port=${cdpPort}`],
   });
-  const context = await browser.newContext({ viewport: { width: 1280, height: 820 }, colorScheme: "dark" });
+  const context = await browser.newContext({
+    viewport: { width: 1280, height: 820 },
+    colorScheme: "dark",
+  });
   const page = await context.newPage();
   page.setDefaultTimeout(actionMs);
   drive.browser = browser;
@@ -698,7 +835,9 @@ async function cdpEndpoint(port: number) {
   const deadline = Date.now() + 10_000;
   while (Date.now() < deadline) {
     try {
-      const response = await fetch(`http://${host}:${port}/json/version`, { signal: AbortSignal.timeout(1000) });
+      const response = await fetch(`http://${host}:${port}/json/version`, {
+        signal: AbortSignal.timeout(1000),
+      });
       const body = (await response.json()) as { webSocketDebuggerUrl?: string };
       if (body.webSocketDebuggerUrl) return body.webSocketDebuggerUrl;
     } catch {
@@ -718,7 +857,9 @@ function debuggingEndpoint(pid: number | undefined) {
 }
 
 function stringEnv(env: NodeJS.ProcessEnv) {
-  const entries = Object.entries(env).filter((entry): entry is [string, string] => entry[1] !== undefined);
+  const entries = Object.entries(env).filter(
+    (entry): entry is [string, string] => entry[1] !== undefined,
+  );
   return Object.fromEntries(entries);
 }
 
@@ -726,11 +867,15 @@ async function launchNext(dataDir: string, scriptsDir: string) {
   const port = await freePort();
   const url = `http://${host}:${port}`;
   const log = createWriteStream(serverLogPath, { flags: "a" });
-  const server = spawn("pnpm", ["exec", "next", "dev", "--hostname", host, "--port", String(port)], {
-    cwd: root,
-    env: serverEnv(dataDir, scriptsDir, port),
-    stdio: ["ignore", "pipe", "pipe"],
-  });
+  const server = spawn(
+    "pnpm",
+    ["exec", "next", "dev", "--hostname", host, "--port", String(port)],
+    {
+      cwd: root,
+      env: serverEnv(dataDir, scriptsDir, port),
+      stdio: ["ignore", "pipe", "pipe"],
+    },
+  );
   server.stdout?.pipe(log);
   server.stderr?.pipe(log);
   let exited = false;
@@ -739,7 +884,10 @@ async function launchNext(dataDir: string, scriptsDir: string) {
   });
   const deadline = Date.now() + readyMs;
   while (Date.now() < deadline) {
-    if (exited) throw new Error(`The Next server exited before it accepted connections.\n${tail(serverLogPath)}`);
+    if (exited)
+      throw new Error(
+        `The Next server exited before it accepted connections.\n${tail(serverLogPath)}`,
+      );
     try {
       const response = await fetch(url, { signal: AbortSignal.timeout(2000) });
       await response.arrayBuffer().catch(() => undefined);
@@ -756,7 +904,9 @@ async function launchNext(dataDir: string, scriptsDir: string) {
 async function launchElectron(dataDir: string) {
   const missing = missingElectronFiles();
   if (missing.length > 0) {
-    throw new Error(`The Electron surface needs ${missing.join(", ")}. Run pnpm build and pnpm build:electron.`);
+    throw new Error(
+      `The Electron surface needs ${missing.join(", ")}. Run pnpm build and pnpm build:electron.`,
+    );
   }
   const executablePath = require("electron") as string;
   const app = await electron.launch({
@@ -775,7 +925,9 @@ async function launchElectron(dataDir: string) {
 function serverPidFrom(spawned: ChildProcess, dataDir: string) {
   const rootPid = spawned.pid;
   if (!rootPid) return null;
-  const match = descendants(rootPid).find((pid) => envValue(pid, "BUSYBOY_HOME") === dataDir && cmdline(pid).includes("next"));
+  const match = descendants(rootPid).find(
+    (pid) => envValue(pid, "BUSYBOY_HOME") === dataDir && cmdline(pid).includes("next"),
+  );
   return match ?? rootPid;
 }
 
@@ -843,8 +995,12 @@ async function keeper(surface: Surface) {
       state.cdp = browserDrive.cdp;
       state.serverPid = serverPidFrom(launched.server, dataDir);
       await openChat(browserDrive);
-      await browserDrive.page.getByText("BusyBoy is ready. What should we work on?").waitFor({ timeout: actionMs });
-      await browserDrive.page.getByRole("link", { name: "BusyBoy, director" }).waitFor({ timeout: actionMs });
+      await browserDrive.page
+        .getByText("BusyBoy is ready. What should we work on?")
+        .waitFor({ timeout: actionMs });
+      await browserDrive.page
+        .getByRole("link", { name: "BusyBoy, director" })
+        .waitFor({ timeout: actionMs });
     }
   } catch (error) {
     await failKeeper(error);
@@ -865,7 +1021,9 @@ async function keeper(surface: Surface) {
         try {
           const command = JSON.parse(line) as Command;
           if (command.cmd === "shutdown") {
-            socket.end(`${JSON.stringify(result(true, "Stopped the BusyBoy instance this run started. Evidence remains in .verify/evidence."))}\n`);
+            socket.end(
+              `${JSON.stringify(result(true, "Stopped the BusyBoy instance this run started. Evidence remains in .verify/evidence."))}\n`,
+            );
             await new Promise((resolveClose) => socket.once("close", resolveClose));
             await release(ready, true);
             process.exit(0);
@@ -936,19 +1094,31 @@ function print(response: Result) {
 async function launchCommand(surface: Surface) {
   const current = readState();
   if (current && alive(current.pid) && cmdline(current.pid).includes("drive.mts")) {
-    throw new Error("A verification instance is already running. Run pnpm drive cleanup before launching another.");
+    throw new Error(
+      "A verification instance is already running. Run pnpm drive cleanup before launching another.",
+    );
   }
   if (current) await cleanupLeftovers(current);
   mkdirSync(verifyDir, { recursive: true });
   const log = openSync(keeperLogPath, "w");
   const keeperEnv = { ...process.env };
   delete keeperEnv.BUSYBOY_TOKEN;
-  const child = spawn(process.execPath, ["--experimental-strip-types", join(root, "scripts", "drive.mts"), "keeper", "--surface", surface], {
-    cwd: root,
-    env: keeperEnv,
-    detached: true,
-    stdio: ["ignore", log, log],
-  });
+  const child = spawn(
+    process.execPath,
+    [
+      "--experimental-strip-types",
+      join(root, "scripts", "drive.mts"),
+      "keeper",
+      "--surface",
+      surface,
+    ],
+    {
+      cwd: root,
+      env: keeperEnv,
+      detached: true,
+      stdio: ["ignore", log, log],
+    },
+  );
   child.unref();
   const deadline = Date.now() + readyMs + 15_000;
   while (Date.now() < deadline) {
@@ -960,7 +1130,8 @@ async function launchCommand(surface: Surface) {
       return;
     }
     if (state?.phase === "failed") throw new Error(state.error ?? "Launch failed.");
-    if (child.pid && !alive(child.pid)) throw new Error(`The drive keeper exited.\n${tail(keeperLogPath)}`);
+    if (child.pid && !alive(child.pid))
+      throw new Error(`The drive keeper exited.\n${tail(keeperLogPath)}`);
     await delay(250);
   }
   throw new Error(`Launch did not become usable.\n${tail(keeperLogPath)}\n${tail(serverLogPath)}`);
@@ -968,7 +1139,12 @@ async function launchCommand(surface: Surface) {
 
 async function cleanupLeftovers(state: RunState) {
   if (alive(state.pid) && cmdline(state.pid).includes("drive.mts")) killTree(state.pid);
-  if (state.serverPid && alive(state.serverPid) && (envValue(state.serverPid, "BUSYBOY_HOME") === state.dataDir || cmdline(state.serverPid).includes("electron"))) {
+  if (
+    state.serverPid &&
+    alive(state.serverPid) &&
+    (envValue(state.serverPid, "BUSYBOY_HOME") === state.dataDir ||
+      cmdline(state.serverPid).includes("electron"))
+  ) {
     killTree(state.serverPid);
   }
   for (const pid of state.serverPid ? descendants(state.serverPid) : []) {
@@ -1032,10 +1208,19 @@ async function doctor() {
   lines.push(`evidence: ${state.evidenceDir}`);
   lines.push(`revision: ${state.revision}`);
   lines.push(`cdp: ${state.cdp ?? "none"}`);
-  if (!alive(state.pid) || !cmdline(state.pid).includes("drive.mts")) problems.push("The drive keeper is not the process this run started.");
+  if (!alive(state.pid) || !cmdline(state.pid).includes("drive.mts"))
+    problems.push("The drive keeper is not the process this run started.");
   else lines.push(`keeper: ${state.pid} alive`);
-  const tree = state.serverPid ? descendants(state.serverPid).concat(descendants(state.pid)) : descendants(state.pid);
-  const server = tree.find((pid) => envValue(pid, "BUSYBOY_HOME") === state.dataDir && (cmdline(pid).includes("next") || cmdline(pid).includes("server.js") || envValue(pid, "BUSYBOY_TOKEN")));
+  const tree = state.serverPid
+    ? descendants(state.serverPid).concat(descendants(state.pid))
+    : descendants(state.pid);
+  const server = tree.find(
+    (pid) =>
+      envValue(pid, "BUSYBOY_HOME") === state.dataDir &&
+      (cmdline(pid).includes("next") ||
+        cmdline(pid).includes("server.js") ||
+        envValue(pid, "BUSYBOY_TOKEN")),
+  );
   if (!server) problems.push("No server process from this run has the temporary data folder.");
   else lines.push(`server: ${server} alive`);
   if (state.port) {
@@ -1049,24 +1234,42 @@ async function doctor() {
   if (state.surface === "next") {
     if (!scriptsPid) problems.push("BUSYBOY_PROVIDER_SCRIPTS is not set on the server.");
     if (tokenPid) problems.push("A launch token is set, so provider scripts are ignored.");
-    else if (scriptsPid) lines.push(`scripted providers: active (${envValue(scriptsPid, "BUSYBOY_PROVIDER_SCRIPTS")})`);
+    else if (scriptsPid)
+      lines.push(
+        `scripted providers: active (${envValue(scriptsPid, "BUSYBOY_PROVIDER_SCRIPTS")})`,
+      );
     const home = server ? envValue(server, "BUSYBOY_HOME") : undefined;
-    if (home !== state.dataDir) problems.push("The server data folder is not this run's temporary folder.");
-  } else if (tokenPid) lines.push("scripted providers: inactive (the desktop server set a launch token)");
-  else problems.push("The desktop server has no launch token, so this is not the Electron app this command starts.");
+    if (home !== state.dataDir)
+      problems.push("The server data folder is not this run's temporary folder.");
+  } else if (tokenPid)
+    lines.push("scripted providers: inactive (the desktop server set a launch token)");
+  else
+    problems.push(
+      "The desktop server has no launch token, so this is not the Electron app this command starts.",
+    );
   const missing = missingElectronFiles();
-  lines.push(missing.length === 0 ? "electron bundle: present" : `electron bundle: missing ${missing.join(", ")}`);
+  lines.push(
+    missing.length === 0
+      ? "electron bundle: present"
+      : `electron bundle: missing ${missing.join(", ")}`,
+  );
   const gh = join(root, "tests", "fake-gh", "gh");
   lines.push(executable(gh) ? `gh: ${gh}` : `gh: ${gh} is not executable`);
   try {
     const response = await call({ cmd: "inspect" });
-    const page = response.data as { title?: string; transcriptConnected?: string | null; setupHeading?: boolean; url?: string };
+    const page = response.data as {
+      title?: string;
+      transcriptConnected?: string | null;
+      setupHeading?: boolean;
+      url?: string;
+    };
     lines.push(`title: ${page.title ?? "unknown"}`);
     lines.push(`page: ${page.url ?? "unknown"}`);
     if (state.surface === "next") {
       if (page.transcriptConnected === "true") lines.push("transcript: connected");
       else problems.push("The transcript is not connected, so the chat is not usable yet.");
-      if (!page.title?.includes("BusyBoy")) problems.push("The page title does not identify BusyBoy.");
+      if (!page.title?.includes("BusyBoy"))
+        problems.push("The page title does not identify BusyBoy.");
     } else if (page.setupHeading) lines.push("setup: Pick a Director is visible");
     else problems.push("The desktop window is not showing Pick a Director.");
   } catch (error) {
@@ -1103,7 +1306,8 @@ async function client(args: string[]) {
   }
   if (command === "launch") {
     const surface = option(args, "surface") ?? "next";
-    if (surface !== "next" && surface !== "electron") throw new Error("--surface must be next or electron.");
+    if (surface !== "next" && surface !== "electron")
+      throw new Error("--surface must be next or electron.");
     await launchCommand(surface);
     return;
   }
@@ -1124,7 +1328,9 @@ async function client(args: string[]) {
         return;
       } catch {
         await cleanupLeftovers(state);
-        process.stdout.write("Stopped the BusyBoy instance this run started. Evidence remains in .verify/evidence.\n");
+        process.stdout.write(
+          "Stopped the BusyBoy instance this run started. Evidence remains in .verify/evidence.\n",
+        );
         return;
       }
     }
@@ -1140,7 +1346,13 @@ async function client(args: string[]) {
     const response = await call({ cmd: command, name: option(args, "name") });
     if (command === "dump" && response.ok) process.stdout.write(`${response.message}`);
     else print(response);
-    if (command === "dump" && response.ok && response.data && typeof response.data === "object" && "path" in response.data) {
+    if (
+      command === "dump" &&
+      response.ok &&
+      response.data &&
+      typeof response.data === "object" &&
+      "path" in response.data
+    ) {
       process.stdout.write(`\n${String((response.data as { path: string }).path)}\n`);
     }
     return;
