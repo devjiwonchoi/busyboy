@@ -28,8 +28,11 @@ import { containsPath, expandShellPath, isShellHome, pathKey } from '../paths'
 // Known limits: code a command runs that is not a command line (a Node or Python
 // script file, git hooks, build scripts, test configs) is not read, and a
 // redirection that overwrites a file is not a delete. Code given on the command
-// line (`node -e`, `python3 -c`) is read by a word list, not parsed: it asks unless
-// nothing in it can run a command, load code, reach the network, or delete.
+// line (`node -e`, `python3 -c`) is read with comments and string literals taken
+// out, then by the calls that remain: a word inside a string or a comment is not
+// a call, and a call still asks when spaces or a comment sit between its parts.
+// An apply_patch heredoc or a JSON wrapper around a patch is read for the files
+// it names, not as a shell script, so a diff that mentions a command does not ask.
 
 export const FORCE_PUSH_RULE = 'Force push or delete a remote branch'
 export const DEFAULT_BRANCH_RULE = 'Push to the default branch'
@@ -132,7 +135,7 @@ const unquoted = (script: string) => script.replace(/\\./g, 'x').replace(/'[^']*
 
 /** Whether a subagent's tool call could change its checkout, so it asks with SUBAGENT_EDIT_RULE. */
 function subagentChanges({ toolName, script, facts, unknown }: { toolName: string; script: string | null; facts: Fact[]; unknown: string | null }) {
-  if (toolName in FILE_TOOLS || toolName === 'apply_patch') return true
+  if (toolName in FILE_TOOLS || isPatchTool(toolName)) return true
   if (script === null) return false
   return unknown !== null || WRITE_REDIRECT.test(unquoted(script).replace(/\d?>&\d/g, '')) || !facts.every(onlyReads)
 }
@@ -162,8 +165,20 @@ export const DEFAULT_ALWAYS_ASK = [
   'mcp__*notion*__*update*',
 ]
 
-/** Shell tool names, whose input is matched by its command. */
-const SHELL_TOOLS = new Set(['Bash', 'shell', 'exec_command', 'local_shell', 'unified_exec'])
+/**
+ * Shell tool names, whose input is matched by its command. Claude says `Bash`.
+ * Codex's hook says `Bash` too, and also the names of the tools it wraps
+ * (`shell_command`, `container.exec`) when a call arrives under its own name.
+ */
+const SHELL_TOOLS = new Set(['bash', 'shell', 'exec_command', 'local_shell', 'unified_exec', 'shell_command', 'container.exec'])
+
+const isShellTool = (toolName: string) => SHELL_TOOLS.has(toolName.toLowerCase())
+
+/** Codex's patch tool, under either name it is called. */
+function isPatchTool(toolName: string) {
+  const name = toolName.toLowerCase()
+  return name === 'apply_patch' || name === 'applypatch'
+}
 
 const SHELLS = new Set(['sh', 'bash', 'zsh', 'dash', 'ksh', 'fish', 'tcsh', 'csh', 'mksh', 'yash'])
 
@@ -264,7 +279,10 @@ type Word = { text: string; dynamic: boolean }
  * `scan`: it was read from a file (a script or a Makefile), where variables are
  * common and are only taken as a home path when they name one.
  */
-type Fact = { written: Word[]; argv: Word[]; cwd: string | null; viaXargs: boolean; gitDir: Word | null; scan: boolean }
+/** A file an apply_patch call names, and what it does to that file. */
+type PatchFile = { path: string; kind: 'add' | 'update' | 'delete' | 'move' }
+
+type Fact = { written: Word[]; argv: Word[]; cwd: string | null; viaXargs: boolean; gitDir: Word | null; scan: boolean; patches: PatchFile[] }
 
 /** `file`: the script or Makefile being read, so `include` resolves against its folder. */
 type Context = { cwd: string | null; depth: number; scan: boolean; file?: string }
@@ -331,8 +349,10 @@ function readDollar(script: string, start: number): { end: number; inner: string
  * (`$(…)` and backticks) run. A word with a variable or a substitution in it is
  * dynamic: what it says is only known when the command runs.
  */
-function tokenize(script: string): { commands: Word[][]; substitutions: string[] } {
+function tokenize(script: string): { commands: Word[][]; substitutions: string[]; heredocs: string[][] } {
   const commands: Word[][] = []
+  /** Bodies of the here-documents each command redirects, in command order. */
+  const heredocs: string[][] = []
   const substitutions: string[] = []
   let words: Word[] = []
   let text = ''
@@ -355,6 +375,7 @@ function tokenize(script: string): { commands: Word[][]; substitutions: string[]
   /** Skips the bodies of pending here-documents, which start after the new line at `index`. Returns the index of the last line read. */
   const skipHereDocs = (index: number) => {
     let position = index
+    const bodies: string[] = []
     for (const { delimiter, expands } of hereDocs.splice(0)) {
       const lines = script.slice(position + 1).split('\n')
       const length = lines.findIndex((line) => line.replace(/^\t+/, '') === delimiter)
@@ -363,14 +384,18 @@ function tokenize(script: string): { commands: Word[][]; substitutions: string[]
       if (expands) {
         substitutions.push(...tokenize(body.replaceAll('"', '\\"').replace(/^/, '"').concat('"')).substitutions)
       }
+      bodies.push(body)
       position += body.length + 1 + (length === -1 ? 0 : delimiter.length + 1)
     }
+    const last = heredocs.length - 1
+    if (last >= 0 && bodies.length > 0) heredocs[last].push(...bodies)
     return Math.min(position, script.length)
   }
   const endCommand = () => {
     endWord()
     if (words.length > 0) {
       commands.push(words)
+      heredocs.push([])
     }
     words = []
   }
@@ -515,7 +540,7 @@ function tokenize(script: string): { commands: Word[][]; substitutions: string[]
     }
   }
   endCommand()
-  return { commands, substitutions }
+  return { commands, substitutions, heredocs }
 }
 
 /**
@@ -778,9 +803,9 @@ function analyze(script: string, context: Context): Analysis {
   if (++run.steps > MAX_STEPS) {
     return unknownOnly('it runs more commands than BusyBoy reads at once')
   }
-  const { commands, substitutions } = tokenize(script)
+  const { commands, substitutions, heredocs } = tokenize(script)
   const deeper = { ...context, depth: context.depth + 1 }
-  return merge([...substitutions.map((inner) => analyze(inner, deeper)), analyzeCommands(commands, context)])
+  return merge([...substitutions.map((inner) => analyze(inner, deeper)), analyzeCommands(commands, context, heredocs)])
 }
 
 /** Commands that only read the arguments xargs adds, so `… | xargs <command>` can run without asking. */
@@ -822,16 +847,112 @@ const interpreterOf = (name: string) => {
 }
 
 /**
- * Words that let inline code run a command, load code, reach the network, or delete: the ways
- * it could do what the list asks about. This is a word list, not a parser, for the same agent
- * the rest of the list guards (one acting from habit, not one hiding what it does); whatever it
- * catches asks as before, so a harmless word caught here costs a card and nothing else.
+ * Calls that let inline code run a command, load code, reach the network, or delete.
+ * Matched on the code with comments and string literals taken out, and only as whole
+ * words, so `requestId`, `filesystem`, or the word "delete" inside a string does not ask.
+ * `execSync` and `spawnSync` are the same call as `exec` and `spawn`. This guards against
+ * agents acting from habit, not agents hiding what they do.
  */
 const INLINE_RUNS =
-  /exec|system|spawn|popen|proc_open|readpipe|\bfork|eval|subprocess|child_process|shutil|link\b|remove|delete|rmtree|rmdir|sock|http|fetch|urllib|request|ctypes|pickle|marshal|syscall|passthru|dofile|loadfile|loadstring|\bload\s*\(?\s*['"]|include|getattr|globals|builtins|binding|dlopen|\bkill|kill\b|worker|constructor|mainmodule|\bimport|require|open[^;]*\||__|`|qx|%x|\b(?:use|do|os|fs|io|net|tls|dns|dgram|cluster|repl|inspector|vm|sh|deno|bun|mail|rm\w*|mv|cp)\b/i
+  /\b(?:exec(?:Sync|File|FileSync|vp|v)?|spawn(?:Sync)?|system|popen|proc_open|readpipe|fork|eval|subprocess|child_process|shutil|remove|delete|rmtree|rmdir|socket|sock|https?|fetch|urllib|request|ctypes|pickle|marshal|syscall|passthru|dofile|loadfile|loadstring|include|getattr|globals|builtins|binding|dlopen|kill|worker|constructor|mainmodule|import|require)\b|link\b|open[^;]*\||__|`|\bqx\b|%x|\bload\s*\(?\s*['"]|\b(?:use|do|os|fs|io|net|tls|dns|dgram|cluster|repl|inspector|vm|sh|deno|bun|mail|rm\w*|mv|cp)\b/i
+
+/**
+ * Comments and string literals masked out of inline code, so a word that only
+ * appears in one of them is not read as a call. `part` chooses which of the two
+ * to mask; the other is copied through. Interpolation (`${…}`, `#{…}`, and the
+ * `{…}` of a Python f-string) is code, so it is kept and masked on its own.
+ */
+function maskCode(code: string, interpreter: string, part: 'comments' | 'strings') {
+  const hashComment = part === 'comments' && (interpreter === 'python' || interpreter === 'perl' || interpreter === 'ruby' || interpreter === 'php')
+  const slashComment = part === 'comments' && (interpreter === 'node' || interpreter === 'php')
+  const dashComment = part === 'comments' && interpreter === 'lua'
+  const blankBacktick = part === 'strings' && interpreter !== 'perl' && interpreter !== 'ruby' && interpreter !== 'php'
+  let out = ''
+  for (let index = 0; index < code.length; ) {
+    if (interpreter === 'python' && (code.startsWith('"""', index) || code.startsWith("'''", index))) {
+      const quote = code.slice(index, index + 3)
+      const end = code.indexOf(quote, index + 3)
+      const stop = end === -1 ? code.length : end + 3
+      out += part === 'strings' ? ' '.repeat(stop - index) : code.slice(index, stop)
+      index = stop
+      continue
+    }
+    const quote = code[index]
+    if (quote === '"' || quote === "'" || quote === '`') {
+      const blank = part === 'strings' && (quote !== '`' || blankBacktick)
+      const stop = blank ? blankString(code, index, quote, interpreter) : copyString(code, index, quote)
+      out += stop.text
+      index = stop.end
+      continue
+    }
+    const comment =
+      (hashComment && quote === '#') || (slashComment && code.startsWith('//', index)) || (dashComment && code.startsWith('--', index)) || (slashComment && code.startsWith('/*', index))
+    if (comment) {
+      const block = code.startsWith('/*', index)
+      const end = block ? code.indexOf('*/', index + 2) : code.indexOf('\n', index)
+      const stop = end === -1 ? code.length : end + (block ? 2 : 0)
+      out += ' '.repeat(stop - index)
+      index = stop
+      continue
+    }
+    out += quote
+    index++
+  }
+  return out
+}
+
+/** The end of a quoted string whose contents are copied through, so a later pass can still see them. */
+function copyString(code: string, start: number, quote: string) {
+  let index = start + 1
+  while (index < code.length && code[index] !== quote) index += code[index] === '\\' ? 2 : 1
+  const end = Math.min(index + 1, code.length)
+  return { text: code.slice(start, end), end }
+}
+
+/** A quoted string replaced with spaces, with the code inside its interpolation kept. */
+function blankString(code: string, start: number, quote: string, interpreter: string) {
+  const pythonF = interpreter === 'python' && /[fF]$/.test(code.slice(Math.max(0, start - 1), start))
+  const ruby = interpreter === 'ruby' && quote === '"'
+  const template = quote === '`' && interpreter === 'node'
+  let text = ' '
+  let index = start + 1
+  while (index < code.length) {
+    if (code[index] === '\\') {
+      text += '  '
+      index += 2
+      continue
+    }
+    const interp = (template && code.startsWith('${', index)) || (ruby && code.startsWith('#{', index)) || (pythonF && code[index] === '{' && code[index + 1] !== '{')
+    if (interp) {
+      const mark = pythonF ? 1 : 2
+      let depth = 1
+      let cursor = index + mark
+      const bodyStart = cursor
+      while (cursor < code.length && depth > 0) {
+        if (code[cursor] === '{') depth++
+        else if (code[cursor] === '}') depth--
+        if (depth > 0) cursor++
+      }
+      text += ' '.repeat(mark) + maskCode(code.slice(bodyStart, cursor), interpreter, 'strings') + ' '
+      index = Math.min(cursor + 1, code.length)
+      continue
+    }
+    text += ' '
+    if (code[index] === quote) return { text, end: index + 1 }
+    index++
+  }
+  return { text, end: code.length }
+}
 
 /** JavaScript's `Function('code')`, told apart from a `function (x) {}` callback by its capital. */
 const INLINE_FUNCTION = /\bFunction\s*\(/
+
+/**
+ * A pipe opened by Perl or Ruby (`open "|cmd"`, `open $p, "-|"`) and Ruby's
+ * `load "file"`. The mode and the path sit in a string, so they are checked
+ * before strings are masked out.
+ */
+const OPENS_COMMAND = /\bopen\s*\([^;]*['"]\s*(?:\|-?|-\|)|\bload\s*\(?\s*['"]/
 
 /** Words that let inline code change a file, which a subagent may not do without asking. */
 const INLINE_WRITES = /open|write|append|truncate|rename|copy|move|mkdir|chmod|chown|touch|put_contents|utime|file\.new|splfileobject/i
@@ -894,8 +1015,10 @@ function inlineCode(name: string, args: Word[], strict = false) {
     unknownModule ||= loaded.some((module) => !modules.includes(module.replace(/^node:/, '')) && !/^[\w@./-]+\.json$/.test(module))
     return ' '
   }
-  const code = codes
-    .join('\n')
+  // Comments go first, so an import written in one is not a module the code loads.
+  // Strings go last, so a read of a file (`open('package.json')`) is still recognized
+  // before the words inside strings stop counting as calls.
+  const read = maskCode(codes.join('\n'), interpreter, 'comments')
     // Reading a file the usual ways (Python's one-argument open, Node's readFileSync), and
     // printing through the terminal's own streams.
     .replace(/\bopen\(\s*(['"])[^'"|<>]*\1\s*\)/g, ' ')
@@ -907,7 +1030,9 @@ function inlineCode(name: string, args: Word[], strict = false) {
     )
     .replace(/\brequire\s*\(?\s*(['"])([^'"]+)\1\s*\)?/g, (_, _quote: string, module: string) => load(module))
     .replace(/\buse\s+([\w:]+)/g, (_, module: string) => load(module))
-  return unknownModule ? null : code
+  // A pipe or a loaded file is named inside a string. Masking that string would hide it.
+  if (unknownModule || OPENS_COMMAND.test(read)) return null
+  return maskCode(read, interpreter, 'strings')
 }
 
 /** Git's global options, which come before the subcommand; any other option there cannot be read. */
@@ -925,12 +1050,13 @@ const GIT_COMMANDS = new Set([
 ])
 
 /** Checks commands already split into words, in order, keeping track of `cd`. */
-function analyzeCommands(commands: Word[][], context: Context): Analysis {
+function analyzeCommands(commands: Word[][], context: Context, heredocs: string[][] = []): Analysis {
   const deeper = (cwd: string | null) => ({ ...context, cwd, depth: context.depth + 1 })
   const results: Analysis[] = []
   let cwd = context.cwd
 
-  for (const written of commands) {
+  for (let commandIndex = 0; commandIndex < commands.length; commandIndex++) {
+    const written = commands[commandIndex]!
     const unwrapped = unwrap(written)
     if (!unwrapped) {
       results.push(unknownOnly('it sets PATH or a git variable, or passes a wrapper command an option BusyBoy does not know'))
@@ -1142,22 +1268,29 @@ function analyzeCommands(commands: Word[][], context: Context): Analysis {
         const alias = git({ cwd: folder, args: ['config', '--get', `alias.${sub.text}`] })
         if (alias) {
           const expanded = alias.startsWith('!') ? alias.slice(1) : `git ${alias}`
-          const { commands: aliasCommands, substitutions } = tokenize(expanded)
+          const { commands: aliasCommands, substitutions, heredocs: aliasHeredocs } = tokenize(expanded)
           const last = aliasCommands.at(-1)
           if (last) {
             last.push(...argv.slice(2))
           }
-          results.push(merge([...substitutions.map((inner) => analyze(inner, deeper(folder))), analyzeCommands(aliasCommands, deeper(folder))]))
+          results.push(merge([...substitutions.map((inner) => analyze(inner, deeper(folder))), analyzeCommands(aliasCommands, deeper(folder), aliasHeredocs)]))
         }
       }
     }
-    results.push({ facts: [{ written, argv, cwd, viaXargs, gitDir, scan: context.scan }], unknown: null })
+    // `apply_patch <<'EOF'` and `apply_patch '{"command":[...patch...]}'` name files in the
+    // heredoc or the argument. The diff text is not a shell command.
+    const patchTool = argv[0]?.text === 'apply_patch' || argv[0]?.text === 'applypatch'
+    const patches = patchTool ? filesInPatch([...(heredocs[commandIndex] ?? []), ...argv.slice(1).map(({ text }) => text)]) : []
+    results.push({ facts: [{ written, argv, cwd, viaXargs, gitDir, scan: context.scan, patches }], unknown: null })
   }
   return merge(results)
 }
 
 /** A Codex argv such as `["bash", "-lc", "git push"]`, as one command line. */
 function argvToScript(argv: string[]) {
+  // One element that already contains a command line (`["git push --force"]`), which is how a
+  // JSON-wrapped call and some Codex payloads arrive. An argument list has no spaces in its words.
+  if (argv.length === 1 && /[\s;&|<>]/.test(argv[0] ?? '')) return argv[0]
   const [first] = argv
   if (first && SHELLS.has(commandName(first))) {
     const flag = argv.findIndex((part, index) => index > 0 && /^-[a-zA-Z]*c[a-zA-Z]*$/.test(part))
@@ -1169,17 +1302,78 @@ function argvToScript(argv: string[]) {
   return argv.map((part) => `'${part.replaceAll("'", `'\\''`)}'`).join(' ')
 }
 
+/** The command text a shell tool carries, under the field names Claude and Codex use. */
+function commandField(input: unknown) {
+  if (typeof input === 'string') return input
+  if (!input || typeof input !== 'object') return undefined
+  const record = input as Record<string, unknown>
+  return record.command ?? record.cmd ?? record.command_line ?? record.commandLine
+}
+
 /** The command line a shell tool runs, or null for any other tool. */
 export function shellCommand(toolName: string, input: unknown) {
-  if (!SHELL_TOOLS.has(toolName) || !input || typeof input !== 'object') {
-    return null
-  }
-  const command = (input as { command?: unknown }).command
-  if (typeof command === 'string') {
-    return command
-  }
+  if (!isShellTool(toolName)) return null
+  const command = commandField(input)
+  if (typeof command === 'string') return command
   // Codex can pass its command as an argument list.
   return Array.isArray(command) && command.every((part) => typeof part === 'string') ? argvToScript(command) : null
+}
+
+const PATCH_KINDS: Record<string, PatchFile['kind']> = { 'add file': 'add', 'update file': 'update', 'delete file': 'delete', 'move to': 'move' }
+
+/**
+ * The files a patch names. The patch may be the raw apply_patch grammar, a heredoc
+ * body, or the JSON wrapper Codex sometimes puts around it (`{"command":["apply_patch","*** Begin Patch…"]}`),
+ * with newlines written as the two characters `\\n`.
+ */
+function filesInPatch(parts: string[], depth = 0): PatchFile[] {
+  if (depth > 4) return []
+  const found: PatchFile[] = []
+  const header = /^[ \t]*\*{3,}[ \t]+(Add File|Update File|Delete File|Move to):[ \t]*(.+?)[ \t]*$/gim
+  const fromText = (part: string) => {
+    const files: PatchFile[] = []
+    for (const match of part.matchAll(header)) {
+      const kind = PATCH_KINDS[match[1].toLowerCase()]
+      const path = match[2].trim().replace(/^['"]|['"]$/g, '')
+      if (kind && path) files.push({ path, kind })
+    }
+    return files
+  }
+  for (const part of parts) {
+    if (!part || part.length > 1_000_000) continue
+    const direct = fromText(part)
+    if (direct.length > 0) {
+      found.push(...direct)
+      continue
+    }
+    const trimmed = part.trim()
+    if ((trimmed.startsWith('{') || trimmed.startsWith('[')) && trimmed.length < 1_000_000) {
+      try {
+        const walk = (value: unknown, level: number) => {
+          if (level > 6) return
+          if (typeof value === 'string') found.push(...filesInPatch([value], depth + 1))
+          else if (Array.isArray(value)) for (const item of value) walk(item, level + 1)
+          else if (value && typeof value === 'object') for (const item of Object.values(value)) walk(item, level + 1)
+        }
+        walk(JSON.parse(trimmed) as unknown, 0)
+        continue
+      } catch {
+        // The text is a patch, not JSON. A backslash-n below may still be its newlines.
+      }
+    }
+    // Newlines written as the two characters `\` and `n`, outside a JSON string.
+    if (part.includes('\\n')) found.push(...filesInPatch([part.replace(/\\n/g, '\n').replace(/\\t/g, '\t')], depth + 1))
+  }
+  return found
+}
+
+/** A fact for a patch tool call, whose input is the patch rather than a shell command. */
+function patchAnalysis(input: unknown, folder: string): Analysis {
+  const text = typeof input === 'string' ? input : commandField(input)
+  const extra = input && typeof input === 'object' ? Object.values(input as Record<string, unknown>).filter((value): value is string => typeof value === 'string') : []
+  const patches = filesInPatch([...(typeof text === 'string' ? [text] : []), ...extra])
+  if (patches.length === 0) return NOTHING
+  return { facts: [{ written: [], argv: [], cwd: folder, viaXargs: false, gitDir: null, scan: false, patches }], unknown: null }
 }
 
 /**
@@ -1411,13 +1605,27 @@ function isOutside({ folders, fact, word }: { folders: string[]; fact: Fact; wor
 
 const HERE = literal('.')
 
+/** Whether a patch deletes, or moves away, a file outside the task folder. The move's source is the update it follows. */
+function patchDeletesOutside(fact: Fact, outside: (word: Word) => boolean) {
+  let source: string | undefined
+  for (const file of fact.patches) {
+    if (file.kind === 'update') source = file.path
+    else if (file.kind === 'add') source = undefined
+    else if (file.kind === 'delete' && outside(literal(file.path))) return true
+    else if (file.kind === 'move' && source && outside(literal(source))) return true
+  }
+  return false
+}
+
 /** Whether a command deletes, or moves away, something outside the task folder. */
 function deletesOutside({ fact, folders }: { fact: Fact; folders: string[] }) {
   const { argv } = fact
+  const outside = (word: Word) => isOutside({ folders, fact, word })
+  if (patchDeletesOutside(fact, outside)) return true
+  if (!argv[0]) return false
   const name = argv[0].text
   const args = argv.slice(1)
   const paths = args.filter(({ text }) => !text.startsWith('-'))
-  const outside = (word: Word) => isOutside({ folders, fact, word })
   if (DELETERS.has(name)) {
     // `xargs rm` deletes paths read from its input, which cannot be seen here.
     return (fact.viaXargs && !fact.scan) || paths.some(outside)
@@ -1486,17 +1694,17 @@ function touchesPrivateFolder({ toolName, input, script, facts, folder, privateF
   if (typeof named === 'string') {
     return isPrivate(expandPath(named, folder))
   }
-  // Codex's patch tool, in case its hook reports it: only shell calls are known to reach the hook,
-  // so a Codex Director's patches may not be checked here.
-  if (toolName === 'apply_patch') {
-    const patch = Object.values(fields).flat().filter((value) => typeof value === 'string').join('\n')
-    const files = [...patch.matchAll(/^\*\*\* (?:(?:Add|Update|Delete) File|Move to): (.+)$/gm)].map((match) => match[1].trim())
-    return files.some((file) => isPrivate(expandPath(file, folder)))
+  // Codex's patch tool. The hook reports it with the patch, sometimes JSON-wrapped, in the input.
+  if (isPatchTool(toolName) && patchAnalysis(input, folder).facts.some((fact) => fact.patches.some((file) => isPrivate(expandPath(file.path, folder))))) {
+    return true
   }
   if (script === null) {
     return false
   }
   if (facts.some((fact) => fact.cwd === null || isPrivate(fact.cwd))) {
+    return true
+  }
+  if (facts.some((fact) => fact.patches.some((file) => isPrivate(expandPath(file.path, fact.cwd ?? folder))))) {
     return true
   }
   // Every word of the command line that could be a path, redirection targets included, read
@@ -1565,8 +1773,11 @@ export function matchAlwaysAsk({
   // A shell tool whose input has no command BusyBoy can read is treated as unreadable, not as a
   // tool call that runs nothing: matching fails closed.
   const unreadableShell: Analysis = { facts: [], unknown: 'the shell tool call has no command BusyBoy can read' }
-  const { facts, unknown } =
-    script !== null ? analyze(script, { cwd: folder, depth: 0, scan: false }) : SHELL_TOOLS.has(toolName) ? unreadableShell : NOTHING
+  const { facts, unknown } = merge([
+    script !== null ? analyze(script, { cwd: folder, depth: 0, scan: false }) : isShellTool(toolName) ? unreadableShell : NOTHING,
+    // A patch sent as its own tool, including one wrapped in JSON, names files rather than a command.
+    isPatchTool(toolName) ? patchAnalysis(input, folder) : NOTHING,
+  ])
   // The folder as given and with symlinks resolved (/var and /private/var on macOS).
   const folders = [folder]
   try {

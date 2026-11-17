@@ -1,0 +1,115 @@
+{
+  "provider": "claude",
+  "description": "Hand-written: question payloads in the shapes Claude Code actually sends, including the ones that are not the documented schema.",
+  "turns": [
+    {
+      "prompt": "Ask the license question in the encoded shape.",
+      "steps": [
+        {
+          "canUseTool": {
+            "toolName": "AskUserQuestion",
+            "input": {
+              "questions": "[{\"question\":\"Which license should the project use?\",\"header\":\"License\",\"multi_select\":false,\"options\":[\"(Recommended) MIT\",\"Apache-2.0\"]}]"
+            }
+          },
+          "then": {
+            "MIT": [
+              {
+                "event": {
+                  "type": "text",
+                  "itemId": "license-encoded",
+                  "text": "Added an MIT license."
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "prompt": "Ask the color question as one object.",
+      "steps": [
+        {
+          "canUseTool": {
+            "toolName": "AskUserQuestion",
+            "input": {
+              "questions": {
+                "prompt": "Which color do you prefer?",
+                "header": "Color",
+                "choices": [
+                  { "text": "Red", "recommended": true, "detail": "A warm color" },
+                  { "name": "Blue", "description": "A cool color" }
+                ]
+              }
+            }
+          },
+          "then": {
+            "Red": [
+              {
+                "event": {
+                  "type": "text",
+                  "itemId": "color-object",
+                  "text": "You picked Red."
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "prompt": "Ask which checks should run, and allow more than one.",
+      "steps": [
+        {
+          "canUseTool": {
+            "toolName": "AskUserQuestion",
+            "input": {
+              "questions": [
+                {
+                  "question": "Which checks should run?",
+                  "header": "Checks",
+                  "multi_select": true,
+                  "options": ["Lint", "Typecheck"]
+                }
+              ]
+            }
+          },
+          "then": {
+            "Lint, Typecheck": [
+              {
+                "event": {
+                  "type": "text",
+                  "itemId": "checks",
+                  "text": "Lint and typecheck will run."
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "prompt": "Ask something BusyBoy cannot read as a question.",
+      "steps": [
+        {
+          "canUseTool": {
+            "toolName": "AskUserQuestion",
+            "input": { "note": "hello" }
+          }
+        }
+      ]
+    },
+    {
+      "prompt": "Summarize the latest change as a list.",
+      "steps": [
+        {
+          "event": {
+            "type": "text",
+            "itemId": "summary",
+            "text": "What changed?\n- Fixed the footer\n- Added tests"
+          }
+        }
+      ]
+    }
+  ]
+}

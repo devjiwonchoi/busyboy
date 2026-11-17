@@ -1,7 +1,8 @@
 // Turns Claude Agent SDK messages and permission requests into contract
 // events. Shared by the live adapter and the scripted replay of recorded
 // Claude runs, so a recording exercises the same mapping as a real run.
-import type { AgentEvent, Question } from './contract'
+import { parseAskedQuestions } from './asked-questions'
+import type { AgentEvent } from './contract'
 
 /** The subset of SDK messages the mapping reads. Recordings keep only these. */
 export type ClaudeRawMessage = {
@@ -223,13 +224,12 @@ export function claudePermissionToEvent(
   requestId: string,
   request: ClaudePermissionRequest,
 ): Extract<AgentEvent, { type: 'approval' | 'question' }> {
-  if (request.toolName === 'AskUserQuestion' && Array.isArray(request.input.questions)) {
-    const questions = (request.input.questions as Question[]).map((question) => ({
-      question: question.question,
-      header: question.header,
-      multiSelect: Boolean(question.multiSelect),
-      options: question.options.map(({ label, description }) => ({ label, description })),
-    }))
+  if (request.toolName === 'AskUserQuestion') {
+    // Any payload this tool sends is a question. A shape we cannot read must not
+    // fall through to an approval, which would offer Allow for a question.
+    const questions = parseAskedQuestions(request.input) ?? [
+      { question: 'Claude asked a question BusyBoy could not read. Reply with the answer.', multiSelect: false, options: [] },
+    ]
     return { type: 'question', requestId, questions }
   }
   return {

@@ -259,6 +259,11 @@ const ASKS: [string | string[], string | ReturnType<typeof expect.stringMatching
   ['rm -rf outside-link/x', DELETE_OUTSIDE_RULE],
   ['</dev/null rm -rf ~/x', DELETE_OUTSIDE_RULE],
   ['gh repo sync owner/repo --force', 'Bash(gh repo sync*--force*)'],
+  // A command line passed as the only element of an argv, and a patch that deletes outside.
+  [['git push --force origin HEAD'], FORCE_PUSH_RULE],
+  ["apply_patch <<'EOF'\n*** Begin Patch\n*** Delete File: ../other-project/notes.txt\n*** End Patch\nEOF", DELETE_OUTSIDE_RULE],
+  [`apply_patch '{"command":["apply_patch","*** Begin Patch\\n*** Delete File: ../other\\n*** End Patch"]}'`, DELETE_OUTSIDE_RULE],
+  [`python3 -c "os . system('git push -f')"`, unreadable],
 ]
 
 const RUNS = [
@@ -317,6 +322,14 @@ const RUNS = [
   'node scripts/gen.mjs -p 3000',
   // A task agent edits files in its own folder, with or without an interpreter.
   `perl -pi -e 's/old/new/' src/app.ts`,
+  // Words that only look dangerous: inside a string, a comment, or a longer name.
+  `node -e "console.log('do not fetch the request or delete it')"`,
+  `node -e "const requestId = 'filesystem'; console.log(requestId)"`,
+  `node -e "/* fetch('https://example.com') */ console.log(1)"`,
+  `python3 -c "# os.system('git push -f')\nprint(1)"`,
+  // A patch is not a shell script, so a force push written in the diff is not one.
+  "apply_patch <<'EOF'\n*** Begin Patch\n*** Update File: src/app.ts\n@@\n-old\n+git push --force origin main\n*** End Patch\nEOF",
+  "apply_patch <<'EOF'\n*** Begin Patch\n*** Delete File: dist/old.js\n*** End Patch\nEOF",
 ]
 
 for (const [command, rule] of ASKS) {
@@ -396,6 +409,26 @@ test('a long command against a rule with many wildcards should be matched quickl
 
 test('a command that cannot be read should not ask when the list has no shell rule', () => {
   expect(matchAlwaysAsk({ rules: ['mcp__*slack*__*send*'], toolName: 'Bash', input: { command: 'eval "$CMD"' }, folder })).toBeNull()
+})
+
+test('a Codex shell_command whose command is in cmd should ask before a force push', () => {
+  expect(matchAlwaysAsk({ rules: DEFAULT_ALWAYS_ASK, toolName: 'shell_command', input: { cmd: 'git push --force origin HEAD' }, folder })).toBe(FORCE_PUSH_RULE)
+  expect(matchAlwaysAsk({ rules: DEFAULT_ALWAYS_ASK, toolName: 'container.exec', input: { command: ['git push --force origin feature'] }, folder })).toBe(FORCE_PUSH_RULE)
+})
+
+test('a JSON-wrapped patch that edits BusyBoy files should ask, and one that edits the task should not', () => {
+  const privateFolder = join(folder, '..', 'data')
+  mkdirSync(privateFolder, { recursive: true })
+  const edit = (path: string) =>
+    matchAlwaysAsk({
+      rules: DEFAULT_ALWAYS_ASK,
+      toolName: 'apply_patch',
+      input: { command: `{"command":["apply_patch","*** Begin Patch\\n*** Update File: ${path}\\n+x\\n*** End Patch"]}` },
+      folder,
+      privateFolder,
+    })
+  expect(edit('../data/app-settings.json')).toBe(BUSYBOY_FILES_RULE)
+  expect(edit('src/app.ts')).toBeNull()
 })
 
 test('deleting a file named ..secret inside the task should not ask, and one outside should', () => {
