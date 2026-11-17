@@ -328,4 +328,7 @@ export async function mergePullRequests({ folder, cardId }: { folder: string; ca
   if (done?.kind === 'done' && done.phase === 'pr') {
     presentCard({ folder, card: { ...done, phase: 'done', pendingChecks: 0 }, agentId: task.agentId })
   }
+  // Merged here, so a task whose record is already done can put itself away without waiting for the next look.
+  const { considerAutoArchive } = await import('../auto-archive')
+  await considerAutoArchive(folder, task.id)
 }

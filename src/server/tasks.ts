@@ -465,6 +465,12 @@ function watchAgent(folder: string, task: TaskRecord, { resumed = false, fromRes
       }
     }
     report()
+    // After the activity save is queued, so the stored activity is idle before the task is put away.
+    if (event.type === 'turn-done' && !event.more && task.kind !== 'subagent') {
+      void import('./auto-archive')
+        .then(({ considerAutoArchive }) => considerAutoArchive(folder, task.id))
+        .catch((error: unknown) => console.error(`busyboy: could not archive finished task ${task.id}`, error))
+    }
   })
 }
 
@@ -530,6 +536,10 @@ export function resumeTasks(folder: string): Promise<void> {
           })
         }).catch((error: unknown) => console.error(`busyboy: could not resume task ${listed.id}`, error))
       }
+      if (isStoppingAllAgents()) return
+      // Idle tasks are not resumed above. One that finished before this process started is put away now.
+      const { archiveFinishedTasks } = await import('./auto-archive')
+      await archiveFinishedTasks(folder).catch((error: unknown) => console.error('busyboy: could not archive finished tasks', error))
     })()
     resumes.set(key, resume)
   }
