@@ -41,7 +41,7 @@ type CardStore = {
   listeners: Set<(update: CardUpdate) => void>;
 };
 
-// On globalThis for the same reason as the runner's registry: `next dev` reloads.
+// why: On globalThis for the same reason as the runner's registry: `next dev` reloads.
 const STORE_KEY = Symbol.for("busyboy.task-cards");
 const globalStore = globalThis as typeof globalThis & { [STORE_KEY]?: Map<string, CardStore> };
 const stores = (globalStore[STORE_KEY] ??= new Map());
@@ -275,7 +275,7 @@ export function subscribeToCards(folder: string, listener: (update: CardUpdate) 
 
 export class CardError extends Error {}
 
-// The runner closes the card synchronously inside the action, so a failed action must not label a later card with the same id.
+// why: The runner closes the card synchronously inside the action, so a failed action must not label a later card with the same id.
 function withOutcome(
   store: CardStore,
   cardId: string,
@@ -407,8 +407,8 @@ export function replyToCard({
   );
 }
 
-// An archive stops the agent after the work is finished. That stop is not the user
-// cancelling, so the done line stays. A later agent for the same task clears it.
+// why: An archive stops the agent after the work is finished. That stop is not the user
+// why: cancelling, so the done line stays. A later agent for the same task clears it.
 const ARCHIVE_STOPS_KEY = Symbol.for("busyboy.archive-stops");
 const archiveStops = ((globalThis as typeof globalThis & { [ARCHIVE_STOPS_KEY]?: Set<string> })[
   ARCHIVE_STOPS_KEY

@@ -41,8 +41,8 @@ export function CardActionProvider({
   const [error, setError] = useState<string | null>(null);
 
   async function run(action: () => Promise<void>, failure: string) {
-    // Answering with the card's own buttons ends the composer's reply to it, so the card closing
-    // afterwards is not taken for a reply that lost its card.
+    // why: Answering with the card's own buttons ends the composer's reply to it, so the card closing
+    // why: afterwards is not taken for a reply that lost its card.
     if (replying) onReplyChange(false);
     setPending(true);
     setError(null);

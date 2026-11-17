@@ -1,4 +1,4 @@
-// utilityProcess.fork cannot start a server that lives inside app.asar.
+// why: utilityProcess.fork cannot start a server that lives inside app.asar.
 import { execFileSync, spawnSync } from "node:child_process";
 import { cpSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -37,7 +37,7 @@ function run(command: string, commandArgs: string[]) {
   });
 }
 
-// Native modules are built for this machine, so the platform flag has to match it.
+// why: Native modules are built for this machine, so the platform flag has to match it.
 function targetPlatform() {
   const requested = args.has("--mac")
     ? "darwin"
@@ -61,11 +61,11 @@ const mac = process.platform === "darwin";
 
 const APP_ID = "dev.jiwon.busyboy";
 const DEVELOPER_TEAM = "5PA4R2B5FF";
-/** The requirement BusyBoy 0.0.22 and earlier check before they install an update. */
+/*why: * The requirement BusyBoy 0.0.22 and earlier check before they install an update. */
 const SIGNATURE_REQUIREMENT = `anchor apple generic and identifier "${APP_ID}" and certificate leaf[subject.OU] = "${DEVELOPER_TEAM}"`;
 
 if (release && mac) {
-  // electron-builder would skip notarization without these and ship an app Gatekeeper refuses.
+  // why: electron-builder would skip notarization without these and ship an app Gatekeeper refuses.
   const missing = ["APPLE_API_KEY", "APPLE_API_KEY_ID", "APPLE_API_ISSUER"].filter(
     (name) => !process.env[name],
   );
@@ -86,7 +86,7 @@ else if (!existsSync(join(root, "dist-electron", "main.cjs"))) {
 
 rmSync(outputDir, { recursive: true, force: true });
 
-// Release jobs install only electron and electron-builder, but electron-builder still requires every production dependency.
+// why: Release jobs install only electron and electron-builder, but electron-builder still requires every production dependency.
 const packagePath = join(root, "package.json");
 const packageBackup = args.has("--skip-next") ? readFileSync(packagePath) : null;
 if (packageBackup) {
@@ -110,10 +110,10 @@ try {
       productName: manifest.productName,
       ...(release
         ? {
-            // BusyBoy-0.0.23-arm64.zip: the name installed apps look for in a release.
+            // why: BusyBoy-0.0.23-arm64.zip: the name installed apps look for in a release.
             artifactName: "${productName}-${version}-${arch}.${ext}",
-            // Makes electron-builder write the update feed files (latest.yml,
-            // latest-mac.yml) and the app-update.yml that tells the app where they are.
+            // why: Makes electron-builder write the update feed files (latest.yml,
+            // why: latest-mac.yml) and the app-update.yml that tells the app where they are.
             publish: [
               {
                 provider: "github" as const,
@@ -122,7 +122,7 @@ try {
                 releaseType: "release" as const,
               },
             ],
-            // macOS: fail instead of shipping an unsigned app when no Developer ID is found.
+            // why: macOS: fail instead of shipping an unsigned app when no Developer ID is found.
             forceCodeSigning: mac,
             nsis: {
               artifactName: "${productName}-Setup-${version}-${arch}.${ext}",
@@ -139,11 +139,11 @@ try {
         : {}),
       extraMetadata: { version },
       directories: { output: outputDir },
-      // Only the bundled main process goes into app.asar; the server brings its own node_modules.
+      // why: Only the bundled main process goes into app.asar; the server brings its own node_modules.
       files: ["dist-electron/**/*", "package.json", "!node_modules/**/*"],
       asar: true,
-      // Nothing to rebuild: app.asar has no native modules, and the server's
-      // come prebuilt from the lockfile install below.
+      // why: Nothing to rebuild: app.asar has no native modules, and the server's
+      // why: come prebuilt from the lockfile install below.
       npmRebuild: false,
       nodeGypRebuild: false,
       electronLanguages: ["en"],
@@ -154,7 +154,7 @@ try {
         category: "public.app-category.developer-tools",
         ...(release
           ? {
-              // Notarization requires the hardened runtime; the entitlements are what V8 needs under it.
+              // why: Notarization requires the hardened runtime; the entitlements are what V8 needs under it.
               hardenedRuntime: true,
               entitlements,
               entitlementsInherit: entitlements,
@@ -177,7 +177,7 @@ try {
                 ? `${productFilename}.exe`
                 : context.packager.appInfo.sanitizedName.toLowerCase(),
             );
-        // Windows cannot use pnpm's symlinks, so each package is copied with its siblings nested inside.
+        // why: Windows cannot use pnpm's symlinks, so each package is copied with its siblings nested inside.
         packagedServer = join(resources, "server");
         if (context.electronPlatformName === "win32")
           materializeWindowsServer(standalone, packagedServer);
@@ -210,7 +210,7 @@ if (release && mac) {
       "Installed apps only accept the bundle id dev.jiwon.busyboy signed by team 5PA4R2B5FF.",
     );
   }
-  // Gatekeeper's own check that the app is signed and notarized.
+  // why: Gatekeeper's own check that the app is signed and notarized.
   execFileSync("spctl", ["--assess", "--type", "execute", "-vv", appBundle], { stdio: "inherit" });
   const signed = spawnSync("codesign", ["-d", "--verbose=2", appBundle], { encoding: "utf8" });
   const details = `${signed.stdout ?? ""}\n${signed.stderr ?? ""}`;
@@ -220,7 +220,7 @@ if (release && mac) {
   ) {
     throw new Error(`The signed app is not ${APP_ID} from team ${DEVELOPER_TEAM}.\n${details}`);
   }
-  // BusyBoy 0.0.22 unpacks the ZIP with ditto and checks this signature requirement.
+  // why: BusyBoy 0.0.22 unpacks the ZIP with ditto and checks this signature requirement.
   const zip = join(
     outputDir,
     `${manifest.productName}-${version}-${builder.Arch[builder.archFromString(process.arch)]}.zip`,

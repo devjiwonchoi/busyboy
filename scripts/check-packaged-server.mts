@@ -1,4 +1,4 @@
-// The copy is outside the repository, so a missing package cannot be satisfied by the checkout's node_modules.
+// why: The copy is outside the repository, so a missing package cannot be satisfied by the checkout's node_modules.
 import { execFileSync, spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { cpSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -15,7 +15,7 @@ const READY_TIMEOUT_MS = 30_000;
 const LOADER_TIMEOUT_MS = 60_000;
 const EXIT_TIMEOUT_MS = 10_000;
 
-// node-pty loads its native binding lazily and runs spawn-helper only when it spawns.
+// why: node-pty loads its native binding lazily and runs spawn-helper only when it spawns.
 const smokeTests: Record<string, string> = {
   "node-pty": `const shell = process.platform === 'win32' ? 'cmd.exe' : '/bin/sh'
 const args = process.platform === 'win32' ? ['/c', 'exit 0'] : ['-c', 'exit 0']
@@ -41,7 +41,7 @@ function freePort(): Promise<number> {
   });
 }
 
-// ELECTRON_RUN_AS_NODE is the server's runtime, so native modules load as they will in the app.
+// why: ELECTRON_RUN_AS_NODE is the server's runtime, so native modules load as they will in the app.
 function isolatedEnv(extra: Record<string, string>): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = {
     ...process.env,
@@ -84,13 +84,13 @@ async function startServer(dir: string) {
         await response.body?.cancel();
         if (response.ok) return;
       } catch {
-        // Not listening yet.
+        // why: Not listening yet.
       }
       await new Promise((resolve) => setTimeout(resolve, 200));
     }
     throw new Error(`The packaged server did not answer within ${READY_TIMEOUT_MS} ms:\n${stderr}`);
   } finally {
-    // Wait for the exit so its folder is no longer in use (Windows locks it).
+    // why: Wait for the exit so its folder is no longer in use (Windows locks it).
     child.kill();
     await Promise.race([exited, new Promise((resolve) => setTimeout(resolve, EXIT_TIMEOUT_MS))]);
   }
@@ -101,8 +101,8 @@ export async function checkPackagedServer(serverDir: string) {
   const dir = join(isolated, "server");
   try {
     cpSync(serverDir, dir, { recursive: true, verbatimSymlinks: true });
-    // The server answers requests while a missing Turbopack alias only fails
-    // inside the render, so the timeout would hide which module is gone.
+    // why: The server answers requests while a missing Turbopack alias only fails
+    // why: inside the render, so the timeout would hide which module is gone.
     assertServerResolves(dir);
     const loader = join(dir, "check-server-packages.mjs");
     writeFileSync(
@@ -111,8 +111,8 @@ export async function checkPackagedServer(serverDir: string) {
 import { createRequire } from 'node:module'
 const smokeTests = ${JSON.stringify(smokeTests)}
 const packages = ${JSON.stringify(serverExternalPackages)}
-// The server loads each package through Next's alias in .next/node_modules
-// (<name>-<hash>), so load those too, the way the server's chunks resolve them.
+// why: The server loads each package through Next's alias in .next/node_modules
+// why: (<name>-<hash>), so load those too, the way the server's chunks resolve them.
 const serverRequire = createRequire(new URL('./.next/server/check.js', import.meta.url))
 const aliasDir = new URL('./.next/node_modules/', import.meta.url)
 const aliases = []
@@ -145,7 +145,7 @@ if (failures.length > 0) {
   console.error(failures.join('\\n'))
   process.exit(1)
 }
-// Exit even if a package keeps handles open (for example conpty on Windows).
+// why: Exit even if a package keeps handles open (for example conpty on Windows).
 process.exit(0)
 `,
     );
@@ -172,7 +172,7 @@ process.exit(0)
     try {
       rmSync(isolated, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
     } catch (error) {
-      // Never hide the check's own result behind a cleanup failure.
+      // why: Never hide the check's own result behind a cleanup failure.
       console.warn(`[build-desktop] Could not remove ${isolated}: ${String(error)}`);
     }
   }

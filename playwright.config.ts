@@ -11,7 +11,7 @@ import { prepareDefaultHome } from "./tests/support/test-home";
 const port = Number(process.env.PLAYWRIGHT_PORT ?? 3100);
 const baseURL = `http://127.0.0.1:${port}`;
 
-// Journeys never see the real ~/.busyboy, ~/.claude, or ~/.codex.
+// why: Journeys never see the real ~/.busyboy, ~/.claude, or ~/.codex.
 function testHome(serverPort: number) {
   const home = join(tmpdir(), `busyboy-e2e-default-home-${serverPort}`);
   prepareDefaultHome(home);

@@ -37,8 +37,8 @@ async function openTerminal(page: Page) {
 async function pressOpen(page: Page) {
   const panel = page.getByRole("region", { name: "Bottom panel" });
   await expect(panel).toBeHidden();
-  // A key pressed before hydration is dropped, so press again only while the
-  // panel is still closed; a press that landed is never undone.
+  // why: A key pressed before hydration is dropped, so press again only while the
+  // why: panel is still closed; a press that landed is never undone.
   await expect(async () => {
     if (await panel.isHidden()) await page.keyboard.press("ControlOrMeta+j");
     await expect(panel).toBeVisible({ timeout: 1_000 });

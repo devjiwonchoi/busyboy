@@ -53,7 +53,7 @@ function freePort(): Promise<number> {
   });
 }
 
-// Outside test mode, with its own data folder, so it never reads the real ~/.busyboy.
+// why: Outside test mode, with its own data folder, so it never reads the real ~/.busyboy.
 async function startServer(
   env: Record<string, string>,
 ): Promise<{ port: number; child: ChildProcess }> {

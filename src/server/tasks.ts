@@ -53,8 +53,8 @@ import {
 } from "./task-cards";
 import { archiveBlocked } from "./task-lifecycle";
 
-// Both folder names are new, so the legacy app's worktrees/ and other files in the data folder are never touched.
-// Files git ignores go with the worktree: keeping every worktree that has a node_modules would keep nearly all of them.
+// why: Both folder names are new, so the legacy app's worktrees/ and other files in the data folder are never touched.
+// why: Files git ignores go with the worktree: keeping every worktree that has a node_modules would keep nearly all of them.
 
 export const TASKS_FILE = "task-list.json";
 export const WORKTREES_FOLDER = "task-worktrees";
@@ -75,7 +75,7 @@ export type TaskRecord = {
   createdAt: string;
   kind?: "subagent";
   reply?: string | null;
-  // A stop made by the server itself is not saved, so quitting does not look like the task stopped.
+  // why: A stop made by the server itself is not saved, so quitting does not look like the task stopped.
   activity?: TaskStatus;
   note?: string | null;
   archivedAt?: string | null;
@@ -112,13 +112,13 @@ export function taskInstructions(
     "A task is trivial only when there is exactly one obvious place and way to make the change, there is no design choice for the user, and the change is easy to revert. A typo, a rename, a single config value, and a small bug with a clear cause are trivial. When you are in any doubt, the task is not trivial: save a draft and wait, as below.",
     "",
     "A trivial task:",
-    // An approved ALIGN.md is the record of the plan. readDraftPlan skips "Status: approved", so no plan card opens.
+    // why: An approved ALIGN.md is the record of the plan. readDraftPlan skips "Status: approved", so no plan card opens.
     `- Save the plan as ${recordFolder}/ALIGN.md with "Status: approved", in the same shape the align skill uses (a goal and todos), then do the work in this same turn. Do not end your turn to wait for approval. BusyBoy shows no plan card for an approved plan.`,
     "- Always-ask rules still apply. A matching tool call waits for the user even though you did not ask them to approve the plan.",
     "",
     "Any other task:",
     "Plan it with the `align` skill before you change anything, and follow the plan once it is approved.",
-    // The align skill saves the plan only after approval, but the card needs the draft on disk before the agent waits.
+    // why: The align skill saves the plan only after approval, but the card needs the draft on disk before the agent waits.
     `- When the plan is ready for approval, save it as ${recordFolder}/ALIGN.md with "Status: draft", present it, and end your turn. BusyBoy shows it to the user as a plan card.`,
     `- The message "${APPROVE_MESSAGE}" approves the plan as saved: change its Status line to approved and carry on. Any other reply asks for changes; revise the draft and end your turn again.`,
     "",
@@ -302,7 +302,7 @@ function slug(text: string) {
   );
 }
 
-// Git reads this from the common git dir, including for a linked worktree, so the tracked gitignore stays untouched.
+// why: Git reads this from the common git dir, including for a linked worktree, so the tracked gitignore stays untouched.
 async function ensureTaskScratch(worktree: string) {
   await mkdir(join(worktree, SCRATCH_FOLDER), { recursive: true });
   const raw = await git(
@@ -360,7 +360,7 @@ export async function createTask(input: CreateTaskInput): Promise<TaskView> {
       `There is no project named "${input.project}". Projects: ${names || "none"}.`,
     );
   }
-  // The name becomes a folder, so a name with a path in it would put the worktree outside the data folder.
+  // why: The name becomes a folder, so a name with a path in it would put the worktree outside the data folder.
   if (/[/\\]/.test(project.name) || /^\.+$/.test(project.name)) {
     throw new TaskError(
       `"${project.name}" cannot be used as a folder name. Rename the project in Setup.`,
@@ -475,11 +475,11 @@ function watchAgent(
   task: TaskRecord,
   { resumed = false, fromRestart = false, fromMessage = false } = {},
 ) {
-  // This agent is new. A stop from here on is the user's, so it may close the done line.
+  // why: This agent is new. A stop from here on is the user's, so it may close the done line.
   clearArchiveStop(task.id);
   let last = taskView(task).status;
   let confirmed = !resumed;
-  // Claude reports signed-out only inside its first reply, after the session.
+  // why: Claude reports signed-out only inside its first reply, after the session.
   let checkingStart = fromRestart || fromMessage;
   const cannot = fromMessage ? continueNote : resumeNote;
   let startFailed = false;
@@ -502,7 +502,7 @@ function watchAgent(
       if (event.sessionId !== task.sessionId)
         void saveTask(folder, task, { sessionId: event.sessionId });
     }
-    // Claude confirms a resumed session only with its first reply, so an idle resumed agent can stay unconfirmed.
+    // why: Claude confirms a resumed session only with its first reply, so an idle resumed agent can stay unconfirmed.
     if (event.type === "error" && !confirmed && isLostSessionError(event)) {
       confirmed = true;
       void saveTask(folder, task, {
@@ -510,7 +510,7 @@ function watchAgent(
         sessionId: null,
         note: cannot("the provider no longer has its conversation"),
       }).then(() => notify(folder, task));
-      // A lost session never recovers; stop now instead of waiting for the process.
+      // why: A lost session never recovers; stop now instead of waiting for the process.
       void stopAgent(task.agentId).catch(() => {});
       last = "stopped";
       return;
@@ -570,7 +570,7 @@ function watchAgent(
       }
     }
     report();
-    // After the activity save is queued, so the stored activity is idle before the task is put away.
+    // why: After the activity save is queued, so the stored activity is idle before the task is put away.
     if (event.type === "turn-done" && !event.more && task.kind !== "subagent") {
       void import("./auto-archive")
         .then(({ considerAutoArchive }) => considerAutoArchive(folder, task.id))
@@ -608,7 +608,7 @@ async function stopTaskNow(folder: string, taskId: string) {
   await stopTaskAgent({ folder, agentId: task.agentId });
 }
 
-// The last step may or may not have finished, and only the agent can tell, so the request is not sent again.
+// why: The last step may or may not have finished, and only the agent can tell, so the request is not sent again.
 export const RESUME_WORKING_MESSAGE =
   "BusyBoy restarted while you were working, so your last step may not have finished. Check what is already done in the worktree before you continue, so nothing runs twice, then carry on with the task.";
 
@@ -621,7 +621,7 @@ const resumeStore = globalThis as typeof globalThis & {
 };
 const resumes = (resumeStore[RESUMES_KEY] ??= new Map());
 
-// Idle tasks are left alone: starting a provider process for each of them would load a small machine for nothing.
+// why: Idle tasks are left alone: starting a provider process for each of them would load a small machine for nothing.
 export function resumeTasks(folder: string): Promise<void> {
   const key = pathKey(folder);
   let resume = resumes.get(key);
@@ -642,7 +642,7 @@ export function resumeTasks(folder: string): Promise<void> {
           )
             return;
           if (task.kind === "subagent") {
-            // Its action may have run already. Running it again could do it twice.
+            // why: Its action may have run already. Running it again could do it twice.
             await saveTask(folder, task, {
               activity: "stopped",
               note: "BusyBoy restarted before this subagent finished. Ask again if it is still needed.",
@@ -660,7 +660,7 @@ export function resumeTasks(folder: string): Promise<void> {
         );
       }
       if (isStoppingAllAgents()) return;
-      // Idle tasks are not resumed above. One that finished before this process started is put away now.
+      // why: Idle tasks are not resumed above. One that finished before this process started is put away now.
       const { archiveFinishedTasks } = await import("./auto-archive");
       await archiveFinishedTasks(folder).catch((error: unknown) =>
         console.error("busyboy: could not archive finished tasks", error),
@@ -694,10 +694,10 @@ async function resumeTask(folder: string, task: TaskRecord) {
   watchAgent(folder, task, { resumed: Boolean(sessionId), fromRestart: true });
   await saved;
   notify(folder, task);
-  // A lost session or a missing CLI may already have ended the agent; the watcher has noted why.
+  // why: A lost session or a missing CLI may already have ended the agent; the watcher has noted why.
   if (getAgent(agent.id)?.status === "stopped" || startFailedAlready(agent.id)) return;
   try {
-    // Claude reports its session with its first reply, so a crash in between can still send the request twice. That window is one file write.
+    // why: Claude reports its session with its first reply, so a crash in between can still send the request twice. That window is one file write.
     if (!sessionId) sendMessage(agent.id, task.request);
     else if (activity === "running") sendMessage(agent.id, RESUME_WORKING_MESSAGE);
     else if (activity === "needs-you") sendMessage(agent.id, RESUME_WAITING_MESSAGE);
@@ -817,7 +817,7 @@ async function deliverMessage(
   try {
     sendMessage(agent.id, sessionId ? turn : { ...turn, text: `${task.request}\n\n${turn.text}` });
   } catch {
-    // It stopped in between (a lost session, a missing CLI); the watcher has noted why.
+    // why: It stopped in between (a lost session, a missing CLI); the watcher has noted why.
     throw new TaskError(`${name} could not start again: ${startError(agent.id)}`);
   }
   notify(folder, task);
@@ -834,7 +834,7 @@ const exists = (path: string) =>
     () => false,
   );
 
-// git refuses to remove a worktree with changed or untracked files, which keeps uncommitted work.
+// why: git refuses to remove a worktree with changed or untracked files, which keeps uncommitted work.
 export async function archiveTask(
   taskId: string,
 ): Promise<{ task: TaskView; worktreeKept: boolean }> {
@@ -878,7 +878,7 @@ async function removeWorktree(folder: string, task: TaskRecord) {
   const shelf = join(folder, ARCHIVE_FOLDER, task.project, task.id, RECORDS_FOLDER);
   let shelved = false;
   try {
-    // The records are untracked, which would make git refuse every archive, and forcing the removal would delete the plan.
+    // why: The records are untracked, which would make git refuse every archive, and forcing the removal would delete the plan.
     const tracked = (await git(task.worktree, "ls-files", "--", RECORDS_FOLDER)) !== "";
     const isFolder = await lstat(records).then(
       (stats) => stats.isDirectory(),
@@ -895,7 +895,7 @@ async function removeWorktree(folder: string, task: TaskRecord) {
       "--path-format=absolute",
       "--git-common-dir",
     );
-    // --git-dir= is one argument git parses itself. A backslash there is an escape, so C:\repo misses the worktree.
+    // why: --git-dir= is one argument git parses itself. A backslash there is an escape, so C:\repo misses the worktree.
     await run(
       "git",
       [`--git-dir=${gitPath(repository)}`, "worktree", "remove", "--", gitPath(task.worktree)],

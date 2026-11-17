@@ -85,7 +85,7 @@ function keep(message: SDKMessage): Step | undefined {
 }
 
 const cwd = mkdtempSync(join(tmpdir(), "busyboy-record-"));
-// Look `claude` up on the login-shell PATH (an alias such as `claude --flag` must not win).
+// why: Look `claude` up on the login-shell PATH (an alias such as `claude --flag` must not win).
 const shellPath = execFileSync(process.env.SHELL || "/bin/zsh", ["-ilc", 'printf "\n%s" "$PATH"'], {
   encoding: "utf8",
 })
@@ -114,7 +114,7 @@ async function* input(): AsyncGenerator<SDKUserMessage> {
   }
 }
 
-// mcp-tools.ts cannot load under plain Node, so the recorder uses this stand-in.
+// why: mcp-tools.ts cannot load under plain Node, so the recorder uses this stand-in.
 async function startToolStandIn(projects: string[], status: string) {
   const tools = [
     {
@@ -354,7 +354,7 @@ try {
         toolInput,
         { title, description, suggestions, suppressAlwaysAllowRule },
       ) => {
-        // Suggestions that would grant more than the request do not count (see claude-adapter.ts).
+        // why: Suggestions that would grant more than the request do not count (see claude-adapter.ts).
         const sessionSuggestions = suppressAlwaysAllowRule ? undefined : suggestions;
         steps.push({
           canUseTool: {

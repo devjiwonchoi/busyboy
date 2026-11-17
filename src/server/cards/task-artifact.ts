@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import { containsPath, samePath } from "../paths";
 import { locateTaskRecords } from "../records/record-location";
 
-// The markdown view only draws http(s) or root-relative images, so a worktree path would be dropped.
+// why: The markdown view only draws http(s) or root-relative images, so a worktree path would be dropped.
 
 const FENCE = /^\s*(```|~~~)/;
 const LINK = /(!?\[[^\]\n]*\])\((<[^>\n]+>|[^)\s]+)(?:\s+("[^"\n]*"|'[^'\n]*'))?\)/g;
@@ -132,7 +132,7 @@ export function linkTaskArtifacts(markdown: string, context: ArtifactContext) {
     .join("\n");
 }
 
-// A symbolic link is refused: the cited file has to stay inside the record folder or the worktree.
+// why: A symbolic link is refused: the cited file has to stay inside the record folder or the worktree.
 export async function readTaskArtifact({
   folder,
   taskId,

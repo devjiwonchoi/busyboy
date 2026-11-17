@@ -1,11 +1,10 @@
 "use client";
 
-import { useEffect } from "react";
-
+import { useExternalSync } from "@/hooks/use-external-sync";
 import { applyDocumentTheme } from "@/lib/theme";
 
 export function ThemeSync() {
-  useEffect(() => {
+  useExternalSync(() => {
     const root = document.documentElement;
     const media = window.matchMedia("(prefers-color-scheme: dark)");
     const apply = () => applyDocumentTheme();

@@ -28,7 +28,7 @@ export const SCRIPTS_ENV = "BUSYBOY_PROVIDER_SCRIPTS";
 
 export const MISSING_SESSION_PREFIX = "missing-";
 
-// A Claude tool_use named mcp__<server>__<tool> really calls that tool, so a replay runs BusyBoy's own tool code.
+// why: A Claude tool_use named mcp__<server>__<tool> really calls that tool, so a replay runs BusyBoy's own tool code.
 export type ScriptStep =
   | { event: AgentEvent; then?: Record<string, ScriptStep[]> }
   | { raw: unknown }
@@ -104,7 +104,7 @@ function findTurn(folder: string, provider: ProviderId, text: string, history: r
   return withContext ?? plain;
 }
 
-// Saved under the system temp folder so a session survives a restart the way a provider's own session files do.
+// why: Saved under the system temp folder so a session survives a restart the way a provider's own session files do.
 const HISTORIES_KEY = Symbol.for("busyboy.scripted-histories");
 const globalStore = globalThis as typeof globalThis & { [HISTORIES_KEY]?: Map<string, string[]> };
 const histories = (globalStore[HISTORIES_KEY] ??= new Map());
@@ -122,7 +122,7 @@ function loadHistory(sessionId: string): string[] {
   try {
     if (file) history = JSON.parse(readFileSync(file, "utf8")) as string[];
   } catch {
-    // Never saved: a new session.
+    // why: Never saved: a new session.
   }
   histories.set(sessionId, history);
   return history;
@@ -132,7 +132,7 @@ function saveHistory(sessionId: string, history: string[]) {
   const file = scriptedHistoryFile(sessionId);
   if (!file || histories.get(sessionId) !== history) return;
   mkdirSync(HISTORY_FOLDER, { recursive: true });
-  // Writing in place empties the file first, and a reader in that gap fails to parse the history.
+  // why: Writing in place empties the file first, and a reader in that gap fails to parse the history.
   const temporary = `${file}.${process.pid}.tmp`;
   writeFileSync(temporary, JSON.stringify(history));
   renameSync(temporary, file);
@@ -292,7 +292,7 @@ function startScripted(folder: string, options: ProviderStartOptions): ProviderS
       }
       if ("toolCall" in step) {
         const { name } = step.toolCall;
-        // `<cwd>` and `<record-folder>` stand in for this task's paths, so a script can name them.
+        // why: `<cwd>` and `<record-folder>` stand in for this task's paths, so a script can name them.
         const input = fillTaskPaths(step.toolCall.input, options.cwd, options.recordFolder);
         let key = "allow";
         const userRule = await checkUserRules({
@@ -433,7 +433,7 @@ function startScripted(folder: string, options: ProviderStartOptions): ProviderS
       } catch (error) {
         mapper?.flush();
         if (stopped) {
-          // Ended by stop(), which already reported it.
+          // why: Ended by stop(), which already reported it.
         } else if (error instanceof Cancelled) {
           emit({ type: "turn-done" });
         } else {

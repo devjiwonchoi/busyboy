@@ -14,7 +14,7 @@ export function CopyCommand({ label, command }: { label: string; command: string
   const [copied, setCopied] = useState(false);
   return (
     <InputGroup className="basis-full">
-      {/* A read-only text area grows to fit, so long commands wrap instead of being cut off. */}
+      {/* why: A read-only text area grows to fit, so long commands wrap instead of being cut off. */}
       <InputGroupTextarea
         aria-label={label}
         value={command}
@@ -28,7 +28,7 @@ export function CopyCommand({ label, command }: { label: string; command: string
           size="icon-xs"
           aria-label={copied ? "Copied" : "Copy command"}
           onClick={async () => {
-            // Copying can be refused (no permission or no focus); the command stays visible to copy by hand.
+            // why: Copying can be refused (no permission or no focus); the command stays visible to copy by hand.
             const ok = await navigator.clipboard.writeText(command).then(
               () => true,
               () => false,

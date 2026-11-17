@@ -1,18 +1,19 @@
 "use client";
 
 import { Download } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { useExternalSync } from "@/hooks/use-external-sync";
 import { desktopBridge } from "@/lib/desktop-bridge";
 
-// In a plain browser there is no updater, so the button never shows.
+// why: In a plain browser there is no updater, so the button never shows.
 export function UpdateButton() {
   const [version, setVersion] = useState<string | null>(null);
   const [restarting, setRestarting] = useState(false);
 
-  useEffect(() => {
+  useExternalSync(() => {
     const bridge = desktopBridge();
     if (!bridge?.onUpdateReady) return;
     let stopped = false;

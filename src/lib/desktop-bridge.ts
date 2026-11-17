@@ -1,4 +1,4 @@
-// In a plain browser the preload bridge is missing, and the UI falls back to typing a folder path.
+// why: In a plain browser the preload bridge is missing, and the UI falls back to typing a folder path.
 
 export const PICK_FOLDERS_CHANNEL = "busyboy:pick-folders";
 
@@ -18,9 +18,9 @@ export const DESKTOP_BRIDGE_KEY = "busyboyDesktop";
 
 export type DesktopBridge = {
   pickFolders(): Promise<string[]>;
-  /** The absolute path of a dropped file or folder (Electron hides `File.path` since v32). */
+  /*why: * The absolute path of a dropped file or folder (Electron hides `File.path` since v32). */
   pathForFile(file: File): string;
-  // Electron hides File.path since v32, so the bridge is the only way to read a dropped path.
+  // why: Electron hides File.path since v32, so the bridge is the only way to read a dropped path.
   onFocus(listener: (target: string) => void): () => void;
   readyUpdate(): Promise<string | null>;
   onUpdateReady(listener: (version: string) => void): () => void;

@@ -1,16 +1,18 @@
 "use client";
 
-import { createContext, useContext, useEffect, useRef } from "react";
+import { createContext, useContext, useRef } from "react";
+
+import { useExternalSync } from "@/hooks/use-external-sync";
 
 export type Shortcut = {
   id: string;
-  // When the layout types a non-ASCII character, letters match by physical key.
+  // why: When the layout types a non-ASCII character, letters match by physical key.
   key: string;
   mod?: boolean;
   shift?: boolean;
   alt?: boolean;
   label: string;
-  // Escape to stop a reply uses handles, so a key repeat does not stop twice.
+  // why: Escape to stop a reply uses handles, so a key repeat does not stop twice.
   handles?: (event: KeyboardEvent) => boolean;
   run: () => void;
 };
@@ -44,10 +46,10 @@ function physicalCode(key: string) {
 export function matchesShortcut(shortcut: Keys, event: KeyboardEvent, mac: boolean) {
   const mod = mac ? event.metaKey : event.ctrlKey;
   const otherMod = mac ? event.ctrlKey : event.metaKey;
-  // AltGr (reported as Ctrl+Alt on Windows) types characters such as ś on a Polish layout; a
-  // shortcut must never take them.
+  // why: AltGr (reported as Ctrl+Alt on Windows) types characters such as ś on a Polish layout; a
+  // why: shortcut must never take them.
   if (!mac && event.getModifierState?.("AltGraph")) return false;
-  // Korean and Cyrillic need the physical key; Dvorak must keep the typed letter. Option on macOS types another character.
+  // why: Korean and Cyrillic need the physical key; Dvorak must keep the typed letter. Option on macOS types another character.
   const typesAscii = /^[\x20-\x7e]$/.test(event.key);
   const sameKey =
     shortcut.alt && mac
@@ -66,7 +68,7 @@ export function matchesShortcut(shortcut: Keys, event: KeyboardEvent, mac: boole
 export function ShortcutRegistryProvider({ children }: { children: React.ReactNode }) {
   const registry = useRef<Registry>(new Map());
 
-  useEffect(() => {
+  useExternalSync(() => {
     const mac = isMacPlatform();
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.defaultPrevented) return;
@@ -86,7 +88,7 @@ export function ShortcutRegistryProvider({ children }: { children: React.ReactNo
   return <ShortcutRegistryContext value={registry.current}>{children}</ShortcutRegistryContext>;
 }
 
-// React does not pass a JSX key through, so the shortcut would match nothing.
+// why: React does not pass a JSX key through, so the shortcut would match nothing.
 export function EscapeShortcut({
   id,
   label,
@@ -106,12 +108,10 @@ export function useShortcut(shortcut: Shortcut) {
   const registry = useContext(ShortcutRegistryContext);
   if (!registry) throw new Error("useShortcut must be used inside ShortcutRegistryProvider.");
   const latest = useRef(shortcut);
-  useEffect(() => {
-    latest.current = shortcut;
-  });
+  latest.current = shortcut;
 
   const { id, key, mod, shift, alt, label } = shortcut;
-  useEffect(() => {
+  useExternalSync(() => {
     const entry: Shortcut = {
       id,
       key,

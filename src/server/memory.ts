@@ -15,14 +15,14 @@ import { dataFolder } from "./config";
 import { pathKey } from "./paths";
 import { getProject, listProjects } from "./projects";
 
-// Project memory is not under projects/, because the legacy app keeps repositories there.
+// why: Project memory is not under projects/, because the legacy app keeps repositories there.
 
 export const MEMORY_FOLDER = "memory";
 const PROJECTS_FOLDER = "projects";
 const LOG_FOLDER = "log";
 const INDEX_FILE = "MEMORY.md";
 
-// What does not fit in the prompt is left to memory_search.
+// why: What does not fit in the prompt is left to memory_search.
 const PROMPT_BUDGET = 12_000;
 const MORE_LINE_RESERVE = 80;
 
@@ -48,7 +48,7 @@ function scopeFolder(folder: string, project: string | null) {
 
 const ID_PATTERN = /^[a-z0-9][a-z0-9-]{0,79}$/;
 
-/** `memory.md` would be the index file on a case-insensitive disk (macOS). */
+/*why: * `memory.md` would be the index file on a case-insensitive disk (macOS). */
 const RESERVED_ID = INDEX_FILE.slice(0, -3).toLowerCase();
 
 function isFactId(id: string) {
@@ -63,7 +63,7 @@ function checkId(id: string) {
   return id;
 }
 
-// A non-ASCII title keeps only part of its slug, so a short hash stops two facts sharing an id.
+// why: A non-ASCII title keeps only part of its slug, so a short hash stops two facts sharing an id.
 function idFromTitle(title: string) {
   const slug = title
     .toLowerCase()
@@ -82,7 +82,7 @@ function isProjectFolderName(name: string) {
   return Boolean(name) && !/[/\\]/.test(name) && name !== "." && name !== "..";
 }
 
-// Memory is keyed by project name, so a rename starts an empty folder and leaves the old facts behind.
+// why: Memory is keyed by project name, so a rename starts an empty folder and leaves the old facts behind.
 async function resolveProject(folder: string, project: string | null | undefined) {
   const name = project?.trim().replace(/^@/, "");
   if (!name) return null;
@@ -217,7 +217,7 @@ async function newOrMatchingId(folder: string, project: string | null, title: st
   const facts = await readFacts(folder, project);
   const same = facts.find((fact) => fact.title.toLowerCase() === title.toLowerCase());
   if (same) return same.id;
-  // macOS disks match Foo.md to foo.md, so every file name counts, ignoring case.
+  // why: macOS disks match Foo.md to foo.md, so every file name counts, ignoring case.
   const names = await readdir(scopeFolder(folder, project)).catch(() => [] as string[]);
   const taken = new Set(names.map((name) => name.toLowerCase().replace(/\.md$/, "")));
   const base = idFromTitle(title);
@@ -309,7 +309,7 @@ export async function searchMemory(input: {
   return hits.slice(0, limit);
 }
 
-// The section changes only when a fact changes, so the prompt cache holds. Project titles are omitted because task agents write them from the repo.
+// why: The section changes only when a fact changes, so the prompt cache holds. Project titles are omitted because task agents write them from the repo.
 export async function memoryPrompt(
   folder: string,
   options: { project?: string; projectIndexes?: boolean } = {},
@@ -324,8 +324,8 @@ export async function memoryPrompt(
     });
   }
   const projects = options.projectIndexes ? (await listMemoryAt(folder)).slice(1) : [];
-  // Task agents stay in their worktree and the Director never reads files, so
-  // a fact that does not fit in full is looked up with memory_search, not read.
+  // why: Task agents stay in their worktree and the Director never reads files, so
+  // why: a fact that does not fit in full is looked up with memory_search, not read.
   const intro = [
     "# Memory",
     "",

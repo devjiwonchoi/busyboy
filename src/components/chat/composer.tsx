@@ -3,11 +3,11 @@
 import { ArrowUp, Mic, Plus, Square, X } from "lucide-react";
 import {
   forwardRef,
-  useEffect,
   useId,
   useImperativeHandle,
   useRef,
   useState,
+  useSyncExternalStore,
   type ComponentProps,
   type DragEvent as ReactDragEvent,
   type ReactNode,
@@ -29,6 +29,7 @@ import {
   getComposerText,
   useComposerContext,
 } from "@/components/ui/composer";
+import { useExternalSync } from "@/hooks/use-external-sync";
 import { attachmentProblem, imageMediaType, type AttachmentInput } from "@/lib/chat-attachments";
 import type { ComposerSkill } from "@/server/skills";
 
@@ -55,11 +56,11 @@ function writeDraft(chatId: string, text: string) {
     if (text) window.localStorage.setItem(draftStorageKey(chatId), text);
     else window.localStorage.removeItem(draftStorageKey(chatId));
   } catch {
-    // Private mode and a full disk still leave the draft in memory for this view.
+    // why: Private mode and a full disk still leave the draft in memory for this view.
   }
 }
 
-// ArrowUp in an empty box only edits the previous message. A global binding would take the key from every field.
+// why: ArrowUp in an empty box only edits the previous message. A global binding would take the key from every field.
 export const ChatComposer = forwardRef<
   ChatComposerHandle,
   {
@@ -106,8 +107,14 @@ export const ChatComposer = forwardRef<
   const [error, setError] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
   const [queryCharacter, setQueryCharacter] = useState<string | null>(null);
-  const [canDictate, setCanDictate] = useState(false);
   const [dictating, setDictating] = useState(false);
+  const [dictationBlocked, setDictationBlocked] = useState(false);
+  const canDictate =
+    useSyncExternalStore(
+      subscribeDictation,
+      () => dictationConstructor() !== null,
+      () => false,
+    ) && !dictationBlocked;
   const [skills, setSkills] = useState<ComposerSkill[]>([]);
   const [files, setFiles] = useState<{ path: string }[]>([]);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -126,8 +133,7 @@ export const ChatComposer = forwardRef<
   const dictation = useRef<DictationSession | null>(null);
   const appendDictationRef = useRef<(transcript: string) => void>(() => {});
 
-  useEffect(() => {
-    setCanDictate(dictationConstructor() !== null);
+  useExternalSync(() => {
     return () => {
       const session = dictation.current;
       dictation.current = null;
@@ -143,7 +149,7 @@ export const ChatComposer = forwardRef<
     };
   }, []);
 
-  useEffect(() => {
+  useExternalSync(() => {
     let current = true;
     void composerSkillsAction(filesProject ?? undefined)
       .then((next) => {
@@ -157,7 +163,7 @@ export const ChatComposer = forwardRef<
     };
   }, [filesProject]);
 
-  useEffect(() => {
+  useExternalSync(() => {
     if (!filesProject) {
       setFiles([]);
       return;
@@ -175,7 +181,7 @@ export const ChatComposer = forwardRef<
     };
   }, [filesProject]);
 
-  // Plain text would match the query again and reopen the picker, so the next Enter would pick instead of send.
+  // why: Plain text would match the query again and reopen the picker, so the next Enter would pick instead of send.
   const projectItems: ComposerItemValue[] = projects.map((name) => ({
     id: `project:${name}`,
     label: name,
@@ -249,10 +255,7 @@ export const ChatComposer = forwardRef<
       return;
     }
     const Dictation = dictationConstructor();
-    if (!Dictation) {
-      setCanDictate(false);
-      return;
-    }
+    if (!Dictation) return;
     const session = new Dictation();
     session.continuous = true;
     session.interimResults = false;
@@ -283,7 +286,7 @@ export const ChatComposer = forwardRef<
     try {
       session.start();
     } catch {
-      setCanDictate(false);
+      setDictationBlocked(true);
       return;
     }
     dictation.current = session;
@@ -313,7 +316,7 @@ export const ChatComposer = forwardRef<
     commit(next);
   }
 
-  useEffect(() => {
+  useExternalSync(() => {
     if (!draftKey) {
       restored.current = true;
       return;
@@ -326,7 +329,7 @@ export const ChatComposer = forwardRef<
 
   const seedToken = seed?.token;
   const seedText = seed?.text;
-  useEffect(() => {
+  useExternalSync(() => {
     if (seedToken === undefined || seedText === undefined) return;
     if (appliedSeed.current === seedToken) return;
     appliedSeed.current = seedToken;
@@ -339,7 +342,7 @@ export const ChatComposer = forwardRef<
     // oxlint-disable-next-line react/exhaustive-deps -- appliedSeed runs this once per seed token, and commit is a new function every render
   }, [seedToken, seedText]);
 
-  useEffect(() => {
+  useExternalSync(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.defaultPrevented || event.repeat || event.key !== "ArrowUp") return;
       if (event.shiftKey || event.altKey || event.metaKey || event.ctrlKey) return;
@@ -347,7 +350,7 @@ export const ChatComposer = forwardRef<
       const target = event.target;
       if (!root || !(target instanceof Node) || !root.contains(target)) return;
       if (!onEmptyArrowUpRef.current) return;
-      // An open @ or / picker owns the arrow keys (it stops the event). This is the extra guard.
+      // why: An open @ or / picker owns the arrow keys (it stops the event). This is the extra guard.
       if (
         target instanceof Element &&
         target.closest('[data-slot="composer-input"]')?.hasAttribute("aria-controls")
@@ -463,13 +466,13 @@ export const ChatComposer = forwardRef<
       onDrop={(event) => {
         if (!event.dataTransfer.files.length) return;
         event.preventDefault();
-        // The chat column also accepts a drop; one drop should add the files once.
+        // why: The chat column also accepts a drop; one drop should add the files once.
         event.stopPropagation();
         setDragging(false);
         void takeFiles(event.dataTransfer.files);
       }}
     >
-      {/* Chips sit outside the adaptive grid, which is only plus, input, and send. */}
+      {/* why: Chips sit outside the adaptive grid, which is only plus, input, and send. */}
       {leading && <div className="px-2 pt-2">{leading}</div>}
       {attachments.length > 0 && (
         <ul aria-label="Attachments" className="flex flex-wrap gap-1.5 px-2 pt-2">
@@ -524,7 +527,7 @@ export const ChatComposer = forwardRef<
         ]}
         className="w-full items-stretch border-0 bg-transparent text-left text-zinc-100 shadow-none ring-0 [--composer-min-rows:1] [--composer-radius:1.25rem]"
       >
-        {/* Pin the empty placeholder to the text origin. The field's ::before is absolute
+        {/* why: Pin the empty placeholder to the text origin. The field's ::before is absolute
             and otherwise keeps a static position Chromium centers in the line box. */}
         <ComposerInput
           aria-label={label}
@@ -685,6 +688,10 @@ type DictationSession = {
   stop: () => void;
   abort: () => void;
 };
+
+function subscribeDictation() {
+  return () => {};
+}
 
 function dictationConstructor(): (new () => DictationSession) | null {
   if (typeof window === "undefined") return null;

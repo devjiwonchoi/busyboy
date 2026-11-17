@@ -22,5 +22,30 @@
   "rules": {
     "react/refs": "off",
     "react/set-state-in-effect": "off"
-  }
+  },
+  "overrides": [
+    {
+      "files": ["src/**/*.{ts,tsx}"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "paths": [
+              {
+                "name": "react",
+                "importNames": ["useEffect"],
+                "message": "Do not sync state in an effect; compute it during render, handle the event, reset with a key, or subscribe with useSyncExternalStore. External setup goes through useExternalSync from src/hooks/use-external-sync.ts (https://react.dev/learn/you-might-not-need-an-effect)."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["src/hooks/use-external-sync.ts", "src/components/ui/**"],
+      "rules": {
+        "no-restricted-imports": "off"
+      }
+    }
+  ]
 }

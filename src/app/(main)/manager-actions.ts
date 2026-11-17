@@ -8,7 +8,7 @@ import { releaseTasksOf } from "@/server/tasks";
 
 export type CreateManagerResult = { error?: string; id?: string; kind?: "manager" | "room" };
 
-// A thrown server-action error's message does not reach the window in a production build.
+// why: A thrown server-action error's message does not reach the window in a production build.
 export async function createManagerAction(
   _previous: CreateManagerResult,
   form: FormData,

@@ -19,9 +19,9 @@ function subscribeNothing() {
   return () => {};
 }
 
-// The native picker and drops need the desktop bridge, which a plain browser lacks.
+// why: The native picker and drops need the desktop bridge, which a plain browser lacks.
 export function FolderPicker() {
-  // Read after hydration: the server never has the bridge, so the first render matches it.
+  // why: Read after hydration: the server never has the bridge, so the first render matches it.
   const bridge = useSyncExternalStore(subscribeNothing, desktopBridge, () => undefined);
   const [errors, setErrors] = useState<string[]>([]);
   const [dragging, setDragging] = useState(false);
@@ -33,7 +33,7 @@ export function FolderPicker() {
       try {
         setErrors((await addProjectsAction(folders)).errors);
       } catch {
-        // Stay on the page: an unexpected failure must not replace setup with an error screen.
+        // why: Stay on the page: an unexpected failure must not replace setup with an error screen.
         setErrors(["Those folders could not be added. Try again, or type a path below."]);
       }
     });

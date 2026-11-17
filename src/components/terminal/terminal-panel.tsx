@@ -5,7 +5,7 @@ import { Terminal } from "@xterm/xterm";
 
 import "@xterm/xterm/css/xterm.css";
 import { FolderOpen, Plus, RotateCcw, SquareTerminal, X } from "lucide-react";
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useRef, useState, useSyncExternalStore } from "react";
 
 import { useShellState, useTaskSelection } from "@/components/shell/shell-state";
 import {
@@ -19,6 +19,7 @@ import {
 } from "@/components/shell/shortcut-registry";
 import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { useExternalSync } from "@/hooks/use-external-sync";
 import { desktopBridge } from "@/lib/desktop-bridge";
 
 import {
@@ -40,7 +41,7 @@ function subscribeNothing() {
   return () => {};
 }
 
-// Off macOS, Ctrl+J is the shell's line feed, so the panel toggle from inside the terminal is Ctrl+`.
+// why: Off macOS, Ctrl+J is the shell's line feed, so the panel toggle from inside the terminal is Ctrl+`.
 function isAppShortcut(event: KeyboardEvent) {
   const mac = isMacPlatform();
   if (matchesShortcut(COMMAND_PALETTE_KEYS, event, mac)) return true;
@@ -52,7 +53,7 @@ function isAppShortcut(event: KeyboardEvent) {
   return mac && matchesShortcut(TOGGLE_PANEL_KEYS, event, mac);
 }
 
-// Selecting another task must not replace a running shell: it may be mid-command or hold the user's history.
+// why: Selecting another task must not replace a running shell: it may be mid-command or hold the user's history.
 export function TerminalPanel() {
   const { panelOpen, setPanelOpen, togglePanel } = useShellState();
   useShortcut({
@@ -151,7 +152,7 @@ export function TerminalPanel() {
         </Button>
       </div>
       {ended ? (
-        // A shell that ended is news, not an emergency, so this alert is a polite status.
+        // why: A shell that ended is news, not an emergency, so this alert is a polite status.
         <Alert role="status" className="shrink-0 rounded-none border-x-0 border-t-0">
           <AlertDescription>{ended}</AlertDescription>
           <AlertAction className="top-1 right-2">
@@ -188,14 +189,12 @@ function TerminalView({
 }) {
   const hostRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<{ term: Terminal; fit: () => void } | null>(null);
-  // Frozen at mount: a selection change must not re-run the effect below, which would kill the shell.
+  // why: Frozen at mount: a selection change must not re-run the effect below, which would kill the shell.
   const [startTaskId] = useState(taskId);
   const callbacks = useRef({ onStart, onEnd });
-  useEffect(() => {
-    callbacks.current = { onStart, onEnd };
-  });
+  callbacks.current = { onStart, onEnd };
 
-  useEffect(() => {
+  useExternalSync(() => {
     const host = hostRef.current;
     if (!host) return;
     const abort = new AbortController();
@@ -217,7 +216,7 @@ function TerminalView({
 
     let lastSize = "";
     const fit = () => {
-      // A hidden panel has no size; fitting it would shrink the shell to nothing.
+      // why: A hidden panel has no size; fitting it would shrink the shell to nothing.
       if (host.clientWidth === 0 || host.clientHeight === 0) return;
       fitAddon.fit();
       const size = `${term.cols}x${term.rows}`;
@@ -232,7 +231,7 @@ function TerminalView({
     observer.observe(host);
 
     const onSchemeChange = () => {
-      // The tokens follow the `dark` class; read them after styles update.
+      // why: The tokens follow the `dark` class; read them after styles update.
       requestAnimationFrame(() => {
         term.options.theme = readTerminalTheme(host);
       });
@@ -303,7 +302,7 @@ function TerminalView({
     };
   }, [startTaskId]);
 
-  useEffect(() => {
+  useExternalSync(() => {
     if (!active) return;
     const current = terminalRef.current;
     if (!current) return;
@@ -311,8 +310,8 @@ function TerminalView({
     current.term.focus();
   }, [active]);
 
-  // The fit addon measures the host's box including its padding, so the
-  // padding lives on a wrapper and the host stays exactly the usable area.
+  // why: The fit addon measures the host's box including its padding, so the
+  // why: padding lives on a wrapper and the host stays exactly the usable area.
   return (
     <div className="flex min-h-0 flex-1 bg-background py-1 pl-3">
       <div

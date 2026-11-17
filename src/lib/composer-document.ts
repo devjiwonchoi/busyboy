@@ -84,7 +84,7 @@ function readValue(root: HTMLElement, ignoreTrailingPlaceholder = true): Compose
         });
       } else if (node.tagName === "BR") {
         if (node.hasAttribute("data-composer-placeholder")) continue;
-        // Browsers end empty lines with a placeholder BR, which is not another newline.
+        // why: Browsers end empty lines with a placeholder BR, which is not another newline.
         if (!ignoreTrailingPlaceholder || index !== nodes.length - 1) pushText(parts, "\n");
       } else {
         const isBlock = node.tagName === "DIV" || node.tagName === "P";
@@ -234,7 +234,7 @@ function currentQuery(root: HTMLElement, triggers: readonly ComposerTrigger[]): 
   if (!(node instanceof Text) || node.parentElement?.closest("[data-composer-token]")) return null;
   let caret = selection.anchorOffset;
   let merged = false;
-  // Paste and token deletion can leave one query split across adjacent text nodes.
+  // why: Paste and token deletion can leave one query split across adjacent text nodes.
   while (node.previousSibling instanceof Text) {
     const previous = node.previousSibling;
     caret += previous.length;
@@ -348,7 +348,7 @@ function insertItem(
 
 type ComposerSelection = { anchor: number; focus: number };
 
-// Use canonical text offsets so chip labels and their icons do not move the caret.
+// why: Use canonical text offsets so chip labels and their icons do not move the caret.
 function readSelection(input: HTMLElement): ComposerSelection | null {
   if (input instanceof HTMLTextAreaElement) {
     return document.activeElement === input

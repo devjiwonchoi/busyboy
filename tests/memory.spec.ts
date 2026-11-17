@@ -69,7 +69,7 @@ test("a saved preference should reach the next task", async ({ page, context, ba
   const readPrompt = () => (existsSync(promptFile) ? readFileSync(promptFile, "utf8") : "");
   await expect.poll(readPrompt).toContain("# Memory");
   const prompt = readPrompt();
-  // Instructions first, then memory: the order that keeps the prompt cache.
+  // why: Instructions first, then memory: the order that keeps the prompt cache.
   expect(prompt).toContain('You are a busyboy task agent for the project "web".');
   expect(prompt).toContain("### Prefers pnpm\nThe user prefers pnpm over npm.");
   expect(prompt.indexOf("# Memory")).toBeGreaterThan(

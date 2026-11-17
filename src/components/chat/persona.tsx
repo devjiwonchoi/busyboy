@@ -3,7 +3,7 @@ import { cn } from "@/lib/utils";
 
 export type Persona = { name: string; mark?: string; imageUrl?: string; tone?: string };
 
-// Full class strings so Tailwind can see them.
+// why: Full class strings so Tailwind can see them.
 const LETTER_TONES = [
   "bg-gradient-to-br from-fuchsia-400 to-violet-500 text-white",
   "bg-teal-400 text-white",

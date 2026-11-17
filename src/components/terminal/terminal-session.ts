@@ -10,7 +10,7 @@ export type StartedTerminal = {
 
 const endpoint = (id: string) => `/api/terminal/${encodeURIComponent(id)}`;
 
-// The cwd override is only honored in test mode.
+// why: The cwd override is only honored in test mode.
 export async function startTerminal(
   { cols, rows, taskId }: { cols: number; rows: number; taskId: string | null },
   signal: AbortSignal,
@@ -68,7 +68,7 @@ export function createInputSender(id: string) {
         body: JSON.stringify({ input }),
       });
     } catch {
-      // The server is gone; the output stream reports that to the panel.
+      // why: The server is gone; the output stream reports that to the panel.
     } finally {
       sending = false;
       void flush();

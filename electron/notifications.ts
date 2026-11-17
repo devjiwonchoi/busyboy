@@ -6,7 +6,7 @@ import { shorten } from "./tray";
 
 export type NotificationContent = { title: string; body: string; target: FocusTarget };
 
-// A notification never includes a reply or tool output; that text can hold a secret on the lock screen.
+// why: A notification never includes a reply or tool output; that text can hold a secret on the lock screen.
 export function notificationFor(event: AttentionEvent): NotificationContent {
   if (event.kind === "director-replied")
     return { title: "The Director replied", body: "", target: { kind: "director" } };
@@ -18,7 +18,7 @@ export function notificationFor(event: AttentionEvent): NotificationContent {
   };
 }
 
-// Electron drops a Notification's click handler once the object is garbage collected.
+// why: Electron drops a Notification's click handler once the object is garbage collected.
 const shown = new Set<Notification>();
 
 export function showNotification(

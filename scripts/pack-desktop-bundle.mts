@@ -1,4 +1,4 @@
-// Windows cannot create pnpm's symlinks, so it gets real directories with siblings nested inside.
+// why: Windows cannot create pnpm's symlinks, so it gets real directories with siblings nested inside.
 import { execFileSync } from "node:child_process";
 import {
   cpSync,
@@ -32,8 +32,8 @@ function inside(candidate: string, containers: readonly string[]): boolean {
   });
 }
 
-// A link into the build machine's node_modules works on that runner and
-// nowhere else. tar -h would also copy the target into the Windows archive.
+// why: A link into the build machine's node_modules works on that runner and
+// why: nowhere else. tar -h would also copy the target into the Windows archive.
 const realRoots = roots.map((dir) => realpathSync(dir));
 const leaks: string[] = [];
 for (const dir of roots) {

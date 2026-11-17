@@ -14,14 +14,14 @@ function requiredText(input: Record<string, unknown>, key: string) {
   return value;
 }
 
-// A task agent reads the repository, so its writes stay in that project's memory.
+// why: A task agent reads the repository, so its writes stay in that project's memory.
 function callerScope(input: Record<string, unknown>, caller: McpCaller) {
   return caller.kind === "task" ? caller.project : optionalText(input, "project");
 }
 
 const MAX_PROJECT_HIT = 300;
 
-// Project memory is untrusted, so a hit reaches the Director quoted and capped.
+// why: Project memory is untrusted, so a hit reaches the Director quoted and capped.
 function forDirector(project: string | null, text: string) {
   if (project === null) return text;
   const line = text.replace(/\s+/g, " ").trim();

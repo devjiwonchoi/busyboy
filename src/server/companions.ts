@@ -5,14 +5,14 @@ import { MAX_IMAGE_BYTES, MAX_IMAGE_TEXT } from "@/lib/companion-limits";
 
 import { dataFolder, readSettings, updateSettings } from "./config";
 
-// The voice is appended to the Director's instructions and stays free of per-turn values so the prompt cache holds.
+// why: The voice is appended to the Director's instructions and stays free of per-turn values so the prompt cache holds.
 
 export type Companion = {
   id: string;
   name: string;
   animal: string;
   emoji: string;
-  // Full class strings so Tailwind can see them.
+  // why: Full class strings so Tailwind can see them.
   tone: string;
   speech: string;
   personality: string;
@@ -135,7 +135,7 @@ const CONTENT_TYPES = Object.fromEntries(
 
 const IMAGE_PREFIX = "app-companion-image.";
 
-// The name in settings is checked against names BusyBoy writes, so an edited settings file cannot point at another file.
+// why: The name in settings is checked against names BusyBoy writes, so an edited settings file cannot point at another file.
 function imageExtension(fileName: string | null) {
   if (!fileName?.startsWith(IMAGE_PREFIX)) return undefined;
   const extension = fileName.slice(IMAGE_PREFIX.length);

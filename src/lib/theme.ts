@@ -1,4 +1,4 @@
-// The boot script and applyDocumentTheme both toggle the dark class the color tokens hang on.
+// why: The boot script and applyDocumentTheme both toggle the dark class the color tokens hang on.
 
 export const THEMES = ["system", "dark", "light"] as const;
 
@@ -14,7 +14,7 @@ export function isDarkTheme(theme: ThemeName, prefersDark: boolean) {
 
 export const THEME_COOKIE = "busyboy-theme";
 
-/** Runs before paint. The document starts dark; this applies a saved light or system choice. */
+/*why: * Runs before paint. The document starts dark; this applies a saved light or system choice. */
 export const THEME_BOOT = `(function(){
   var root = document.documentElement;
   var media = window.matchMedia('(prefers-color-scheme: dark)');
@@ -47,8 +47,8 @@ export function applyDocumentTheme() {
   const theme =
     themeFromCookie() ?? (isThemeName(root.dataset.theme) ? root.dataset.theme : "dark");
   const dark = isDarkTheme(theme, window.matchMedia("(prefers-color-scheme: dark)").matches);
-  // Skip a no-op write: a mutation observer watches this attribute, and setting the same value
-  // again would deliver another notification.
+  // why: Skip a no-op write: a mutation observer watches this attribute, and setting the same value
+  // why: again would deliver another notification.
   if (root.dataset.theme !== theme) root.dataset.theme = theme;
   if (root.classList.contains("dark") !== dark) root.classList.toggle("dark", dark);
 }

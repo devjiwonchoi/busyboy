@@ -4,7 +4,7 @@ import { dataFolder, readSettingsAt, updateSettings, type ManagerEntry } from ".
 import { pathKey } from "./paths";
 import { addProject, getProject, ProjectError } from "./projects";
 
-// A project has at most one manager, so a task's cards always have one chat to show in.
+// why: A project has at most one manager, so a task's cards always have one chat to show in.
 
 export type Manager = ManagerEntry;
 
@@ -12,7 +12,7 @@ export class ManagerError extends Error {}
 
 const MAX_NAME_LENGTH = 40;
 
-// Kept on globalThis so `next dev` reloads keep the listeners and the known ids.
+// why: Kept on globalThis so `next dev` reloads keep the listeners and the known ids.
 const STORE_KEY = Symbol.for("busyboy.managers.v2");
 type Store = { listeners: Map<string, Set<() => void>>; known: Map<string, Set<string>> };
 const globalStore = globalThis as typeof globalThis & { [STORE_KEY]?: Store };

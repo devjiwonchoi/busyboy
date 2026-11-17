@@ -106,7 +106,7 @@ async function readRecordTexts(
   return { texts, changedAt };
 }
 
-// The record may not be rewritten yet, so the agent's live state wins while it works or waits.
+// why: The record may not be rewritten yet, so the agent's live state wins while it works or waits.
 function taskStatus(records: ParsedRecords, agent: TaskStatus): NodeStatus {
   if (agent === "needs-you" || agent === "running") return agent;
   switch (records.state) {
@@ -175,7 +175,7 @@ async function readTask(dataFolder: string, task: TaskRecord, cards: readonly Ca
   };
 }
 
-// readSettingsAt moves a corrupt file aside, and the watcher must not change a file the user is editing.
+// why: readSettingsAt moves a corrupt file aside, and the watcher must not change a file the user is editing.
 async function projectNames(folder: string): Promise<string[]> {
   let text: string;
   try {

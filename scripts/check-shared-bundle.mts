@@ -1,4 +1,4 @@
-// macOS keeps pnpm's symlinks; Windows gets real directories. Either layout has to resolve Turbopack's hashed aliases.
+// why: macOS keeps pnpm's symlinks; Windows gets real directories. Either layout has to resolve Turbopack's hashed aliases.
 import { existsSync, readdirSync, readFileSync, realpathSync } from "node:fs";
 import { basename, isAbsolute, join, relative } from "node:path";
 
@@ -65,8 +65,8 @@ function assertInside(dir: string, name: string) {
     fail(`The app bundle resolved ${name} to ${parsed.name ?? "a package with no name"}.`);
 }
 
-// Checked by path, not by Node walking parent directories: a checkout next to
-// the bundle also has these packages, and that copy is not the one the app ships.
+// why: Checked by path, not by Node walking parent directories: a checkout next to
+// why: the bundle also has these packages, and that copy is not the one the app ships.
 for (const name of ["react", "react-dom", "next"]) {
   const dir = join(standalone, "node_modules", name);
   if (!existsSync(dir)) fail(`The app bundle has no ${name}.`);

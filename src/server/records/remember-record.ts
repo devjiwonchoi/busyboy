@@ -1,4 +1,4 @@
-// RETRO.md is the name the delegation-rate script on main still scans. A task that only has the old file is still read.
+// why: RETRO.md is the name the delegation-rate script on main still scans. A task that only has the old file is still read.
 
 import { execFile, execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
@@ -37,7 +37,7 @@ export type DelegationRecord = {
   endStateItemsMet: number;
   reviewChangeRequests: number;
   delegated: boolean;
-  /** Empty when the task was delegated. Names match the delegation-rate script. */
+  /*why: * Empty when the task was delegated. Names match the delegation-rate script. */
   reasons: string[];
 };
 
@@ -46,7 +46,7 @@ export type WeekDelegation = {
   weekStart: string;
   weekEnd: string;
   records: DelegationRecord[];
-  /** Files in the week the delegation-rate script would reject. */
+  /*why: * Files in the week the delegation-rate script would reject. */
   rejected: { path: string; reason: string }[];
 };
 
@@ -106,7 +106,7 @@ function storeFor(folder: string): Map<string, Stored> {
       }
     }
   } catch {
-    // Missing or unreadable: this process starts from what it sees next.
+    // why: Missing or unreadable: this process starts from what it sees next.
   }
   stores.set(folder, store);
   return store;
@@ -355,14 +355,14 @@ async function branchPoint(cwd: string): Promise<string | null> {
       const base = await git(cwd, "merge-base", "HEAD", tip);
       if (base) return base;
     } catch {
-      // That branch is not in this repository.
+      // why: That branch is not in this repository.
     }
   }
   return null;
 }
 
 async function reviewChangeRequests(worktree: string): Promise<number> {
-  // Test journeys use a fake origin, and a stuck gh must not hold up the record.
+  // why: Test journeys use a fake origin, and a stuck gh must not hold up the record.
   if (process.env.BUSYBOY_TEST_MODE === "1") return 0;
   let origin = "";
   try {
@@ -438,7 +438,7 @@ child.on('error', () => finish(null))
 child.on('close', (code) => finish(code === 0 ? out : null))
 `;
 
-// A stuck gh must not hold up the record. No answer within two seconds counts as no pull request.
+// why: A stuck gh must not hold up the record. No answer within two seconds counts as no pull request.
 function ghText(cwd: string, args: string[]): Promise<string | null> {
   return new Promise((resolve) => {
     let worker: Worker;
@@ -519,7 +519,7 @@ async function writeRemember({
 }) {
   const align = await readRecord(folder, task, "ALIGN.md");
   const items = endStateItems(align ?? "");
-  // The delegation-rate script rejects a total below 1, so a task with no end state is not recorded.
+  // why: The delegation-rate script rejects a total below 1, so a task with no end state is not recorded.
   if (items.length < 1) return;
   const status = await readRecord(folder, task, "STATUS.md");
   const done = parseRecords(status === null ? {} : { "STATUS.md": status }).state === "done";
@@ -724,7 +724,7 @@ type FrontMatter = {
   delegated: boolean;
 };
 
-/** Parses front matter the way the delegation-rate script does. A string reason means it would reject the file. */
+/*why: * Parses front matter the way the delegation-rate script does. A string reason means it would reject the file. */
 export function parseRememberFrontMatter(text: string): FrontMatter | string {
   const lines = text.replace(/^\uFEFF/, "").split(/\r?\n/);
   if (!/^---[ \t]*$/.test(lines[0] ?? "")) return "missing front matter";

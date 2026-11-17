@@ -1,4 +1,4 @@
-// A record that cannot be read is an error node, so a misread never becomes a quietly wrong status.
+// why: A record that cannot be read is an error node, so a misread never becomes a quietly wrong status.
 
 export const RECORD_FILES = ["ALIGN.md", "STATUS.md", "VERIFY.md", "REVIEW.md"] as const;
 export type RecordFile = (typeof RECORD_FILES)[number];
@@ -108,7 +108,7 @@ function tableRows(lines: Line[]) {
 
 const TODO_HEADING = /^(\d+[a-z]?)\s*·\s*(.+?)(?:\s{2,}\(.*\))?\s*$/i;
 
-// Builds on: is BusyBoy's own line. The skills have none. The graph draws a dashed edge from it.
+// why: Builds on: is BusyBoy's own line. The skills have none. The graph draws a dashed edge from it.
 const BUILDS_ON = /^\s*(?:-\s*)?Builds on:\s*(.+)$/i;
 
 function parseAlign(text: string, errors: RecordError[]) {
@@ -256,7 +256,7 @@ function parseVerify(text: string) {
   return checks;
 }
 
-// A finding's status is its first word, so "reopened (was resolved)" stays open.
+// why: A finding's status is its first word, so "reopened (was resolved)" stays open.
 const OPEN_STATUS = /^\W*(open|reopened|new|unresolved|not)\b/i;
 const CLOSED_STATUS = /^\W*(resolved|fixed|dismissed|accepted|won['’]?t fix|dropped|closed)\b/i;
 const OPEN_WORD = /\b(open|reopened|unresolved|not (yet )?resolved|partially)\b/i;

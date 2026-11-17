@@ -53,7 +53,7 @@ import { neighborSteps, parseStep, stepHref, STEPS, type StepId } from "./steps"
 
 export const metadata: Metadata = { title: "Setup · BusyBoy" };
 
-// Steps read local state, which Cache Components would otherwise prerender at build time.
+// why: Steps read local state, which Cache Components would otherwise prerender at build time.
 export default function SetupPage({ searchParams }: PageProps<"/setup">) {
   return (
     <div className="flex min-h-dvh flex-col">
@@ -119,8 +119,8 @@ const HEADINGS: Record<StepId, { title: string; description: string }> = {
 
 async function CurrentStep({ searchParams }: Pick<PageProps<"/setup">, "searchParams">) {
   const step = parseStep((await searchParams).step);
-  // Awaiting searchParams alone still lets Next prerender this part at request
-  // time, which rejects the clock reads in providerState; this renders it per request.
+  // why: Awaiting searchParams alone still lets Next prerender this part at request
+  // why: time, which rejects the clock reads in providerState; this renders it per request.
   await connection();
   const { title, description } = HEADINGS[step];
   const index = STEPS.findIndex(({ id }) => id === step);
@@ -182,7 +182,7 @@ async function AgentsPage() {
             <Row name={name} status={STATUS_TEXT[state.state]} />
             {state.state === "signed-out" && (
               <>
-                {/* Setup is its own screen outside the app shell, so the terminal panel isn't here; the user copies the command. */}
+                {/* why: Setup is its own screen outside the app shell, so the terminal panel isn't here; the user copies the command. */}
                 <ItemDescription className="basis-full">
                   Run this in a terminal, then choose Check again.
                 </ItemDescription>
@@ -210,7 +210,7 @@ async function AgentsPage() {
           Check again
         </Button>
       </form>
-      {/* One form for the choice and Continue, so Continue saves the default agent. */}
+      {/* why: One form for the choice and Continue, so Continue saves the default agent. */}
       <form id={AGENTS_FORM} action={continueFromAgentsAction} className="space-y-2">
         {signedIn.length > 1 && (
           <RadioGroup
@@ -302,7 +302,7 @@ async function ApprovalsPage() {
   const rules = await alwaysAskRules();
   return (
     <>
-      {/* Keyed by the list, so Restore defaults shows the restored text in the box. */}
+      {/* why: Keyed by the list, so Restore defaults shows the restored text in the box. */}
       <AlwaysAskForm
         key={rules.join("\n")}
         id={APPROVALS_FORM}

@@ -48,7 +48,7 @@ export function PlanCardView({ card }: CardViewProps<PlanCard>) {
         }
       />
       <CardShellBody>
-        {/* The shell's section gap is wider than the title-to-summary gap in the mock. */}
+        {/* why: The shell's section gap is wider than the title-to-summary gap in the mock. */}
         <p className="-mt-2 truncate">{card.summary}</p>
         {card.criteria.length > 0 && (
           <div className="space-y-4 pt-4">
@@ -84,7 +84,7 @@ export function PlanCardView({ card }: CardViewProps<PlanCard>) {
               <DialogDescription className="inline">
                 {card.project} · {card.taskTitle}
               </DialogDescription>
-              {/* Warning tint: this plan is still a draft waiting on the user. */}
+              {/* why: Warning tint: this plan is still a draft waiting on the user. */}
               <Badge
                 variant="outline"
                 className="border-warning/40 bg-warning/10 text-warning-foreground"

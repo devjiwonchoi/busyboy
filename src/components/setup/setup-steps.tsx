@@ -5,8 +5,8 @@ import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 
-// No library (shadcn, @coss, @spell) has a stepper, so the step pills are
-// links styled as buttons with a numbered badge, joined by separators.
+// why: No library (shadcn, @coss, @spell) has a stepper, so the step pills are
+// why: links styled as buttons with a numbered badge, joined by separators.
 export function SetupSteps({ current }: { current: StepId }) {
   return (
     <nav aria-label="Setup steps">

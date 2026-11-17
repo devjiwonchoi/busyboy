@@ -271,7 +271,7 @@ export function toolsFor(caller: McpCaller) {
   });
 }
 
-// The URL carries an MCP token, never the server token. A task token is bound to its project.
+// why: The URL carries an MCP token, never the server token. A task token is bound to its project.
 export async function busyboyMcpServers(
   taskProject?: string,
   folder?: string,

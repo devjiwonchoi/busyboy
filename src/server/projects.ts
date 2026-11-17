@@ -6,7 +6,7 @@ import { promisify } from "node:util";
 import { readSettings, updateSettings, type ProjectEntry } from "./config";
 import { expandHome, samePath } from "./paths";
 
-// Removing a project only forgets it and never touches files.
+// why: Removing a project only forgets it and never touches files.
 
 export type Project = ProjectEntry;
 

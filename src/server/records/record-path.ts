@@ -4,7 +4,7 @@ import { promisify } from "node:util";
 
 import { containsPath } from "../paths";
 
-// The path shape is the task-recording skill's. Test mode uses a folder under the journey's data folder.
+// why: The path shape is the task-recording skill's. Test mode uses a folder under the journey's data folder.
 
 const run = promisify(execFile);
 
@@ -47,7 +47,7 @@ export async function repoSegments(
     const fromOrigin = repoFromOrigin(await git(task.worktree, "remote", "get-url", "origin"));
     if (fromOrigin) return fromOrigin;
   } catch {
-    // No origin, or git could not be run. The directory name is the next try.
+    // why: No origin, or git could not be run. The directory name is the next try.
   }
   try {
     const common = await git(
@@ -59,7 +59,7 @@ export async function repoSegments(
     const name = basename(dirname(common));
     if (name && name !== "." && name !== "..") return [name];
   } catch {
-    // Not a git checkout.
+    // why: Not a git checkout.
   }
   return [task.project?.trim() || "task"];
 }

@@ -22,7 +22,7 @@ export type ServerHandle = {
   stop: () => Promise<{ acknowledged: boolean }>;
 };
 
-/** The standalone server sits outside app.asar in packaged builds. */
+/*why: * The standalone server sits outside app.asar in packaged builds. */
 export function serverEntry() {
   const entry = app.isPackaged
     ? join(process.resourcesPath, "server", "server.js")
@@ -60,7 +60,7 @@ async function waitUntilReady(url: string, token: string, exited: () => boolean)
       await response.body?.cancel();
       if (response.ok) return;
     } catch {
-      // Not listening yet.
+      // why: Not listening yet.
     }
     await new Promise((resolve) => setTimeout(resolve, 100));
   }
@@ -81,7 +81,7 @@ async function startOnFreePort(entry: string): Promise<Attempt> {
     env: {
       ...process.env,
       NODE_ENV: "production",
-      // A desktop app should not send Next's anonymous usage data from users' machines.
+      // why: A desktop app should not send Next's anonymous usage data from users' machines.
       NEXT_TELEMETRY_DISABLED: "1",
       HOSTNAME: LOOPBACK,
       PORT: String(port),
@@ -100,7 +100,7 @@ async function startOnFreePort(entry: string): Promise<Attempt> {
   try {
     await waitUntilReady(url, token, () => !running);
   } catch (error) {
-    // Exiting before ready is most often a lost race for the port.
+    // why: Exiting before ready is most often a lost race for the port.
     if (!running) return { kind: "exited", port };
     child.kill();
     throw error;
@@ -125,7 +125,7 @@ async function startOnFreePort(entry: string): Promise<Attempt> {
           child.on("message", onMessage);
         });
         let timer: ReturnType<typeof setTimeout> | undefined;
-        // On Windows kill() terminates the process outright and no exit hook runs.
+        // why: On Windows kill() terminates the process outright and no exit hook runs.
         child.postMessage({ type: SHUTDOWN_MESSAGE });
         await Promise.race([
           shutdownDone,

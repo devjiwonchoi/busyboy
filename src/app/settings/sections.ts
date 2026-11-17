@@ -1,5 +1,5 @@
-// The settings sections, in order. The open section lives in the URL (`?section=`), so a
-// reload or the Back button lands on the same one without client state.
+// why: The settings sections, in order. The open section lives in the URL (`?section=`), so a
+// why: reload or the Back button lands on the same one without client state.
 
 export const SECTIONS = [
   { id: "companion", title: "Director" },

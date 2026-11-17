@@ -2,18 +2,18 @@ import { execFile, spawn, type ChildProcess } from "node:child_process";
 
 import type { SpawnedProcess, SpawnOptions } from "@anthropic-ai/claude-agent-sdk";
 
-/** Seconds the group has to exit after SIGTERM before it is killed. */
+/*why: * Seconds the group has to exit after SIGTERM before it is killed. */
 const GRACE_SECONDS = 5;
 const STDERR_TAIL = 2000;
 
-// When the server exits, even by a crash, the pipe closes and the watcher ends the CLI's process group.
+// why: When the server exits, even by a crash, the pipe closes and the watcher ends the CLI's process group.
 const WATCH_SCRIPT = [
   `{ trap '' TERM; read -r _ <&3; kill -TERM 0; sleep ${GRACE_SECONDS}; kill -KILL 0; } </dev/null >/dev/null 2>&1 &`,
   'exec "$@" 3<&-',
 ].join("\n");
 
 export type ClaudeProcess = SpawnedProcess & {
-  // Call this before closing the CLI's input: once the CLI exits, detached commands are no longer its descendants.
+  // why: Call this before closing the CLI's input: once the CLI exits, detached commands are no longer its descendants.
   stop(): Promise<void>;
   stderrTail(): string;
 };
@@ -22,11 +22,11 @@ function signal(target: number, name: NodeJS.Signals) {
   try {
     process.kill(target, name);
   } catch {
-    // Already gone.
+    // why: Already gone.
   }
 }
 
-// Claude Code starts Bash commands detached, in a session of their own, so the CLI's group does not include them.
+// why: Claude Code starts Bash commands detached, in a session of their own, so the CLI's group does not include them.
 function detachedDescendants(root: number): Promise<number[]> {
   return new Promise((resolve) => {
     execFile("ps", ["-A", "-o", "pid=,ppid=,pgid="], { timeout: 2000 }, (error, stdout) => {
@@ -50,7 +50,7 @@ function detachedDescendants(root: number): Promise<number[]> {
   });
 }
 
-// Windows has no process groups. A killed CLI can leave the commands it detached.
+// why: Windows has no process groups. A killed CLI can leave the commands it detached.
 export function spawnClaudeProcess(options: SpawnOptions): ClaudeProcess {
   const env = options.env as NodeJS.ProcessEnv;
   let tail = "";

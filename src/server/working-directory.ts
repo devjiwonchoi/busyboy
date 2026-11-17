@@ -8,7 +8,7 @@ import { dataFolder } from "./config";
 import { samePath } from "./paths";
 import { readTasksAt, TaskError, WORKTREES_FOLDER, type TaskRecord } from "./tasks";
 
-// Never while the server has a launch token, which the desktop app always sets.
+// why: Never while the server has a launch token, which the desktop app always sets.
 export function isTestMode() {
   return process.env[TEST_MODE_ENV] === "1" && !process.env[SERVER_TOKEN_ENV];
 }
@@ -22,7 +22,7 @@ export type WorkingDirectory = {
   task: Pick<TaskRecord, "id" | "project" | "title"> | null;
 };
 
-// The client names a task, never a folder. An edited task list must not point a shell anywhere else.
+// why: The client names a task, never a folder. An edited task list must not point a shell anywhere else.
 export async function currentWorkingDirectory({
   taskId,
   testOverride,
@@ -51,7 +51,7 @@ export async function currentWorkingDirectory({
     throw new TaskError(`The worktree of "${task.title}" is gone: ${task.worktree}`);
   }
 
-  // A link inside the worktrees folder must not lead out, and a link put in the task's own place must fail.
+  // why: A link inside the worktrees folder must not lead out, and a link put in the task's own place must fail.
   const real = (path: string) => {
     try {
       return realpathSync(path);
@@ -63,7 +63,7 @@ export async function currentWorkingDirectory({
   const isSegment = (name: string) => basename(name) === name && name !== "." && name !== "..";
   const worktrees = real(join(folder, WORKTREES_FOLDER));
   const inPlace = isSegment(task.project) && isSegment(task.id) && worktrees !== null;
-  // Without the ignore comment Turbopack traces the whole project for a path built at run time.
+  // why: Without the ignore comment Turbopack traces the whole project for a path built at run time.
   if (
     !worktree ||
     !inPlace ||

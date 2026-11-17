@@ -182,7 +182,7 @@ export async function stopTaskAction(taskId: string) {
   await stopTask(taskId);
 }
 
-// A thrown server-action error's message does not reach the window in a production build.
+// why: A thrown server-action error's message does not reach the window in a production build.
 export async function messageTaskAction(
   taskId: string,
   text: string,

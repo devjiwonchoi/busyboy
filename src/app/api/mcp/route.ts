@@ -18,15 +18,15 @@ import {
 import { listManagers } from "@/server/managers";
 import { McpToolError, toolsFor, type McpCaller } from "@/server/mcp-tools";
 
-// McpServer reports an unknown tool as a tool result, so a forbidden tool has to fail as a JSON-RPC error.
-// Agents get a derived MCP token, never the server token.
+// why: McpServer reports an unknown tool as a tool result, so a forbidden tool has to fail as a JSON-RPC error.
+// why: Agents get a derived MCP token, never the server token.
 
-/** A JSON-RPC error with exactly this message; McpError would prefix "MCP error <code>:". */
+/*why: * A JSON-RPC error with exactly this message; McpError would prefix "MCP error <code>:". */
 function rpcError(code: number, message: string) {
   return Object.assign(new Error(message), { code });
 }
 
-// Without a server token (tests, next dev) the URL is trusted, because every request is let in anyway.
+// why: Without a server token (tests, next dev) the URL is trusted, because every request is let in anyway.
 async function callerOf(request: Request): Promise<McpCaller> {
   const params = new URL(request.url).searchParams;
   const serverToken = process.env[SERVER_TOKEN_ENV];
@@ -37,7 +37,7 @@ async function callerOf(request: Request): Promise<McpCaller> {
     if (project) return { kind: "task", project };
     return id ? managerCaller(id) : { kind: "director" };
   }
-  // The proxy lets a manager token in for its manager parameter, so a project on the URL must not widen that.
+  // why: The proxy lets a manager token in for its manager parameter, so a project on the URL must not widen that.
   if (provided && project && provided === taskMcpTokenFor(serverToken, project))
     return { kind: "task", project };
   if (provided && id && provided === managerMcpTokenFor(serverToken, id)) return managerCaller(id);
@@ -57,7 +57,7 @@ function busyboyServer(caller: McpCaller) {
   const tools = toolsFor(caller);
   const server = new Server({ name: "busyboy", version: "0.0.0" }, { capabilities: { tools: {} } });
   server.setRequestHandler(ListToolsRequestSchema, () => ({
-    // Claude otherwise defers MCP tools behind tool search.
+    // why: Claude otherwise defers MCP tools behind tool search.
     tools: tools.map(({ name, description, inputSchema }) => ({
       name,
       description,
@@ -82,7 +82,7 @@ function busyboyServer(caller: McpCaller) {
   return server;
 }
 
-// The SDK requires initialize to carry client capabilities this server never reads.
+// why: The SDK requires initialize to carry client capabilities this server never reads.
 function withInitializeDefaults(message: unknown) {
   const request = message as { method?: unknown; params?: Record<string, unknown> } | null;
   if (
@@ -101,7 +101,7 @@ function withInitializeDefaults(message: unknown) {
   };
 }
 
-// The MCP spec asks for an Accept header of both JSON and an event stream; curl sends neither.
+// why: The MCP spec asks for an Accept header of both JSON and an event stream; curl sends neither.
 async function forTransport(request: Request) {
   const headers = new Headers(request.headers);
   headers.set("accept", "application/json, text/event-stream");
@@ -113,8 +113,8 @@ async function forTransport(request: Request) {
       ? json.map(withInitializeDefaults)
       : withInitializeDefaults(json);
   } catch {}
-  // A new plain Request: `new Request(request, ...)` fails on Next's request
-  // subclass, whose private fields the base constructor cannot read.
+  // why: A new plain Request: `new Request(request, ...)` fails on Next's request
+  // why: subclass, whose private fields the base constructor cannot read.
   return {
     request: new Request(request.url, { method: request.method, headers, body }),
     parsedBody,

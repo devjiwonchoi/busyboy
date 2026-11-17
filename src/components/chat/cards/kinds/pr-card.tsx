@@ -21,7 +21,7 @@ const CHECK_LABEL: Record<Exclude<PullRequestCheck, "none">, string> = {
   pending: "Checks pending",
 };
 
-/** One row per pull request, in stack order. Open and Merge in order are the only actions. */
+/*why: * One row per pull request, in stack order. Open and Merge in order are the only actions. */
 export function PrCardView({ card }: CardViewProps<PrCard>) {
   const { pending, replying, run } = useCardActions();
   const first = card.pulls[0];
