@@ -136,7 +136,9 @@ test('a working task should not be archived, and a finished subagent should', as
   await openChatAndGraph(page)
   const working = taskLine(page, 'web · Release notes')
   const subagent = taskLine(page, 'web · Which branch')
-  await expect(working.locator('[data-status]')).toHaveText('Running')
+  // The first turn has no records yet, so the phase word is Planning. The agent is still running, so the task cannot be archived.
+  await expect(working.locator('[data-status]')).toHaveText('Planning')
+  await expect(working.locator('[data-status]')).toHaveAttribute('data-status', 'running')
   await expect(subagent.locator('[data-status]')).toHaveText('Done')
   const [task] = storedTasks(home)
 

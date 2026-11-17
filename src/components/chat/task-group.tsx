@@ -11,9 +11,9 @@ import { Button } from '@/components/ui/button'
 import { Bubble, BubbleContent } from '@/components/ui/bubble'
 import { Message, MessageContent } from '@/components/ui/message'
 import { Toggle } from '@/components/ui/toggle'
-import type { TaskPhase } from '@/server/records/task-phase'
 import type { TaskStatus, TaskView } from '@/server/tasks'
 import { PhaseMark } from './phase-mark'
+import { useTaskPhases } from './task-phases'
 
 // Status colors follow the app's scheme (amber needs you, blue running, gray
 // idle, red stopped). Badge has no amber or blue variant, so those two add
@@ -41,15 +41,12 @@ const ARCHIVED = { label: 'Archived', variant: 'outline' as const, className: 't
 export function TaskGroup({
   taskIds,
   tasks,
-  phases,
   messaging,
   currentJump = null,
   onMessage,
 }: {
   taskIds: string[]
   tasks: Map<string, TaskView>
-  /** The phase from the project graph, by task id. Absent until the graph has loaded. */
-  phases: Map<string, TaskPhase>
   /** The task the composer's next message goes to, if any. */
   messaging: string | null
   /** The command-palette hit to mark, `task-<id>`. */
@@ -57,6 +54,7 @@ export function TaskGroup({
   onMessage: (taskId: string | null) => void
 }) {
   const { selectedTask, toggleTask } = useTaskSelection()
+  const phases = useTaskPhases()
   const [error, setError] = useState<string | null>(null)
   // Said once after an archive that could not remove the worktree.
   const [notice, setNotice] = useState<string | null>(null)
