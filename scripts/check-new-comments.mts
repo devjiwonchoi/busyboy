@@ -1,4 +1,4 @@
-import { gitText } from "./git-text.mts";
+import { diffFromMergeBase } from "./git-text.mts";
 
 const base = process.argv[2];
 if (!base) {
@@ -6,7 +6,7 @@ if (!base) {
   process.exit(1);
 }
 
-const diff = gitText(["diff", "--unified=0", "--no-color", "--diff-filter=ACMR", base, "HEAD"]);
+const diff = diffFromMergeBase(base, ["--unified=0", "--no-color", "--diff-filter=ACMR"]);
 
 const typescript = /\.(?:tsx?|mts)$/;
 

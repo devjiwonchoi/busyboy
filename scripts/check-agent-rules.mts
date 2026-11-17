@@ -1,4 +1,4 @@
-import { gitText } from "./git-text.mts";
+import { diffFromMergeBase } from "./git-text.mts";
 
 const kebab = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const recordFiles = new Set([
@@ -107,8 +107,8 @@ function main() {
     process.exit(1);
   }
 
-  const nameStatus = gitText(["diff", "--name-status", "--find-renames", base, "HEAD"]);
-  const diff = gitText(["diff", "--unified=0", "--no-color", "--find-renames", base, "HEAD"]);
+  const nameStatus = diffFromMergeBase(base, ["--name-status", "--find-renames"]);
+  const diff = diffFromMergeBase(base, ["--unified=0", "--no-color", "--find-renames"]);
   const failures: string[] = [];
 
   for (const line of nameStatus.split("\n")) {
