@@ -53,12 +53,12 @@ flowchart TD
   prCard -->|"Merge in order"| merged["Pull requests merged"]
   ship --> memory["remember writes project memory"]
   doneCard --> memory
-  merged --> archived["Director archives the task when the pull request merged or closed, or the idea was dropped"]
+  merged --> archived["BusyBoy archives the task once State is done and every pull request is merged or closed"]
 
   class subCard,planCard,askCard,appr,prog,prCard,doneCard card
 ```
 
-A draft `ALIGN.md` at the end of a turn is the plan card. An `ALIGN.md` that already says `Status: approved` is not. `STATUS.md` is read again at the end of each turn: the todo table is the progress card, `State: done` replaces it with the done card, and the Pull requests table is the PR card. Merge in order merges those pull requests from the card. BusyBoy does not merge them on its own. The Director archives a task when you say its pull request merged or closed, or that the task is no longer wanted.
+A task is trivial only when there is one obvious place and way to make the change, no design choice, and the change is easy to revert. The agent then saves `ALIGN.md` with `Status: approved` and keeps working in that same turn, so no plan card opens. Any doubt makes it the other path: `explore` when the goal or approach is unclear, then `align` writes a draft `ALIGN.md` and ends the turn, which opens the plan card. `STATUS.md` is read again at the end of each turn. The todo table is the progress card, `State: done` replaces it with the done card, and the Pull requests table is the PR card. Merge in order merges those pull requests from the card. BusyBoy does not merge them on its own. Once the turn is finished, the plan is not a draft, and `State` is done, BusyBoy archives the task. When that `STATUS.md` lists pull requests, it waits until each one is merged or closed.
 
 ## Information architecture
 
@@ -125,7 +125,7 @@ flowchart TD
 
 **Chat sidebar.** Shown from the medium breakpoint up. Search filters managers and rooms. The Director row opens the Director chat and shows a status line plus how many aligned items are verified. A manager row opens that manager's chat, shows the same kind of progress for its project, and can be removed. Removing a manager stops it and moves its tasks into the Director chat. The project stays. A room is a row for two or more projects. It does not open a chat. New manager asks for a name, then an existing project, a room of several projects, or another git folder.
 
-**Director chat.** The companion greets you. You send a message, queue more while a reply is running, edit and resend your last message, retry a failed turn, copy a message, and stop the reply. `@` names a project. `/` offers installed skills plus new task, stop, and archive. You can attach files and dictate. A context meter appears once the harness reports usage. Task lines, cards, and closed cards stay in the transcript.
+**Director chat.** The companion greets you. You send a message, queue more while a reply is running, edit and resend your last message, retry a failed turn, copy a message, and stop the reply. `@` names a project. `/` offers installed skills plus new task, stop, and archive. You can attach files and dictate. Task lines, cards, and closed cards stay in the transcript.
 
 **Manager chat.** The same chat, for one project. The header names that manager and project. `@` offers files in the project. A request here becomes a task in that project only.
 
