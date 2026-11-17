@@ -94,6 +94,7 @@ export async function reviseDirectorMessageAction(
   text: string,
   chat?: string | null,
   attachments?: AttachmentInput[],
+  keepImages?: boolean,
 ): Promise<{ error?: string }> {
   checkId(entryId, "The message");
   if (typeof text !== "string" || text.length > MAX_MESSAGE_LENGTH) {
@@ -101,7 +102,7 @@ export async function reviseDirectorMessageAction(
   }
   try {
     const files = attachmentInputs(attachments);
-    if (!text.trim() && files.length === 0)
+    if (!text.trim() && files.length === 0 && keepImages !== true)
       throw new Error("A message must be non-empty text of at most 100,000 characters.");
     const manager = await checkChat(chat);
     await reviseDirectorMessage({
@@ -110,6 +111,7 @@ export async function reviseDirectorMessageAction(
       entryId,
       text,
       attachments: files,
+      keepImages: keepImages === true,
       resolveProvider: (current) => resolveDirectorProvider(current),
       mcp: await busyboyMcpServers(undefined, undefined, manager ?? undefined),
     });

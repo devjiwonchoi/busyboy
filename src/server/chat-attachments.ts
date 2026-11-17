@@ -1,12 +1,16 @@
 import { randomBytes } from "node:crypto";
-import { mkdir, writeFile } from "node:fs/promises";
+import { constants } from "node:fs";
+import { lstat, mkdir, open, writeFile } from "node:fs/promises";
 import { basename, join } from "node:path";
 
 import {
   attachmentProblem,
+  IMAGE_MEDIA_TYPES,
   imageMediaType,
+  MAX_IMAGE_BYTES,
   type AttachmentInput,
   type ImageMediaType,
+  type MessageImage,
 } from "@/lib/chat-attachments";
 
 import type { TurnImage, UserTurn } from "./runner/user-turn";
@@ -91,4 +95,44 @@ export async function attachmentsTurn({
     else notes.push(`Attached file: ${path}`);
   }
   return { text: text.trim(), note: notes.join("\n"), images };
+}
+
+export function messageImages(turn: UserTurn, task?: string): MessageImage[] | undefined {
+  if (turn.images.length === 0) return undefined;
+  return turn.images.map((image) => ({
+    name: image.name,
+    file: basename(image.path),
+    ...(task ? { task } : {}),
+  }));
+}
+
+const NO_FOLLOW: number | undefined = constants.O_NOFOLLOW;
+
+const SAVED_NAME = /^[0-9a-f]{8}-[\w.\- ]{1,80}$/;
+
+export async function readSavedImage(
+  folder: string,
+  file: string,
+): Promise<{ bytes: Buffer; mediaType: ImageMediaType; path: string } | null> {
+  if (!SAVED_NAME.test(file)) return null;
+  const attachments = join(/*turbopackIgnore: true*/ folder, ATTACHMENTS_FOLDER);
+  const path = join(/*turbopackIgnore: true*/ attachments, file);
+  try {
+    if (!(await lstat(/*turbopackIgnore: true*/ attachments)).isDirectory()) return null;
+    if (NO_FOLLOW === undefined && !(await lstat(/*turbopackIgnore: true*/ path)).isFile())
+      return null;
+    const flags = constants.O_RDONLY | (NO_FOLLOW ?? 0);
+    const handle = await open(/*turbopackIgnore: true*/ path, flags);
+    try {
+      const stats = await handle.stat();
+      if (!stats.isFile() || stats.size > MAX_IMAGE_BYTES) return null;
+      const bytes = await handle.readFile();
+      const mediaType = IMAGE_MEDIA_TYPES.find((type) => matchesImage(bytes, type));
+      return mediaType ? { bytes, mediaType, path } : null;
+    } finally {
+      await handle.close();
+    }
+  } catch {
+    return null;
+  }
 }

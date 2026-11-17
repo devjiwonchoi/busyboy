@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { expect, test, type Page } from "@playwright/test";
@@ -76,8 +76,6 @@ test("pasting an image should send an image block to the harness", async ({
 
   const box = composer(page);
   await expect(box.getByRole("img", { name: "pixel.png" })).toBeVisible();
-  mkdirSync("/opt/cursor/artifacts", { recursive: true });
-  await page.screenshot({ path: "/opt/cursor/artifacts/composer-pasted-image.png" });
   await send(page, "Look at this pasted image");
 
   const reply = page.getByLabel("Reply", { exact: true });
@@ -89,7 +87,9 @@ test("pasting an image should send an image block to the harness", async ({
   expect(saved).toContain(join(home, "director", "attachments"));
   expect(saved).toContain("pixel.png");
   expect(readFileSync(saved!).equals(PNG_BYTES)).toBe(true);
-  await expect(page.getByLabel("Your message")).toContainText("Image: pixel.png");
+  await expect(
+    page.getByLabel("Your message").getByRole("img", { name: "pixel.png" }),
+  ).toBeVisible();
 });
 
 test("dropping an image on the chat should send an image block to the harness", async ({
@@ -103,8 +103,6 @@ test("dropping an image on the chat should send an image block to the harness", 
   await dropImageOnChat(page, "dropped.png");
 
   await expect(composer(page).getByRole("img", { name: "dropped.png" })).toBeVisible();
-  mkdirSync("/opt/cursor/artifacts", { recursive: true });
-  await page.screenshot({ path: "/opt/cursor/artifacts/composer-dropped-image.png" });
   await send(page, "Look at this dropped image");
 
   const reply = page.getByLabel("Reply", { exact: true });
@@ -127,8 +125,6 @@ test("attaching a file should send its path to the harness", async ({ page, cont
 
   const box = composer(page);
   await expect(box.getByRole("list", { name: "Attachments" })).toContainText("notes.txt");
-  mkdirSync("/opt/cursor/artifacts", { recursive: true });
-  await page.screenshot({ path: "/opt/cursor/artifacts/composer-attached-file.png" });
   await send(page, "Look at this attached file");
 
   const reply = page.getByLabel("Reply", { exact: true });
@@ -169,8 +165,6 @@ test("attaching an unsupported file should show an error", async ({ page, contex
 
   await expect(box.getByRole("alert")).toHaveText("Use a PNG, JPEG, GIF, or WebP image.");
   await expect(box.getByRole("list", { name: "Attachments" })).toHaveCount(0);
-  mkdirSync("/opt/cursor/artifacts", { recursive: true });
-  await page.screenshot({ path: "/opt/cursor/artifacts/composer-attachment-error.png" });
 });
 
 test("attaching an oversized file should show an error", async ({ page, context, baseURL }) => {
