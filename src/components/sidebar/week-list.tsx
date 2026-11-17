@@ -20,9 +20,21 @@ export function WeekList() {
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null)
 
   useEffect(() => {
-    const source = new EventSource('/api/achievement/events')
-    source.onmessage = (message) => setSnapshot(JSON.parse(message.data) as Snapshot)
-    return () => source.close()
+    let stopped = false
+    const load = async () => {
+      try {
+        const response = await fetch('/api/achievement', { cache: 'no-store' })
+        if (!stopped && response.ok) setSnapshot((await response.json()) as Snapshot)
+      } catch {
+        // The next poll tries again.
+      }
+    }
+    void load()
+    const timer = setInterval(() => void load(), 2_000)
+    return () => {
+      stopped = true
+      clearInterval(timer)
+    }
   }, [])
 
   const weeks = snapshot && 'weeks' in snapshot ? snapshot.weeks : []
