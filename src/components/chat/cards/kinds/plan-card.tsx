@@ -8,12 +8,14 @@ import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Markdown } from '../../markdown'
 import type { CardViewProps } from '../card-view-props'
-import { CardActionError, CardTrailingActions, useCardActions } from '../card-actions'
+import { CardActionError, useCardActions } from '../card-actions'
 import { CardShell, CardShellActions, CardShellBody, CardShellHeader } from '../card-shell'
 
 /**
- * A plan waiting for approval. The timeline shows the title, the short summary,
- * and the end-state list. View details opens the whole ALIGN.md in one pane.
+ * A plan waiting for approval, laid out like the timeline mock: a bold title
+ * with the project name on the right, one summary line, then the end-state
+ * list. Reply and Stop stay off this card; a reply starts from Request changes
+ * in the dialog, and Stop stays on the task.
  */
 export function PlanCardView({ card }: CardViewProps<PlanCard>) {
   const { pending, replying, onReplyChange, run } = useCardActions()
@@ -32,15 +34,19 @@ export function PlanCardView({ card }: CardViewProps<PlanCard>) {
 
   return (
     <CardShell label={cardGroupLabel(card)} replying={replying}>
-      <CardShellHeader title={card.title} meta={`${card.project} · ${card.taskTitle}`} />
+      <CardShellHeader
+        title={<span className="font-bold">{card.title}</span>}
+        meta={<span className="text-muted-foreground text-[0.6875rem] font-normal">{card.project}</span>}
+      />
       <CardShellBody>
-        <p>{card.summary}</p>
+        {/* The shell's section gap is wider than the title-to-summary gap in the mock. */}
+        <p className="-mt-2 truncate">{card.summary}</p>
         {card.criteria.length > 0 && (
-          <div className="space-y-1">
-            <p id={endStateId} className="text-muted-foreground">
+          <div className="space-y-3.5 pt-5">
+            <p id={endStateId} className="text-muted-foreground text-[0.6875rem]">
               End state
             </p>
-            <ol aria-labelledby={endStateId} className="list-decimal space-y-1 pl-4">
+            <ol aria-labelledby={endStateId} className="list-decimal space-y-1 pl-5">
               {card.criteria.map((item, index) => (
                 <li key={`${index}-${item}`}>{item}</li>
               ))}
@@ -50,11 +56,10 @@ export function PlanCardView({ card }: CardViewProps<PlanCard>) {
         <CardActionError />
       </CardShellBody>
       <CardShellActions>
-        <CardTrailingActions />
-        <Button type="button" size="sm" variant="outline" onClick={() => setDetails(true)}>
+        <Button type="button" variant="ghost" className="text-muted-foreground px-2 font-normal" onClick={() => setDetails(true)}>
           View details
         </Button>
-        <Button type="button" size="sm" disabled={pending} onClick={approve}>
+        <Button type="button" className="px-3" disabled={pending} onClick={approve}>
           Approve
         </Button>
       </CardShellActions>

@@ -105,6 +105,7 @@ test.describe('Claude task agents', () => {
       'Show the project name on every page',
       'Place the footer below the main content',
     ])
+    await expect(card.getByRole('button')).toHaveText(['View details', 'Approve'])
     // The agent is idle between turns, but the task waits on the user.
     await expect(transcript(page).getByLabel('web · Add a footer', { exact: true })).toContainText('Needs you')
     await card.getByRole('button', { name: 'View details' }).click()
@@ -171,7 +172,8 @@ test.describe('Claude task agents', () => {
     await openChat(page)
     await createTask(context.request, 'Add a footer', PLAN_REQUEST)
     const card = openCard(page, 'Plan from web · Add a footer')
-    await card.getByRole('button', { name: 'Reply' }).click()
+    await card.getByRole('button', { name: 'View details' }).click()
+    await page.getByRole('dialog', { name: 'Add a site footer' }).getByRole('button', { name: 'Request changes' }).click()
     const composer = page.getByRole('textbox', { name: 'Message' })
     await composer.fill('Yes, go ahead.')
 
