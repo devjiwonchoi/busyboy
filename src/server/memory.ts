@@ -2,6 +2,7 @@ import { appendFile, mkdir, readdir, readFile, rename, rm, stat, writeFile } fro
 import { createHash } from 'node:crypto'
 import { join } from 'node:path'
 import { dataFolder } from './config'
+import { pathKey } from './paths'
 import { getProject, listProjects } from './projects'
 
 // Memory is plain files that agents and the user both read and write.
@@ -130,18 +131,20 @@ const writeQueues = (globalStore[QUEUE_KEY] ??= new Map())
 
 /** Calls `listener` after any memory in `folder` changes. */
 export function subscribeToMemory(folder: string, listener: () => void) {
-  let set = listeners.get(folder)
-  if (!set) listeners.set(folder, (set = new Set()))
+  const key = pathKey(folder)
+  let set = listeners.get(key)
+  if (!set) listeners.set(key, (set = new Set()))
   set.add(listener)
   return () => set.delete(listener)
 }
 
 /** Runs memory writes for one data folder one at a time, then tells listeners when facts changed. */
 function queueWrite<T>(folder: string, write: () => Promise<T>, factsChanged = true): Promise<T> {
-  const next = (writeQueues.get(folder) ?? Promise.resolve()).catch(() => {}).then(write)
-  writeQueues.set(folder, next)
+  const key = pathKey(folder)
+  const next = (writeQueues.get(key) ?? Promise.resolve()).catch(() => {}).then(write)
+  writeQueues.set(key, next)
   return next.then((result: T) => {
-    if (factsChanged) for (const listener of listeners.get(folder) ?? []) listener()
+    if (factsChanged) for (const listener of listeners.get(key) ?? []) listener()
     return result
   })
 }

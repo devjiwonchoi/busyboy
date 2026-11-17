@@ -1,3 +1,4 @@
+import { samePath } from '../paths'
 import { directorSession } from './chat'
 import { getAgent, removeAgent, sendMessage, startAgent, stopAgent, subscribeToAgent } from '../runner/agent-runner'
 import type { AgentEventEnvelope } from '../runner/contract'
@@ -69,7 +70,7 @@ async function startSideChat(folder: string, chat: string | null) {
   // Registered right after starting, with no await between, so the cap below counts it.
   sideAgents.all.add(agent.id)
   sideAgents.live.set(agent.id, { folder, usedAt: Date.now() })
-  const others = [...sideAgents.live].filter(([id, side]) => id !== agent.id && side.folder === folder)
+  const others = [...sideAgents.live].filter(([id, side]) => id !== agent.id && samePath(side.folder, folder))
   others.sort(([, a], [, b]) => a.usedAt - b.usedAt)
   for (const [id] of others.slice(0, Math.max(0, others.length + 1 - MAX_SIDE_CHATS))) void stopAgent(id).catch(() => {})
   let ended = false
@@ -106,7 +107,7 @@ function stopError(agentId: string) {
  */
 export async function askSideQuestion(folder: string, text: string, agentId?: string, chat: string | null = null) {
   const live = agentId ? sideAgents.live.get(agentId) : undefined
-  const continues = live?.folder === folder && agentId !== undefined && getAgent(agentId)?.status !== 'stopped'
+  const continues = live !== undefined && samePath(live.folder, folder) && agentId !== undefined && getAgent(agentId)?.status !== 'stopped'
   const id = continues ? agentId : await startSideChat(folder, chat)
   // A provider that fails to start has already recorded `stopped`; streaming after it would wait forever.
   if (getAgent(id)?.status === 'stopped') throw new Error(stopError(id))
@@ -121,7 +122,8 @@ export async function askSideQuestion(folder: string, text: string, agentId?: st
 
 /** Ends the side chat `agentId` if it belongs to this data folder. */
 export async function closeSideChat(folder: string, agentId: string) {
-  if (sideAgents.live.get(agentId)?.folder !== folder) return
+  const side = sideAgents.live.get(agentId)
+  if (!side || !samePath(side.folder, folder)) return
   await stopAgent(agentId).catch(() => {})
 }
 

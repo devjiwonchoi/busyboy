@@ -1,6 +1,7 @@
 import { watch, type FSWatcher } from 'node:fs'
 import { join } from 'node:path'
 import { SETTINGS_FILE } from '../config'
+import { pathKey } from '../paths'
 import { readTasksAt, subscribeToTasks, TASKS_FILE, type TaskRecord } from '../tasks'
 import { readProjectGraph, RECORDS_FOLDER, type ProjectGraph } from './project-graph'
 
@@ -141,12 +142,13 @@ function close(hub: Hub) {
   for (const watcher of hub.watchers.values()) watcher.close()
   hub.watchers.clear()
   hub.stopTasks()
-  hubs.delete(hub.folder)
+  hubs.delete(pathKey(hub.folder))
 }
 
 /** Calls `listener` with the graph now and after every change, until the returned function is called. */
 export async function subscribeToProjectGraph(folder: string, listener: Listener) {
-  let hub = hubs.get(folder)
+  const key = pathKey(folder)
+  let hub = hubs.get(key)
   if (!hub) {
     const created: Hub = {
       folder,
@@ -162,7 +164,7 @@ export async function subscribeToProjectGraph(folder: string, listener: Listener
       // Agent status changes (running, waiting, stopped) are not file changes.
       stopTasks: subscribeToTasks(folder, () => schedule(created)),
     }
-    hubs.set(folder, (hub = created))
+    hubs.set(key, (hub = created))
   }
   const current = hub
   let sent = false

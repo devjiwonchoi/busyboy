@@ -5,6 +5,7 @@ import { isAbsolute, join } from 'node:path'
 import { cookies } from 'next/headers'
 import { unstable_rethrow } from 'next/navigation'
 import { SERVER_TOKEN_ENV, TEST_MODE_ENV } from '@/lib/server-token'
+import { pathKey } from './paths'
 import type { ProviderId } from './runner/contract'
 
 // The data folder is shared with the legacy app, which keeps its own files
@@ -174,8 +175,9 @@ const globalStore = globalThis as typeof globalThis & { [WRITE_QUEUE_KEY]?: Map<
 const writeQueues = (globalStore[WRITE_QUEUE_KEY] ??= new Map())
 
 function queued<T>(file: string, work: () => Promise<T>): Promise<T> {
-  const next = (writeQueues.get(file) ?? Promise.resolve()).catch(() => {}).then(work)
-  writeQueues.set(file, next)
+  const key = pathKey(file)
+  const next = (writeQueues.get(key) ?? Promise.resolve()).catch(() => {}).then(work)
+  writeQueues.set(key, next)
   return next
 }
 

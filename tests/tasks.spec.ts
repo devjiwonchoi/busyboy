@@ -55,7 +55,8 @@ test('a git hook run while creating a task should not see busyboy variables', as
   const { home, projects } = await useProjectsHome(context, baseURL!, ['web'])
   const envFile = join(home, 'hook-env.txt')
   const hook = join(projects.web, '.git', 'hooks', 'post-checkout')
-  writeFileSync(hook, `#!/bin/sh\nenv > '${envFile}'\n`)
+  // Git Bash on Windows does not expand backslashes inside quotes; forward slashes name the same file.
+  writeFileSync(hook, `#!/bin/sh\nenv > '${envFile.replaceAll('\\', '/')}'\n`)
   chmodSync(hook, 0o755)
 
   await callTool(context.request, 'create_task', { project: 'web', title: 'Add CONTRIBUTING.md', request: REQUEST })

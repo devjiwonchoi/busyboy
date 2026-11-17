@@ -44,7 +44,9 @@ export default defineConfig({
       env: {
         PORT: String(port),
         BUSYBOY_TEST_MODE: '1',
-        BUSYBOY_TEST_SHELL: '/bin/sh',
+        // The terminal journeys type POSIX commands and skip Windows. Other journeys that open a
+        // shell (the worktree path check) need a shell that exists on this machine.
+        BUSYBOY_TEST_SHELL: process.platform === 'win32' ? (process.env.COMSPEC ?? 'cmd.exe') : '/bin/sh',
         BUSYBOY_PROVIDER_SCRIPTS: join(__dirname, 'tests/provider-scripts'),
         // Messages sent within 2 s go to the Director as one turn.
         BUSYBOY_DIRECTOR_BATCH_MS: '2000',

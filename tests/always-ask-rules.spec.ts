@@ -49,7 +49,11 @@ test.beforeAll(() => {
   writeFileSync(join(folder, 'inc', 'var.mk'), 'all:\n\t$(GIT) push -f\n')
   writeFileSync(join(folder, 'justfile'), 'ship:\n    vercel deploy --prod\n')
   mkdirSync(join(folder, '..', 'outside'))
-  symlinkSync(join(folder, '..', 'outside'), join(folder, 'outside-link'))
+  // A junction needs no extra privilege on Windows and realpath resolves it the same way.
+  const outsideLink = join(folder, 'outside-link')
+  const outsideTarget = join(folder, '..', 'outside')
+  if (process.platform === 'win32') symlinkSync(outsideTarget, outsideLink, 'junction')
+  else symlinkSync(outsideTarget, outsideLink)
   execFileSync('git', ['init', '-q', '-b', 'busyboy/task'], { cwd: folder })
   execFileSync('git', ['config', 'alias.ship', 'push --force'], { cwd: folder })
   execFileSync('git', ['config', 'alias.st', 'status'], { cwd: folder })
@@ -425,6 +429,51 @@ test('a JSON-wrapped patch that edits BusyBoy files should ask, and one that edi
     })
   expect(edit('../data/app-settings.json')).toBe(BUSYBOY_FILES_RULE)
   expect(edit('src/app.ts')).toBeNull()
+})
+
+test('deleting a file named ..secret inside the task should not ask, and one outside should', () => {
+  writeFileSync(join(folder, '..secret'), 'keep')
+  expect(bash('rm ..secret')).toBeNull()
+  expect(bash('rm -rf ../..secret')).toBe(DELETE_OUTSIDE_RULE)
+})
+
+test("editing a file named ..secret in BusyBoy's own files should ask", () => {
+  const data = mkdtempSync(join(tmpdir(), 'busyboy-private-'))
+  try {
+    const hidden = join(data, '..secret')
+    writeFileSync(hidden, 'secret')
+    expect(matchAlwaysAsk({ rules: [], toolName: 'Write', input: { file_path: hidden }, folder, privateFolder: data })).toBe(BUSYBOY_FILES_RULE)
+  } finally {
+    rmSync(data, { recursive: true, force: true })
+  }
+})
+
+test("reading BusyBoy's own files through a native path should ask", () => {
+  const data = mkdtempSync(join(tmpdir(), 'busyboy-private-'))
+  try {
+    const secret = join(data, 'app-settings.json')
+    writeFileSync(secret, '{}')
+    // Quotes keep backslashes, which is how a shell has to write a Windows path.
+    expect(matchAlwaysAsk({ rules: [], toolName: 'Bash', input: { command: `cat '${secret}'` }, folder, privateFolder: data })).toBe(BUSYBOY_FILES_RULE)
+  } finally {
+    rmSync(data, { recursive: true, force: true })
+  }
+})
+
+test('running git.exe push --force should ask', () => {
+  test.skip(process.platform !== 'win32', 'git.exe is the Windows name of git.')
+  expect(bash('git.exe push --force')).toBe(FORCE_PUSH_RULE)
+})
+
+test('deleting a quoted drive path outside the task should ask', () => {
+  test.skip(process.platform !== 'win32', 'Drive paths are Windows paths.')
+  const outside = join(folder, '..', 'outside', 'gone.txt')
+  expect(bash(`rm "${outside}"`)).toBe(DELETE_OUTSIDE_RULE)
+})
+
+test('rsync --delete onto a drive path inside the task should not ask', () => {
+  test.skip(process.platform !== 'win32', 'Drive paths are Windows paths.')
+  expect(bash(`rsync -a --delete dist/ "${join(folder, 'site')}"`)).toBeNull()
 })
 
 test('a rule written as a bare command or with an open parenthesis should be refused', () => {

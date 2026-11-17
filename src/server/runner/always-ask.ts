@@ -1,8 +1,9 @@
 import { execFileSync } from 'node:child_process'
 import { existsSync, readdirSync, readFileSync, realpathSync, statSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { dirname, isAbsolute, join, relative, resolve } from 'node:path'
+import { basename as fileBasename, dirname, join, relative, resolve } from 'node:path'
 import type { AgentEvent } from './contract'
+import { containsPath, expandShellPath, isShellHome, pathKey } from '../paths'
 
 // The "always ask" list: actions a task agent must get the user's approval for
 // every time, even where the provider's Auto mode would run them without asking
@@ -288,7 +289,16 @@ type Context = { cwd: string | null; depth: number; scan: boolean; file?: string
 
 type Analysis = { facts: Fact[]; unknown: string | null }
 
-const basename = (path: string) => path.replace(/^.*\//, '')
+/** The program name. On Windows `C:\Git\cmd\git.exe` is `git`, as `/usr/bin/git` is. */
+function commandName(file: string) {
+  const name = fileBasename(file)
+  return process.platform === 'win32' ? name.replace(/\.(exe|cmd)$/i, '') : name
+}
+
+/** A path rather than a command name: slashes, and on Windows a drive or backslash. */
+function namesAPath(text: string) {
+  return text.includes('/') || (process.platform === 'win32' && (text.includes('\\') || /^[a-zA-Z]:/.test(text)))
+}
 const literal = (text: string): Word => ({ text, dynamic: false })
 const unknownOnly = (unknown: string): Analysis => ({ facts: [], unknown })
 const NOTHING: Analysis = { facts: [], unknown: null }
@@ -436,7 +446,8 @@ function tokenize(script: string): { commands: Word[][]; substitutions: string[]
       started = true
       index++
       while (index < script.length && script[index] !== '"') {
-        if (script[index] === '\\') {
+        // In double quotes a backslash only escapes $, `, ", \, and newline. `C:\Users` keeps its slashes.
+        if (script[index] === '\\' && /[$`"\\\n]/.test(script[index + 1] ?? '')) {
           text += script[index + 1] ?? ''
           index += 2
         } else if (script[index] === '$') {
@@ -548,7 +559,7 @@ function unwrap(words: Word[]): { argv: Word[]; viaXargs: boolean } | null {
     if (!first || first.dynamic) {
       return { argv, viaXargs }
     }
-    const name = basename(first.text)
+    const name = commandName(first.text)
     if (RISKY_VARIABLE.test(first.text)) {
       return null
     }
@@ -839,7 +850,8 @@ const interpreterOf = (name: string) => {
  * Calls that let inline code run a command, load code, reach the network, or delete.
  * Matched on the code with comments and string literals taken out, and only as whole
  * words, so `requestId`, `filesystem`, or the word "delete" inside a string does not ask.
- * `execSync` and `spawnSync` are the same call as `exec` and `spawn`.
+ * `execSync` and `spawnSync` are the same call as `exec` and `spawn`. This guards against
+ * agents acting from habit, not agents hiding what they do.
  */
 const INLINE_RUNS =
   /\b(?:exec(?:Sync|File|FileSync|vp|v)?|spawn(?:Sync)?|system|popen|proc_open|readpipe|fork|eval|subprocess|child_process|shutil|remove|delete|rmtree|rmdir|socket|sock|https?|fetch|urllib|request|ctypes|pickle|marshal|syscall|passthru|dofile|loadfile|loadstring|include|getattr|globals|builtins|binding|dlopen|kill|worker|constructor|mainmodule|import|require)\b|link\b|open[^;]*\||__|`|\bqx\b|%x|\bload\s*\(?\s*['"]|\b(?:use|do|os|fs|io|net|tls|dns|dgram|cluster|repl|inspector|vm|sh|deno|bun|mail|rm\w*|mv|cp)\b/i
@@ -1068,7 +1080,7 @@ function analyzeCommands(commands: Word[][], context: Context, heredocs: string[
       continue
     }
 
-    const name = basename(argv[0].text)
+    const name = commandName(argv[0].text)
     const args = argv.slice(1)
     const pathOf = (word: Word | undefined) => (word && !word.dynamic && cwd !== null ? resolve(cwd, word.text) : null)
 
@@ -1114,7 +1126,7 @@ function analyzeCommands(commands: Word[][], context: Context, heredocs: string[
     if (name === 'cd' || name === 'pushd') {
       const target = args.find((word) => !word.text.startsWith('-'))
       // `~` and `~/x` are the home folder; `~user` is someone else's, which is not looked up.
-      const home = target && !target.dynamic && /^~(?=\/|$)/.test(target.text) ? join(homedir(), target.text.slice(1)) : null
+      const home = target && !target.dynamic && isShellHome(target.text) ? expandShellPath(target.text, cwd ?? homedir()) : null
       cwd = !target ? cwd : home ?? (target.dynamic || target.text.startsWith('~') || cwd === null ? null : resolve(cwd, target.text))
       continue
     }
@@ -1206,7 +1218,7 @@ function analyzeCommands(commands: Word[][], context: Context, heredocs: string[
         results.push(analyzeFile(path, deeper(folder)))
       }
     }
-    if (argv[0].text.includes('/') && cwd !== null) {
+    if (namesAPath(argv[0].text) && cwd !== null) {
       // A script run by its path, such as ./deploy.sh: its text is checked. A binary is matched as itself.
       results.push(analyzeFile(resolve(cwd, argv[0].text), deeper(cwd)))
     }
@@ -1280,7 +1292,7 @@ function argvToScript(argv: string[]) {
   // JSON-wrapped call and some Codex payloads arrive. An argument list has no spaces in its words.
   if (argv.length === 1 && /[\s;&|<>]/.test(argv[0] ?? '')) return argv[0]
   const [first] = argv
-  if (first && SHELLS.has(basename(first))) {
+  if (first && SHELLS.has(commandName(first))) {
     const flag = argv.findIndex((part, index) => index > 0 && /^-[a-zA-Z]*c[a-zA-Z]*$/.test(part))
     const inner = flag === -1 ? undefined : argv.slice(flag + 1).find((part) => part !== '--')
     if (inner !== undefined) {
@@ -1588,12 +1600,7 @@ function isOutside({ folders, fact, word }: { folders: string[]; fact: Fact; wor
     return true
   }
   const path = resolve(fact.cwd, word.text)
-  return [path, realPath(path)].some((candidate) =>
-    folders.every((folder) => {
-      const inside = relative(folder, candidate)
-      return inside.startsWith('..') || isAbsolute(inside)
-    }),
-  )
+  return [path, realPath(path)].some((candidate) => folders.every((folder) => !containsPath(folder, candidate)))
 }
 
 const HERE = literal('.')
@@ -1638,7 +1645,9 @@ function deletesOutside({ fact, folders }: { fact: Fact; folders: string[] }) {
   if (name === 'rsync' && args.some(({ text }) => text.startsWith('--delete') || text === '--remove-source-files')) {
     // The destination is the last path; a remote one (host:path) is outside too.
     const destination = paths.at(-1)
-    return destination !== undefined && (/^[^/]*:/.test(destination.text) || outside(destination))
+    // `host:path` is remote. A Windows drive (`C:\` or `C:`) is a local folder.
+    const remote = destination !== undefined && !(process.platform === 'win32' && /^[a-zA-Z]:/.test(destination.text)) && /^[^/]*:/.test(destination.text)
+    return destination !== undefined && (remote || outside(destination))
   }
   if (name === 'git' && args[0]?.text === 'clean') {
     return outside(fact.gitDir ?? HERE)
@@ -1657,18 +1666,9 @@ function pathForms(path: string) {
   return [...new Set([path, realPath(path)])]
 }
 
-/** macOS and Windows name files without regard to case by default, so `/USERS/me` is `/Users/me`. */
-const foldCase = (path: string) => (process.platform === 'darwin' || process.platform === 'win32' ? path.toLowerCase() : path)
-
-const within = (folder: string, path: string) => {
-  const inside = relative(foldCase(folder), foldCase(path))
-  return !inside.startsWith('..') && !isAbsolute(inside)
-}
-
 /** `~/x` and `$HOME/x` as the shell would expand them; anything else against `cwd`. */
 function expandPath(path: string, cwd: string) {
-  const home = /^(?:~|\$HOME|\$\{HOME\})(?=\/|$)/
-  return home.test(path) ? join(homedir(), path.replace(home, '')) : resolve(cwd, path)
+  return expandShellPath(path, cwd)
 }
 
 /**
@@ -1688,7 +1688,7 @@ function touchesPrivateFolder({ toolName, input, script, facts, folder, privateF
 }) {
   const own = pathForms(folder)
   const isPrivate = (path: string) =>
-    pathForms(path).some((form) => pathForms(privateFolder).some((root) => within(root, form)) && !own.some((mine) => within(mine, form)))
+    pathForms(path).some((form) => pathForms(privateFolder).some((root) => containsPath(root, form)) && !own.some((mine) => containsPath(mine, form)))
   const fields = input && typeof input === 'object' ? (input as Record<string, unknown>) : {}
   const named = FILE_TOOLS[toolName] ? fields[FILE_TOOLS[toolName]] : undefined
   if (typeof named === 'string') {
@@ -1715,7 +1715,7 @@ function touchesPrivateFolder({ toolName, input, script, facts, folder, privateF
     .replace(/["']/g, '')
     .split(/[\s;&|()<>`]+/)
     .map((word) => word.replace(/^[^=/~$.]*=/, ''))
-    .filter((word) => /^(?:~|\$HOME\b|\$\{HOME\}|\.)|\//.test(word))
+    .filter((word) => /^(?:~|\$HOME\b|\$\{HOME\}|\.)|\//.test(word) || (process.platform === 'win32' && (word.includes('\\') || /^[a-zA-Z]:/.test(word))))
   return words.some((word) => folders.some((cwd) => isPrivate(expandPath(word, cwd))))
 }
 
@@ -1834,14 +1834,15 @@ function placeOf(cwd: string) {
   } catch {
     // A folder that does not exist yet is named as given.
   }
-  if (!existsSync(join(folder, '.git')) && !isInsideRepository(folder)) return `${folder}@none`
+  const place = pathKey(folder)
+  if (!existsSync(join(folder, '.git')) && !isInsideRepository(folder)) return `${place}@none`
   try {
     const out = execFileSync('git', ['-C', folder, 'rev-parse', '--symbolic-full-name', 'HEAD', 'HEAD'], {
       encoding: 'utf8',
       timeout: 2000,
       stdio: ['ignore', 'pipe', 'ignore'],
     })
-    return `${folder}@${out.trim().replace(/\s+/g, ' ')}`
+    return `${place}@${out.trim().replace(/\s+/g, ' ')}`
   } catch {
     return null
   }

@@ -1,8 +1,9 @@
 import { mkdir, writeFile } from 'node:fs/promises'
-import { isAbsolute, join, relative } from 'node:path'
+import { join } from 'node:path'
 import { ALWAYS_ASK_PATH, alwaysAskTokenFor, MCP_TOKEN_HEADER, SERVER_TOKEN_ENV } from '@/lib/server-token'
 import { alwaysAskRules } from '../always-ask-list'
 import { resolveDataFolder } from '../config'
+import { containsPath } from '../paths'
 import { listProjects } from '../projects'
 import { matchAlwaysAsk } from './always-ask'
 
@@ -75,8 +76,7 @@ async function decideUnowned(call: HookCall): Promise<HookDecision> {
 }
 
 function isInside({ folder, path }: { folder: string; path: string }) {
-  const inside = relative(folder, path)
-  return !inside.startsWith('..') && !isAbsolute(inside)
+  return containsPath(folder, path)
 }
 
 // The hook script, run by Codex with the tool call as JSON on stdin. It prints
