@@ -191,8 +191,6 @@ function launch(agent: AgentRecord, resumeSessionId?: string) {
       alwaysAsk: agent.input.alwaysAsk,
       privateFolder: agent.input.privateFolder,
       noFileEdits: agent.input.noFileEdits,
-      model: agent.input.model,
-      effort: agent.input.effort,
       rulesFolder: agent.input.rulesFolder,
       emit: (event) => record(agent, event),
     })

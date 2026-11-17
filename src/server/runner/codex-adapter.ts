@@ -43,14 +43,6 @@ function resolveCodex() {
 }
 
 /** Thread settings for a permission mode. The reviewer is always sent so a resumed thread never keeps an old one. */
-const CODEX_EFFORTS = new Set(['minimal', 'low', 'medium', 'high', 'xhigh'])
-
-/** Model and reasoning effort, included only when this chat set them. */
-export function codexModelSettings({ model, effort }: { model?: string; effort?: string }) {
-  const level = effort && CODEX_EFFORTS.has(effort) ? effort : undefined
-  return { ...(model ? { model } : {}), ...(level ? { modelReasoningEffort: level } : {}) }
-}
-
 export function codexThreadSettings(mode: PermissionMode, noTools = false) {
   // Codex has no switch for "no tools" over app-server: its tools are turned
   // off one by one (noToolsConfig), and the read-only sandbox with `never`
@@ -453,7 +445,6 @@ function startCodex(options: ProviderStartOptions): ProviderSession {
       const settings = {
         cwd: options.cwd,
         ...codexThreadSettings(options.permissionMode, options.noTools),
-        ...codexModelSettings(options),
         developerInstructions: options.instructions ?? null,
         config: options.noTools ? await noToolsConfig(current, options.cwd) : { ...mcp.config, ...hook?.config },
       }

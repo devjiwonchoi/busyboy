@@ -12,9 +12,7 @@ import {
 } from '@/app/(main)/director-actions'
 import { EscapeShortcut } from '@/components/shell/shortcut-registry'
 import { cn } from '@/lib/utils'
-import type { ChatHarness } from '@/server/chat-harness'
 import type { ChatEntry, DirectorStatus, DirectorUpdate } from '@/server/director/chat'
-import type { ProviderId } from '@/server/runner/contract'
 import type { TaskCard } from '@/server/cards/model'
 import type { TaskView } from '@/server/tasks'
 import { Alert, AlertDescription } from '@/components/ui/alert'
@@ -25,13 +23,11 @@ import { ClosedCard } from './cards/closed-card'
 import { OpenCard } from './cards/open-card'
 import { mergeTimeline } from './cards/timeline'
 import { ContextMeter, type ContextUsage } from './context-meter'
-import { HarnessPicker } from './harness-picker'
 import { ChatComposer, type ChatComposerHandle, type ComposerMessage } from './composer'
 import { Markdown } from './markdown'
 import { MessageActions } from './message-actions'
 import { PersonaAvatar, type Persona } from './persona'
 import { ReplyTarget } from './reply-target'
-import { suggestFollowUps } from './suggest-follow-ups'
 import { TaskGroup } from './task-group'
 
 type View = {
@@ -71,18 +67,6 @@ function latestTurn(entries: ChatEntry[]): { user: UserEntry; reply?: DirectorRe
     if (entry.kind === 'note' && (entry.tone === 'error' || entry.text === 'Stopped.')) failed = true
   }
   return { user, reply, retry: Boolean((reply && reply.interrupted) || (!reply && failed)) }
-}
-
-function followUps(entries: ChatEntry[], status: DirectorStatus): string[] {
-  if (status !== 'idle') return []
-  for (let index = entries.length - 1; index >= 0; index--) {
-    const entry = entries[index]
-    if (entry.kind === 'note' || entry.kind === 'tasks' || entry.kind === 'card') continue
-    if (entry.kind === 'user') return []
-    if (entry.interrupted) return []
-    return suggestFollowUps(entry.text)
-  }
-  return []
 }
 
 /** Escape stops this chat unless the pointer is in a side chat that is answering. */
@@ -146,9 +130,6 @@ export function DirectorChat({
   managedProject = null,
   header,
   greeting,
-  harnessFallback,
-  initialHarness,
-  offered,
 }: {
   projects: string[]
   persona: Persona
@@ -159,11 +140,6 @@ export function DirectorChat({
   /** Shown above the greeting in place of the name. */
   header?: string
   greeting: string
-  /** Harness shown until this chat stores its own. */
-  harnessFallback: ProviderId
-  initialHarness: ChatHarness | null
-  /** Harnesses the picker may offer. Grok is included only when it is signed in. */
-  offered: ProviderId[]
 }) {
   const [view, setView] = useState(initialView)
   // The card the composer replies to, picked only by the user with a card's Reply. A card
@@ -241,7 +217,6 @@ export function DirectorChat({
 
   const turn = latestTurn(view.entries)
   const canEdit = view.status === 'idle' && view.queue.length === 0
-  const suggestions = editingId || draftText.trim() ? [] : followUps(view.entries, view.status)
   const queued = view.status === 'answering' ? view.queue : []
 
   function fillComposer(text: string) {
@@ -456,15 +431,6 @@ export function DirectorChat({
       </div>
       <div className="mx-auto w-full max-w-3xl px-6 pb-4">
         <ContextMeter usage={view.usage} />
-        {suggestions.length > 0 && (
-          <div role="group" aria-label="Suggested replies" className="mb-2 flex flex-wrap gap-1.5">
-            {suggestions.map((text) => (
-              <Button key={text} type="button" variant="outline" size="sm" className="rounded-full" onClick={() => fillComposer(text)}>
-                {text}
-              </Button>
-            ))}
-          </div>
-        )}
         {editingId && (
           <div role="status" aria-label="Editing your last message" className="text-muted-foreground mb-2 flex items-center gap-2 text-xs">
             <span>Editing your last message</span>
@@ -506,7 +472,6 @@ export function DirectorChat({
           onEmptyArrowUp={() => {
             if (turn && canEdit) beginEdit(turn.user.text, turn.user.id)
           }}
-          toolbar={<HarnessPicker chat={chat} fallback={harnessFallback} initial={initialHarness} offered={offered} />}
           leading={
             target ? (
               <ReplyTarget

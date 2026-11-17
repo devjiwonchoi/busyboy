@@ -5,7 +5,7 @@ import { redirect } from 'next/navigation'
 import { Suspense } from 'react'
 import { ConnectorAddForm } from '@/components/settings/connector-add-form'
 import { CompanionSettings } from '@/components/settings/companion-settings'
-import { DefaultAgent } from '@/components/settings/default-agent'
+import { HarnessChoice } from '@/components/settings/harness-choice'
 import { ThemeChoice } from '@/components/settings/theme-choice'
 import { AddProjectForm } from '@/components/setup/add-project-form'
 import { AlwaysAskForm } from '@/components/setup/always-ask-form'
@@ -92,7 +92,7 @@ const HEADINGS: Record<SectionId, { title: string; description: string }> = {
   },
   agents: {
     title: 'Agents',
-    description: 'BusyBoy uses the Claude Code, Codex, and Grok CLIs you already have. It never signs in for you.',
+    description: 'BusyBoy uses the Claude Code, Codex, and Grok CLIs you already have. It never signs in for you. Every chat uses the harness you choose here.',
   },
   connectors: {
     title: 'Connectors',
@@ -162,9 +162,23 @@ async function AgentsSection() {
     ),
     defaultProvider(),
   ])
-  const signedIn = agents.filter(({ state }) => state.state === 'signed-in')
   return (
     <>
+      <section aria-label="Harness" className="space-y-3">
+        <div className="space-y-1">
+          <h2 className="text-sm font-medium">Harness</h2>
+          <p className="text-muted-foreground text-sm">Every chat uses this harness. The harness picks its model and effort.</p>
+        </div>
+        <HarnessChoice
+          harnesses={agents.map(({ id, name, state }) => ({
+            id,
+            name,
+            status: STATUS_TEXT[state.state],
+            selectable: state.state === 'signed-in' || state.state === 'unknown',
+          }))}
+          selected={current ?? undefined}
+        />
+      </section>
       <ItemGroup aria-label="Agents" className="gap-2">
         {agents.map(({ id, name, state, skills }) => (
           <Item key={id} role="listitem" variant="outline">
@@ -201,7 +215,6 @@ async function AgentsSection() {
           Check again
         </Button>
       </form>
-      {signedIn.length > 1 && <DefaultAgent agents={signedIn.map(({ id, name }) => ({ id, name }))} selected={current ?? undefined} />}
     </>
   )
 }

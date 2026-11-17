@@ -2,11 +2,8 @@
 
 import type { AttachmentInput } from '@/lib/chat-attachments'
 import { AttachmentError } from '@/server/chat-attachments'
-import { readChatHarness } from '@/server/chat-harness'
 import { dataFolder } from '@/server/config'
 import {
-  DIRECTOR_FOLDER,
-  MANAGERS_FOLDER,
   replyToTaskCard,
   reviseDirectorMessage,
   sendDirectorQueueNow,
@@ -15,7 +12,6 @@ import {
   stopDirector,
 } from '@/server/director/chat'
 import { getManagerAt } from '@/server/managers'
-import { join } from 'node:path'
 import { busyboyMcpServers } from '@/server/mcp-tools'
 import { defaultProvider, providerState } from '@/server/providers'
 import type { ProviderId } from '@/server/runner/contract'
@@ -35,21 +31,6 @@ async function resolveDirectorProvider(current?: ProviderId): Promise<ProviderId
   if (provider) return provider
   if (current && (await providerState(current)).state === 'unknown') return current
   return null
-}
-
-/**
- * The harness this chat stored, when that harness can run. Otherwise the
- * default provider, so a chat with no choice of its own keeps today's behavior.
- */
-async function resolveChatProvider(chat: string | null, current?: ProviderId): Promise<ProviderId | null> {
-  const folder = await dataFolder()
-  const directory = chat ? join(folder, MANAGERS_FOLDER, chat) : join(folder, DIRECTOR_FOLDER)
-  const stored = await readChatHarness(directory)
-  if (stored) {
-    const state = await providerState(stored.provider)
-    if (state.state === 'signed-in' || state.state === 'unknown') return stored.provider
-  }
-  return resolveDirectorProvider(current)
 }
 
 /** The manager a chat id names, or null for the Director's chat. Throws for a manager that does not exist. */
@@ -87,7 +68,7 @@ export async function sendToDirectorAction(text: string, chat?: string | null, a
       chat: manager,
       text,
       attachments: files,
-      resolveProvider: (current) => resolveChatProvider(manager, current),
+      resolveProvider: (current) => resolveDirectorProvider(current),
       mcp: await busyboyMcpServers(undefined, undefined, manager ?? undefined),
     })
     return {}
@@ -130,7 +111,7 @@ export async function reviseDirectorMessageAction(
       entryId,
       text,
       attachments: files,
-      resolveProvider: (current) => resolveChatProvider(manager, current),
+      resolveProvider: (current) => resolveDirectorProvider(current),
       mcp: await busyboyMcpServers(undefined, undefined, manager ?? undefined),
     })
     return {}

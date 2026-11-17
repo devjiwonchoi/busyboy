@@ -3,7 +3,6 @@ import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { appendTranscriptLine, readTranscript, type TranscriptCursor } from './transcript-log'
 import { alwaysAskRulesAt } from '../always-ask-list'
-import { readChatHarness } from '../chat-harness'
 import { rulesFolderFor } from '../runner/user-rules'
 import { pathKey, samePath } from '../paths'
 import { BUSYBOY_FILES_RULE } from '../runner/always-ask'
@@ -150,8 +149,6 @@ type Director = {
   instructions?: string
   /** The always-ask list the running agent was started with, as JSON. */
   alwaysAsk?: string
-  /** Model and effort the running agent was started with, as JSON. */
-  harnessKey?: string
   /** The latest context report for the running session. */
   usage: ContextUsage | null
   status: DirectorStatus
@@ -448,13 +445,8 @@ function saveState(director: Director) {
 // ---- The Director agent ----------------------------------------------------------
 
 async function ensureAgent(director: Director, provider: ProviderId, mcp: McpServers, instructions: string, alwaysAsk: string[]) {
-  const stored = await readChatHarness(directorFolder(director))
-  const model = stored?.provider === provider ? stored.model : undefined
-  const effort = stored?.provider === provider ? stored.effort : undefined
-  const harnessKey = JSON.stringify({ model: model ?? null, effort: effort ?? null })
   const existing = director.agentId ? getAgent(director.agentId) : undefined
-  const sameSetup =
-    director.instructions === instructions && director.alwaysAsk === JSON.stringify(alwaysAsk) && director.harnessKey === harnessKey
+  const sameSetup = director.instructions === instructions && director.alwaysAsk === JSON.stringify(alwaysAsk)
   if (existing && existing.provider === provider && sameSetup) {
     if (existing.status === 'stopped') {
       director.unconfirmedResume = Boolean(existing.sessionId)
@@ -492,14 +484,11 @@ async function ensureAgent(director: Director, provider: ProviderId, mcp: McpSer
     resumeSessionId,
     alwaysAsk,
     privateFolder: director.folder,
-    model,
-    effort,
     rulesFolder: rulesFolderFor(director.folder),
   })
   director.agentId = agent.id
   director.instructions = instructions
   director.alwaysAsk = JSON.stringify(alwaysAsk)
-  director.harnessKey = harnessKey
   subscribeToAgent(agent.id, 0, (envelope) => onAgentEvent(director, agent.id, envelope))
   return agent.id
 }
