@@ -9,8 +9,9 @@ import { containsPath, expandShellPath, isShellHome, pathKey } from '../paths'
 // every time, even where the provider's Auto mode would run them without asking
 // (merges, deploys, force pushes, deletes outside the task, messages sent through
 // connectors). Each provider adapter checks every tool call against the list
-// before it runs, through the provider's own pre-tool-use hook, and asks with an
-// approval (an approval card in the Director chat) when one matches.
+// before it runs and asks with an approval (an approval card) when one matches.
+// Claude and Codex do that with a pre-tool-use hook. Grok's hooks are fail-open,
+// so its adapter decides the same list on ACP permission requests instead.
 //
 // One rule per line:
 //   Tool                 a tool name, `*` matching any characters (mcp__*linear*__*update*)

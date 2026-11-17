@@ -148,6 +148,7 @@ export function DirectorChat({
   greeting,
   harnessFallback,
   initialHarness,
+  offered,
 }: {
   projects: string[]
   persona: Persona
@@ -161,6 +162,8 @@ export function DirectorChat({
   /** Harness shown until this chat stores its own. */
   harnessFallback: ProviderId
   initialHarness: ChatHarness | null
+  /** Harnesses the picker may offer. Grok is included only when it is signed in. */
+  offered: ProviderId[]
 }) {
   const [view, setView] = useState(initialView)
   // The card the composer replies to, picked only by the user with a card's Reply. A card
@@ -503,7 +506,7 @@ export function DirectorChat({
           onEmptyArrowUp={() => {
             if (turn && canEdit) beginEdit(turn.user.text, turn.user.id)
           }}
-          toolbar={<HarnessPicker chat={chat} fallback={harnessFallback} initial={initialHarness} />}
+          toolbar={<HarnessPicker chat={chat} fallback={harnessFallback} initial={initialHarness} offered={offered} />}
           leading={
             target ? (
               <ReplyTarget

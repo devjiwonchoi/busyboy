@@ -18,13 +18,21 @@ export function HarnessPicker({
   chat,
   fallback,
   initial,
+  offered,
 }: {
   chat: string | null
   /** Used when this chat has no choice of its own yet. */
   fallback: ProviderId
   initial: ChatHarness | null
+  /** Providers this chat may choose. Grok is listed only while it is signed in. */
+  offered: ProviderId[]
 }) {
-  const [choice, setChoice] = useState<ChatHarness>(initial ?? { provider: fallback })
+  const choices = HARNESSES.filter((harness) => offered.includes(harness.id))
+  const starting =
+    initial && offered.includes(initial.provider)
+      ? initial
+      : { provider: offered.includes(fallback) ? fallback : (choices[0]?.id ?? fallback) }
+  const [choice, setChoice] = useState<ChatHarness>(starting)
   const [error, setError] = useState(false)
   const harness = harnessById(choice.provider) ?? HARNESSES[0]
   const modelField = harness?.fields.find((field) => field.id === 'model')
@@ -54,7 +62,7 @@ export function HarnessPicker({
           })
         }}
       >
-        {HARNESSES.map(({ id, name }) => (
+        {choices.map(({ id, name }) => (
           <option key={id} value={id}>
             {name}
           </option>

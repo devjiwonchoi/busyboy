@@ -92,7 +92,7 @@ const HEADINGS: Record<SectionId, { title: string; description: string }> = {
   },
   agents: {
     title: 'Agents',
-    description: 'BusyBoy uses the Claude Code and Codex CLIs you already have. It never signs in for you.',
+    description: 'BusyBoy uses the Claude Code, Codex, and Grok CLIs you already have. It never signs in for you.',
   },
   connectors: {
     title: 'Connectors',

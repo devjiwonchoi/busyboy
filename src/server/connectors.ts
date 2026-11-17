@@ -22,8 +22,11 @@ export type ConnectorServer = {
 
 export type ConnectorOffer = { name: string; title: string; url: string; command: string }
 
+/** Claude Code and Codex are the harnesses whose connector CLIs BusyBoy drives. */
+type ConnectorProvider = 'claude' | 'codex'
+
 export type ConnectorHarness = {
-  provider: ProviderId
+  provider: ConnectorProvider
   name: string
   servers: ConnectorServer[]
   /** Official remote servers that are not configured yet. */
@@ -278,7 +281,7 @@ function offers(provider: ProviderId, present: Set<string>): ConnectorOffer[] {
 /** Inherited connectors for each harness, with a live handshake for the status. */
 export async function listConnectors(): Promise<ConnectorHarness[]> {
   const [claude, codex] = await Promise.all([claudeServers(), codexServers()])
-  const harnesses: { provider: ProviderId; name: string; listed: Listed[] }[] = [
+  const harnesses: { provider: ConnectorProvider; name: string; listed: Listed[] }[] = [
     { provider: 'claude', name: 'Claude Code', listed: claude },
     { provider: 'codex', name: 'Codex', listed: codex },
   ]

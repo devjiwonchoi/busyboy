@@ -4,7 +4,7 @@
 // own protocol into `AgentEvent` and implement `ProviderAdapter`.
 import type { UserTurn } from './user-turn'
 
-export type ProviderId = 'claude' | 'codex'
+export type ProviderId = 'claude' | 'codex' | 'grok'
 
 /** `auto`: the provider's own auto mode (default). `full-access`: no checks, opt-in per task. */
 export type PermissionMode = 'auto' | 'full-access'

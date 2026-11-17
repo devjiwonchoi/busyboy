@@ -143,7 +143,7 @@ function parseSettings(text: string): Settings | undefined {
     ...value,
     version: typeof value.version === 'number' && value.version > 1 ? value.version : 1,
     setupCompletedAt: typeof value.setupCompletedAt === 'string' ? value.setupCompletedAt : null,
-    defaultProvider: value.defaultProvider === 'claude' || value.defaultProvider === 'codex' ? value.defaultProvider : null,
+    defaultProvider: value.defaultProvider === 'claude' || value.defaultProvider === 'codex' || value.defaultProvider === 'grok' ? value.defaultProvider : null,
     theme: isThemeName(value.theme) ? value.theme : 'dark',
     companion: typeof value.companion === 'string' ? value.companion : null,
     companionImage: typeof value.companionImage === 'string' ? value.companionImage : null,

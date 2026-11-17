@@ -10,6 +10,8 @@ import { dataFolder, readSettings } from '@/server/config'
 import { DIRECTOR_FOLDER, MANAGERS_FOLDER } from '@/server/director/chat'
 import { listManagers } from '@/server/managers'
 import { listProjects } from '@/server/projects'
+import { HARNESSES } from '@/server/harness'
+import { providerState } from '@/server/providers'
 import type { ProviderId } from '@/server/runner/contract'
 
 type Search = Promise<{ manager?: string | string[] }>
@@ -23,13 +25,18 @@ export default function ChatPage({ searchParams }: { searchParams: Search }) {
   )
 }
 
-async function harnessFor(chat: string | null): Promise<{ fallback: ProviderId; choice: ChatHarness | null }> {
+async function harnessFor(chat: string | null): Promise<{ fallback: ProviderId; choice: ChatHarness | null; offered: ProviderId[] }> {
   const folder = await dataFolder()
-  const [settings, choice] = await Promise.all([
+  const [settings, choice, grok] = await Promise.all([
     readSettings(),
     readChatHarness(chat ? join(folder, MANAGERS_FOLDER, chat) : join(folder, DIRECTOR_FOLDER)),
+    providerState('grok'),
   ])
-  return { fallback: settings.defaultProvider ?? 'claude', choice }
+  // Claude Code and Codex stay in the list. Grok is offered only when it can run.
+  const offerGrok = grok.state === 'signed-in' || grok.state === 'unknown'
+  const offered = HARNESSES.map((harness) => harness.id).filter((id) => id !== 'grok' || offerGrok)
+  const fallback = settings.defaultProvider && offered.includes(settings.defaultProvider) ? settings.defaultProvider : offered[0] ?? 'claude'
+  return { fallback, choice, offered }
 }
 
 async function Chat({ searchParams }: { searchParams: Search }) {
@@ -51,6 +58,7 @@ async function Chat({ searchParams }: { searchParams: Search }) {
       greeting={companion?.greeting ?? 'BusyBoy is ready. What should we work on?'}
       harnessFallback={harness.fallback}
       initialHarness={harness.choice}
+      offered={harness.offered}
     />
   )
 }
@@ -74,6 +82,7 @@ async function ManagerChat({ id }: { id: string }) {
       greeting={`I look after ${manager.project}. What should we work on?`}
       harnessFallback={harness.fallback}
       initialHarness={harness.choice}
+      offered={harness.offered}
     />
   )
 }
