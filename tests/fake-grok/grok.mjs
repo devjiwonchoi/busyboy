@@ -202,6 +202,39 @@ async function play(session, text, signal) {
     say(session, 'Pushed.')
     return 'end_turn'
   }
+  if (text.includes('Print the secret token with Grok')) {
+    const decision = await ask(session, signal, 'echo secret-token')
+    if (decision !== 'allow') {
+      if (decision === 'cancel') return 'cancelled'
+      say(session, 'I did not print the token.')
+      return 'end_turn'
+    }
+    usedTool(session, 'echo secret-token')
+    say(session, 'Printed the token.')
+    return 'end_turn'
+  }
+  if (text.includes('Print the working directory with Grok')) {
+    const decision = await ask(session, signal, 'pwd')
+    if (decision !== 'allow') {
+      if (decision === 'cancel') return 'cancelled'
+      say(session, 'I did not print the directory.')
+      return 'end_turn'
+    }
+    usedTool(session, 'pwd')
+    say(session, 'Printed the working directory.')
+    return 'end_turn'
+  }
+  if (text.includes('Say hello with Grok')) {
+    const decision = await ask(session, signal, 'echo hello')
+    if (decision !== 'allow') {
+      if (decision === 'cancel') return 'cancelled'
+      say(session, 'I did not say hello.')
+      return 'end_turn'
+    }
+    usedTool(session, 'echo hello')
+    say(session, 'Said hello.')
+    return 'end_turn'
+  }
   if (text.includes('Remove the build folder')) {
     const decision = await ask(session, signal, 'rm -rf build')
     if (decision !== 'allow') {
