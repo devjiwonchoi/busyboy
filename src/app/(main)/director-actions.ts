@@ -144,7 +144,7 @@ export async function approveCardAction(cardId: string) {
   approveCard({ folder: await dataFolder(), cardId })
 }
 
-/** The task's saved plan, for a done card's View plan link. Null when it has none. */
+/** The task's saved plan and verification note, for a done card's View plan link. Null when it has no plan. */
 export async function readTaskPlanAction(taskId: string) {
   checkId(taskId, 'The task')
   return readTaskPlan({ folder: await dataFolder(), taskId })

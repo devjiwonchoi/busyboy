@@ -14,7 +14,7 @@ import { CardShell, CardShellHeader } from '../card-shell'
 export function DoneCardView({ card }: CardViewProps<DoneCard>) {
   const { replying } = useCardActions()
   const [open, setOpen] = useState(false)
-  const [plan, setPlan] = useState<{ title: string; plan: string } | null>(null)
+  const [plan, setPlan] = useState<{ title: string; plan: string; verify: string | null } | null>(null)
   const [missing, setMissing] = useState(false)
   const share = card.achievement
 
@@ -56,12 +56,20 @@ export function DoneCardView({ card }: CardViewProps<DoneCard>) {
         }
       />
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent size="lg">
+        <DialogContent size="lg" className="overflow-hidden">
           <DialogHeader>
             <DialogTitle>{plan?.title ?? card.taskTitle}</DialogTitle>
             <DialogDescription>{card.project}</DialogDescription>
           </DialogHeader>
-          {plan ? <Markdown text={plan.plan} /> : missing ? <p>The plan could not be read.</p> : null}
+          {/* The title stays put while the note scrolls, the same pane View details uses for a plan. */}
+          {plan ? (
+            <div className="min-h-0 overflow-y-auto">
+              <Markdown text={plan.plan} />
+              {plan.verify ? <Markdown text={plan.verify} /> : null}
+            </div>
+          ) : missing ? (
+            <p>The plan could not be read.</p>
+          ) : null}
         </DialogContent>
       </Dialog>
     </CardShell>
