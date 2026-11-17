@@ -2,43 +2,37 @@
 
 Rules for every agent and contributor working in this repository.
 
+| Rule                                                                                                                                                                                                                                                                                 | Enforced by                                                                                     |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------- |
+| File and folder names are kebab-case, for example `server-process.ts`. Keep a tool-fixed name (`page.tsx`, `layout.tsx`, `route.ts`, `default.tsx`, `next.config.ts`, `README.md`, `AGENTS.md`) or a record file (`ALIGN.md`, `STATUS.md`, `VERIFY.md`, `REVIEW.md`, `REMEMBER.md`). | `scripts/check-agent-rules.mts` rejects an added path that is not kebab-case                    |
+| Do not add a comment line in a `.ts`, `.tsx`, or `.mts` file. `// @ts-expect-error`, `/// <reference`, an eslint or oxlint disable line, and a shebang are allowed.                                                                                                                  | `scripts/check-new-comments.mts`                                                                |
+| Do not edit `README.md`.                                                                                                                                                                                                                                                             | `scripts/check-agent-rules.mts`                                                                 |
+| Do not add a Markdown document outside `tests/` or `.agents/skills/`. A skill and its feature map belong under `.agents/skills/`. | `scripts/check-agent-rules.mts` |
+| A change a person can see or operate is proven with verify-busyboy before the pull request opens: follow `.agents/skills/verify-busyboy/SKILL.md`, drive the feature, and attach the screenshot. | The `verify-busyboy` skill. Evidence goes in `.verify/evidence`, which git ignores. |
+| A new test file is a Playwright journey under `tests/` ending in `.spec.ts`.                                                                                                                                                                                                         | `scripts/check-agent-rules.mts`                                                                 |
+| Do not add `test.skip`, `it.skip`, `describe.skip`, `test.fixme`, `it.fixme`, `describe.fixme`, `waitForTimeout`, `sleep`, or `retries` other than `retries: 0`.                                                                                                                     | `scripts/check-agent-rules.mts` fails when a test diff adds more of these than it removes       |
+| Do not add `/opt/cursor/artifacts` in a test.                                                                                                                                                                                                                                        | `scripts/check-agent-rules.mts` fails when a test diff adds more of these paths than it removes |
+| When a screenshot baseline under `*-snapshots/` changes, say so in the pull request description.                                                                                                                                                                                     | `scripts/check-agent-rules.mts`                                                                 |
+| `pnpm typecheck` passes.                                                                                                                                                                                                                                                             | CI job Type check                                                                               |
+| `pnpm lint` and `pnpm format:check` pass.                                                                                                                                                                                                                                            | CI job Lint                                                                                     |
+| Playwright journeys pass.                                                                                                                                                                                                                                                            | CI job Journeys                                                                                 |
+
 ## Write everything in English
 
-All text committed to this repository is English: code, identifiers, comments, UI copy, error and log messages, test names, commit messages, and PR descriptions.
-
-## Never commit documents
-
-Do not add research notes, reports, specs, plans, or other documents to the repository, and do not open PRs whose purpose is a document. Deliver them in the conversation instead. Code comments, PR descriptions, and README changes that a code change needs are fine.
-
-## Never edit README.md
-
-The user maintains `README.md`. Do not change it.
+All text committed to this repository is English: code, identifiers, UI copy, error and log messages, test names, commit messages, and pull request descriptions.
 
 ## Build UI from the component library
 
 The UI library is shadcn on Base UI (`base-mira` style, see `components.json`) with the `@coss` and `@spell` registries.
 
 - Use a component from, in order: the shadcn base components, then `@coss`, then `@spell`. Add one with `pnpm shadcn add <name>`, `pnpm shadcn add @coss/<name>`, or `pnpm shadcn add @spell/<name>`.
-- Edit an added component only when needed, and say why in a comment next to the change.
+- Edit an added component only when needed, and say why in the commit message.
 - Write a custom component only when none of them supports the need, and say why in the commit message.
 
-## Use kebab-case file names
+## Journeys
 
-Every file and folder name is kebab-case, for example `server-process.ts` or `bottom-panel.tsx`. Files whose names are fixed by a tool (`AGENTS.md`, `README.md`, `page.tsx`, `next.config.ts`) keep those names.
-
-## Test with end-to-end journeys only
-
-- Do not write unit tests.
-- Tests are deterministic Playwright journeys under `tests/`, named by action and outcome, for example `clicking Approve should start the task`.
-- Replace real providers with scripted replays; use real files and git in temporary directories.
+- Replace real providers with scripted replays. Use real files and git in temporary directories.
 - Run only the tests you added or changed.
-
-## Keep journeys honest
-
-- Flaky journeys are never fixed by retries, sleeps, or skips. Find the root cause, or delete the test with the reason in the commit message.
-- Committed tests never write to agent-VM-only paths like `/opt/cursor/artifacts`.
-- Before opening a PR, run the type check and the affected journeys locally.
-- Screenshot baselines (`toHaveScreenshot`) are only updated when the UI change is intentional, and the PR says so.
 
 ## Prove UI changes with verify-busyboy
 

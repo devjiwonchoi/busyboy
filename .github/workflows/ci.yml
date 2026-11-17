@@ -46,11 +46,14 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint
       - run: pnpm format:check
-      - name: New comments
+      - name: Pull request rules
         if: github.event_name == 'pull_request'
+        env:
+          PULL_REQUEST_BODY: ${{ github.event.pull_request.body }}
         run: |
           git fetch --no-tags --depth=1 origin "${{ github.base_ref }}"
           node scripts/check-new-comments.mts "origin/${{ github.base_ref }}"
+          node scripts/check-agent-rules.mts "origin/${{ github.base_ref }}"
 
   model:
     name: Model
