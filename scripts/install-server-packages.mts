@@ -250,10 +250,17 @@ function packageNameAt(dir: string): string {
   return parent.startsWith('@') ? `${parent}/${name}` : name
 }
 
+/** True when the name contains a `platform-arch` token such as `darwin-arm64`. */
+function mentionsPlatform(name: string): boolean {
+  return name.match(PLATFORM_TOKEN) !== null
+}
+
 /**
  * Drops native packages the Linux shared bundle traced for another machine.
  * The Agent SDK's platform packages are the bundled `claude` executable; the
  * app runs the user's own, so every one of them goes, including the host's.
+ * Turbopack's alias `@anthropic-ai/claude-agent-sdk-<hash>` is not one of
+ * those packages and has to stay under `.next/node_modules`.
  */
 function removeForeignNativePackages(serverDir: string, platform: string, arch: string) {
   const stack = [serverDir]
@@ -270,7 +277,7 @@ function removeForeignNativePackages(serverDir: string, platform: string, arch: 
       const path = join(dir, entry.name)
       const name = packageNameAt(path)
       const drop =
-        /^@anthropic-ai\/claude-agent-sdk-/.test(name) ||
+        (/^@anthropic-ai\/claude-agent-sdk-/.test(name) && mentionsPlatform(name)) ||
         ((/^@next\/swc-/.test(name) || /^@esbuild\//.test(name)) && isForeignPlatformPackage(name, platform, arch))
       if (drop) {
         rmSync(path, { recursive: true, force: true })

@@ -3,11 +3,13 @@
 //   node scripts/pack-desktop-bundle.mts
 //
 // macOS receives pnpm's symlinks, which the standalone server loads. Windows
-// cannot create those symlinks (tar reports the target is missing), so it
-// receives a second archive with every link stored as a real file.
+// cannot create those symlinks, so it receives a second archive of real
+// directories with each package's pnpm siblings nested inside it.
 import { execFileSync } from 'node:child_process'
-import { existsSync, readdirSync, readlinkSync, realpathSync, statSync } from 'node:fs'
+import { cpSync, existsSync, mkdtempSync, readdirSync, readlinkSync, realpathSync, rmSync, statSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path'
+import { materializeWindowsServer } from './materialize-windows-server.mts'
 
 const root = join(import.meta.dirname, '..')
 const roots = [join(root, '.next', 'standalone'), join(root, 'dist-electron')]
@@ -71,10 +73,24 @@ if (listSymlinks('desktop-bundle.tar').length < 1) {
   throw new Error('The app bundle has no symlinks. The standalone server would not start.')
 }
 
-execFileSync('tar', ['--format=posix', '-h', '--hard-dereference', '-cf', 'desktop-bundle-windows.tar', '.next/standalone', 'dist-electron'], {
-  cwd: root,
-  stdio: 'inherit',
-})
+const staging = mkdtempSync(join(tmpdir(), 'busyboy-windows-bundle-'))
+try {
+  const windowsStandalone = join(staging, '.next', 'standalone')
+  materializeWindowsServer(join(root, '.next', 'standalone'), windowsStandalone)
+  cpSync(join(root, 'dist-electron'), join(staging, 'dist-electron'), { recursive: true, dereference: true })
+  execFileSync(process.execPath, ['scripts/check-shared-bundle.mts'], { cwd: root, stdio: 'inherit' })
+  execFileSync(process.execPath, ['scripts/check-shared-bundle.mts', '--windows', '--standalone', windowsStandalone], {
+    cwd: root,
+    stdio: 'inherit',
+  })
+  execFileSync(
+    'tar',
+    ['--format=posix', '-cf', join(root, 'desktop-bundle-windows.tar'), '-C', staging, '.next/standalone', 'dist-electron'],
+    { stdio: 'inherit' },
+  )
+} finally {
+  rmSync(staging, { recursive: true, force: true })
+}
 const windowsLinks = listSymlinks('desktop-bundle-windows.tar')
 if (windowsLinks.length > 0) {
   throw new Error(`The Windows app bundle still contains symlinks:\n${windowsLinks.join('\n')}`)

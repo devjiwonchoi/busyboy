@@ -3,14 +3,19 @@
 //   node scripts/check-shared-bundle.mts
 //
 // macOS and Linux keep pnpm's symlinks; losing them leaves the server unable
-// to resolve its packages. Windows receives real files instead, because it
-// cannot create those symlinks, so there the packages only have to resolve.
+// to resolve its packages. Windows receives real directories with each
+// package's siblings nested inside it. Either layout has to resolve next's
+// own dependencies and Turbopack's hashed external aliases.
 import { existsSync, readdirSync, readFileSync, realpathSync } from 'node:fs'
 import { basename, isAbsolute, join, relative } from 'node:path'
 import { serverExternalPackages } from '../src/lib/server-external-packages.ts'
+import { assertServerResolves } from './check-server-resolution.mts'
 
 const root = join(import.meta.dirname, '..')
-const standalone = join(root, '.next', 'standalone')
+const args = process.argv.slice(2)
+const standaloneFlag = args.indexOf('--standalone')
+const standaloneArg = standaloneFlag === -1 ? join(root, '.next', 'standalone') : args[standaloneFlag + 1]
+const windows = args.includes('--windows') || process.platform === 'win32'
 const packages = ['react', 'react-dom', 'next', ...serverExternalPackages]
 
 function fail(message: string): never {
@@ -31,12 +36,15 @@ function countSymlinks(dir: string): number {
   return count
 }
 
+if (!standaloneArg) fail('--standalone needs the standalone server directory.')
+const standalone = standaloneArg
+
 if (!existsSync(join(standalone, 'server.js'))) fail('The app bundle has no .next/standalone/server.js.')
 if (!existsSync(join(root, 'dist-electron', 'main.cjs'))) fail('The app bundle has no dist-electron/main.cjs.')
 
-if (process.platform !== 'win32' && countSymlinks(standalone) < 1) {
-  fail('The app bundle has no symlinks. The standalone server would not start.')
-}
+const symlinks = countSymlinks(standalone)
+if (windows && symlinks > 0) fail('The Windows app bundle still contains symlinks.')
+if (!windows && symlinks < 1) fail('The app bundle has no symlinks. The standalone server would not start.')
 
 const standaloneRoot = realpathSync(standalone)
 
@@ -77,6 +85,12 @@ for (const name of serverExternalPackages) {
   const present = candidates.filter((dir) => existsSync(dir))
   if (present.length === 0) fail(`The app bundle has no ${name}.`)
   for (const dir of present) assertInside(dir, name)
+}
+
+try {
+  assertServerResolves(standalone)
+} catch (error) {
+  fail(error instanceof Error ? error.message : String(error))
 }
 
 console.log(`[check-shared-bundle] Resolved ${packages.join(', ')} from the standalone server.`)

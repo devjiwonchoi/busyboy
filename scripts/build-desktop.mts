@@ -29,6 +29,7 @@ import { basename, join } from 'node:path'
 import builder from 'electron-builder'
 import { checkPackagedServer } from './check-packaged-server.mts'
 import { installServerPackages } from './install-server-packages.mts'
+import { materializeWindowsServer } from './materialize-windows-server.mts'
 
 const root = join(import.meta.dirname, '..')
 const argv = process.argv.slice(2)
@@ -190,13 +191,11 @@ await builder.build({
             context.electronPlatformName === 'win32' ? `${productFilename}.exe` : context.packager.appInfo.sanitizedName.toLowerCase(),
           )
       // pnpm's standalone node_modules is symlinks into .pnpm. Keep them as
-      // relative links on macOS and Linux; Windows gets real copies.
+      // relative links on macOS and Linux. Windows cannot use those links, so
+      // each package is copied with its pnpm siblings nested inside it.
       packagedServer = join(resources, 'server')
-      cpSync(standalone, packagedServer, {
-        recursive: true,
-        verbatimSymlinks: context.electronPlatformName !== 'win32',
-        dereference: context.electronPlatformName === 'win32',
-      })
+      if (context.electronPlatformName === 'win32') materializeWindowsServer(standalone, packagedServer)
+      else cpSync(standalone, packagedServer, { recursive: true, verbatimSymlinks: true })
       // Repository files have no place in the app: they are not used, and macOS cannot
       // sign a .git folder. next.config.ts keeps them out; this fails the build if one comes back.
       const strays = ['.git', 'tests', 'release', 'scripts', 'electron'].filter((name) => existsSync(join(packagedServer as string, name)))
