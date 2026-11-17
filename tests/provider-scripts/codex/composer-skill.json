@@ -1,0 +1,29 @@
+{
+  "provider": "codex",
+  "description": "Codex confirms a $skill invocation from the composer.",
+  "turns": [
+    {
+      "prompt": "$align",
+      "steps": [
+        {
+          "raw": {
+            "method": "item/agentMessage/delta",
+            "params": { "itemId": "msg-skill", "delta": "Using the align skill." }
+          }
+        },
+        {
+          "raw": {
+            "method": "item/completed",
+            "params": { "item": { "type": "agentMessage", "id": "msg-skill", "text": "Using the align skill." } }
+          }
+        },
+        {
+          "raw": {
+            "method": "turn/completed",
+            "params": { "turn": { "id": "turn-skill", "status": "completed", "error": null } }
+          }
+        }
+      ]
+    }
+  ]
+}
