@@ -1,6 +1,6 @@
 'use client'
 
-import { Plus, Search, Trash2 } from 'lucide-react'
+import { AlertTriangle, CircleCheck, CircleHelp, Plus, Search, Trash2 } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useActionState, useEffect, useState, useSyncExternalStore } from 'react'
@@ -29,7 +29,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { desktopBridge } from '@/lib/desktop-bridge'
 import { cn } from '@/lib/utils'
 import type { ChatSummary } from '@/server/director/chat'
-import type { ProgressState, TaskProgress } from '@/server/records/progress'
+import type { TaskProgress } from '@/server/records/progress'
 import type { Room } from '@/server/rooms'
 
 /** The radio value for a repository BusyBoy does not know yet. */
@@ -155,27 +155,37 @@ function progressOf(projects: ProjectProgress[], name: string | null) {
   return projects.find((project) => project.name.toLowerCase() === key)?.progress
 }
 
-// Badge and PhaseMark both add a chip or a phase word. This row only wants a dot, a fraction, and at most one state word.
-const DOT: Record<ProgressState, string> = {
-  calm: 'bg-success-foreground',
-  decision: 'bg-warning-foreground',
-  'at-risk': 'bg-destructive',
+// Badge and PhaseMark always add a chip or a phase word. The row is an icon and a muted count.
+type ProgressMark = 'complete' | 'at-risk' | 'decision'
+
+const MARK: Record<ProgressMark, { icon: typeof CircleCheck; label: string; className: string }> = {
+  complete: { icon: CircleCheck, label: 'All verified', className: 'text-success-foreground' },
+  'at-risk': { icon: AlertTriangle, label: 'At risk', className: 'text-destructive' },
+  decision: { icon: CircleHelp, label: 'Needs a decision', className: 'text-warning-foreground' },
 }
 
-const WORD: Record<Exclude<ProgressState, 'calm'>, string> = {
-  decision: 'text-warning-foreground',
-  'at-risk': 'text-destructive',
+/** One icon per attention state, or a check when every aligned item is verified and nothing needs attention. */
+function directorMarks(total: TaskProgress, projects: ProjectProgress[]): ProgressMark[] {
+  const states = new Set(projects.filter((project) => project.progress.total > 0).map((project) => project.progress.state))
+  const marks: ProgressMark[] = []
+  if (states.has('at-risk')) marks.push('at-risk')
+  if (states.has('decision')) marks.push('decision')
+  if (marks.length === 0 && total.total > 0 && total.verified === total.total) marks.push('complete')
+  return marks
 }
 
-const WORD_TEXT: Record<Exclude<ProgressState, 'calm'>, string> = {
-  decision: 'decision',
-  'at-risk': 'at risk',
+/** A check only when the project is fully verified. Unfinished calm work is just the count. */
+function projectMark(progress: TaskProgress): ProgressMark | null {
+  if (progress.total === 0) return null
+  if (progress.state === 'at-risk') return 'at-risk'
+  if (progress.state === 'decision') return 'decision'
+  if (progress.verified === progress.total) return 'complete'
+  return null
 }
 
-function directorLabel(name: string, total: TaskProgress, attention: ProjectProgress[]) {
+function directorLabel(name: string, total: TaskProgress, marks: ProgressMark[]) {
   if (total.total === 0) return `${name}, director`
-  const notes = attention.map((project) => `${project.name} ${project.progress.state === 'at-risk' ? 'at risk' : 'decision'}`)
-  return [`${name}, director, ${total.verified}/${total.total}`, ...notes].join(', ')
+  return [`${name}, director`, ...marks.map((mark) => MARK[mark].label), `${total.verified}/${total.total}`].join(', ')
 }
 
 function Fraction({ progress }: { progress: TaskProgress }) {
@@ -186,37 +196,28 @@ function Fraction({ progress }: { progress: TaskProgress }) {
   )
 }
 
-/** The Director's total, then one dot per project that needs attention. No word: the dots are the projects. */
-function DirectorProgress({ total, attention }: { total: TaskProgress; attention: ProjectProgress[] }) {
-  if (total.total === 0) return null
+function StatusIcon({ mark }: { mark: ProgressMark }) {
+  const { icon: Icon, label, className } = MARK[mark]
   return (
-    <span data-progress={`${total.verified}/${total.total}`} className="inline-flex shrink-0 items-center gap-1 text-[11px] leading-none whitespace-nowrap text-[#8d8d93]">
-      <Fraction progress={total} />
-      {attention.length > 0 && (
-        <span className="inline-flex items-center gap-0.5" aria-hidden>
-          {attention.map((project) => (
-            <span key={project.name} data-state={project.progress.state} className={cn('size-1.5 shrink-0 rounded-full', DOT[project.progress.state])} />
-          ))}
-        </span>
-      )}
-    </span>
+    <Icon data-state={mark} role="img" aria-label={label} className={cn('size-3.5 shrink-0', className)}>
+      <title>{label}</title>
+    </Icon>
   )
 }
 
-/** A manager's aligned progress. Nothing when the project has no contract yet. */
-function ProjectProgressMark({ progress }: { progress: TaskProgress | undefined }) {
-  if (!progress || progress.total === 0) return null
-  const attention = progress.state === 'calm' ? null : progress.state
+function ManagerProgress({ progress }: { progress: TaskProgress }) {
+  const mark = projectMark(progress)
+  return <ProgressReadout progress={progress} marks={mark ? [mark] : []} />
+}
+
+function ProgressReadout({ progress, marks }: { progress: TaskProgress; marks: ProgressMark[] }) {
+  if (progress.total === 0) return null
   return (
-    <span
-      data-progress={`${progress.verified}/${progress.total}`}
-      className="inline-flex shrink-0 items-center gap-1 text-[11px] leading-none whitespace-nowrap text-[#8d8d93]"
-    >
-      <span data-state={progress.state} className={cn('size-1.5 shrink-0 rounded-full', DOT[progress.state])} aria-hidden />
-      <span>
-        <Fraction progress={progress} />
-        {attention && <span className={WORD[attention]}> {WORD_TEXT[attention]}</span>}
-      </span>
+    <span data-progress={`${progress.verified}/${progress.total}`} className="inline-flex shrink-0 items-center gap-1 text-[11px] leading-none whitespace-nowrap text-[#8d8d93]">
+      {marks.map((mark) => (
+        <StatusIcon key={mark} mark={mark} />
+      ))}
+      <Fraction progress={progress} />
     </span>
   )
 }
@@ -233,12 +234,12 @@ function DirectorRow({
   progress: { projects: ProjectProgress[]; total: TaskProgress }
 }) {
   const line = statusLine(chat, 'Leads every manager')
-  const attention = progress.projects.filter((project) => project.progress.total > 0 && project.progress.state !== 'calm')
+  const marks = directorMarks(progress.total, progress.projects)
   return (
     <Link
       href="/"
       aria-current={active ? 'page' : undefined}
-      aria-label={directorLabel(director.name, progress.total, attention)}
+      aria-label={directorLabel(director.name, progress.total, marks)}
       className={cn('flex items-center gap-2.5 rounded-xl px-2 py-1.5', active && 'bg-muted dark:bg-[#232325]')}
     >
       {director.mark && <PersonaAvatar persona={director} className="size-10 text-xl" />}
@@ -251,7 +252,7 @@ function DirectorRow({
           {line}
         </span>
       </span>
-      <DirectorProgress total={progress.total} attention={attention} />
+      <ProgressReadout progress={progress.total} marks={marks} />
     </Link>
   )
 }
@@ -273,7 +274,7 @@ function ManagerItem({ manager, active, progress }: { manager: ChatSummary; acti
         {/* Hover brings the remove control up over this corner. Focusing the row itself leaves the count in place. */}
         {progress && progress.total > 0 && (
           <span className="group-hover/manager:invisible">
-            <ProjectProgressMark progress={progress} />
+            <ManagerProgress progress={progress} />
           </span>
         )}
       </Link>

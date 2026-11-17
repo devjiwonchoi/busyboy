@@ -80,17 +80,22 @@ test('the chat list should show a calm fraction and nothing for an unaligned pro
   await open(page)
   const list = chats(page)
   await expect(director(page)).toContainText('8/8')
-  await expect(director(page)).toHaveAccessibleName('Jota, director, 8/8')
-  await expect(director(page).locator('[data-state]')).toHaveCount(0)
+  await expect(director(page)).toHaveAccessibleName('Jota, director, All verified, 8/8')
+  await expect(director(page).locator('[data-state="complete"]')).toHaveAttribute('aria-label', 'All verified')
+  await expect(director(page).locator('[data-state="complete"] title')).toHaveText('All verified')
+  await expect(director(page).locator('[data-state="complete"]')).toHaveClass(/text-success-foreground/)
   await expect(list.getByText('at risk')).toHaveCount(0)
-  await expect(list.getByText('decision')).toHaveCount(0)
+  await expect(list.getByText('Needs a decision')).toHaveCount(0)
 
   const web = manager(page, 'Web')
   await expect(web).toContainText('5/5')
-  await expect(web.locator('[data-state="calm"]')).toHaveClass(/bg-success-foreground/)
+  // The label lives in the icon's title, which is not drawn on the row.
+  expect(await web.innerText()).not.toContain('All verified')
+  await expect(web.locator('[data-state="complete"]')).toHaveAttribute('aria-label', 'All verified')
+  await expect(web.locator('[data-state="complete"]')).toHaveClass(/text-success-foreground/)
   await expect(web.locator('[data-progress]')).toHaveClass(/text-\[#8d8d93\]/)
   await expect(manager(page, 'Api')).toContainText('3/3')
-  await expect(manager(page, 'Api').locator('[data-state="calm"]')).toBeVisible()
+  await expect(manager(page, 'Api').locator('[data-state="complete"]')).toBeVisible()
   await expect(manager(page, 'Notes')).not.toContainText(/\d+\s*\/\s*\d+/)
   await expect(manager(page, 'Notes').locator('[data-progress]')).toHaveCount(0)
   await shot(page, 'sidebar-calm-director.png')
@@ -105,12 +110,13 @@ test('the chat list should show a calm fraction and nothing for an unaligned pro
   await shot(page, 'sidebar-calm-project.png')
 })
 
-test('the chat list should say at risk or decision only on the project that needs it', async ({ page, context, baseURL }) => {
-  const { home, projects } = await useProjectsHome(context, baseURL!, ['web', 'api', 'docs', 'notes'])
+test('the chat list should mark at risk and a decision with an icon', async ({ page, context, baseURL }) => {
+  const { home, projects } = await useProjectsHome(context, baseURL!, ['web', 'api', 'docs', 'quiet', 'notes'])
   writeManagers(home, [
     { id: 'webby', name: 'Web', project: 'web' },
     { id: 'apily', name: 'Api', project: 'api' },
     { id: 'docsy', name: 'Docs', project: 'docs' },
+    { id: 'quiety', name: 'Quiet', project: 'quiet' },
     { id: 'notesy', name: 'Notes', project: 'notes' },
   ])
   await addRecordTask(home, {
@@ -139,6 +145,13 @@ test('the chat list should say at risk or decision only on the project that need
     files: { 'ALIGN.md': align(5), 'VERIFY.md': verify(['pass', 'pass', 'pass', 'pass', 'pass']) },
   })
   await addRecordTask(home, {
+    project: 'quiet',
+    projectPath: projects.quiet,
+    id: 'quiet-part',
+    title: 'Write the notes',
+    files: { 'ALIGN.md': align(4), 'VERIFY.md': verify(['pass', 'pass', 'pending', 'pending']) },
+  })
+  await addRecordTask(home, {
     project: 'notes',
     projectPath: projects.notes,
     id: 'notes-draft',
@@ -148,31 +161,35 @@ test('the chat list should say at risk or decision only on the project that need
 
   await open(page)
   const jota = director(page)
-  await expect(jota).toContainText('12/16')
-  await expect(jota).not.toContainText('at risk')
-  await expect(jota).not.toContainText('decision')
-  await expect(jota).toHaveAccessibleName('Jota, director, 12/16, web at risk, api decision')
-  const dots = jota.locator('[data-state]')
-  await expect(dots).toHaveCount(2)
-  await expect(dots.nth(0)).toHaveAttribute('data-state', 'at-risk')
-  await expect(dots.nth(0)).toHaveClass(/bg-destructive/)
-  await expect(dots.nth(1)).toHaveAttribute('data-state', 'decision')
-  await expect(dots.nth(1)).toHaveClass(/bg-warning-foreground/)
+  await expect(jota).toContainText('14/20')
+  // The labels live in the icon titles, which are not drawn on the row.
+  expect(await jota.innerText()).not.toContain('At risk')
+  expect(await jota.innerText()).not.toContain('Needs a decision')
+  await expect(jota).toHaveAccessibleName('Jota, director, At risk, Needs a decision, 14/20')
+  const icons = jota.locator('[data-state]')
+  await expect(icons).toHaveCount(2)
+  await expect(icons.nth(0)).toHaveAttribute('data-state', 'at-risk')
+  await expect(icons.nth(0)).toHaveAttribute('aria-label', 'At risk')
+  await expect(icons.nth(0)).toHaveClass(/text-destructive/)
+  await expect(icons.nth(1)).toHaveAttribute('data-state', 'decision')
+  await expect(icons.nth(1)).toHaveAttribute('aria-label', 'Needs a decision')
+  await expect(icons.nth(1)).toHaveClass(/text-warning-foreground/)
 
   const web = manager(page, 'Web')
-  await expect(web).toContainText('3/5 at risk')
-  await expect(web).not.toContainText('decision')
-  await expect(web.locator('[data-state="at-risk"]')).toHaveClass(/bg-destructive/)
-  await expect(web.getByText('at risk')).toHaveClass(/text-destructive/)
+  await expect(web).toContainText('3/5')
+  expect(await web.innerText()).not.toContain('At risk')
+  await expect(web.locator('[data-state="at-risk"]')).toHaveAttribute('aria-label', 'At risk')
+  await expect(web.locator('[data-state="at-risk"]')).toHaveClass(/text-destructive/)
   const api = manager(page, 'Api')
-  await expect(api).toContainText('4/6 decision')
-  await expect(api).not.toContainText('at risk')
-  await expect(api.locator('[data-state="decision"]')).toHaveClass(/bg-warning-foreground/)
-  await expect(api.getByText('decision')).toHaveClass(/text-warning-foreground/)
+  await expect(api).toContainText('4/6')
+  expect(await api.innerText()).not.toContain('Needs a decision')
+  await expect(api.locator('[data-state="decision"]')).toHaveAttribute('aria-label', 'Needs a decision')
+  await expect(api.locator('[data-state="decision"]')).toHaveClass(/text-warning-foreground/)
   await expect(manager(page, 'Docs')).toContainText('5/5')
-  await expect(manager(page, 'Docs')).not.toContainText('at risk')
-  await expect(manager(page, 'Docs')).not.toContainText('decision')
-  await expect(manager(page, 'Docs').locator('[data-state="calm"]')).toHaveClass(/bg-success-foreground/)
+  await expect(manager(page, 'Docs').locator('[data-state="complete"]')).toHaveClass(/text-success-foreground/)
+  const quiet = manager(page, 'Quiet')
+  await expect(quiet).toContainText('2/4')
+  await expect(quiet.locator('[data-state]')).toHaveCount(0)
   await expect(manager(page, 'Notes')).not.toContainText(/\d+\s*\/\s*\d+/)
   await shot(page, 'sidebar-attention-director.png')
 
@@ -180,9 +197,11 @@ test('the chat list should say at risk or decision only on the project that need
   await expect(api).toHaveAttribute('aria-current', 'page')
   // The pointer stays on the row after the click, which is where Remove sits. Park it in the chat.
   await page.mouse.move(640, 360)
-  await expect(api.getByText('4/6 decision')).toBeVisible()
-  await expect(web.getByText('3/5 at risk')).toBeVisible()
-  await expect(jota).toContainText('12/16')
-  await expect(jota).not.toContainText('at risk')
+  await expect(api.getByText('4/6')).toBeVisible()
+  await expect(api.locator('[data-state="decision"]')).toBeVisible()
+  await expect(web.getByText('3/5')).toBeVisible()
+  await expect(web.locator('[data-state="at-risk"]')).toBeVisible()
+  await expect(jota).toContainText('14/20')
+  expect(await jota.innerText()).not.toContain('At risk')
   await shot(page, 'sidebar-attention-project.png')
 })
