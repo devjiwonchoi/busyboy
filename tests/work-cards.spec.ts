@@ -3,14 +3,11 @@ import { join } from 'node:path'
 import { expect as baseExpect, test, type APIRequestContext, type Page } from '@playwright/test'
 import { useProjectsHome } from './support/projects-home'
 
-// A task whose records move from a running step to a finished stack of pull requests.
-// The script is tests/provider-scripts/work-cards.json. Merges go to tests/fake-gh/gh.
 const REQUEST = 'Build the site footer and report each step.'
 const SHIP = 'Ship the footer.'
 
 const expect = baseExpect.configure({ timeout: 15_000 })
 
-// The approved mockup is dark. The app follows the operating system's color scheme.
 test.use({ colorScheme: 'dark' })
 
 async function createTask(request: APIRequestContext, home: string, title: string, text: string) {
@@ -75,8 +72,6 @@ test('clicking Merge in order should merge pull requests from the base of the st
   await openChat(page)
   const task = await createTask(context.request, home, 'Add a footer', REQUEST)
   await expect(openCard(page, 'Progress from web · Add a footer')).toBeVisible()
-  // The progress card does not take the composer, so the task can be told to ship.
-  // The turn ended, and the record still says the work is running, so the row says Working.
   await expect(transcript(page).getByLabel('web · Add a footer', { exact: true })).toContainText('Working')
 
   await transcript(page).getByRole('group', { name: 'Tasks' }).getByRole('button', { name: 'Message web · Add a footer' }).click()
@@ -91,7 +86,6 @@ test('clicking Merge in order should merge pull requests from the base of the st
   await expect(done.getByRole('button', { name: 'Reply' })).toHaveCount(0)
   await expect(done.getByRole('button', { name: 'Stop task' })).toHaveCount(0)
   await expect(openCard(page, 'Progress from web · Add a footer')).toHaveCount(0)
-  // Finishing replaces the progress card. It does not leave a second closed Done card.
   await expect(transcript(page).getByRole('group', { name: 'Card from web · Add a footer' })).toHaveCount(0)
 
   await done.getByRole('button', { name: 'View plan' }).click()
@@ -115,7 +109,6 @@ test('clicking Merge in order should merge pull requests from the base of the st
   await expect(pulls.getByRole('link', { name: 'Open' })).toHaveCount(1)
   await expect(pulls.getByRole('button', { name: 'Reply' })).toHaveCount(0)
   await expect(pulls.getByRole('button', { name: 'Stop task' })).toHaveCount(0)
-  // The card is on screen and nothing has merged: the click is what merges.
   const log = join(task.worktree, '.gh-merge.log')
   expect(existsSync(log)).toBe(false)
   await page.evaluate(() => {

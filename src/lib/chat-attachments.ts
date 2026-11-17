@@ -1,11 +1,8 @@
-// Shared by the composer and the server. The server checks the bytes again:
-// the browser's file size and type are only the first reading.
 
 export const IMAGE_MEDIA_TYPES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp'] as const
 
 export type ImageMediaType = (typeof IMAGE_MEDIA_TYPES)[number]
 
-/** What the composer sends to a server action. `data` is base64, without a data: prefix. */
 export type AttachmentInput = { name: string; mediaType: string; data: string }
 
 export const MAX_IMAGE_BYTES = 4 * 1024 * 1024
@@ -37,10 +34,6 @@ function extensionOf(name: string) {
   return dot === -1 ? '' : base.slice(dot + 1).toLowerCase()
 }
 
-/**
- * Why this file cannot be attached, or null when it can. `already` is how many
- * attachments the message already has; `totalBytes` is their size so far.
- */
 export function attachmentProblem({
   name,
   mediaType,

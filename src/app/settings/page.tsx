@@ -31,8 +31,6 @@ import { parseSection, sectionHref, SECTIONS, type SectionId } from './sections'
 
 export const metadata: Metadata = { title: 'Settings · BusyBoy' }
 
-// Settings after setup: one page with a section list, where each change saves on its own.
-// Setup stays a guided first run; this page has no steps, Continue, or Back.
 export default function SettingsPage({ searchParams }: PageProps<'/settings'>) {
   return (
     <div className="flex h-dvh flex-col">
@@ -51,9 +49,7 @@ export default function SettingsPage({ searchParams }: PageProps<'/settings'>) {
 
 async function Body({ searchParams }: Pick<PageProps<'/settings'>, 'searchParams'>) {
   const section = parseSection((await searchParams).section)
-  // Sections read local state (sign-in probes, files) per request.
   await connection()
-  // Settings only exist once setup has been finished; until then setup is the way in.
   if (!isSetupComplete(await readSettings())) redirect('/setup')
   return (
     <div className="flex min-h-0 flex-1 flex-col md:flex-row">
@@ -155,7 +151,6 @@ async function AgentsSection() {
     Promise.all(
       PROVIDERS.map(async (provider) => {
         const state = await providerState(provider.id)
-        // Skills only matter for an agent BusyBoy can run.
         const skills = state.state === 'not-installed' ? null : await skillsState(provider.id)
         return { ...provider, state, skills }
       }),

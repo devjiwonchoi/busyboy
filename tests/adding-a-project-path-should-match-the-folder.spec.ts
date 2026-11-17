@@ -5,8 +5,6 @@ import { join, sep } from 'node:path'
 import { expect, test } from '@playwright/test'
 import { createGitRepository, removeFolder, useTestHome } from './support/test-home'
 
-// A second spelling of the same folder: a trailing slash, and on Windows the
-// other slash and the other drive-letter case.
 function otherSpelling(folder: string) {
   const slashed = folder.endsWith('/') || folder.endsWith('\\') ? folder : `${folder}${sep}`
   if (process.platform !== 'win32') return slashed
@@ -67,7 +65,6 @@ test('adding a home shortcut should add that folder', async ({ page, context, ba
   )
 
   await page.goto('/settings?section=projects')
-  // `~\` is a home path on Windows. `~/` is one everywhere, including Windows.
   const typed = process.platform === 'win32' ? `~\\${name}` : `~/${name}`
   await page.getByLabel('Folder path').fill(typed)
   await page.getByRole('button', { name: 'Add folder' }).click()

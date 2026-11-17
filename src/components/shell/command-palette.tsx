@@ -21,7 +21,6 @@ function subscribeNothing() {
   return () => {}
 }
 
-/** Opens the existing New manager sheet. That sheet owns the form. */
 export function openNewManager() {
   document.querySelector<HTMLButtonElement>('button[aria-label="New manager"]')?.click()
 }
@@ -34,10 +33,6 @@ function chatHref(id: string | null) {
   return id ? `/?manager=${encodeURIComponent(id)}` : '/'
 }
 
-/**
- * Cmd+K searches Director and manager transcripts and task titles, and lists
- * New task, Settings, and Switch chat. Cmd+N starts the new manager flow.
- */
 export function CommandPalette() {
   const router = useRouter()
   const mac = useSyncExternalStore(subscribeNothing, isMacPlatform, () => true)
@@ -51,7 +46,6 @@ export function CommandPalette() {
     id: 'command-palette',
     label: 'Command palette',
     ...COMMAND_PALETTE_KEYS,
-    // The opening key can land in the search box. Start from an empty query so Settings stays listed.
     run: () => {
       setQuery('')
       setOpen((value) => !value)

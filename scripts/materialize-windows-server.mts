@@ -1,14 +1,4 @@
-// Rewrites a pnpm standalone server into real directories for Windows.
-//
-// pnpm keeps a package's dependencies as siblings of the package
-// (`.pnpm/<id>/node_modules/<dep>`), and Node only finds them because it
-// resolves the real path behind the `node_modules/<name>` symlink. Copying
-// that symlink with `cp --dereference` or `tar -h` leaves the package in
-// `node_modules/<name>` and its siblings behind, so `next` cannot load
-// `@swc/helpers`. Each package is copied with those siblings nested inside
-// its own `node_modules`, which is where Node looks once the file is real.
-// Turbopack's hashed aliases under `.next/node_modules/` are copied the same
-// way. The result has no symlinks, so Windows tar can extract it.
+// pnpm siblings only resolve through the package symlink, and Windows tar cannot create those links.
 import { copyFileSync, cpSync, existsSync, lstatSync, mkdirSync, readdirSync, realpathSync, rmSync, statSync } from 'node:fs'
 import { basename, dirname, join } from 'node:path'
 

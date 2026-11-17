@@ -1,18 +1,3 @@
-// Records a short real Claude run as a provider script for the scripted
-// provider (src/server/runner/scripted-provider.ts). It runs in a fresh temporary
-// folder in Auto mode, answers every approval with Allow and every question
-// with its first option (or --answer), and keeps only the messages the
-// Claude event mapping reads.
-//
-//   node scripts/record-claude-script.mts tests/provider-scripts/name.json \
-//     --description "What the run shows" [--ask "Bash(touch:*)"] [--answer Blue] \
-//     "first prompt" ["second prompt" ...]
-//
-// With --director, the run gets the Director's fixed instructions, as a
-// Director with no companion voice and no saved memory, and a stand-in for
-// busyboy's MCP tools that knows the projects given by --project, answers
-// task_status with the text of --status-file, and remembers nothing. Replays
-// call the real tools (see `mcpCalls` in src/server/runner/scripted-provider.ts).
 import { execFileSync } from 'node:child_process'
 import { createServer } from 'node:http'
 import type { AddressInfo } from 'node:net'

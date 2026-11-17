@@ -482,8 +482,6 @@ function useComposerInputLayout() {
       document.fonts.removeEventListener("loadingdone", scheduleMeasure);
     };
   }, [input]);
-  // Controlled drafts, layout props, and conditional actions can change without
-  // an input event. Coalesce these commits with input and resize notifications.
   useLayoutEffect(() => {
     scheduleMeasureRef.current?.();
   });

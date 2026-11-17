@@ -1,11 +1,7 @@
-// Turns Grok's ACP `session/update` notifications and permission requests into
-// contract events. Grok streams assistant text one fragment at a time and names
-// tools in its own vocabulary (`run_terminal_command`, `write`); the always-ask
-// list is written for Claude and Codex (`Bash`, `Write`, `Edit`, `mcp__…`).
+// The always-ask list is written for Claude and Codex tool names. Grok names tools differently.
 import type { AgentEvent } from './contract'
 import { TEXT_DELTA_FLUSH_MS, toolLabel } from './claude-events'
 
-/** A permission option Grok offers on `session/request_permission`. */
 export type GrokPermissionOption = { optionId: string; name?: string; kind?: string }
 
 const SHELL_NAMES = new Set([
@@ -26,16 +22,11 @@ function record(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : {}
 }
 
-/** Grok's tool meta, when the call carries `x.ai/tool`. */
 function toolMeta(toolCall: Record<string, unknown>) {
   return record(record(toolCall._meta)['x.ai/tool'])
 }
 
-/**
- * The always-ask tool name and input for one ACP tool call. Shell calls become
- * `Bash` with `{ command }`, and file calls become `Write` or `Edit` with
- * `file_path`, which is what the list and the private-folder check read.
- */
+// Shell calls become Bash and file calls become Write or Edit, which is what the list reads.
 export function grokToolSubject(toolCall: Record<string, unknown>) {
   const meta = toolMeta(toolCall)
   const raw = record(toolCall.rawInput ?? toolCall.raw_input ?? meta.input)
@@ -54,13 +45,11 @@ export function grokToolSubject(toolCall: Record<string, unknown>) {
     const toolName = /edit|search_replace|apply_patch/i.test(`${name} ${variant}`) ? 'Edit' : 'Write'
     return { toolName, input: { ...raw, file_path: path }, title }
   }
-  // Connector rules are written `mcp__server__tool`. Grok's own tools stay as named.
   const namespace = text(meta.namespace)
   const toolName = namespace && namespace !== 'grok_build' ? `mcp__${namespace}__${name}` : name
   return { toolName, input: raw, title }
 }
 
-/** Whether the call belongs to an MCP server BusyBoy marked trusted. */
 export function grokTrustedTool(toolCall: Record<string, unknown>, trusted: ReadonlySet<string>) {
   const namespace = text(toolMeta(toolCall).namespace)
   if (namespace && trusted.has(namespace)) return true
@@ -71,7 +60,6 @@ export function grokTrustedTool(toolCall: Record<string, unknown>, trusted: Read
   return false
 }
 
-/** The ACP result for a permission decision, using an option Grok actually offered. */
 export function grokPermissionOutcome(
   options: readonly GrokPermissionOption[],
   decision: 'allow' | 'allow-session' | 'deny' | 'cancel',
@@ -87,7 +75,6 @@ export function grokPermissionOutcome(
   return { outcome: { outcome: 'selected' as const, optionId: option.optionId } }
 }
 
-/** Whether Grok offered to remember an allow for the rest of the session. */
 export function grokCanAllowForSession(options: readonly GrokPermissionOption[]) {
   return options.some((entry) => entry.kind === 'allow_always')
 }
@@ -104,11 +91,6 @@ function toolUpdate(update: Record<string, unknown>) {
   }
 }
 
-/**
- * Maps one Grok session's `session/update` notifications to contract events.
- * Text fragments are gathered for TEXT_DELTA_FLUSH_MS. Each tool call is one
- * `tool` event, the first time it can be named.
- */
 export class GrokEventMapper {
   private itemId: string | undefined
   private pending = ''
@@ -168,7 +150,6 @@ export class GrokEventMapper {
   }
 }
 
-/** A readable reason for a prompt that stopped other than by finishing or being cancelled. */
 export function grokStopMessage(stopReason: string) {
   switch (stopReason) {
     case 'max_tokens':

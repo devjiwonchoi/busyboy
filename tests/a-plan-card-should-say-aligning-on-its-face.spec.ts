@@ -1,7 +1,6 @@
 import { expect as baseExpect, test, type APIRequestContext, type Page } from '@playwright/test'
 import { useProjectsHome } from './support/projects-home'
 
-// The plan turn is tests/provider-scripts/task-cards.json.
 const REQUEST = 'Add a footer with the project name to the web app.'
 
 const expect = baseExpect.configure({ timeout: 15_000 })

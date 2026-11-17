@@ -6,10 +6,8 @@ import { listProjects } from '@/server/projects'
 import { listRooms } from '@/server/rooms'
 import { ChatSidebar } from './chat-sidebar'
 
-/** The left chat list, with who the Director is and the projects a new manager can take. */
 export function ChatSidebarSlot() {
   return (
-    // The list reads the open chat from the URL, which needs a boundary of its own.
     <Suspense>
       <ChatSidebarData />
     </Suspense>

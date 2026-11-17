@@ -1,14 +1,8 @@
 #!/bin/sh
-# Stands in for the Claude CLI in journeys that run the real adapter. Like a
-# CLI with an MCP server and a running Bash command, it starts one child in
-# its own process group and one detached into a session of its own (as Claude
-# Code starts its commands), writes both pids to $FAKE_CLAUDE_PID_FILE, and
-# then waits until its input closes.
+# Like Claude Code, one child stays in this process group and one is detached with setsid.
 sleep 300 &
 grouped=$!
-# The detached child writes the pid file itself, after setsid: written any
-# earlier, a stop on a slow machine could signal the group while the child is
-# still in it and miss it once it has left.
+# The detached child writes the pid file after setsid, or a stop can signal it while it is still in the group.
 perl -MPOSIX -e '
   POSIX::setsid();
   open(my $file, ">", "$ENV{FAKE_CLAUDE_PID_FILE}.tmp") or die;

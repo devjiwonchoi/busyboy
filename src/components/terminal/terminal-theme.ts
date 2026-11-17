@@ -1,6 +1,5 @@
 import type { ITheme } from '@xterm/xterm'
 
-// ANSI colors tuned to read on the app's light and dark backgrounds.
 const lightAnsi: ITheme = {
   black: '#1f2328',
   red: '#cf222e',
@@ -39,10 +38,7 @@ const darkAnsi: ITheme = {
   brightWhite: '#f0f6fc',
 }
 
-/**
- * xterm.js only understands hex and rgb colors, while the app's tokens are
- * oklch. Paint each token on a canvas and read the pixel back as hex.
- */
+// xterm.js only understands hex and rgb, and the app's tokens are oklch.
 function tokenColor(host: HTMLElement, token: string, context: CanvasRenderingContext2D) {
   const probe = document.createElement('span')
   probe.style.color = `var(${token})`
@@ -61,7 +57,6 @@ function prefersDark() {
   return document.documentElement.classList.contains('dark')
 }
 
-/** Builds the terminal theme from the app's current color tokens. */
 export function readTerminalTheme(host: HTMLElement): ITheme {
   const canvas = document.createElement('canvas')
   canvas.width = 1

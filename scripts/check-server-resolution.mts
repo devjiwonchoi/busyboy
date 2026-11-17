@@ -1,9 +1,4 @@
-// Fails when the standalone server cannot load what it imports.
-//
-// Node's lookup is run from the standalone tree alone. A dependency that is
-// only found in a parent checkout (the repository's own node_modules) counts
-// as missing: that is how `tar -h` loses pnpm's sibling packages, and how a
-// deleted `.next/node_modules/<name>-<hash>` alias shows up.
+// tar -h drops pnpm's sibling packages, and Node then cannot load them from the standalone tree alone.
 import { createRequire } from 'node:module'
 import { existsSync, readdirSync, readFileSync, realpathSync } from 'node:fs'
 import { isAbsolute, join, relative } from 'node:path'

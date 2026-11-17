@@ -1,10 +1,6 @@
-// Turns Claude Agent SDK messages and permission requests into contract
-// events. Shared by the live adapter and the scripted replay of recorded
-// Claude runs, so a recording exercises the same mapping as a real run.
 import { parseAskedQuestions } from './asked-questions'
 import type { AgentEvent } from './contract'
 
-/** The subset of SDK messages the mapping reads. Recordings keep only these. */
 export type ClaudeRawMessage = {
   type: string
   subtype?: string
@@ -24,7 +20,6 @@ export type ClaudeRawMessage = {
   }
   message?: { id?: string; content?: unknown }
   parent_tool_use_id?: string | null
-  /** MCP servers Claude reports on `system` `init`, including ones inherited from the user's config. */
   mcp_servers?: { name?: string; status?: string }[]
 }
 
@@ -34,21 +29,15 @@ export type ClaudePermissionRequest = {
   input: Record<string, unknown>
   title?: string
   description?: string
-  /**
-   * Permission updates that would stop this request from asking again in the
-   * session. Without any, the request cannot be allowed for the session.
-   */
   suggestions?: unknown[]
 }
 
-/** How long text deltas are gathered before they are sent as one event. */
 export const TEXT_DELTA_FLUSH_MS = 50
 
 const SIGNED_OUT_ERRORS = new Set(['authentication_failed', 'oauth_org_not_allowed'])
 const LABEL_LIMIT = 80
 const CONTEXT_FULL = 'Claude stopped: the conversation is longer than the model can read. Run /compact or start a new agent.'
 
-/** Readable reasons for a turn the CLI ended early. Interrupts are not errors and are absent. */
 const TERMINAL_REASONS: Record<string, string> = {
   api_error: 'Claude gave up after repeated API errors.',
   malformed_tool_use_exhausted: 'Claude gave up after repeated malformed tool calls.',
@@ -71,7 +60,6 @@ function shorten(value: string) {
   return line.length > LABEL_LIMIT ? `${line.slice(0, LABEL_LIMIT - 1)}…` : line
 }
 
-/** A startup problem for an MCP server Claude inherited or was given, or undefined when it connected. */
 export function claudeMcpStartupNotice(server: { name?: string; status?: string }) {
   const name = server.name?.trim()
   if (!name || !/^[A-Za-z0-9_-]+$/.test(name)) return undefined
@@ -80,14 +68,12 @@ export function claudeMcpStartupNotice(server: { name?: string; status?: string 
   return undefined
 }
 
-/** A short label such as `Bash: pnpm test` or `Read: app/page.tsx`. */
 export function toolLabel(name: string, input: Record<string, unknown>) {
   const detail =
     input.command ?? input.file_path ?? input.path ?? input.pattern ?? input.url ?? input.query ?? input.description
   return typeof detail === 'string' && detail ? `${name}: ${shorten(detail)}` : name
 }
 
-/** A readable error for a turn result, or undefined when the turn ended normally. */
 export function claudeResultError(message: ClaudeRawMessage): string | undefined {
   const reason = message.terminal_reason
   if (reason && INTERRUPTED_REASONS.has(reason)) return undefined
@@ -95,7 +81,6 @@ export function claudeResultError(message: ClaudeRawMessage): string | undefined
   if (message.subtype === 'success' && !message.is_error && !known) return undefined
   if (message.api_error_status === 529) return 'Claude is overloaded right now. Try again shortly.'
   if (message.api_error_status === 429) return 'Claude hit its rate limit. Try again later.'
-  // The CLI mixes its own telemetry into `errors`; it is not for the user.
   const listed = message.errors?.find((error) => typeof error === 'string' && !error.startsWith('[ede_diagnostic]'))
   if (reason === 'api_error' && message.result?.trim().startsWith('API Error:')) return message.result.trim().slice(0, 500)
   if (known) return known
@@ -107,27 +92,12 @@ export function claudeResultError(message: ClaudeRawMessage): string | undefined
 
 type ContentBlock = { type?: string; text?: string; name?: string; input?: Record<string, unknown> }
 
-/**
- * Maps one Claude conversation's SDK messages to contract events, in order.
- *
- * Each text block of a reply is its own item, `<message id>:text:<n>`. Its
- * streamed deltas are gathered for TEXT_DELTA_FLUSH_MS and sent together, so
- * a long reply adds a few events per second instead of one per token. The
- * assistant message that completes a block sends its text only when that text
- * never streamed or differs from what streamed. Any other event first sends the
- * deltas still gathered, so order is kept.
- */
 export class ClaudeEventMapper {
-  /** Id of the reply being streamed, from its `message_start`. */
   private streamingMessageId: string | undefined
-  /** Item ids by content block index of the reply being streamed. */
   private streamingBlocks = new Map<number, string>()
-  /** Text blocks per message id seen so far, streamed and completed, to number items. */
   private streamedCount = new Map<string, number>()
   private completedCount = new Map<string, number>()
-  /** Full streamed text by item id, until the completed message arrives. */
   private streamedText = new Map<string, string>()
-  /** Deltas not sent yet, by item id, in arrival order. */
   private pending = new Map<string, string>()
   private timer: ReturnType<typeof setTimeout> | undefined
   private anonymous = 0
@@ -135,7 +105,6 @@ export class ClaudeEventMapper {
   constructor(private readonly emit: (event: AgentEvent) => void) {}
 
   push(message: ClaudeRawMessage) {
-    // Subagent traffic stays inside the subagent; the parent reports its result.
     if (message.parent_tool_use_id) return
     switch (message.type) {
       case 'system':
@@ -164,7 +133,6 @@ export class ClaudeEventMapper {
     }
   }
 
-  /** Sends gathered deltas now, for example before the session reports it stopped. */
   flush() {
     if (this.timer) clearTimeout(this.timer)
     this.timer = undefined
@@ -173,7 +141,6 @@ export class ClaudeEventMapper {
     for (const [itemId, text] of pending) this.emit({ type: 'text-delta', itemId, text })
   }
 
-  /** Stops the flush timer without sending anything. */
   dispose() {
     if (this.timer) clearTimeout(this.timer)
     this.timer = undefined
@@ -242,8 +209,6 @@ export function claudePermissionToEvent(
   request: ClaudePermissionRequest,
 ): Extract<AgentEvent, { type: 'approval' | 'question' }> {
   if (request.toolName === 'AskUserQuestion') {
-    // Any payload this tool sends is a question. A shape we cannot read must not
-    // fall through to an approval, which would offer Allow for a question.
     const questions = parseAskedQuestions(request.input) ?? [
       { question: 'Claude asked a question BusyBoy could not read. Reply with the answer.', multiSelect: false, options: [] },
     ]

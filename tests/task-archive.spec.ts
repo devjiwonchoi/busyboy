@@ -6,8 +6,6 @@ import { expect, test, type APIRequestContext, type Page } from '@playwright/tes
 import { useProjectsHome } from './support/projects-home'
 import { startStandaloneServer } from './support/standalone-server'
 
-// Archiving and restoring tasks. Scripts: tests/provider-scripts/task-agents.json (a short first
-// turn), task-messages.json (a follow-up and a subagent), and task-resume.json (a long turn).
 
 const QUICK_REQUEST = 'Add a CONTRIBUTING.md that explains how to run the project.'
 const QUICK_FOLLOW_UP = 'Also add a section on running the tests.'
@@ -37,7 +35,6 @@ async function callTool(request: APIRequestContext, name: string, args: Record<s
   return { isError: Boolean(body.result.isError), text: body.result.content[0].text }
 }
 
-/** A task whose agent finished its first turn, with a record its agent would have written. */
 async function finishedTask(request: APIRequestContext, home: string) {
   await callTool(request, 'create_task', { project: 'web', title: 'Contributing guide', request: QUICK_REQUEST })
   await expect.poll(() => storedTasks(home)[0]?.activity).toBe('idle')
@@ -70,10 +67,8 @@ test('archiving a finished task should remove its worktree, and restoring should
 
   await expect(line.locator('[data-status]')).toHaveText('Archived')
   expect(existsSync(task.worktree)).toBe(false)
-  // Its branch and its records are kept.
   expect(branches(projects.web)).toContain(task.branch)
   expect(readFileSync(join(home, 'task-archive', 'web', task.id, '.jwn', task.id, 'STATUS.md'), 'utf8')).toBe('Stage: Ship\n')
-  // Nothing to message or open a terminal in while it is archived.
   await expect(line.getByRole('button', { name: 'Message web · Contributing guide' })).toHaveCount(0)
   await expect(line.getByRole('button', { name: 'Select web · Contributing guide' })).toBeDisabled()
 
@@ -97,7 +92,6 @@ test('archiving a task with uncommitted changes should keep its worktree and say
   await expect(line.locator('[data-status]')).toHaveText('Archived')
   await expect(page.getByRole('group', { name: 'Tasks' })).toContainText(KEPT_NOTICE)
   expect(readFileSync(join(task.worktree, 'CONTRIBUTING.md'), 'utf8')).toBe('Run pnpm dev.\n')
-  // The records stay with the worktree that was kept.
   expect(existsSync(join(task.worktree, '.jwn', task.id, 'STATUS.md'))).toBe(true)
   expect(existsSync(join(home, 'task-archive', 'web', task.id))).toBe(false)
 })
@@ -110,7 +104,6 @@ test('calling message_task for an archived task should restore it and send the m
     text: `Archived task ${task.id} in web.`,
   })
   expect(existsSync(task.worktree)).toBe(false)
-  // Out of the Director's status summary while archived.
   expect((await callTool(context.request, 'task_status', {})).text).not.toContain(task.id)
 
   const result = await callTool(context.request, 'message_task', { task: task.id, message: QUICK_FOLLOW_UP })
@@ -129,7 +122,6 @@ test('a working task should not be archived, and a finished subagent should', as
   await openChat(page)
   const working = taskLine(page, 'web · Release notes')
   const subagent = taskLine(page, 'web · Which branch')
-  // The first turn has no records yet, so the phase word is Planning. The agent is still running, so the task cannot be archived.
   await expect(working.locator('[data-status]')).toHaveText('Planning')
   await expect(working.locator('[data-status]')).toHaveAttribute('data-status', 'running')
   await expect(subagent.locator('[data-status]')).toHaveText('Done')
@@ -153,11 +145,9 @@ test('an archived task that was due to resume should stay put away after a resta
     const context = await browser.newContext({ baseURL: server.baseURL })
     const { home } = await useProjectsHome(context, server.baseURL, ['web'])
     const task = await finishedTask(context.request, home)
-    // Uncommitted work keeps the worktree, so a resume would have somewhere to run.
     writeFileSync(join(task.worktree, 'CONTRIBUTING.md'), 'Run pnpm dev.\n')
     await callTool(context.request, 'archive_task', { task: task.id })
     await server.stop('SIGTERM')
-    // As after a restart whose provider could not start: the task still says it was working.
     const file = join(home, 'task-list.json')
     const list = JSON.parse(readFileSync(file, 'utf8')) as { tasks: StoredTask[] }
     list.tasks[0].activity = 'running'
@@ -168,7 +158,6 @@ test('an archived task that was due to resume should stay put away after a resta
     await openChat(page)
 
     await expect(taskLine(page, 'web · Contributing guide').locator('[data-status]')).toHaveText('Archived')
-    // No agent was started for it, and nothing was sent to its session.
     expect(storedTasks(home)[0]).toMatchObject({ archivedAt: expect.any(String) })
     expect(sessionMessages(task.sessionId)).toEqual([QUICK_REQUEST])
     await context.close()

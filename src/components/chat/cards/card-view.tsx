@@ -11,7 +11,6 @@ import { ProgressCardView } from './kinds/progress-card'
 
 type KindView<T extends TaskCard> = ComponentType<CardViewProps<T>>
 
-// Each kind has its own module. A follow-up replaces that module; this map stays.
 const views: { [K in TaskCard['kind']]: KindView<Extract<TaskCard, { kind: K }>> } = {
   question: ChoiceCard,
   approval: ChoiceCard,

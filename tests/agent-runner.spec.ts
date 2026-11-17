@@ -3,9 +3,6 @@ import { expect, test, type Page } from '@playwright/test'
 import { fakeClaudePidFile, fakeClaudeURL } from './fake-claude/fake-claude'
 import { useProjectsHome } from './support/projects-home'
 
-// The agent runner, driven through the Director's chat: the Director is the
-// one agent the user talks to directly. Prompts are recorded from real Claude
-// runs in tests/provider-scripts/ (the slow story is hand-written).
 const PLAIN_PROMPT = 'Reply with exactly this sentence and nothing else: Hello from busyboy.'
 const APPROVAL_PROMPT = 'Run the shell command `touch notes.txt` with the Bash tool, then reply with exactly: Created notes.txt.'
 const QUESTION_PROMPT =
@@ -61,7 +58,6 @@ test('an approval request from the Director should be denied so the run continue
   await useProjectsHome(context, baseURL!, [])
   await sendMessage(page, APPROVAL_PROMPT)
 
-  // The recorded run has a branch for a denial (tests/provider-scripts/claude-approval.json).
   const transcript = page.getByRole('log', { name: 'Transcript' })
   await expect(transcript.getByLabel('Reply', { exact: true })).toHaveText('I was not allowed to create notes.txt.')
   await expect(transcript).toHaveAttribute('data-status', 'idle')
@@ -71,7 +67,6 @@ test('a question tool call from the Director should be answered with a request t
   await useProjectsHome(context, baseURL!, [])
   await sendMessage(page, QUESTION_PROMPT)
 
-  // The recorded run has a branch for that answer (tests/provider-scripts/claude-question.json).
   const transcript = page.getByRole('log', { name: 'Transcript' })
   await expect(transcript.getByLabel('Reply', { exact: true })).toHaveText('Which color do you prefer, Red or Blue?')
   await expect(transcript).toHaveAttribute('data-status', 'idle')
@@ -85,11 +80,9 @@ test.describe('with the real Claude adapter', () => {
 
   test('stopping the Director should end the processes it started', async ({ page, context }) => {
     rmSync(fakeClaudePidFile, { force: true })
-    // The fake CLI never answers a sign-in check, so the journey reports Claude as signed in.
     await useProjectsHome(context, fakeClaudeURL, [], { claude: 'signed-in' })
     await sendMessage(page, 'Start working.')
 
-    // The fake CLI has started its children once it records their pids.
     await expect.poll(() => existsSync(fakeClaudePidFile)).toBe(true)
     const children = readFileSync(fakeClaudePidFile, 'utf8').trim().split(' ').map(Number)
     expect(children).toHaveLength(2)

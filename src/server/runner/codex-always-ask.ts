@@ -8,22 +8,12 @@ import { listProjects } from '../projects'
 import { matchAlwaysAsk } from './always-ask'
 import { checkUserRules, resolveRulesFolder } from './user-rules'
 
-// Codex's Auto mode lets its auto reviewer approve escalations without the
-// user, so the always-ask list reaches Codex through a PreToolUse command hook
-// instead: BusyBoy adds the hook to each task thread's config, the hook posts
-// every tool call to ALWAYS_ASK_PATH and waits, and the session that owns the
-// thread answers once the user has (see `codexAdapter`). The hook fails closed:
-// when BusyBoy cannot be reached, the tool call is blocked. Verified live with
-// codex-cli 0.167.0: the hook gets `session_id` (the thread id), `cwd`,
-// `tool_name` ("Bash" for shell commands) and `tool_input`, and its denial
-// blocks the command.
+// Codex's auto reviewer approves escalations without the user. Verified with codex-cli 0.167.0: a hook denial blocks the command.
 
-/** What a hook asks about: the tool call and where it came from. */
 export type HookCall = { sessionId: string | undefined; cwd: string | undefined; toolName: string; input: unknown }
 
 export type HookDecision = { allow: boolean; reason: string }
 
-/** `signal` aborts when the hook went away (its turn ended, or it timed out), so the session drops the approval. */
 type Gate = (call: Pick<HookCall, 'toolName' | 'input' | 'cwd'> & { signal: AbortSignal }) => Promise<HookDecision>
 
 // On globalThis like the runner's registry, so `next dev` reloads keep the open sessions.
@@ -31,7 +21,6 @@ const GATES_KEY = Symbol.for('busyboy.codex-always-ask')
 const globalStore = globalThis as typeof globalThis & { [GATES_KEY]?: Map<string, Gate> }
 const gates = (globalStore[GATES_KEY] ??= new Map())
 
-/** Lets the hook calls of a thread, or of anything run inside a working folder, reach `gate`. */
 export function registerGate({ key, gate }: { key: string; gate: Gate }) {
   gates.set(key, gate)
   return () => {
@@ -44,16 +33,7 @@ export function registerGate({ key, gate }: { key: string; gate: Gate }) {
 export const threadKey = (threadId: string) => `thread:${threadId}`
 export const folderKey = (cwd: string) => `cwd:${cwd}`
 
-/**
- * Decides a hook call: the owning session asks the user when a rule matches.
- * A call is matched by its thread, else by a folder inside a task's folder (a
- * subagent the task started). Codex also runs its own background agents, such
- * as memory consolidation in ~/.codex/memories, with the thread's hooks; those
- * are not BusyBoy's to ask about and run. A call with no owner that works in
- * BusyBoy's data folder or a project, such as a task's subagent in the
- * project's main checkout, has no session to ask, so it is blocked when a rule
- * matches.
- */
+// Codex also runs its own agents, such as memory consolidation in ~/.codex/memories, with the thread's hooks. Those are not ours to ask about.
 export function decideHookCall({ call, signal }: { call: HookCall; signal: AbortSignal }): Promise<HookDecision> {
   const byThread = call.sessionId ? gates.get(threadKey(call.sessionId)) : undefined
   const byFolder = call.cwd
@@ -67,7 +47,6 @@ export function decideHookCall({ call, signal }: { call: HookCall; signal: Abort
 }
 
 async function decideUnowned(call: HookCall): Promise<HookDecision> {
-  // No session to show a card. A matching rule, or a check that cannot be read, is still blocked.
   const userRule = await checkUserRules({
     rulesFolder: resolveRulesFolder(undefined),
     toolName: call.toolName,
@@ -88,13 +67,7 @@ function isInside({ folder, path }: { folder: string; path: string }) {
   return containsPath(folder, path)
 }
 
-// The hook script, run by Codex with the tool call as JSON on stdin. It prints
-// a PreToolUse denial to block the call and prints nothing to let it run. The
-// server keeps the response open with spaces until the user answers, so a long
-// wait never hits fetch's idle timeout. It is passed inline on the command line
-// and the URL is part of it: a script or endpoint file on disk could be
-// rewritten by any agent running as the user to let everything through. Only
-// the token is read from a file, and a rewritten token is refused by the server.
+// A script file on disk could be rewritten by any agent running as the user. Only the token is read from a file.
 const hookScript = ({ url, tokenFile }: { url: string; tokenFile: string }) => `import { readFileSync } from 'node:fs'
 const deny = (reason) => {
   process.stdout.write(JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: reason } }))
@@ -115,7 +88,6 @@ try {
 
 const quote = (value: string) => `'${value.replaceAll("'", `'\\''`)}'`
 
-/** Printed by the shell when the hook script cannot run at all, so the tool call is blocked rather than let through. */
 const CANNOT_RUN = JSON.stringify({
   hookSpecificOutput: {
     hookEventName: 'PreToolUse',
@@ -124,28 +96,18 @@ const CANNOT_RUN = JSON.stringify({
   },
 })
 
-/**
- * Writes the hook's token and returns the hook's shell command. The command is
- * the same for every thread of this server, so Codex's trust hash for it stays
- * the same (see `trustedHookConfig`). The token lives in its own folder per
- * port, so two servers on one machine never answer each other's hooks, and is
- * written again before each thread. The server's own runtime runs the script:
- * in the desktop app that is Electron, run as plain Node.
- */
+// The command is the same for every thread, so Codex's trust hash for it stays the same.
 export async function hookCommand() {
   const port = process.env.PORT ?? '3000'
   const folder = join(resolveDataFolder(), `always-ask-${port}`)
   await mkdir(folder, { recursive: true, mode: 0o700 })
   const token = process.env[SERVER_TOKEN_ENV]
-  // The token stays out of the command line, where process listings would show it.
   const tokenFile = join(folder, 'token')
   await writeFile(tokenFile, token ? alwaysAskTokenFor(token) : '', { mode: 0o600 })
   const script = hookScript({ url: `http://127.0.0.1:${port}${ALWAYS_ASK_PATH}`, tokenFile })
-  // When the runtime or the script cannot start, `||` prints the denial instead.
   return `ELECTRON_RUN_AS_NODE=1 ${quote(process.execPath)} --input-type=module -e ${quote(script)} || printf '%s' ${quote(CANNOT_RUN)}`
 }
 
-/** A day: a hook that waits for the user must not time out into running the action. */
 const HOOK_TIMEOUT_S = 24 * 60 * 60
 
 type Request = <T>(method: string, params: unknown) => Promise<T>
@@ -154,20 +116,10 @@ type ListedHook = { key: string; command?: string; source?: string; currentHash:
 
 const trust = new Map<string, Promise<{ key: string; hash: string }>>()
 
-/**
- * The thread config that adds the hook already trusted. Codex runs only hooks
- * the user trusted, by a hash of the hook that it does not document, so BusyBoy
- * reads the hash from `hooks/list` on an ephemeral thread with no turn (no model
- * call) and passes it as `hooks.state.<key>.trusted_hash`, which Codex accepts
- * from a thread's own config (verified with codex-cli 0.167.0). The hash is
- * read once per command.
- */
+// Codex trusts hooks by a hash it does not document. Verified with codex-cli 0.167.0.
 export async function trustedHookConfig({ request, cwd, executable }: { request: Request; cwd: string; executable: string }) {
   const hookCommandText = await hookCommand()
-  // No matcher: the hook sees every tool call and the session decides, so a rule never depends on
-  // Codex's matcher syntax or tool names agreeing with the list. Each call costs a short process start.
   const hooks = { PreToolUse: [{ matcher: null, hooks: [{ type: 'command', command: hookCommandText, timeout: HOOK_TIMEOUT_S }] }] }
-  // Keyed by the executable too: another Codex version may hash differently.
   const cacheKey = `${executable}\n${hookCommandText}`
   let trusted = trust.get(cacheKey)
   if (!trusted) {
@@ -192,10 +144,7 @@ export async function trustedHookConfig({ request, cwd, executable }: { request:
   const { key, hash } = await trusted
   return {
     config: { hooks: { ...hooks, state: { [key]: { trusted_hash: hash } } } },
-    /**
-     * Checks that the started thread runs the hook as trusted. An untrusted hook is skipped
-     * without an error, which would let every rule through, so the thread must not be used then.
-     */
+    // An untrusted hook is skipped with no error, which would let every rule through.
     verify: async (threadId: string) => {
       const { data } = await request<{ data: { hooks: ListedHook[] }[] }>('hooks/list', { threadId })
       const listed = data.flatMap((entry) => entry.hooks).find((hook) => hook.command === hookCommandText)

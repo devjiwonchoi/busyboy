@@ -4,8 +4,6 @@ import { expect, test, type Page } from '@playwright/test'
 import { addRecordTask } from './support/record-tasks'
 import { useProjectsHome } from './support/projects-home'
 
-// Aligned progress on the chat list. Records live in the journey's jwn root
-// (tests/support/record-tasks.ts), the same place /api/records/events reads.
 
 const TITLES = ['One', 'Two', 'Three', 'Four', 'Five', 'Six']
 
@@ -35,7 +33,6 @@ function writeManagers(home: string, managers: { id: string; name: string; proje
 
 const chats = (page: Page) => page.getByRole('navigation', { name: 'Chats' })
 const director = (page: Page) => chats(page).getByRole('link', { name: 'Jota, director' })
-// The row's accessible name is the manager's name alone. The link inside also carries the fraction.
 const manager = (page: Page, name: string) => chats(page).getByRole('listitem', { name, exact: true }).getByRole('link')
 
 async function open(page: Page) {
@@ -89,7 +86,6 @@ test('the chat list should show a calm fraction and nothing for an unaligned pro
 
   const web = manager(page, 'Web')
   await expect(web).toContainText('5/5')
-  // The label lives in the icon's title, which is not drawn on the row.
   expect(await web.innerText()).not.toContain('All verified')
   await expect(web.locator('[data-state="complete"]')).toHaveAttribute('aria-label', 'All verified')
   await expect(web.locator('[data-state="complete"]')).toHaveClass(/text-success-foreground/)
@@ -102,7 +98,6 @@ test('the chat list should show a calm fraction and nothing for an unaligned pro
 
   await web.click()
   await expect(web).toHaveAttribute('aria-current', 'page')
-  // The pointer stays on the row after the click, which is where Remove sits. Park it in the chat.
   await page.mouse.move(640, 360)
   await expect(web.getByText('5/5')).toBeVisible()
   await expect(director(page)).toContainText('8/8')
@@ -162,7 +157,6 @@ test('the chat list should mark at risk and a decision with an icon', async ({ p
   await open(page)
   const jota = director(page)
   await expect(jota).toContainText('14/20')
-  // The labels live in the icon titles, which are not drawn on the row.
   expect(await jota.innerText()).not.toContain('At risk')
   expect(await jota.innerText()).not.toContain('Needs a decision')
   await expect(jota).toHaveAccessibleName('Jota, director, At risk, Needs a decision, 14/20')
@@ -195,7 +189,6 @@ test('the chat list should mark at risk and a decision with an icon', async ({ p
 
   await api.click()
   await expect(api).toHaveAttribute('aria-current', 'page')
-  // The pointer stays on the row after the click, which is where Remove sits. Park it in the chat.
   await page.mouse.move(640, 360)
   await expect(api.getByText('4/6')).toBeVisible()
   await expect(api.locator('[data-state="decision"]')).toBeVisible()

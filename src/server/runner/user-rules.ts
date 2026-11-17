@@ -6,12 +6,7 @@ import { isTestMode } from '../config'
 import { alwaysAskApproval, matchAlwaysAsk, ruleError, UNREADABLE } from './always-ask'
 import type { AgentEvent } from './contract'
 
-// Blocking rules the user keeps in ~/.jwn, as plain Markdown or YAML, separate
-// from the always-ask list. Claude Code and Codex both run them in the pre-tool
-// hook: a match blocks the call until the user allows it, and a check that
-// cannot be read blocks too (fail closed) and asks with an approval card.
-// In test mode each journey has its own folder under its data folder, so a
-// test never reads the machine's real ~/.jwn.
+// A check that cannot be read blocks too. In test mode each journey has its own folder, so it never reads the real ~/.jwn.
 
 const RULE_FILE = /\.(md|ya?ml)$/i
 const MAX_FILES = 100
@@ -23,23 +18,15 @@ export type UserRuleCheck =
   | { ask: false }
   | {
       ask: true
-      /** Stable key for remembering an allow of this exact call. */
       ruleKey: string
-      /** Shown on the approval card. */
       detail: string
-      /** False when the check failed: an allow is for this one call, never the session. */
       remember: boolean
     }
 
-/** The rules folder for a data folder: ~/.jwn, or the journey's own folder in test mode. */
 export function rulesFolderFor(dataFolder: string) {
   return isTestMode() ? join(dataFolder, 'user-jwn') : join(homedir(), '.jwn')
 }
 
-/**
- * `given` when the caller has one, otherwise ~/.jwn. Test mode does not fall
- * back to the real home: a journey that did not set a folder has no rules.
- */
 export function resolveRulesFolder(given: string | undefined) {
   if (given) return given
   if (isTestMode()) return undefined
@@ -51,14 +38,12 @@ export function userRulesHookNeeded(rulesFolder: string | undefined) {
   const folder = resolveRulesFolder(rulesFolder)
   if (!folder) return false
   try {
-    // The folder is the user's home, not part of the app, so it must not be traced into the build.
     return readdirSync(/*turbopackIgnore: true*/ folder).some((name) => RULE_FILE.test(name))
   } catch (error) {
     return (error as NodeJS.ErrnoException).code !== 'ENOENT'
   }
 }
 
-/** What the approval card says when the rules could not be checked. The action stays blocked until the user answers. */
 export function failedRuleCheck(error: unknown): UserRuleCheck {
   const message = error instanceof Error ? error.message : String(error)
   return {
@@ -69,10 +54,6 @@ export function failedRuleCheck(error: unknown): UserRuleCheck {
   }
 }
 
-/**
- * The approval for a blocking rule, or for a check that failed. `remember` is
- * false for a failed check, so Allow does not skip the next call.
- */
 export function userRuleApproval({
   requestId,
   toolName,
@@ -90,12 +71,6 @@ export function userRuleApproval({
   return { ...event, detail, canAllowForSession: remember }
 }
 
-/**
- * Whether this tool call is blocked by a user rule. A match asks. No rules, or
- * no folder, does not. Anything that prevents a trustworthy check — a rule
- * file that cannot be read or parsed, a matcher that throws — asks too, and
- * does not remember an allow.
- */
 export async function checkUserRules({
   rulesFolder,
   toolName,
@@ -180,17 +155,7 @@ function finish(partial: { name?: string; block?: string; tool?: string; pattern
   return { name: partial.name ?? '', block, reason: partial.reason ?? '', file }
 }
 
-/**
- * A small slice of YAML, enough for a rules file:
- *
- *     rules:
- *       - name: No force push
- *         block: Bash(git push --force*)
- *         reason: Force pushes rewrite history.
- *
- * `tool` and `pattern` together are `Tool(pattern)`. Anything else is an error,
- * so a file that only looks like rules cannot be treated as empty.
- */
+// Anything that only looks like rules is an error, so it cannot be treated as an empty file.
 function parseYaml(text: string, file: string): UserRule[] {
   const rules: UserRule[] = []
   let current: { name?: string; block?: string; tool?: string; pattern?: string; reason?: string } | null = null
@@ -242,12 +207,6 @@ function assign(rule: { name?: string; block?: string; tool?: string; pattern?: 
   throw new Error(`${file}: unknown field "${key}". Use name, block, tool, pattern, or reason.`)
 }
 
-/**
- * Markdown rules: a `Block:` line is one rule, in the same `Tool(pattern)` form
- * as the always-ask list. The heading above it is the rule's name, and a
- * following `Reason:` line is its explanation. A Markdown file with no `Block:`
- * line is not a rule file.
- */
 function parseMarkdown(text: string, file: string): UserRule[] {
   const rules: UserRule[] = []
   let heading = ''

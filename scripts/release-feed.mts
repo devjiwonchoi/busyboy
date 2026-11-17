@@ -1,21 +1,4 @@
-// Prepares the files installed apps read to find and trust an update, in a
-// folder that holds a release's installers.
-//
-//   UPDATE_SIGNING_KEY=<pem> node scripts/release-feed.mts <version> <release-dir>
-//
-// Two things happen:
-//
-// 1. Windows builds each architecture on its own runner, and each writes a
-//    latest.yml. An installed app reads one latest.yml and picks the installer
-//    whose name contains its architecture, so `latest-<arch>.yml` files are
-//    merged into one.
-//
-// 2. BusyBoy 0.0.22 and earlier install a macOS update only when the release
-//    has `busyboy-update.json`, listing every installer and ZIP with its
-//    SHA-512, and `busyboy-update.json.sig`, an Ed25519 signature of that file
-//    made with the key in the release environment's UPDATE_SIGNING_KEY. Both
-//    are written here and then checked the way those apps check them, so a
-//    release they would refuse is never published.
+// BusyBoy 0.0.22 installs a macOS update only when busyboy-update.json is signed and the ZIP hash matches.
 import { createHash, createPrivateKey, createPublicKey, sign, verify } from 'node:crypto'
 import { createReadStream, existsSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { extname, join } from 'node:path'
@@ -23,7 +6,6 @@ import { pipeline } from 'node:stream/promises'
 
 const MANIFEST = 'busyboy-update.json'
 const SIGNATURE = 'busyboy-update.json.sig'
-/** What an installed app downloads to update, or a person downloads to install. */
 const SIGNED_EXTENSIONS = new Set(['.zip', '.dmg', '.exe'])
 
 /** The public half of UPDATE_SIGNING_KEY that BusyBoy 0.0.22 and earlier ship with. */
@@ -40,7 +22,6 @@ const unquote = (value: string) => {
 }
 const quote = (value: string) => `'${value.replaceAll("'", "''")}'`
 
-/** Reads the part of electron-builder's latest.yml that an installed app uses. */
 function parseFeed(raw: string, source: string): Feed {
   let version: string | undefined
   let releaseDate: string | undefined
@@ -88,7 +69,6 @@ function serializeFeed(feed: Feed) {
   ].join('\n')
 }
 
-/** Merges `latest-<arch>.yml` into latest.yml. Returns whether there was anything to merge. */
 function mergeWindowsFeeds(dir: string, version: string) {
   const parts = readdirSync(dir)
     .filter((name) => /^latest-(x64|arm64)\.yml$/.test(name))
@@ -139,11 +119,7 @@ async function signInstallers(dir: string, version: string, privateKeyPem: strin
   return manifest
 }
 
-/**
- * The checks BusyBoy 0.0.22 runs before it installs: the signature covers the
- * manifest, the manifest is for this version, and the ZIP it will download
- * (`BusyBoy-<version>-<arch>.zip`) is listed with the hash and size of the file.
- */
+// The checks BusyBoy 0.0.22 runs before it installs an update.
 async function checkAsInstalledApps(dir: string, version: string, productName: string) {
   const bytes = readFileSync(join(dir, MANIFEST))
   const signature = Buffer.from(readFileSync(join(dir, SIGNATURE), 'utf8').trim(), 'base64')

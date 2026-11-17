@@ -1,14 +1,8 @@
-// MCP elicitation forms (`mcpServer/elicitation/request` in `form` mode) as
-// question cards, and the answers back as typed form content. The contract's
-// questions only offer choices, so a field becomes a question when it has a
-// fixed set of values (an enum, a titled enum, a boolean, a multi-select);
-// other fields take their default. Types follow codex-cli 0.167.0
-// (`McpElicitationSchema`), the MCP 2025-11-25 form schema.
+// Field types follow codex-cli 0.167.0 and the MCP 2025-11-25 form schema. The contract's questions only offer choices.
 import type { AgentAnswer, Question } from './contract'
 
 type Choice = { const: string; title: string }
 
-/** One property of a requested form schema, reduced to the fields read here. */
 export type ElicitationField = {
   type?: string
   title?: string
@@ -22,7 +16,6 @@ export type ElicitationField = {
 
 export type ElicitationSchema = { properties?: Record<string, ElicitationField | undefined>; required?: string[] }
 
-/** The option that declines the whole form, offered on every question unless a field already has a choice by that name. */
 export const DECLINE_LABEL = "Don't send the form"
 const YES = 'Yes'
 const NO = 'No'
@@ -37,7 +30,6 @@ function choicesOf(field: ElicitationField): Choice[] {
   return values.map((value, index) => ({ const: value, title: field.enumNames?.[index] ?? value }))
 }
 
-/** The fields that become questions, in schema order. The first question carries the form's message. */
 function formQuestions(message: string, schema: ElicitationSchema): FormQuestion[] {
   const questions: FormQuestion[] = []
   for (const [key, field] of Object.entries(schema.properties ?? {})) {
@@ -63,10 +55,6 @@ function formQuestions(message: string, schema: ElicitationSchema): FormQuestion
   return questions
 }
 
-/**
- * Required fields BusyBoy cannot ask for: they take free text or a number and
- * have no default. A form with any of them cannot be filled in here.
- */
 export function unfillableFields(schema: ElicitationSchema) {
   const properties = schema.properties ?? {}
   return (schema.required ?? []).filter((key) => {
@@ -75,22 +63,16 @@ export function unfillableFields(schema: ElicitationSchema) {
   })
 }
 
-/** What a form sends without asking: each field's default, as `Title: value` lines. */
 export function elicitationDefaults(schema: ElicitationSchema) {
   return Object.entries(schema.properties ?? {})
     .filter(([, field]) => field?.default !== undefined)
     .map(([key, field]) => `${field?.title || key}: ${JSON.stringify(field?.default)}`)
 }
 
-/** The questions for a form, or none when it has no field with choices. */
 export function elicitationQuestions(message: string, schema: ElicitationSchema): Question[] {
   return formQuestions(message, schema).map(({ question }) => question)
 }
 
-/**
- * Splits a multi-select answer (labels joined with ", ") back into labels, even
- * when a label has a comma. Undefined when any part is not one of the labels.
- */
 function selectedLabels(answer: string, choices: Choice[]) {
   if (answer === '') return []
   const labels = new Set(choices.map((choice) => choice.title))
@@ -106,15 +88,7 @@ function selectedLabels(answer: string, choices: Choice[]) {
   return current === undefined ? selected : undefined
 }
 
-/**
- * The form content for an answer, or undefined when the form is declined: the
- * user chose Decline, an answer is not one of its question's choices, or a
- * required field is still empty. Unanswered fields take their default.
- *
- * An answer that matches no choice declines rather than being skipped: the
- * Director answers every question with a "No answer..." text, and skipping it
- * would send the form with its defaults (say, `action: delete`) that no one saw.
- */
+// Skipping an answer that matches no choice would send the form's defaults, which nobody saw.
 export function elicitationContent(
   message: string,
   schema: ElicitationSchema,

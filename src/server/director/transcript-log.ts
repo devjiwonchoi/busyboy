@@ -1,20 +1,13 @@
 import { appendFile, mkdir, readdir, readFile, rename, stat } from 'node:fs/promises'
 import { join } from 'node:path'
 
-/** The file new transcript entries are appended to. */
 export const TRANSCRIPT_FILE = 'transcript.jsonl'
 
-/**
- * Closed segments are named `transcript.<n>.jsonl`, with `n` starting at 1.
- * The active file is rotated before an append that would push it past this
- * size, so each file stays near 20MB. One entry larger than the limit is
- * written whole and rotated away on the next append.
- */
+// Each file stays near 20MB. One entry larger than the limit is written whole.
 export const MAX_TRANSCRIPT_BYTES = 20 * 1024 * 1024
 
 const SEGMENT_NAME = /^transcript\.(\d+)\.jsonl$/
 
-/** Bytes already written to the active file, once known. Callers serialize appends. */
 export type TranscriptCursor = { bytes?: number }
 
 async function fileSize(file: string) {
@@ -26,11 +19,6 @@ async function fileSize(file: string) {
   }
 }
 
-/**
- * The whole transcript, oldest closed segment first and the active file last,
- * so a later line with the same id still replaces an earlier one. Missing
- * files read as empty, the same as a chat that has not started.
- */
 export async function readTranscript(folder: string) {
   let names: string[]
   try {
@@ -67,12 +55,6 @@ async function nextSegment(folder: string) {
   return highest + 1
 }
 
-/**
- * Appends one transcript line, including its trailing newline. Rotates the
- * active file first when the line would push it past the limit and the file
- * already holds something, then updates `cursor` so the next append need not
- * stat the file.
- */
 export async function appendTranscriptLine(folder: string, line: string, cursor: TranscriptCursor) {
   await mkdir(folder, { recursive: true })
   const file = join(folder, TRANSCRIPT_FILE)

@@ -4,13 +4,9 @@ import { expect, test, type Page } from '@playwright/test'
 import { useProjectsHome } from './support/projects-home'
 import { addRecordTask } from './support/record-tasks'
 
-// What the desktop tray and notifications read: the attention stream
-// (src/app/api/attention/events). The Electron side itself is covered by
-// `--self-check` (electron/self-check.ts).
 
 const FOOTER = { id: 'show-health-footer-a1b2c3', title: 'Show API health in the footer' }
 const HEALTH = { id: 'add-health-endpoint-d4e5f6', title: 'Add a health endpoint' }
-// Recorded from real Claude (tests/provider-scripts/claude-approval.json): the agent asks before running Bash.
 const APPROVAL_REQUEST = 'Run the shell command `touch notes.txt` with the Bash tool, then reply with exactly: Created notes.txt.'
 const PLAIN_PROMPT = 'Reply with exactly this sentence and nothing else: Hello from busyboy.'
 
@@ -18,7 +14,6 @@ type Update =
   | { type: 'state'; tasks: { taskId: string; project: string; title: string }[] }
   | { type: 'event'; event: { kind: string; taskId?: string; project?: string; title?: string } }
 
-/** Follows the attention stream from the page, the way the desktop app does from its main process. */
 async function followAttention(page: Page) {
   await page.goto('/setup')
   await page.evaluate(() => {
@@ -41,7 +36,6 @@ test('a task that finishes or starts needing the user should be announced, with 
   const footer = await addRecordTask(home, { project: 'web', projectPath: projects.web, ...FOOTER })
   const stream = await followAttention(page)
 
-  // Connecting reports what waits now and announces nothing old.
   await expect.poll(async () => lastState(await stream.updates())?.tasks).toEqual([{ taskId: FOOTER.id, project: 'web', title: FOOTER.title }])
   expect(events(await stream.updates())).toEqual([])
 
@@ -81,7 +75,6 @@ test('a task agent asking for approval should put the task on the needs-you list
   await expect.poll(async () => lastState(await stream.updates())?.tasks.map(({ title }) => title)).toEqual(['Touch notes'])
   const announced = events(await stream.updates())
   expect(announced).toEqual([expect.objectContaining({ kind: 'task-needs-you', project: 'web', title: 'Touch notes' })])
-  // Only ids, the project, and the title: nothing the agent wrote (the approval's command) is sent.
   expect(JSON.stringify(await stream.updates())).not.toContain('touch notes.txt')
 })
 

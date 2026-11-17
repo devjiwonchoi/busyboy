@@ -11,12 +11,10 @@ import type { CardViewProps } from '../card-view-props'
 import { useCardActions } from '../card-actions'
 import { CardShell, CardShellHeader } from '../card-shell'
 
-/** The pending-check note on a done line whose pull requests are still open. */
 function pendingChecks(count: number) {
   return ` · ${count} ${count === 1 ? 'check' : 'checks'} pending`
 }
 
-/** One compact line: a check, the task name, Done or the open pull requests, and a link to the plan. */
 export function DoneCardView({ card }: CardViewProps<DoneCard>) {
   const { replying } = useCardActions()
   const [open, setOpen] = useState(false)

@@ -5,31 +5,25 @@ import { join } from 'node:path'
 import { agentEnvironment, findExecutable } from './runner/find-executable'
 import type { ProviderId } from './runner/contract'
 
-// Connectors are the MCP servers the user already configured for Claude Code and Codex.
-// BusyBoy does not keep their tokens: the harness config is the list, a live handshake is the
-// status, and login or add is the harness CLI.
+// BusyBoy does not keep connector tokens. The harness config is the list, and login is the harness CLI.
 
 export type ConnectorStatus = 'connected' | 'needs-login' | 'failed'
 
 export type ConnectorServer = {
   name: string
   status: ConnectorStatus
-  /** Why a server failed, when the probe could say. */
   detail?: string
-  /** Present when the server still needs the harness login command. */
   loginCommand?: string
 }
 
 export type ConnectorOffer = { name: string; title: string; url: string; command: string }
 
-/** Claude Code and Codex are the harnesses whose connector CLIs BusyBoy drives. */
 type ConnectorProvider = 'claude' | 'codex'
 
 export type ConnectorHarness = {
   provider: ConnectorProvider
   name: string
   servers: ConnectorServer[]
-  /** Official remote servers that are not configured yet. */
   add: ConnectorOffer[]
 }
 
@@ -108,11 +102,9 @@ function listedFrom(name: string, value: unknown): Listed | undefined {
   return { name, url, command, args, env: strings(server.env), headers: strings(server.headers) }
 }
 
-/** User-level MCP servers Claude Code loads from its config directory. */
 async function claudeServers(): Promise<Listed[]> {
   const dir = claudeConfigDir()
   const files = [join(dir, '.claude.json'), join(dir, 'settings.json')]
-  // Without CLAUDE_CONFIG_DIR the user file is ~/.claude.json, next to ~/.claude.
   if (!process.env.CLAUDE_CONFIG_DIR) files.unshift(join(homedir(), '.claude.json'))
   const byName = new Map<string, Listed>()
   for (const file of files) {
@@ -138,7 +130,6 @@ function tomlString(value: string) {
   return undefined
 }
 
-/** MCP servers in Codex's config.toml. A table with `enabled = false` is left out. */
 async function codexServers(): Promise<Listed[]> {
   let text = ''
   try {
@@ -254,8 +245,7 @@ async function probeStdio(server: Listed): Promise<Pick<ConnectorServer, 'status
       method: 'initialize',
       params: { protocolVersion: '2025-03-26', capabilities: {}, clientInfo: { name: 'busyboy', version: '0.0.0' } },
     })
-    // MCP stdio is one JSON message per line. Leave stdin open until the server
-    // answers or the timeout kills it; closing stdin ends the handshake first.
+    // Closing stdin ends an MCP stdio handshake before the server answers.
     child.stdin?.on('error', () => {})
     child.stdin?.write(`${body}\n`)
     setTimeout(() => finish({ status: 'failed', detail: 'The server did not answer in time.' }), PROBE_MS).unref()
@@ -278,7 +268,6 @@ function offers(provider: ProviderId, present: Set<string>): ConnectorOffer[] {
   }))
 }
 
-/** Inherited connectors for each harness, with a live handshake for the status. */
 export async function listConnectors(): Promise<ConnectorHarness[]> {
   const [claude, codex] = await Promise.all([claudeServers(), codexServers()])
   const harnesses: { provider: ConnectorProvider; name: string; listed: Listed[] }[] = [
@@ -294,10 +283,6 @@ export async function listConnectors(): Promise<ConnectorHarness[]> {
   )
 }
 
-/**
- * Adds one official remote connector with the harness CLI. The CLI stores the
- * server and runs its own OAuth; BusyBoy keeps no token.
- */
 export async function addConnector(provider: ProviderId, name: string) {
   const server = officialConnector(name)
   if (!server || (provider !== 'claude' && provider !== 'codex')) throw new Error('Unknown connector.')

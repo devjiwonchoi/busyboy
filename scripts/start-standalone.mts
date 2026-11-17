@@ -1,6 +1,3 @@
-// Starts the standalone Next server on the loopback interface only.
-//
-//   PORT=3100 node scripts/start-standalone.mts
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'

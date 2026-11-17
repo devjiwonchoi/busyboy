@@ -28,7 +28,6 @@ function isRunning(pid: number) {
 
 test('stopping the server should end the processes its agents started', async ({ browser }) => {
   test.skip(process.platform === 'win32', 'The fake Claude CLI is a POSIX process-group script.')
-  // Its own server with the real Claude adapter over the fake CLI, so stopping it leaves the shared ones running.
   const port = await freePort()
   const home = createTempFolder('stop-home')
   const pidFile = join(home, 'fake-claude.pid')
@@ -57,10 +56,8 @@ test('stopping the server should end the processes its agents started', async ({
     const children = readFileSync(pidFile, 'utf8').trim().split(' ').map(Number)
     expect(children.every(isRunning)).toBe(true)
 
-    // What `pnpm start` gets from Ctrl+C or `kill`; the desktop app's Quit runs the same stop through its shutdown message.
     server.kill('SIGTERM')
 
-    // Including the child the CLI detached into a session of its own, which only stopping the agent ends.
     await expect.poll(() => children.filter(isRunning), { timeout: 15_000 }).toEqual([])
     await context.close()
     removeFolder(dataHome)

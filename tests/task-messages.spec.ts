@@ -5,12 +5,9 @@ import { expect, test, type APIRequestContext, type Page } from '@playwright/tes
 import { useProjectsHome } from './support/projects-home'
 import { startStandaloneServer } from './support/standalone-server'
 
-// Messages to a task after its first request. Scripts: tests/provider-scripts/task-messages.json,
-// task-agents.json (a short first turn), and task-resume.json (a long turn, and one that asks for approval).
 
 const QUICK_REQUEST = 'Add a CONTRIBUTING.md that explains how to run the project.'
 const QUICK_FOLLOW_UP = 'Also add a section on running the tests.'
-// Its turn asks for approval, so the task starts waiting on a card.
 const CARD_FOLLOW_UP = 'Now delete the build folder.'
 const LONG_REQUEST = 'Write the release notes for this week.'
 const LONG_FOLLOW_UP = 'List the fixes only.'
@@ -24,7 +21,6 @@ function storedTasks(home: string): StoredTask[] {
   return existsSync(file) ? (JSON.parse(readFileSync(file, 'utf8')) as { tasks: StoredTask[] }).tasks : []
 }
 
-/** The user messages a scripted session received, across every server that ran it. */
 function sessionMessages(sessionId: string | null | undefined): string[] {
   if (!sessionId) return []
   const file = join(tmpdir(), 'busyboy-scripted-sessions', `${sessionId}.json`)
@@ -66,10 +62,8 @@ test('messaging a task that finished its turn should reach its agent and not the
 
   const transcript = page.getByRole('log', { name: 'Transcript' })
   await expect(transcript.getByRole('group', { name: 'Your reply to web · Contributing guide' })).toHaveText(QUICK_FOLLOW_UP)
-  // The same agent, on the same session, got it after the request.
   await expect.poll(() => sessionMessages(before.sessionId)).toEqual([QUICK_REQUEST, QUICK_FOLLOW_UP])
   expect(storedTasks(home)[0].agentId).toBe(before.agentId)
-  // One message only: the composer is back on the Director, who never saw this one.
   await expect(page.getByText('Messaging web · Contributing guide')).toHaveCount(0)
   await expect(transcript.getByRole('group', { name: 'Reply', exact: true })).toHaveCount(0)
   await expect(transcript).toHaveAttribute('data-status', 'idle')
@@ -85,7 +79,6 @@ test('a message typed for a task that started waiting on a card should not be se
   await line.getByRole('button', { name: 'Message web · Contributing guide' }).click()
   await page.getByRole('textbox', { name: 'Message' }).fill('Yes, delete it.')
 
-  // Meanwhile the task asks for approval, so it is answered on its card from here on.
   await callTool(context.request, 'message_task', { task: task.id, message: CARD_FOLLOW_UP })
   await expect(line.locator('[data-status]')).toHaveText('Needs you')
   await expect(page.getByText('Messaging web · Contributing guide')).toHaveCount(0)
@@ -96,7 +89,6 @@ test('a message typed for a task that started waiting on a card should not be se
   await expect(transcript.getByRole('group', { name: /^Your / })).toHaveCount(0)
   await expect(transcript).toHaveAttribute('data-status', 'idle')
   expect(sessionMessages(task.sessionId)).toEqual([QUICK_REQUEST, CARD_FOLLOW_UP])
-  // The text is back in the box, and the composer does not point at the task again by itself.
   await expect(page.getByRole('textbox', { name: 'Message' })).toHaveText('Yes, delete it.')
 })
 
@@ -114,7 +106,6 @@ test('messaging an idle task after a restart should start its agent again on the
     const page = await context.newPage()
     await openChat(page)
     const line = taskLine(page, 'web · Contributing guide')
-    // Idle tasks are not started when BusyBoy starts.
     await expect(line.locator('[data-status]')).toHaveText('Idle')
     expect(storedTasks(home)[0].agentId).toBe(before.agentId)
 
@@ -169,7 +160,6 @@ test('a task waiting on a card, a subagent, and an unknown task should not take 
   await expect(taskLine(page, 'web · Which branch').locator('[data-status]')).toHaveText('Done')
   const [waiting, subagent] = storedTasks(home)
 
-  // The card is where a waiting task is answered, and a subagent has done its one action.
   await expect(page.getByRole('button', { name: /^Message web · / })).toHaveCount(0)
   expect(await callTool(context.request, 'message_task', { task: waiting.id, message: 'Hurry up.' })).toEqual({
     isError: true,

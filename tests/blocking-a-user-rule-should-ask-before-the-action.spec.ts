@@ -3,12 +3,8 @@ import { join } from 'node:path'
 import { expect as baseExpect, test, type APIRequestContext, type Page } from '@playwright/test'
 import { useProjectsHome } from './support/projects-home'
 
-// Rules live in the journey's own stand-in for ~/.jwn (the data folder's
-// user-jwn). Claude replays tests/provider-scripts/user-rules.json. Codex runs
-// the real adapter and its hook against tests/provider-scripts/codex/user-rules.json.
 const RULES = join(__dirname, 'fixtures', 'user-rules')
 
-// A Codex task starts the fake app server, a Node process, and its hook starts another.
 const expect = baseExpect.configure({ timeout: 15_000 })
 
 function installRule(home: string, name: string) {
@@ -72,7 +68,6 @@ test.describe('Claude task agents', () => {
     await expect(card).toContainText('Bash: echo hello')
     await expect(card).toContainText('BusyBoy could not check the rules in ~/.jwn, so this action is blocked.')
     await expect(card).toContainText('broken.yaml')
-    // A failed check is not remembered: Allow is for this call only.
     await expect(card.getByRole('button', { name: /^[A-C]\. / })).toHaveText(['AAllow', 'BDeny'])
     await card.getByRole('button', { name: 'B. Deny' }).click()
 

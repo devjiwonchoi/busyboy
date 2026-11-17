@@ -3,24 +3,14 @@
 import { createContext, useContext, useEffect, useRef } from 'react'
 
 export type Shortcut = {
-  /** Unique id, for example `toggle-panel`. A later registration with the same id wins. */
   id: string
-  /**
-   * The `KeyboardEvent.key` value, compared case-insensitively. When the layout
-   * types a non-ASCII character, single letters and digits match by physical key
-   * (`KeyB`, `Digit1`), so shortcuts work while a non-Latin input source is active.
-   */
+  // When the layout types a non-ASCII character, letters match by physical key.
   key: string
-  /** Cmd on macOS, Ctrl elsewhere. */
   mod?: boolean
   shift?: boolean
   alt?: boolean
   label: string
-  /**
-   * When several shortcuts match one key, the first whose `handles` returns
-   * true runs. Omit it to always handle the key. Escape to stop a reply uses
-   * this so a key repeat does not stop twice.
-   */
+  // Escape to stop a reply uses handles, so a key repeat does not stop twice.
   handles?: (event: KeyboardEvent) => boolean
   run: () => void
 }
@@ -29,14 +19,12 @@ type Registry = Map<string, Shortcut>
 
 type Keys = Pick<Shortcut, 'key' | 'mod' | 'shift' | 'alt'>
 
-// Plain Cmd/Ctrl+S stays Save in the editors and shells the user also runs.
 export const TOGGLE_PANEL_KEYS = { key: 'j', mod: true } as const
 export const COMMAND_PALETTE_KEYS = { key: 'k', mod: true } as const
 export const NEW_TASK_KEYS = { key: 'n', mod: true } as const
 
 const ShortcutRegistryContext = createContext<Registry | null>(null)
 
-/** True on macOS and iOS, where the shortcut modifier is Cmd instead of Ctrl. */
 export function isMacPlatform() {
   return /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent)
 }
@@ -47,19 +35,13 @@ function physicalCode(key: string) {
   return null
 }
 
-/** Whether `event` presses `shortcut`; the terminal uses it too, so both agree on every layout. */
 export function matchesShortcut(shortcut: Keys, event: KeyboardEvent, mac: boolean) {
   const mod = mac ? event.metaKey : event.ctrlKey
   const otherMod = mac ? event.ctrlKey : event.metaKey
   // AltGr (reported as Ctrl+Alt on Windows) types characters such as ś on a Polish layout; a
   // shortcut must never take them.
   if (!mac && event.getModifierState?.('AltGraph')) return false
-  // Fall back to the physical key only when the layout types a non-ASCII
-  // character there (Korean, Cyrillic). On Latin layouts such as Dvorak the
-  // typed letter wins, so Cmd/Ctrl+X on the physical B key stays Cut. With
-  // Option held macOS types another character (S types ß, or an ASCII symbol
-  // on some layouts), so there Alt shortcuts always match by physical key. Ctrl+Alt elsewhere
-  // types the plain letter, which keeps Dvorak users on the letter they see.
+  // Korean and Cyrillic need the physical key; Dvorak must keep the typed letter. Option on macOS types another character.
   const typesAscii = /^[\x20-\x7e]$/.test(event.key)
   const sameKey = shortcut.alt && mac
     ? event.code === physicalCode(shortcut.key)
@@ -73,7 +55,6 @@ export function matchesShortcut(shortcut: Keys, event: KeyboardEvent, mac: boole
   )
 }
 
-/** Owns the one keydown listener; features add shortcuts with `useShortcut`. */
 export function ShortcutRegistryProvider({ children }: { children: React.ReactNode }) {
   const registry = useRef<Registry>(new Map())
 
@@ -81,7 +62,6 @@ export function ShortcutRegistryProvider({ children }: { children: React.ReactNo
     const mac = isMacPlatform()
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.defaultPrevented) return
-      // Plain keys belong to an active input method; modifier shortcuts still apply.
       if (event.isComposing && !event.metaKey && !event.ctrlKey) return
       for (const shortcut of registry.current.values()) {
         if (!matchesShortcut(shortcut, event, mac)) continue
@@ -98,10 +78,7 @@ export function ShortcutRegistryProvider({ children }: { children: React.ReactNo
   return <ShortcutRegistryContext value={registry.current}>{children}</ShortcutRegistryContext>
 }
 
-/**
- * Registers Escape while mounted. The key is set here, not as a JSX `key`:
- * React does not pass that prop through, so the shortcut would match nothing.
- */
+// React does not pass a JSX key through, so the shortcut would match nothing.
 export function EscapeShortcut({
   id,
   label,
@@ -117,7 +94,6 @@ export function EscapeShortcut({
   return null
 }
 
-/** Registers a keyboard shortcut while the calling component is mounted. */
 export function useShortcut(shortcut: Shortcut) {
   const registry = useContext(ShortcutRegistryContext)
   if (!registry) throw new Error('useShortcut must be used inside ShortcutRegistryProvider.')
@@ -145,7 +121,6 @@ export function useShortcut(shortcut: Shortcut) {
   }, [registry, id, key, mod, shift, alt, label])
 }
 
-/** Formats a shortcut for display, for example `⌘B` on macOS and `Ctrl+B` elsewhere. */
 export function formatShortcut(shortcut: Pick<Shortcut, 'key' | 'mod' | 'shift' | 'alt'>, mac: boolean) {
   const key = shortcut.key.toUpperCase()
   if (mac) {

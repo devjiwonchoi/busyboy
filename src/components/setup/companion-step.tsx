@@ -22,9 +22,7 @@ export function CompanionStep({
 }: {
   companions: Companion[]
   selected?: string
-  /** Checked until the user picks, and until a choice has been saved. */
   defaultId: string
-  /** The user's own picture, shown on the selected companion. */
   imageUrl?: string
 }) {
   const [state, action, pending] = useActionState(chooseCompanionAction, {})
@@ -47,7 +45,6 @@ export function CompanionStep({
   )
 }
 
-/** The characters as a radio row, shared by setup (saved on Continue) and settings (saved on choice). */
 export function CompanionChoices({
   companions,
   value,
@@ -88,12 +85,10 @@ export function CompanionChoices({
   )
 }
 
-/** Shown under the picker. The emoji are stand-ins for illustrated characters. */
 export function CharacterNote({ className }: { className?: string }) {
   return <p className={cn('text-muted-foreground text-center text-xs', className)}>Temporary emoji stand in for character art.</p>
 }
 
-/** An optional picture of the user's own for their companion. It stays in the data folder. */
 export function CompanionImageForm({ hasImage }: { hasImage: boolean }) {
   const [state, action, pending] = useActionState(setCompanionImageAction, {})
   const [tooLarge, setTooLarge] = useState(false)

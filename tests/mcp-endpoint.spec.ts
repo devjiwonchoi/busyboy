@@ -3,7 +3,6 @@ import { join } from 'node:path'
 import { expect, test, type APIRequestContext } from '@playwright/test'
 import { useProjectsHome } from './support/projects-home'
 
-/** Sends one JSON-RPC message to busyboy's MCP endpoint, with this context's data folder cookie. */
 async function rpc(request: APIRequestContext, method: string, params: Record<string, unknown> = {}) {
   const response = await request.post('/api/mcp', { data: { jsonrpc: '2.0', id: 1, method, params } })
   expect(response.status()).toBe(200)
@@ -49,7 +48,6 @@ test("a task agent's endpoint should offer only memory tools that write to its p
     message: 'Unknown tool: create_task',
   })
 
-  // Asking for global memory still writes to the task's own project.
   await taskRpc('tools/call', { name: 'memory_write', arguments: { title: 'Uses Vitest', text: 'web tests run with Vitest.' } })
 
   expect(readFileSync(join(home, 'memory', 'projects', 'web', 'uses-vitest.md'), 'utf8')).toBe('# Uses Vitest\n\nweb tests run with Vitest.\n')
@@ -66,7 +64,6 @@ test("a task agent's memory search should find only global memory and its own pr
   await call('/api/mcp?project=web', 'memory_write', { title: 'Web deploy', text: 'web deploys with Vercel.' })
   await call('/api/mcp?project=api', 'memory_write', { title: 'Api deploy', text: 'api deploys with a secret script.' })
 
-  // Asking for api's memory by name still searches only web's.
   const hits = await call('/api/mcp?project=web', 'memory_search', { query: 'deploys', project: 'api' })
 
   expect((JSON.parse(hits) as { project: string }[]).map(({ project }) => project).sort()).toEqual(['global', 'web'])

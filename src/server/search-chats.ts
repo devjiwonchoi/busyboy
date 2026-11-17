@@ -8,19 +8,16 @@ import { listManagersAt } from './managers'
 import { readTasksAt } from './tasks'
 
 export type PaletteChat = {
-  /** Null for the Director. */
   id: string | null
   name: string
 }
 
 export type SearchHit = {
   kind: 'transcript' | 'task'
-  /** Null when the hit is in the Director's chat. */
   chat: string | null
   chatName: string
   title: string
   snippet: string
-  /** DOM id the chat scrolls to. */
   anchor: string
 }
 
@@ -73,10 +70,6 @@ async function transcriptHits(folder: string, chat: string | null, chatName: str
   return hits
 }
 
-/**
- * Chats for the palette, and the transcript lines and task titles that match
- * `query`. An empty query returns the chats and no hits.
- */
 export async function commandPalette(query: string): Promise<{ chats: PaletteChat[]; hits: SearchHit[] }> {
   const folder = await dataFolder()
   const [companion, managers, tasks] = await Promise.all([currentCompanion(), listManagersAt(folder), readTasksAt(folder)])

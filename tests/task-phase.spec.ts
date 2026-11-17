@@ -3,8 +3,6 @@ import { join } from 'node:path'
 import { expect as baseExpect, test, type APIRequestContext, type Page } from '@playwright/test'
 import { useProjectsHome } from './support/projects-home'
 
-// The phase word on the task row. The verifying turn is
-// tests/provider-scripts/task-phase.json. The running turn is tests/provider-scripts/work-cards.json.
 const VERIFY = 'Verify the site footer and report each step.'
 const RUNNING = 'Build the site footer and report each step.'
 
@@ -50,7 +48,6 @@ test('a progress card should not say someone is waiting', async ({ page, context
   await createTask(context.request, home, 'Add a footer', RUNNING)
 
   await expect(transcript(page).getByRole('group', { name: 'Progress from web · Add a footer' })).toBeVisible()
-  // The progress card is the task reporting, so the chat list does not say the user is needed.
   await expect(page.getByRole('link', { name: 'BusyBoy, director' })).not.toContainText(/waiting/i)
 })
 

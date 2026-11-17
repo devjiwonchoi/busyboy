@@ -19,7 +19,6 @@ import { createScriptedAdapter, hasScripts, SCRIPTS_ENV } from './scripted-provi
 import { asTurn, displayText, type UserTurn } from './user-turn'
 import { onServerShutdown } from '../shutdown'
 
-/** Newest events kept per agent for replay. Live listeners still receive every event. */
 const MAX_RETAINED_EVENTS = 5_000
 
 type AgentRecord = {
@@ -28,20 +27,16 @@ type AgentRecord = {
   status: AgentStatus
   sessionId?: string
   events: AgentEventEnvelope[]
-  /** Highest seq assigned. Stays monotonic after old events are dropped. */
   lastSeq: number
   listeners: Set<(envelope: AgentEventEnvelope) => void>
   session: ProviderSession | null
-  /** Open approvals and questions by request id, with the answer kind each takes. */
   pending: Map<string, AgentAnswer['kind']>
-  /** Set by interruptAgent while a turn runs; cleared when that turn ends or the process stops. */
   interrupting: boolean
 }
 
 type Registry = {
   agents: Map<string, AgentRecord>
   shutdownHooked?: boolean
-  /** Set once the server stops its agents, so a stop is not mistaken for the user's or a crash. */
   stoppingAll?: boolean
 }
 
@@ -51,27 +46,17 @@ const REGISTRY_KEY = Symbol.for('busyboy.agent-runner')
 const globalStore = globalThis as typeof globalThis & { [REGISTRY_KEY]?: Registry }
 const registry: Registry = (globalStore[REGISTRY_KEY] ??= { agents: new Map() })
 
-/**
- * Ends every agent and what it started. Claude's process-group watcher only
- * ends the CLI's own group when the server exits; the commands it detached
- * (background shells, for example) are found and ended only by `stop()`, so
- * quitting must stop each agent while the server still runs.
- */
+// Claude's process-group watcher does not end commands the CLI detached, so quitting has to stop each agent while the server still runs.
 export async function stopAllAgents() {
   registry.stoppingAll = true
   await Promise.allSettled([...registry.agents.values()].map((agent) => agent.session?.stop()))
 }
 
-/**
- * Whether an error says the session to resume no longer exists. Codex reports
- * the `lost-session` code; Grok does too. Claude (and the scripted provider)
- * only says so in its message.
- */
+// Codex and Grok report lost-session. Claude only says so in its message.
 export function isLostSessionError(event: Extract<AgentEvent, { type: 'error' }>) {
   return event.code === 'lost-session' || /No conversation found with session ID/i.test(event.message)
 }
 
-/** Whether agents are stopping because the server is stopping; their tasks resume on the next start. */
 export function isStoppingAllAgents() {
   return Boolean(registry.stoppingAll)
 }
@@ -79,20 +64,13 @@ export function isStoppingAllAgents() {
 function hookShutdown() {
   if (registry.shutdownHooked) return
   registry.shutdownHooked = true
-  // The desktop app asks before it stops the server and waits for this.
-  // `pnpm start` and a terminal's Ctrl+C send a signal instead, and Next exits
-  // once its connections close without waiting for other signal handlers, so
-  // there the stop is best effort; the process-group watcher still ends each CLI.
+  // Next exits on Ctrl+C once its connections close, without waiting for other signal handlers.
   onServerShutdown(stopAllAgents)
   process.once('SIGTERM', () => void stopAllAgents())
   process.once('SIGINT', () => void stopAllAgents())
 }
 
-/**
- * With BUSYBOY_PROVIDER_SCRIPTS set, each provider that has a script in that
- * folder is replaced by the scripted replay. The desktop app always starts the
- * server with a token, so a token means a real install and the variable is ignored.
- */
+// A launch token means a real install, so BUSYBOY_PROVIDER_SCRIPTS is ignored there.
 function adapterFor(provider: ProviderId): ProviderAdapter {
   const scripts = process.env[SCRIPTS_ENV]
   if (scripts && !process.env[SERVER_TOKEN_ENV] && hasScripts(scripts, provider)) return createScriptedAdapter(scripts)
@@ -120,7 +98,6 @@ function snapshot(record: AgentRecord): AgentSnapshot {
 }
 
 function record(agent: AgentRecord, event: AgentEvent) {
-  // An interrupted turn ends with an "aborted" error from the provider; it is expected.
   if (agent.interrupting && event.type === 'error' && event.code === 'provider') return
   switch (event.type) {
     case 'started':
@@ -146,7 +123,6 @@ function record(agent: AgentRecord, event: AgentEvent) {
         event = { ...event, interrupted: true }
         agent.interrupting = false
       }
-      // With `more`, a queued message's turn starts now: the agent keeps running and can be interrupted.
       agent.status = event.more ? 'running' : 'idle'
       break
     case 'stopped':
@@ -157,7 +133,6 @@ function record(agent: AgentRecord, event: AgentEvent) {
       break
   }
   if (event.type === 'turn-done' || event.type === 'stopped') {
-    // Requests left open by an interrupt or stop can no longer be answered.
     for (const requestId of agent.pending.keys()) push(agent, { type: 'answered', requestId })
     agent.pending.clear()
   }
@@ -185,7 +160,6 @@ function launch(agent: AgentRecord, resumeSessionId?: string) {
       permissionMode: agent.input.permissionMode ?? 'auto',
       resumeSessionId,
       mcpServers: agent.input.mcpServers,
-      // A branch is never resumed itself (it is not kept), so it always forks from the original.
       forkSessionId: resumeSessionId ? undefined : agent.input.forkSessionId,
       noTools: agent.input.noTools,
       alwaysAsk: agent.input.alwaysAsk,
@@ -202,10 +176,8 @@ function launch(agent: AgentRecord, resumeSessionId?: string) {
   }
 }
 
-// ---- Operations ------------------------------------------------------------
 
 export function startAgent(input: StartAgentInput): AgentSnapshot {
-  // An agent started after the stop pass would outlive Quit with whatever it detached.
   if (registry.stoppingAll) throw new Error('BusyBoy is quitting, so no agent can start.')
   hookShutdown()
   const agent: AgentRecord = {
@@ -233,10 +205,8 @@ export function sendMessage(agentId: string, turn: UserTurn | string) {
   agent.session.send(message)
 }
 
-/** Ends the current turn. The agent stays alive and waits for the next message. */
 export async function interruptAgent(agentId: string) {
   const agent = getRecord(agentId)
-  // Only a running turn can be interrupted; otherwise the flag would mark a later turn.
   if (!agent.session || (agent.status !== 'running' && agent.status !== 'waiting')) return
   agent.interrupting = true
   try {
@@ -253,7 +223,6 @@ export async function stopAgent(agentId: string) {
   await agent.session.stop()
 }
 
-/** Starts a stopped agent again on the same provider session. */
 export function resumeAgent(agentId: string): AgentSnapshot {
   const agent = getRecord(agentId)
   if (agent.session) return snapshot(agent)
@@ -268,10 +237,6 @@ export async function compactAgent(agentId: string) {
   await agent.session.compact()
 }
 
-/**
- * Answers an open approval or question. Returns false when it is no longer open;
- * throws when the answer kind does not match the request.
- */
 export function answerAgent(agentId: string, requestId: string, answer: AgentAnswer) {
   const agent = getRecord(agentId)
   const kind = agent.pending.get(requestId)
@@ -282,10 +247,6 @@ export function answerAgent(agentId: string, requestId: string, answer: AgentAns
   return true
 }
 
-/**
- * Forgets a stopped agent and its events, for agents nobody comes back to.
- * A running agent is kept. Returns whether the agent was removed.
- */
 export function removeAgent(agentId: string) {
   const agent = registry.agents.get(agentId)
   if (!agent || agent.session) return false
@@ -303,12 +264,6 @@ export function listAgents(): AgentSnapshot[] {
   return [...registry.agents.values()].map(snapshot)
 }
 
-/**
- * Replays retained events after `afterSeq`, then delivers new ones as they happen.
- * Only the newest events are kept (see MAX_RETAINED_EVENTS), so a subscriber that
- * fell further behind receives that tail (a gap before it) and then live events.
- * Returns the unsubscribe function, or null for an unknown agent.
- */
 export function subscribeToAgent(
   agentId: string,
   afterSeq: number,
@@ -323,13 +278,6 @@ export function subscribeToAgent(
   return () => agent.listeners.delete(listener)
 }
 
-/**
- * The agent's latest reply text, or null. A task agent may finish without
- * writing records, so this is how the Director learns what it said. Replies
- * usually arrive only as deltas; a `text` event for the same item replaces them.
- * Only retained events are visible, which is the whole reply unless that one
- * reply emitted more events than the buffer holds.
- */
 export function lastAgentReply(agentId: string): string | null {
   const agent = registry.agents.get(agentId)
   if (!agent) return null

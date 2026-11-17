@@ -1,18 +1,8 @@
 import type { GraphTask, NodeStatus, ProjectGraph } from './project-graph'
 
-// The Director's view of the records: one short line per task, so its context
-// stays small and it never has to read a record file itself.
-//
-// Task agents write the records, so any text taken from them (titles, state,
-// todo titles, task folder names, error messages that quote record lines) is
-// untrusted. The Director can create tasks in every project, so a record that
-// says "ignore your instructions and..." must not reach it as instructions:
-// each such field is put on one line, capped, and quoted, and the summary
-// opens by saying that quoted text is data.
+// Record text is untrusted and is quoted, so a record cannot reach the Director as instructions.
 
-/** Longest record text one field may carry into the summary. */
 const MAX_FIELD = 160
-/** A reply carries the task's result when it wrote no records, so it gets more room. */
 const MAX_REPLY = 600
 
 export const RECORD_TEXT_NOTICE =
@@ -23,10 +13,8 @@ function oneLine(text: string, max = MAX_FIELD) {
   return line.length > max ? `${line.slice(0, max - 1)}…` : line
 }
 
-/** Record text as a JSON string, so it cannot break out of its quotes. */
 const quote = (text: string, max?: number) => JSON.stringify(oneLine(text, max))
 
-/** A task folder or todo id from the records: one line, capped, with no quotes to fake a field. */
 const plain = (text: string) => oneLine(text.replaceAll('"', ''))
 
 const STATUS_WORDS: Record<NodeStatus, string> = {
@@ -60,10 +48,6 @@ function taskLine(task: GraphTask, lastReply: string | null) {
   return `- ${plain(task.id)} ${quote(task.title)}: ${parts.join('; ')}`
 }
 
-/**
- * `lastReplyOf` gives a task agent's latest reply. It is kept out of the graph,
- * which is sent to the window every time it changes.
- */
 export function summarizeGraph(graph: ProjectGraph, project?: string, lastReplyOf: (task: GraphTask) => string | null = () => null) {
   if (graph.error) return graph.error
   const wanted = project?.trim().replace(/^@/, '').toLowerCase()
@@ -82,10 +66,6 @@ const SUBAGENT_STATUS: Record<'running' | 'needs-you' | 'idle' | 'stopped', stri
   stopped: 'stopped',
 }
 
-/**
- * Subagents write no records, so they are not in the graph: one line each with its status and
- * reply, quoted like any agent text. Empty when there are none.
- */
 export function summarizeSubagents(
   subagents: { id: string; project: string; title: string; status: keyof typeof SUBAGENT_STATUS; reply: string | null }[],
   project?: string,

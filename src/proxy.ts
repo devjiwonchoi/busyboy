@@ -29,13 +29,7 @@ function forbidden(reason: string) {
   return new NextResponse(`Forbidden: ${reason}`, { status: 403 })
 }
 
-/**
- * Only `127.0.0.1:<port>` and `localhost:<port>` are accepted, which blocks DNS
- * rebinding and requests that reach the server through another interface.
- * The port is checked when the server knows it (`PORT`, set by the desktop app
- * and `pnpm start`). `pnpm dev` and `pnpm start` also bind to 127.0.0.1, so
- * other machines cannot connect at all.
- */
+// Only loopback hosts are accepted, which blocks DNS rebinding.
 function isAllowedHost(host: string | null) {
   if (!host) return false
   let url: URL
@@ -49,12 +43,7 @@ function isAllowedHost(host: string | null) {
   return !port || url.port === port
 }
 
-/**
- * Guards every route. The desktop app starts the server with a per-launch
- * token and gives its window a matching cookie, so other local processes
- * cannot use the server. Without a token, requests are allowed only in
- * `next dev` and in test mode; otherwise the server fails closed.
- */
+// Without a launch token, only next dev and test mode are allowed. Anything else fails closed.
 export async function proxy(request: NextRequest) {
   const host = request.headers.get('host')
   if (!isAllowedHost(host)) return forbidden('host')
@@ -64,9 +53,7 @@ export async function proxy(request: NextRequest) {
 
   const expected = process.env[SERVER_TOKEN_ENV]
   if (!expected) {
-    // Only the desktop app sets a token. `next dev` and the Playwright journeys run
-    // without one; NODE_ENV is inlined at build time, so a production build can
-    // never take the development path, and BUSYBOY_TEST_MODE is set only by tests.
+    // NODE_ENV is inlined at build time, so a production build cannot take the dev path.
     const open = process.env.NODE_ENV === 'development' || process.env[TEST_MODE_ENV] === '1'
     if (!open) return forbidden('token')
   } else {
@@ -76,10 +63,7 @@ export async function proxy(request: NextRequest) {
   return (await setupRedirect(request)) ?? NextResponse.next()
 }
 
-/**
- * Agents reach only the MCP endpoint, and Codex's always-ask hook only its own
- * endpoint, each with its own token derived from the server token.
- */
+// The MCP token and the always-ask token are derived from the server token and open only their own routes.
 function hasMcpToken(request: NextRequest, serverToken: string) {
   if (request.nextUrl.pathname === ALWAYS_ASK_PATH) {
     const provided = request.headers.get(MCP_TOKEN_HEADER)
@@ -89,16 +73,12 @@ function hasMcpToken(request: NextRequest, serverToken: string) {
   const provided = request.headers.get(MCP_TOKEN_HEADER)
   if (!provided) return false
   if (sameToken(provided, mcpTokenFor(serverToken))) return true
-  // A task agent's token only opens the endpoint for its own project.
   const project = request.nextUrl.searchParams.get(MCP_TASK_PROJECT_PARAM)
   if (project && sameToken(provided, taskMcpTokenFor(serverToken, project))) return true
-  // A manager's token only opens the endpoint as that manager.
   const manager = request.nextUrl.searchParams.get(MCP_MANAGER_PARAM)
   return Boolean(manager && sameToken(provided, managerMcpTokenFor(serverToken, manager)))
 }
 
-// Opening the main screen or settings goes to setup until setup is complete. Settings checks
-// too, but by then its header has been sent; here it is a plain redirect.
 async function setupRedirect(request: NextRequest) {
   if ((request.nextUrl.pathname !== '/' && request.nextUrl.pathname !== '/settings') || request.method !== 'GET') return undefined
   const folder = resolveDataFolder(request.cookies.get(TEST_HOME_COOKIE)?.value)

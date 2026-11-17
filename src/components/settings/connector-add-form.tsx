@@ -5,7 +5,6 @@ import { CopyCommand } from '@/components/setup/copy-command'
 import { Button } from '@/components/ui/button'
 import { addConnectorAction, type AddConnectorResult } from '@/app/settings/actions'
 
-/** Adds one official connector with the harness CLI, and keeps the command visible to run by hand. */
 export function ConnectorAddForm({
   provider,
   name,

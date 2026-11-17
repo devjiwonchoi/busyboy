@@ -5,32 +5,23 @@ import type { AgentAnswer, AgentEvent, Question } from './runner/contract'
 
 export type { CardOption, CardQuestion, TaskCard } from './cards/model'
 
-// Cards are how a task agent reaches the user: a question, an approval, or a
-// plan that waits for approval. They live only while the agent waits. The
-// Director chat shows open ones in the timeline and writes each one to its
-// transcript once it closes. Progress, done, and pull-request cards use the
-// same store through presentCard. A Director connector approval uses it too.
 
 export type CardUpdate = { type: 'open'; card: TaskCard } | { type: 'close'; card: TaskCard; outcome: string }
 
-/** The task fields a card needs; matches `TaskRecord` without importing tasks.ts. */
 type CardTask = { id: string; project: string; title: string; agentId: string; worktree: string; chat?: string | null }
 
-/** What the agent receives when the user clicks Approve on an Align card. */
 export const APPROVE_MESSAGE = 'Approved.'
 
 export const ALLOW = 'Allow'
 export const ALLOW_FOR_SESSION = 'Allow for this session'
 export const DENY = 'Deny'
 
-/** Agents mark the option they recommend this way (AskUserQuestion's own convention). */
 const RECOMMENDED = /\s*\(recommended\)\s*$/i
 
 type OpenCard = { card: TaskCard; agentId: string; requestId: string | null }
 
 type CardStore = {
   open: Map<string, OpenCard>
-  /** Outcomes set by an action just before the event that closes its card. */
   outcomes: Map<string, string>
   listeners: Set<(update: CardUpdate) => void>
 }
@@ -60,7 +51,6 @@ function closeCard(store: CardStore, cardId: string) {
     return
   }
   store.open.delete(cardId)
-  // Closed without an action of ours: answered elsewhere, interrupted, or the agent ended.
   const outcome = store.outcomes.get(cardId) ?? 'No longer waiting'
   store.outcomes.delete(cardId)
   for (const listener of store.listeners) listener({ type: 'close', card: entry.card, outcome })
@@ -102,7 +92,6 @@ function requestCard(task: CardTask, event: Extract<AgentEvent, { type: 'approva
   }
 }
 
-/** Opens and closes the cards of one task agent for as long as it runs; `onChange` follows each open and close. */
 export function trackTaskCards({ folder, task, onChange }: { folder: string; task: CardTask; onChange: () => void }) {
   const store = storeFor(folder)
   const isOwn = (update: CardUpdate) => update.card.taskId === task.id
@@ -135,7 +124,6 @@ export function trackTaskCards({ folder, task, onChange }: { folder: string; tas
         }
         void readDraftPlan(folder, task)
           .then((draft) => {
-            // Only while the agent still waits on this turn: a message or stop since then moved on.
             if (!draft || latestSeq !== seq || getAgent(task.agentId)?.status !== 'idle') {
               return
             }
@@ -157,7 +145,6 @@ export function trackTaskCards({ folder, task, onChange }: { folder: string; tas
   })
 }
 
-/** Shows a Director approval in the chat that owns `chat`, answered through the Director's agent. */
 export function openDirectorApproval({
   folder,
   chat,
@@ -186,7 +173,6 @@ export function openDirectorApproval({
   openCard(storeFor(folder), { card, agentId, requestId: event.requestId })
 }
 
-/** Closes a Director approval that was answered or whose turn ended. */
 export function closeDirectorApproval(folder: string, agentId: string, requestId?: string) {
   const store = storeFor(folder)
   for (const [id, entry] of [...store.open]) {
@@ -200,12 +186,6 @@ export function openCards(folder: string) {
   return [...storeFor(folder).open.values()].map(({ card }) => card)
 }
 
-/**
- * Puts a card on the timeline. Sending the same id again replaces that card;
- * keep `openedAt` to leave it where it is. Question, approval, and plan cards
- * are opened by trackTaskCards. Progress, done, and pull-request cards use this.
- * `agentId` is the task agent the card belongs to, so stopping that agent closes it.
- */
 export function presentCard({
   folder,
   card,
@@ -220,7 +200,6 @@ export function presentCard({
   openCard(storeFor(folder), { card, agentId, requestId })
 }
 
-/** Closes a card with `outcome`, the same path as answering one. */
 export function settleCard({ folder, cardId, outcome }: { folder: string; cardId: string; outcome: string }) {
   const store = storeFor(folder)
   if (!store.open.has(cardId)) {
@@ -237,11 +216,7 @@ export function subscribeToCards(folder: string, listener: (update: CardUpdate) 
 
 export class CardError extends Error {}
 
-/**
- * Runs an action that closes a card with `outcome`. The outcome is set first
- * because the runner closes the card synchronously inside the action; it is
- * removed again when the action fails, so it cannot label a later card with the same id.
- */
+// The runner closes the card synchronously inside the action, so a failed action must not label a later card with the same id.
 function withOutcome(store: CardStore, cardId: string, outcome: string, action: () => boolean | void) {
   store.outcomes.set(cardId, outcome)
   let delivered: boolean | void
@@ -266,10 +241,6 @@ function getOpen(folder: string, cardId: string) {
   return { store, entry }
 }
 
-/**
- * Answers a question or approval card with the chosen labels for each of its
- * questions, by question index: two questions of one request may share their text.
- */
 export function answerCard({ folder, cardId, choices }: { folder: string; cardId: string; choices: string[][] }) {
   const { store, entry } = getOpen(folder, cardId)
   const { card } = entry
@@ -289,10 +260,8 @@ export function answerCard({ folder, cardId, choices }: { folder: string; cardId
   let answer: AgentAnswer
   if (card.kind === 'approval') {
     const [label] = picked[0].labels
-    // The middle option remembers the allow, whatever the request named it.
     answer = { kind: 'approval', allow: label !== DENY, forSession: label !== ALLOW && label !== DENY }
   } else {
-    // The providers key answers by question text, so questions that share their text share one answer, listing both choices.
     const answers: Record<string, string> = {}
     for (const { question, labels } of picked) {
       answers[question] = Object.hasOwn(answers, question) ? `${answers[question]}; ${labels.join(', ')}` : labels.join(', ')
@@ -304,7 +273,6 @@ export function answerCard({ folder, cardId, choices }: { folder: string; cardId
   withOutcome(store, cardId, outcome, () => answerAgent(agentId, requestId, answer))
 }
 
-/** Approves the plan, so the task agent carries on with it. */
 export function approveCard({ folder, cardId }: { folder: string; cardId: string }) {
   const { store, entry } = getOpen(folder, cardId)
   if (entry.card.kind !== 'plan') {
@@ -313,10 +281,6 @@ export function approveCard({ folder, cardId }: { folder: string; cardId: string
   withOutcome(store, cardId, 'Approved', () => sendMessage(entry.agentId, APPROVE_MESSAGE))
 }
 
-/**
- * Sends the user's reply to the card's task agent: a requested change for a
- * plan, a written answer for a question, or the reason for a refused approval.
- */
 export function replyToCard({ folder, cardId, text }: { folder: string; cardId: string; text: string }) {
   const { store, entry } = getOpen(folder, cardId)
   const { card } = entry
@@ -338,9 +302,7 @@ export function replyToCard({ folder, cardId, text }: { folder: string; cardId: 
   )
 }
 
-/** Stops a task agent; its open cards close as stopped. */
 export async function stopTaskAgent({ folder, agentId }: { folder: string; agentId: string }) {
-  // A task from an earlier run of the app has no agent in this one, so it is already stopped.
   if (!getAgent(agentId)) {
     return
   }
@@ -359,11 +321,6 @@ export async function stopTaskAgent({ folder, agentId }: { folder: string; agent
   }
 }
 
-/**
- * Whether a task agent waits on a question, an approval, or a plan, including a
- * plan card while the agent itself is idle. Progress, done, and pull-request
- * cards stay on the timeline without taking the task: the user can still message it.
- */
 export function hasOpenCard(agentId: string) {
   return [...stores.values()].some((store) =>
     [...store.open.values()].some(

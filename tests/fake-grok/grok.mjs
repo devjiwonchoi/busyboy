@@ -1,12 +1,4 @@
-// A fake `grok agent stdio` for journeys. The real Grok adapter starts it
-// (BUSYBOY_GROK_PATH points here) and talks newline-delimited JSON-RPC to it,
-// so tests exercise the adapter itself. Nothing here uses the network.
-//
-// Prompts pick a scripted turn. A tool call is a `session/request_permission`
-// that waits for BusyBoy's outcome; there is no hook to run. `session/load`
-// and `session/fork` of an id starting with `missing-` fail the way a session
-// Grok no longer has fails. Any other id can be loaded: a second process does
-// not share the first process's memory, and a real Grok keeps sessions on disk.
+// A second process does not share the first process's memory, and a real Grok keeps sessions on disk. missing- ids are gone.
 import { randomUUID } from 'node:crypto'
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
@@ -22,7 +14,6 @@ function flagValue(name) {
   return value
 }
 
-/** Writes the model and effort this process was started with, next to the session. */
 function recordLaunch(cwd) {
   if (typeof cwd !== 'string' || !cwd) return
   mkdirSync(cwd, { recursive: true })
@@ -71,7 +62,6 @@ function remember(params, extra = {}) {
   return session
 }
 
-/** A session this process may not have created. `missing-` ids are gone. */
 function recall(id, params) {
   if (missing(id)) return undefined
   const existing = sessions.get(id)
@@ -103,7 +93,6 @@ function say(session, text) {
   }
 }
 
-/** Records that BusyBoy allowed the command, so a journey can see it without a card. */
 function noteAllowed(session, command) {
   if (session.cwd) writeFileSync(join(session.cwd, '.grok-ran'), `${command}\n`)
 }

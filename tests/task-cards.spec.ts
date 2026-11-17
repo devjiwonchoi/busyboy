@@ -4,8 +4,6 @@ import { expect as baseExpect, test, type APIRequestContext, type Page } from '@
 import { homeRecordFolder } from './support/record-tasks'
 import { useProjectsHome } from './support/projects-home'
 
-// Task agents that wait on the user, played from tests/provider-scripts/task-cards.json
-// (Claude) and tests/provider-scripts/codex/approval.json (the real Codex adapter).
 const PLAN_REQUEST = 'Add a footer with the project name to the web app.'
 const QUESTION_REQUEST = 'Add a license file to the project.'
 const APPROVAL_REQUEST = 'Clean up the old build output.'
@@ -14,10 +12,8 @@ const CODEX_APPROVAL_REQUEST = 'Run the shell command `touch notes.txt`, then re
 const CODEX_ROUTED_REQUEST = 'Run the shell command `touch routed.txt` and report how it was approved.'
 const CODEX_PREFIX_DECISION = '{"acceptWithExecpolicyAmendment":{"execpolicy_amendment":["touch","routed.txt"]}}'
 
-// A Codex task starts the fake app server, a Node process, which can be slow on a busy machine.
 const expect = baseExpect.configure({ timeout: 15_000 })
 
-/** Creates a task the way the Director does, through busyboy's MCP tool. */
 async function createTask(request: APIRequestContext, title: string, text: string) {
   const response = await request.post('/api/mcp', {
     data: { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'create_task', arguments: { project: 'web', title, request: text } } },
@@ -29,7 +25,6 @@ async function createTask(request: APIRequestContext, title: string, text: strin
   return tasks.find((task) => task.title === title)!
 }
 
-/** Starts a subagent the way the Director does. Its one reply is shown on the task line. */
 async function runSubagent(request: APIRequestContext, title: string, text: string) {
   const response = await request.post('/api/mcp', {
     data: { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'run_subagent', arguments: { project: 'web', title, request: text } } },
@@ -66,7 +61,6 @@ test.describe('Claude task agents', () => {
     await expect(card.getByRole('button', { name: 'B. Apache-2.0' })).toBeVisible()
     await expect(transcript(page).getByLabel('web · Add a license', { exact: true })).toContainText('Needs you')
 
-    // Unanswered cards stay in the timeline, also after the page loads again.
     await expect(page.getByRole('region', { name: 'Waiting for you' })).toHaveCount(0)
     await page.reload()
     await card.getByRole('button', { name: 'A. MIT (Recommended)' }).click()
@@ -84,7 +78,6 @@ test.describe('Claude task agents', () => {
 
     const card = openCard(page, 'Approval from web · Clean up dist')
     await expect(card).toContainText('Bash: rm -rf dist')
-    // A reply to an approval denies it, so the composer stays with the Director until the user picks Reply.
     await expect(page.getByRole('textbox', { name: 'Message' })).toHaveAttribute('aria-placeholder', 'Message BusyBoy')
     await expect(card.getByRole('button', { name: /^[A-C]\. / })).toHaveText(['AAllow', 'BAllow for this session', 'CDeny'])
     await card.getByRole('button', { name: 'B. Allow for this session' }).click()
@@ -107,7 +100,6 @@ test.describe('Claude task agents', () => {
       'Place the footer below the main content',
     ])
     await expect(card.getByRole('button')).toHaveText(['View details', 'Approve'])
-    // The plan card is the task waiting on the user, so the row says Aligning.
     await expect(transcript(page).getByLabel('web · Add a footer', { exact: true })).toContainText('Aligning')
     await card.getByRole('button', { name: 'View details' }).click()
     const details = page.getByRole('dialog', { name: 'Add a site footer' })
@@ -121,10 +113,8 @@ test.describe('Claude task agents', () => {
 
     await expect(openCards(page)).toHaveCount(0)
     await expect(transcript(page).getByRole('group', { name: 'Card from web · Add a footer' })).toContainText('Approved')
-    // The agent got the approval and saved the plan as approved, in the record root.
     const records = await homeRecordFolder(home, { id: task.id, project: 'web', worktree: task.worktree })
     await expect.poll(() => readFileSync(join(records, 'ALIGN.md'), 'utf8')).toContain('Status: approved')
-    // Its turn ended with the approved plan, which asks for nothing more.
     await expect(transcript(page).getByLabel('web · Add a footer', { exact: true })).toContainText('Idle')
     await expect(openCards(page)).toHaveCount(0)
   })
@@ -136,7 +126,6 @@ test.describe('Claude task agents', () => {
     await expect(card).toBeVisible()
 
     const composer = page.getByRole('textbox', { name: 'Message' })
-    // The card does not take the composer; the user opens the plan and asks for a change.
     await expect(composer).toHaveAttribute('aria-placeholder', 'Message BusyBoy')
     await card.getByRole('button', { name: 'View details' }).click()
     const details = page.getByRole('dialog', { name: 'Add a site footer' })
@@ -148,11 +137,9 @@ test.describe('Claude task agents', () => {
 
     await expect(transcript(page).getByRole('group', { name: 'Your reply to web · Add a footer' })).toHaveText('Also show the current year.')
     await expect(transcript(page).getByRole('group', { name: 'Card from web · Add a footer' })).toContainText('Changes requested')
-    // The closed card comes first, then the reply that closed it.
     await expect(transcript(page).getByRole('group', { name: /^(Card from|Your reply to) web · Add a footer$/ }).first()).toHaveAccessibleName(
       'Card from web · Add a footer',
     )
-    // The agent revised its draft, so a new plan card asks again.
     const revised = openCard(page, 'Plan from web · Add a footer')
     await expect(revised).toContainText('When done: a footer with the project name on every page and the current year.')
     await expect(revised.getByRole('list', { name: 'End state' }).getByRole('listitem')).toHaveText([
@@ -160,11 +147,9 @@ test.describe('Claude task agents', () => {
       'Place the footer below the main content',
       'Show the current year beside the project name',
     ])
-    // Nothing went to the Director, and the reply target ended with the card it answered.
     await expect(transcript(page).getByLabel('Your message')).toHaveCount(0)
     await expect(composer).toHaveAttribute('aria-placeholder', 'Message BusyBoy')
 
-    // The next message goes to the Director as usual.
     await composer.fill('What is running right now?')
     await page.getByRole('button', { name: 'Send' }).click()
     await expect(transcript(page).getByLabel('Your message')).toHaveText('What is running right now?')
@@ -244,7 +229,6 @@ test.describe('Claude task agents', () => {
 
 test.describe('Codex task agents', () => {
   test.beforeEach(async ({ context, baseURL }) => {
-    // Only Codex is signed in, so the task agent runs on the real Codex adapter.
     ;({ home } = await useProjectsHome(context, baseURL!, ['web'], { claude: 'signed-out' }))
   })
 
@@ -253,7 +237,6 @@ test.describe('Codex task agents', () => {
     await createTask(context.request, 'Create notes', CODEX_APPROVAL_REQUEST)
 
     const card = openCard(page, 'Approval from web · Create notes')
-    // The recorded request offers an execpolicy prefix, not the string `acceptForSession`.
     await expect(card.getByRole('button', { name: /^[A-C]\. / })).toHaveText([
       'AAllow',
       'BAlways allow commands starting with touch notes.txt',

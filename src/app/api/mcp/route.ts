@@ -13,29 +13,15 @@ import {
 import { listManagers } from '@/server/managers'
 import { McpToolError, toolsFor, type McpCaller } from '@/server/mcp-tools'
 
-// Busyboy's MCP endpoint (streamable HTTP, stateless, JSON responses only),
-// served by the MCP SDK: it handles JSON-RPC, batches, `initialize` version
-// negotiation, and `ping`; this file only lists and calls busyboy's tools.
-// `proxy.ts` rejects requests without the MCP token, so only agents busyboy
-// started can call it. Their MCP config carries that token, which is derived
-// from the per-launch token and opens only this route (src/lib/server-token.ts);
-// agents never get the per-launch token itself.
-//
-// The low-level `Server` rather than `McpServer`: McpServer answers a call to
-// an unknown tool with a tool result, but a tool the caller may not use must
-// fail as a JSON-RPC error, so an agent cannot mistake it for a tool's output.
+// McpServer reports an unknown tool as a tool result, so a forbidden tool has to fail as a JSON-RPC error.
+// Agents get a derived MCP token, never the server token.
 
 /** A JSON-RPC error with exactly this message; McpError would prefix "MCP error <code>:". */
 function rpcError(code: number, message: string) {
   return Object.assign(new Error(message), { code })
 }
 
-/**
- * A request is a task agent's when its URL names a project and, in the desktop
- * app, its token is that project's task token (proxy.ts already checked it is
- * valid). Without a server token (tests, `next dev`) the URL is trusted, as
- * every request is let in anyway.
- */
+// Without a server token (tests, next dev) the URL is trusted, because every request is let in anyway.
 async function callerOf(request: Request): Promise<McpCaller> {
   const params = new URL(request.url).searchParams
   const serverToken = process.env[SERVER_TOKEN_ENV]
@@ -46,17 +32,13 @@ async function callerOf(request: Request): Promise<McpCaller> {
     if (project) return { kind: 'task', project }
     return id ? managerCaller(id) : { kind: 'director' }
   }
-  // The token decides who calls, never the URL alone: the proxy lets a manager's
-  // token in for its own `manager` parameter, whatever else the URL carries, so a
-  // URL that also names a project must not make that manager anything more.
+  // The proxy lets a manager token in for its manager parameter, so a project on the URL must not widen that.
   if (provided && project && provided === taskMcpTokenFor(serverToken, project)) return { kind: 'task', project }
   if (provided && id && provided === managerMcpTokenFor(serverToken, id)) return managerCaller(id)
-  // The Director's token, or no MCP token at all: the proxy let the window's own token in.
   if (!provided || provided === mcpTokenFor(serverToken)) return { kind: 'director' }
   throw new RefusedCallerError('This token cannot be used here.')
 }
 
-/** A manager removed since its agent started is refused rather than treated as the Director. */
 async function managerCaller(id: string): Promise<McpCaller> {
   const manager = (await listManagers()).find((entry) => entry.id === id)
   if (!manager) throw new RefusedCallerError('This manager was removed.')
@@ -65,17 +47,11 @@ async function managerCaller(id: string): Promise<McpCaller> {
 
 class RefusedCallerError extends Error {}
 
-/**
- * A new server per request: stateless, it keeps nothing between requests, and
- * it offers only the tools this caller may use.
- */
 function busyboyServer(caller: McpCaller) {
   const tools = toolsFor(caller)
   const server = new Server({ name: 'busyboy', version: '0.0.0' }, { capabilities: { tools: {} } })
   server.setRequestHandler(ListToolsRequestSchema, () => ({
-    // Always loaded: Claude otherwise defers MCP tools behind tool search,
-    // and the Director must see create_task, and a task agent its memory
-    // tools, from the first turn.
+    // Claude otherwise defers MCP tools behind tool search.
     tools: tools.map(({ name, description, inputSchema }) => ({
       name,
       description,
@@ -96,25 +72,14 @@ function busyboyServer(caller: McpCaller) {
   return server
 }
 
-/**
- * `initialize` must carry the client's capabilities and info, which the SDK
- * checks. This server reads neither, so a minimal client (curl, the journeys)
- * that sends only a protocol version gets them filled in instead of an error.
- */
+// The SDK requires initialize to carry client capabilities this server never reads.
 function withInitializeDefaults(message: unknown) {
   const request = message as { method?: unknown; params?: Record<string, unknown> } | null
   if (request?.method !== 'initialize' || typeof request.params !== 'object' || request.params === null) return message
   return { ...request, params: { capabilities: {}, clientInfo: { name: 'unknown', version: '0.0.0' }, ...request.params } }
 }
 
-/**
- * The request as the transport takes it. The transport refuses a POST whose
- * Accept header does not list both JSON and an event stream, as the spec asks
- * of clients; every answer here is JSON (`enableJsonResponse`), so a client
- * that sends no such header, like curl, gets the same JSON instead of a 406.
- * The body is parsed here only to fill in `initialize`; a body that is not
- * JSON goes to the transport as it came, which reports the parse error.
- */
+// The MCP spec asks for an Accept header of both JSON and an event stream; curl sends neither.
 async function forTransport(request: Request) {
   const headers = new Headers(request.headers)
   headers.set('accept', 'application/json, text/event-stream')
@@ -142,14 +107,12 @@ export async function POST(incoming: Request) {
   const transport = new WebStandardStreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true })
   await server.connect(transport)
   try {
-    // With JSON responses, this resolves once every response is ready.
     return await transport.handleRequest(request, { parsedBody })
   } finally {
     await server.close()
   }
 }
 
-// No server-initiated stream and no sessions, so only POST.
 export function GET() {
   return new Response('Method Not Allowed', { status: 405, headers: { Allow: 'POST' } })
 }

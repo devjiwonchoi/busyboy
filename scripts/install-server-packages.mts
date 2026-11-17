@@ -1,24 +1,5 @@
-// Installs the packages in src/lib/server-external-packages.ts as complete
-// folders into a packaged server, instead of relying on what Next's file
-// tracing picked: they load native binaries or files by computed paths, so a
-// traced subset can miss what they need at runtime.
-//
-// The packages the server loads by name are installed into a temporary folder
-// from the lockfile (frozen, so exactly the locked versions) as real, hoisted
-// folders. Only those packages are installed: the rest of the app is not, so
-// the install stays small on the slow Windows runners. The listed packages and
-// everything they resolve to are copied from there.
-//
-// Next also traces `sharp` into the standalone output, including the build
-// machine's native binary. `sharp` is not a direct dependency, so it is added
-// here and installed for the machine doing the packaging. Binaries for any
-// other platform are then removed.
-//
-// node-pty publishes prebuilds and ConPTY binaries for every operating system.
-// The shared release bundle is built on Linux, which also compiles node-pty
-// into build/Release. Each packaging machine strips the other platforms before
-// the app is signed: codesign rejects the Windows executables, and node-pty
-// loads build/Release ahead of the host prebuild.
+// These packages load native files by computed paths, which Next's file tracing misses.
+// node-pty loads build/Release ahead of the host prebuild, and codesign rejects the other platforms' binaries.
 import { execFileSync } from 'node:child_process'
 import { chmodSync, closeSync, copyFileSync, cpSync, existsSync, lstatSync, mkdtempSync, openSync, readdirSync, readFileSync, readSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -28,9 +9,6 @@ import { trimLockfile } from './trim-lockfile.mts'
 
 const root = join(import.meta.dirname, '..')
 
-// The Agent SDK installs its own `claude` executable for the host platform as
-// an optional package (about 300 MB). The app runs the user's installed
-// `claude`, so these are dropped.
 const bundledExecutables = /^@anthropic-ai\/claude-agent-sdk-/
 
 type Manifest = {
@@ -46,7 +24,6 @@ function readManifest(packageDir: string): Manifest {
   return JSON.parse(readFileSync(join(packageDir, 'package.json'), 'utf8'))
 }
 
-/** Top-level package folders in a hoisted node_modules, with scopes expanded. */
 function listPackages(nodeModules: string): string[] {
   const names: string[] = []
   for (const entry of readdirSync(nodeModules)) {
@@ -60,7 +37,6 @@ function listPackages(nodeModules: string): string[] {
   return names
 }
 
-/** Node's lookup: the nearest node_modules/<name> from `fromDir` up to the install root. */
 function resolvePackage(nodeModules: string, fromDir: string, name: string): string | undefined {
   let dir = fromDir
   while (dir.startsWith(nodeModules)) {
@@ -73,13 +49,11 @@ function resolvePackage(nodeModules: string, fromDir: string, name: string): str
   return existsSync(join(topLevel, 'package.json')) ? topLevel : undefined
 }
 
-/** The top-level folder that contains `packageDir` (nested node_modules travel with it). */
 function topLevelName(nodeModules: string, packageDir: string): string {
   const parts = relative(nodeModules, packageDir).split(sep)
   return parts[0].startsWith('@') ? `${parts[0]}/${parts[1]}` : parts[0]
 }
 
-/** Top-level folders needed by the listed packages, following dependencies the way Node resolves them. */
 function dependencyClosure(nodeModules: string, names: readonly string[]): Set<string> {
   const needed = new Set<string>()
   const visited = new Set<string>()
@@ -109,7 +83,6 @@ function dependencyClosure(nodeModules: string, names: readonly string[]): Set<s
   return needed
 }
 
-/** Keeps only the host's prebuilt binaries in packages that ship them for every platform. */
 function pruneForeignPrebuilds(packageDir: string, platform: string, arch: string) {
   const prebuilds = join(packageDir, 'prebuilds')
   if (!existsSync(prebuilds)) return
@@ -118,13 +91,7 @@ function pruneForeignPrebuilds(packageDir: string, platform: string, arch: strin
   }
 }
 
-/**
- * node-pty's npm package also ships `third_party/conpty` (OpenConsole.exe and
- * conpty.dll for every Windows architecture). The Windows prebuild already
- * contains the copy the host loads. A Linux shared bundle additionally leaves
- * its compiled `build/Release` in the tree, which node-pty loads before the
- * host prebuild and which codesign will not sign.
- */
+// node-pty loads build/Release ahead of the host prebuild, and codesign will not sign the Windows conpty binaries.
 function pruneNodePtyLayout(packageDir: string, platform: string, arch: string) {
   pruneForeignPrebuilds(packageDir, platform, arch)
   rmSync(join(packageDir, 'third_party'), { recursive: true, force: true })
@@ -145,7 +112,6 @@ function looksLikeNodePty(dir: string, entryName: string): boolean {
   }
 }
 
-/** The shared bundle's traced and `.pnpm` copies are not the package just installed. */
 function pruneNodePtyPackages(serverDir: string, platform: string, arch: string) {
   const stack = [serverDir]
   while (stack.length > 0) {
@@ -178,7 +144,6 @@ function makeSpawnHelperExecutable(packageDir: string, platform: string, arch: s
   }
 }
 
-/** The lockfile snapshot Next resolved for sharp, including its peer suffix when it has one. */
 function lockedSharp(lockText: string): { specifier: string; version: string } | null {
   const withPeer = /^  sharp@(\d+\.\d+\.\d+)\([^)\n]+\):/m.exec(lockText)
   if (withPeer) return { specifier: withPeer[1], version: withPeer[1] + withPeer[0].slice(`  sharp@${withPeer[1]}`.length, -1) }
@@ -190,7 +155,6 @@ function quoteYaml(name: string) {
   return /[^A-Za-z0-9_-]/.test(name) ? `'${name.replaceAll("'", "''")}'` : name
 }
 
-/** Adds one root dependency the committed importer does not list. `version` is the lockfile snapshot id. */
 function addLockfileDependency(lockText: string, name: string, specifier: string, version: string) {
   const newline = lockText.includes('\r\n') ? '\r\n' : '\n'
   const header = `    dependencies:${newline}`
@@ -200,11 +164,7 @@ function addLockfileDependency(lockText: string, name: string, specifier: string
   return lockText.slice(0, at + header.length) + entry + lockText.slice(at + header.length)
 }
 
-/**
- * Deletes `@img/sharp-*` binaries that are not for `platform-arch`. A standalone
- * output built on another machine contains that machine's copy, and loading it
- * crashes the server.
- */
+// A standalone output built on another machine contains that machine's sharp binary, and loading it crashes the server.
 function removeForeignSharpPackages(serverDir: string, platform: string, arch: string) {
   const keep = new Set([`sharp-${platform}-${arch}`, `sharp-libvips-${platform}-${arch}`])
   const stack = [serverDir]
@@ -221,8 +181,6 @@ function removeForeignSharpPackages(serverDir: string, platform: string, arch: s
       const path = join(dir, entry.name)
       if (entry.name === '@img') {
         for (const child of readdirSync(path, { withFileTypes: true })) {
-          // Symlinks too: pnpm links each platform package, and a link to the
-          // build machine's binary must not survive onto another platform.
           if (keep.has(child.name) || !child.name.startsWith('sharp-')) continue
           if (!child.isDirectory() && !child.isSymbolicLink()) continue
           rmSync(join(path, child.name), { recursive: true, force: true })
@@ -255,13 +213,7 @@ function mentionsPlatform(name: string): boolean {
   return name.match(PLATFORM_TOKEN) !== null
 }
 
-/**
- * Drops native packages the Linux shared bundle traced for another machine.
- * The Agent SDK's platform packages are the bundled `claude` executable; the
- * app runs the user's own, so every one of them goes, including the host's.
- * Turbopack's alias `@anthropic-ai/claude-agent-sdk-<hash>` is not one of
- * those packages and has to stay under `.next/node_modules`.
- */
+// Turbopack's hashed Claude SDK alias is not the bundled claude executable and has to stay.
 function removeForeignNativePackages(serverDir: string, platform: string, arch: string) {
   const stack = [serverDir]
   while (stack.length > 0) {
@@ -421,12 +373,7 @@ export function installServerPackages(serverDir: string, platform: string, arch:
   assertHostBinaries(serverDir, platform)
 }
 
-/**
- * The server does not load an external package by its name: Next links
- * `.next/node_modules/<name>-<hash>` to the traced copy and loads that, which
- * lacks the native binaries. Point each alias at the whole package instead,
- * as a relative link, or as a copy on Windows, where the server has no links.
- */
+// Next loads .next/node_modules/<name>-<hash>, which lacks the native binaries. Windows has no symlinks there.
 function pointAliasesAtInstalledPackages(serverDir: string, platform: string) {
   const aliases = join(serverDir, '.next', 'node_modules')
   if (!existsSync(aliases)) return
@@ -445,7 +392,6 @@ function escapeRegExp(value: string) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
 
-/** True for files, folders, and links (even broken ones). */
 function pathExists(path: string): boolean {
   try {
     lstatSync(path)

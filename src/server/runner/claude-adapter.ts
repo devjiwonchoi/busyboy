@@ -27,13 +27,10 @@ import type {
 import { agentEnvironment, findExecutable } from './find-executable'
 import { claudeContent, modelText, type UserTurn } from './user-turn'
 
-/** Overrides the `claude` executable that is otherwise looked up on PATH. */
 export const CLAUDE_PATH_ENV = 'BUSYBOY_CLAUDE_PATH'
 const SIGN_IN_TIMEOUT_MS = 20_000
-/** How long an always-ask approval may wait for the user: a day, so a waiting card never times out into running the action. */
 const ALWAYS_ASK_TIMEOUT_S = 24 * 60 * 60
 
-/** Streaming input for `query()`: user messages are pushed as the user sends them. */
 class MessageQueue implements AsyncIterable<SDKUserMessage> {
   private items: SDKUserMessage[] = []
   private waiting: ((result: IteratorResult<SDKUserMessage>) => void) | undefined
@@ -55,12 +52,10 @@ class MessageQueue implements AsyncIterable<SDKUserMessage> {
     } else this.items.push(message)
   }
 
-  /** Whether messages still wait for `release`. */
   get isHeld() {
     return this.held
   }
 
-  /** Lets the CLI read messages. Until then they wait, so setup can finish before the first turn. */
   release() {
     this.held = false
     const item = this.waiting && this.items.shift()
@@ -70,7 +65,6 @@ class MessageQueue implements AsyncIterable<SDKUserMessage> {
     }
   }
 
-  /** Drops messages the CLI has not read yet. */
   clear() {
     this.items = []
   }
@@ -99,11 +93,7 @@ function resolveClaude() {
 
 type OpenRequest = {
   input: Record<string, unknown>
-  /**
-   * The CLI's permission updates that stop this request from asking again,
-   * kept to the session. Empty when the CLI offers none, or when remembering
-   * would grant more than this request; then the request cannot be allowed for the session.
-   */
+  // Remembering a suggestion that grants more than this request would leave the agent in a different permission mode.
   sessionPermissions: PermissionUpdate[]
   resolve: (result: PermissionResult) => void
 }
@@ -130,23 +120,13 @@ function toSdkMcpServers(servers: Record<string, McpServer>): Record<string, Mcp
   )
 }
 
-/**
- * Continue, branch, or start a session. A branch (`forkSessionId`) is
- * `resume` + `forkSession`, which copies the history into a new session id
- * and leaves the original file untouched, plus `persistSession: false`, so no
- * file is written for the branch at all.
- */
+// forkSession copies the history and persistSession: false writes no file for the branch.
 function sessionOptions({ resumeSessionId, forkSessionId }: ProviderStartOptions): Partial<Options> {
   if (forkSessionId) return { resume: forkSessionId, forkSession: true, persistSession: false }
   return { resume: resumeSessionId }
 }
 
-/**
- * No tools at all. `tools: []` turns off only the built-in ones; the user's
- * own MCP servers (settings, plugins, connectors) would still load, so they
- * are left out and refused too. Verified with CLI 2.1.311: a branch of a
- * session that used tools still answers with no tools defined.
- */
+// tools: [] leaves the user's MCP servers loaded. Verified with CLI 2.1.311.
 const NO_TOOLS: Partial<Options> = { tools: [], strictMcpConfig: true, disallowedTools: ['mcp__*'] }
 
 function startClaude(options: ProviderStartOptions): ProviderSession {
@@ -159,16 +139,10 @@ function startClaude(options: ProviderStartOptions): ProviderSession {
   let cli: ClaudeProcess | undefined
   let inTurn = false
   let stopRequested = false
-  /** Always-ask approvals waiting for the user, by request id. Null means it was dropped (an interrupt). */
   const asks = new Map<string, (answer: AgentAnswer | null) => void>()
   const allowedCalls = createAllowedCalls()
 
-  /**
-   * Checks each tool call against the always-ask list before it runs. It is a
-   * PreToolUse hook rather than part of canUseTool because Auto mode calls
-   * canUseTool only for calls it would ask about itself, and it does not ask
-   * about some irreversible ones; a hook runs for every call.
-   */
+  // Auto mode calls canUseTool only for calls it would ask about itself.
   const waitForApproval = (requestId: string, event: Extract<AgentEvent, { type: 'approval' }>, signal: AbortSignal) =>
     new Promise<AgentAnswer | null>((resolve) => {
       const onAbort = () => {
@@ -199,9 +173,7 @@ function startClaude(options: ProviderStartOptions): ProviderSession {
       return {}
     }
     const { tool_name: toolName, tool_input: toolInput } = hookInput
-    // The hook names the shell's current folder, which a `cd` in an earlier call may have changed.
     const cwd = hookInput.cwd || options.cwd
-    // User rules run first and fail closed: a check that throws or cannot be read blocks and asks.
     const userRule = await checkUserRules({ rulesFolder: options.rulesFolder, toolName, input: toolInput, cwd })
     if (userRule.ask) {
       const call = { toolName, input: toolInput, rule: userRule.ruleKey, cwd }
@@ -234,7 +206,6 @@ function startClaude(options: ProviderStartOptions): ProviderSession {
     return {
       hookSpecificOutput: {
         hookEventName: 'PreToolUse',
-        // Allowed by the user, so Auto mode does not ask a second time.
         permissionDecision: allowed ? 'allow' : 'deny',
         permissionDecisionReason: allowed ? 'The user approved this action.' : declined,
       },
@@ -248,15 +219,12 @@ function startClaude(options: ProviderStartOptions): ProviderSession {
   ) => {
     const requestId = toolUseID || randomUUID()
     return new Promise<PermissionResult>((resolve) => {
-      // The SDK cancels the request (for example when the turn ends): close it for the runner too.
       const onAbort = () => {
         requests.delete(requestId)
         resolve({ behavior: 'deny', message: 'The request was cancelled.' })
         emit({ type: 'answered', requestId })
       }
       signal.addEventListener('abort', onAbort, { once: true })
-      // Only rules and directories: a suggested mode change would leave the agent
-      // in a different permission mode than the one it was started with.
       const sessionPermissions = suppressAlwaysAllowRule
         ? []
         : (suggestions ?? [])
@@ -284,18 +252,15 @@ function startClaude(options: ProviderStartOptions): ProviderSession {
     })
   }
 
-  /** Hands the MCP servers to the CLI over its control channel, then lets the first message through. */
   const registerMcpServers = async (run: Query) => {
     try {
       if (options.mcpServers && Object.keys(options.mcpServers).length > 0) {
         try {
           await run.initializationResult()
         } catch {
-          // The session itself failed to start; run() reports why.
           return
         }
         const result = await run.setMcpServers(toSdkMcpServers(options.mcpServers))
-        // Errors can echo headers or tokens; report only the server names.
         const failed = Object.keys(result.errors)
         if (failed.length > 0) {
           emit({ type: 'error', code: 'provider', message: `These MCP servers could not start: ${failed.join(', ')}.` })
@@ -335,13 +300,10 @@ function startClaude(options: ProviderStartOptions): ProviderSession {
         allowDangerouslySkipPermissions: options.permissionMode === 'full-access',
         systemPrompt: { type: 'preset', preset: 'claude_code', append: options.instructions },
         canUseTool,
-        // `block`: a hook that fails or times out stops the tool call instead of letting it run unasked.
         hooks:
           (options.alwaysAsk?.length || options.privateFolder || options.noFileEdits || userRulesHookNeeded(options.rulesFolder)) && !options.noTools
             ? { PreToolUse: [{ hooks: [alwaysAsk], timeout: ALWAYS_ASK_TIMEOUT_S, onFailure: 'block' }] }
             : undefined,
-        // The servers are added after start (registerMcpServers), but the rule
-        // can name them now: every tool of a trusted server runs without a prompt.
         allowedTools: Object.entries(options.mcpServers ?? {})
           .filter(([, server]) => server.trusted)
           .map(([name]) => `mcp__${name}`),
@@ -361,7 +323,6 @@ function startClaude(options: ProviderStartOptions): ProviderSession {
       if (stopRequested) return !inTurn
       mapper.flush()
       const message = error instanceof Error ? error.message : String(error)
-      // A CLI that fails to start explains why only on stderr.
       const stderr = cli?.stderrTail()
       emit({ type: 'error', code: 'provider', message: stderr ? `${message}\n${stderr}` : message })
       return false
@@ -369,7 +330,6 @@ function startClaude(options: ProviderStartOptions): ProviderSession {
     .then((finished) => {
       mapper.flush()
       mapper.dispose()
-      // The SDK stream can end while the CLI still runs; end it and what it started.
       void cli?.stop()
       emit({ type: 'stopped', finished } satisfies AgentEvent)
     })
@@ -380,14 +340,11 @@ function startClaude(options: ProviderStartOptions): ProviderSession {
       input.push(turn)
     },
     async interrupt() {
-      // A denial with `interrupt` ends the turn by itself; a second interrupt
-      // could reach the CLI after it has started the next queued message.
       const open = [...requests.entries()]
       for (const [requestId, request] of open) {
         request.resolve({ behavior: 'deny', message: 'The user interrupted.', interrupt: true })
         emit({ type: 'answered', requestId })
       }
-      // A dropped always-ask approval denies its tool call; the interrupt below then ends the turn.
       for (const [requestId, resolve] of [...asks.entries()]) {
         resolve(null)
         emit({ type: 'answered', requestId })
@@ -397,8 +354,6 @@ function startClaude(options: ProviderStartOptions): ProviderSession {
         await current?.interrupt()
         return
       }
-      // The CLI is still starting (or adding MCP servers) and has read nothing:
-      // drop the queued message and end the turn here.
       input.clear()
       if (inTurn) {
         inTurn = false
@@ -425,11 +380,7 @@ function startClaude(options: ProviderStartOptions): ProviderSession {
   }
 }
 
-/**
- * `claude update` only updates the native install. A Homebrew cask can lag
- * behind the release the SDK needs, so its users get the native build instead,
- * which `claude install` puts ahead of brew on a login shell's PATH.
- */
+// claude update only updates the native install, and a Homebrew cask can lag the SDK.
 function updateCommandFor(executable: string) {
   let resolved = executable
   try {
@@ -440,10 +391,6 @@ function updateCommandFor(executable: string) {
   return resolved.includes('/Caskroom/claude-code/') ? 'claude install latest' : 'claude update'
 }
 
-/**
- * Starts Claude Code without sending a prompt: the CLI completes its
- * initialization (which reports the account) but never calls the API.
- */
 async function claudeSignInStatus(): Promise<SignInStatus> {
   const executable = resolveClaude()
   if (!executable) return { state: 'not-installed', detail: 'The `claude` command was not found on PATH.' }
@@ -463,13 +410,7 @@ async function claudeSignInStatus(): Promise<SignInStatus> {
       options: { pathToClaudeCodeExecutable: executable, env: agentEnvironment(), abortController: abort },
     })
     const { account, hook_on_failure_supported, claude_code_version } = await probe.initializationResult()
-    // Task agents and the Director run with a PreToolUse hook set to `onFailure: 'block'`
-    // so an always-ask check that fails stops the action. A CLI that predates the option
-    // would let it run, so the SDK refuses every session on it: report that here instead
-    // of as signed in, or Setup passes and every turn fails. The check holds even when
-    // the always-ask list is empty: the list is on by default and can change between
-    // turns, and an agent that starts working and then stops on the next edit is worse
-    // than Setup asking for an update once.
+    // A CLI that predates onFailure: block would let an always-ask failure run the action.
     if (hook_on_failure_supported !== true) {
       const version = claude_code_version ? ` ${claude_code_version}` : ''
       return {
@@ -480,7 +421,6 @@ async function claudeSignInStatus(): Promise<SignInStatus> {
     }
     if (account.apiProvider && account.apiProvider !== 'firstParty') return { state: 'signed-in', account: account.apiProvider }
     const hasKey = Boolean(account.apiKeySource) && account.apiKeySource !== 'none'
-    // Require a positive signal: a missing tokenSource does not prove a sign-in.
     const hasToken = Boolean(account.tokenSource) && account.tokenSource !== 'none'
     if (hasToken || hasKey || account.email) {
       return { state: 'signed-in', account: account.email ?? account.organization }

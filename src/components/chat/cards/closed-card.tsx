@@ -2,7 +2,6 @@ import type { ChatEntry } from '@/server/director/chat'
 import { Badge } from '@/components/ui/badge'
 import { CardShell, CardShellBody, CardShellHeader } from './card-shell'
 
-/** A card after it closed: what it asked and how it ended, in the same shell. */
 export function ClosedCard({ entry }: { entry: Extract<ChatEntry, { kind: 'card' }> }) {
   return (
     <CardShell label={`Card from ${entry.project} · ${entry.taskTitle}`}>

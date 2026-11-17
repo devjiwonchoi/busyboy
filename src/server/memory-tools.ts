@@ -1,9 +1,6 @@
 import { appendLog, forgetFact, MemoryError, searchMemory, writeFact } from './memory'
 import type { McpCaller, McpTool } from './mcp-tools'
 
-// The memory tools of busyboy's MCP endpoint. Agents write freely: a write
-// never needs the user's approval. Bad input throws MemoryError, which
-// mcp-tools.ts reports to the agent (a value import from there would be an import cycle).
 
 function optionalText(input: Record<string, unknown>, key: string) {
   const value = input[key]
@@ -18,27 +15,14 @@ function requiredText(input: Record<string, unknown>, key: string) {
   return value
 }
 
-/**
- * Where a write, forget, or search goes. A task agent writes only its own
- * project's memory: it reads untrusted repository content, which must not
- * reach every later prompt. Its search covers global memory and that project.
- * A manager is not bound: like the Director it takes its words from the user
- * alone, and what the user asks it to remember is often global.
- */
+// A task agent reads the repository, so its writes stay in that project's memory.
 function callerScope(input: Record<string, unknown>, caller: McpCaller) {
   return caller.kind === 'task' ? caller.project : optionalText(input, 'project')
 }
 
-/** Longest project memory text one search hit carries to the Director. */
 const MAX_PROJECT_HIT = 300
 
-/**
- * Task agents write project memory after reading untrusted repository
- * content, and the Director can create tasks in every project. So a project
- * hit reaches the Director on one line, capped, inside a JSON string, after a
- * notice that it is data; the Director's prompt lists no project fact titles
- * for the same reason (see memoryPrompt in memory.ts).
- */
+// Project memory is untrusted, so a hit reaches the Director quoted and capped.
 function forDirector(project: string | null, text: string) {
   if (project === null) return text
   const line = text.replace(/\s+/g, ' ').trim()
@@ -98,9 +82,6 @@ export const MEMORY_TOOLS: McpTool[] = [
       required: ['query'],
     },
     async run(input, caller) {
-      // Like writes, a task agent's search stays in global memory and its own
-      // project: another project's memory is not its business, and may hold
-      // what that project's agents read from their repositories.
       const hits = await searchMemory({ query: requiredText(input, 'query'), project: callerScope(input, caller) })
       if (hits.length === 0) return 'Nothing in memory matches.'
       if (caller.kind === 'task') {

@@ -16,7 +16,6 @@ const STATE_WORD: Record<ProgressStepState, string> = {
   pending: 'Not started',
 }
 
-/** A filled green check, a spinner, or an empty circle. */
 function StepMark({ state }: { state: ProgressStepState }) {
   if (state === 'done') {
     return (
@@ -46,7 +45,6 @@ function StepList({ steps, spelled }: { steps: ProgressCard['steps']; spelled?: 
   )
 }
 
-/** Steps of a task that is underway. The only action is View details. */
 export function ProgressCardView({ card }: CardViewProps<ProgressCard>) {
   const { replying } = useCardActions()
   const [details, setDetails] = useState(false)

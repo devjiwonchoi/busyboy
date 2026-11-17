@@ -21,11 +21,6 @@ import { archiveTask, restoreTask, stopTask, TaskError } from '@/server/tasks'
 
 const MAX_MESSAGE_LENGTH = 100_000
 
-/**
- * The provider for the Director's next turn. The provider the Director already
- * uses carries on only when its own sign-in check failed, never when it is
- * known to be signed out. Null when no provider can be used.
- */
 async function resolveDirectorProvider(current?: ProviderId): Promise<ProviderId | null> {
   const provider = await defaultProvider()
   if (provider) return provider
@@ -33,7 +28,6 @@ async function resolveDirectorProvider(current?: ProviderId): Promise<ProviderId
   return null
 }
 
-/** The manager a chat id names, or null for the Director's chat. Throws for a manager that does not exist. */
 async function checkChat(chat: unknown) {
   if (chat === null || chat === undefined) return null
   if (typeof chat !== 'string' || !(await getManagerAt(await dataFolder(), chat))) throw new Error('That manager no longer exists.')
@@ -53,9 +47,7 @@ function attachmentInputs(value: unknown): AttachmentInput[] {
   })
 }
 
-/** Sends a message to the Director, or to the manager `chat`. */
 export async function sendToDirectorAction(text: string, chat?: string | null, attachments?: AttachmentInput[]): Promise<{ error?: string }> {
-  // Server actions are public endpoints, so the argument is checked at runtime.
   if (typeof text !== 'string' || text.length > MAX_MESSAGE_LENGTH) {
     throw new Error('A message must be non-empty text of at most 100,000 characters.')
   }
@@ -82,15 +74,10 @@ export async function stopDirectorAction(chat?: string | null) {
   await stopDirector(await dataFolder(), await checkChat(chat))
 }
 
-/** Interrupts the current reply and sends the messages waiting behind it. */
 export async function sendDirectorQueueNowAction(chat?: string | null) {
   await sendDirectorQueueNow(await dataFolder(), await checkChat(chat))
 }
 
-/**
- * Replaces the latest message in the chat with `text` and asks again.
- * Server actions are public endpoints, so every argument is checked at runtime.
- */
 export async function reviseDirectorMessageAction(
   entryId: string,
   text: string,
@@ -121,14 +108,12 @@ export async function reviseDirectorMessageAction(
   }
 }
 
-// Server actions are public endpoints, so every argument is checked at runtime.
 function checkId(value: unknown, name: string): asserts value is string {
   if (typeof value !== 'string' || !value || value.length > 500) {
     throw new Error(`${name} must be a non-empty id.`)
   }
 }
 
-/** Answers a choice card: the chosen option labels for each of its questions, in question order. */
 export async function answerCardAction(cardId: string, choices: string[][]) {
   checkId(cardId, 'The card')
   const valid =
@@ -144,19 +129,16 @@ export async function approveCardAction(cardId: string) {
   approveCard({ folder: await dataFolder(), cardId })
 }
 
-/** The task's saved plan and verification note, for a done card's View plan link. Null when it has no plan. */
 export async function readTaskPlanAction(taskId: string) {
   checkId(taskId, 'The task')
   return readTaskPlan({ folder: await dataFolder(), taskId })
 }
 
-/** Merges the pull requests on an open card, base of the stack first. Nothing merges until this runs. */
 export async function mergePullRequestsAction(cardId: string) {
   checkId(cardId, 'The card')
   await mergePullRequests({ folder: await dataFolder(), cardId })
 }
 
-/** Sends a composer message to the task agent behind an open card instead of the Director. */
 export async function replyToCardAction(cardId: string, text: string, attachments?: AttachmentInput[]): Promise<{ error?: string }> {
   checkId(cardId, 'The card')
   if (typeof text !== 'string' || text.length > MAX_MESSAGE_LENGTH) {
@@ -178,11 +160,7 @@ export async function stopTaskAction(taskId: string) {
   await stopTask(taskId)
 }
 
-/**
- * Sends a composer message to a task's agent instead of the Director. A refusal the user can act
- * on (the task waits on a card, its worktree is gone) comes back as `error`: a thrown error's
- * message does not reach the window in a production build.
- */
+// A thrown server-action error's message does not reach the window in a production build.
 export async function messageTaskAction(taskId: string, text: string, attachments?: AttachmentInput[]): Promise<{ error?: string }> {
   checkId(taskId, 'The task')
   if (typeof text !== 'string' || text.length > MAX_MESSAGE_LENGTH) {
@@ -199,7 +177,6 @@ export async function messageTaskAction(taskId: string, text: string, attachment
   }
 }
 
-/** Archives a task. `worktreeKept` says its worktree stayed because it has uncommitted changes. */
 export async function archiveTaskAction(taskId: string): Promise<{ error?: string; worktreeKept?: boolean }> {
   checkId(taskId, 'The task')
   try {

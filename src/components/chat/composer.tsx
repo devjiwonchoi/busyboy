@@ -27,7 +27,6 @@ type DraftAttachment = AttachmentInput & { id: string; bytes: number; previewUrl
 
 export type ChatComposerHandle = { addFiles: (files: FileList | File[]) => void }
 
-/** localStorage key for one chat's composer draft. The Director uses `director`. */
 export function draftStorageKey(chatId: string) {
   return `busyboy.composer-draft.${chatId}`
 }
@@ -49,42 +48,25 @@ function writeDraft(chatId: string, text: string) {
   }
 }
 
-/**
- * The message box. Enter sends, Shift+Enter adds a line.
- * `@` opens a picker and `/` opens skills and commands. Arrow keys move,
- * Enter chooses, Escape or Tab closes the picker. A plus button, a paste,
- * or a drop adds files.
- * ArrowUp in an empty box is not a registry shortcut: it only edits the
- * previous message, and a global binding would take the key from every field.
- */
+// ArrowUp in an empty box only edits the previous message. A global binding would take the key from every field.
 export const ChatComposer = forwardRef<
   ChatComposerHandle,
   {
-    /** Project names for the Director's `@` picker. Ignored while `filesProject` is set. */
     projects: string[]
-    /** When set, `@` lists this project's tracked files instead of projects. */
     filesProject?: string | null
-    /** BusyBoy commands in the `/` picker. A side question leaves them out. */
     showCommands?: boolean
     canStop?: boolean
     canArchive?: boolean
     onCommand?: (command: 'stop' | 'archive') => void
     placeholder: string
-    /** May reject; the text and attachments then come back into an empty box. */
     onSend: (message: ComposerMessage) => Promise<void> | void
-    /** Shown as a Stop button while there is work to stop. */
     onStop?: () => void
-    /** Accessible names for the box and the send button. */
     label?: string
     sendLabel?: string
-    /** Rendered at the start of the box. The reply chip uses this slot. */
     leading?: ReactNode
-    /** Remembers the draft for this chat across remounts and reloads. */
     draftKey?: string
-    /** ArrowUp while the box is empty. */
     onEmptyArrowUp?: () => void
     onTextChange?: (text: string) => void
-    /** When `token` changes, the box is replaced with `text`. */
     seed?: { token: number; text: string } | null
   }
 >(function ChatComposer(
@@ -124,7 +106,6 @@ export const ChatComposer = forwardRef<
   valueRef.current = value
   const attachmentsRef = useRef(attachments)
   attachmentsRef.current = attachments
-  // Set once the stored draft has been read, so the empty first render cannot wipe it.
   const restored = useRef(!draftKey)
   const onTextChangeRef = useRef(onTextChange)
   onTextChangeRef.current = onTextChange
@@ -183,10 +164,7 @@ export const ChatComposer = forwardRef<
     }
   }, [filesProject])
 
-  // A chosen row becomes a token. getComposerText sends `text` when it is set
-  // (a Codex skill is `$name`, a Claude skill is `/name`, a file is `@path`)
-  // and otherwise the trigger plus the label. Plain text would match the query
-  // again and reopen the picker, so the next Enter would pick instead of send.
+  // Plain text would match the query again and reopen the picker, so the next Enter would pick instead of send.
   const projectItems: ComposerItemValue[] = projects.map((name) => ({ id: `project:${name}`, label: name, kind: 'project' }))
   const fileItems: ComposerItemValue[] = files.map((file) => {
     const slash = Math.max(file.path.lastIndexOf('/'), file.path.lastIndexOf('\\'))
@@ -401,8 +379,6 @@ export const ChatComposer = forwardRef<
     Promise.resolve(onSend({ text, attachments: sending })).then(
       () => release(snapshot),
       () => {
-        // A send failure is shown by the chat. This box only reports a file it
-        // refused before sending, and puts the draft back when sending fails.
         if (!getComposerText(valueRef.current).trim() && text) commit([{ type: 'text', text }])
         setAttachments((current) => {
           if (current.length > 0) {
@@ -561,7 +537,6 @@ function PickerRow({ item, prefix }: { item: ComposerItemValue; prefix?: string 
   )
 }
 
-/** The query's letters appear in order in the name, or the description contains the query. */
 function fuzzyMatch(item: ComposerItemValue, query: string) {
   const needle = query.toLowerCase().replace(/\s+/g, '')
   if (!needle) return true
@@ -579,7 +554,6 @@ function fuzzyMatch(item: ComposerItemValue, query: string) {
   return named || (item.description ?? '').toLowerCase().includes(needle)
 }
 
-/** Round send control. Accent (white on the dark box) only when the message can be sent. */
 function RoundSendButton({ label, className, ...props }: { label: string } & ComponentProps<typeof Button>) {
   const { canSubmit } = useComposerContext()
   return (
@@ -616,7 +590,6 @@ type DictationSession = {
   abort: () => void
 }
 
-/** The Web Speech API, when this browser can dictate into the box. */
 function dictationConstructor(): (new () => DictationSession) | null {
   if (typeof window === 'undefined') return null
   const host = window as Window & {

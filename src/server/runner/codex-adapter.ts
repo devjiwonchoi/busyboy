@@ -29,43 +29,31 @@ import type {
 } from './contract'
 import { agentEnvironment, findExecutable } from './find-executable'
 
-/** Overrides the `codex` executable that is otherwise looked up on PATH. */
 export const CODEX_PATH_ENV = 'BUSYBOY_CODEX_PATH'
 const SIGN_IN_TIMEOUT_MS = 20_000
-/** How long a failed start waits to learn whether Codex is signed out. */
 const ACCOUNT_CHECK_TIMEOUT_MS = 5_000
 const CLIENT_INFO = { name: 'busyboy', title: 'BusyBoy', version: '0.0.0' }
-/** How long a closed app server's output is still read after it exits. */
 const CLOSE_WAIT_MS = 500
 
 function resolveCodex() {
   return process.env[CODEX_PATH_ENV] || findExecutable('codex')
 }
 
-/** Thread settings for a permission mode. The reviewer is always sent so a resumed thread never keeps an old one. */
 export function codexThreadSettings(mode: PermissionMode, noTools = false) {
-  // Codex has no switch for "no tools" over app-server: its tools are turned
-  // off one by one (noToolsConfig), and the read-only sandbox with `never`
-  // keeps anything left from changing files or asking.
+  // Codex has no switch for no tools over app-server.
   if (noTools) return { approvalPolicy: 'never', approvalsReviewer: 'user', sandbox: 'read-only' }
   return mode === 'full-access'
     ? { approvalPolicy: 'never', approvalsReviewer: 'user', sandbox: 'danger-full-access' }
     : { approvalPolicy: 'on-request', approvalsReviewer: 'auto_review', sandbox: 'workspace-write' }
 }
 
-/**
- * Config for `noTools`: the shell (both kinds), apps (connectors), plugins,
- * sub-agents, tool suggestions, and web search off, and every MCP server from
- * the user's Codex config disabled for this thread. codex-cli 0.167.0
- * recognizes every key (it warns about unknown ones).
- */
+// codex-cli 0.167.0 warns about unknown config keys, and every key here is one it recognizes.
 async function noToolsConfig(connection: AppServerConnection, cwd: string) {
   let servers: Record<string, unknown>
   try {
     const response = await connection.request<{ config?: { mcp_servers?: Record<string, unknown> } }>('config/read', { cwd })
     servers = response.config?.mcp_servers ?? {}
   } catch (error) {
-    // Without the list the user's servers would stay on, so the agent does not start.
     throw new Error(`Codex could not list its MCP servers to turn them off: ${error instanceof Error ? error.message : String(error)}`)
   }
   return {
@@ -80,18 +68,9 @@ async function noToolsConfig(connection: AppServerConnection, cwd: string) {
   }
 }
 
-/** MCP server names Codex accepts as a key in its config. */
 const MCP_NAME = /^[A-Za-z0-9_-]+$/
 
-/**
- * Per-thread config overrides for the agent's MCP servers. They travel in
- * `thread/start` and `thread/resume` over JSON-RPC, never on the command line
- * or in the app server's environment, so tokens in headers stay out of process
- * listings and child processes. Each `mcp_servers.<name>` key sets one server;
- * servers from the user's own Codex config are kept. A trusted server's tools
- * are approved without a prompt (`default_tools_approval_mode`, recognized by
- * codex-cli 0.167.0). Returns the servers Codex cannot take, with the reason.
- */
+// MCP config travels in thread/start over JSON-RPC, so tokens stay out of the command line and child processes.
 export function codexMcpConfig(servers: Record<string, McpServer> = {}) {
   const config: Record<string, unknown> = {}
   const skipped: string[] = []
@@ -113,7 +92,6 @@ class AppServerExited extends Error {
   }
 }
 
-/** Newline-delimited JSON-RPC over the stdio of one `codex app-server` process. */
 class AppServerConnection {
   private nextId = 1
   private pending = new Map<number, Pending>()
@@ -124,7 +102,6 @@ class AppServerConnection {
     private child: GroupProcess,
     onMessage: (message: CodexRawMessage) => void,
   ) {
-    // A write racing the process exit fails with EPIPE; the exit itself is reported through `exited`.
     child.stdin.on('error', () => {})
     createInterface({ input: child.stdout }).on('line', (line) => {
       if (!line.trim()) return
@@ -155,7 +132,6 @@ class AppServerConnection {
         resolve({ code, stderr: [child.stderrTail(), spawnError].filter(Boolean).join('\n') })
       }
       process.on('close', done)
-      // A command Codex started may hold its output open after it exits; then `close` never comes.
       process.on('exit', (code) => setTimeout(() => done(code), CLOSE_WAIT_MS).unref())
     })
   }
@@ -195,12 +171,7 @@ class AppServerConnection {
     this.notify('initialized')
   }
 
-  /**
-   * Ends the app server and everything it started (commands, MCP servers):
-   * SIGTERM to its process groups, then SIGKILL to what is left after a grace
-   * period. The groups are found first, while Codex still runs; then its input
-   * closes, which also ends a Codex that exits on its own.
-   */
+  // The groups are found while Codex still runs. Closing its input also ends a Codex that exits on its own.
   async kill() {
     await this.child.stop()
     this.child.stdin.end()
@@ -211,7 +182,6 @@ function spawnAppServer(executable: string, cwd: string, onMessage: (message: Co
   // The app server and every command it runs get the agent environment, without BusyBoy's own variables.
   // Next types NODE_ENV as required in ProcessEnv; the agent environment leaves it out on purpose.
   const env = agentEnvironment() as NodeJS.ProcessEnv
-  // On Windows `codex` resolves through its npm `.cmd` shim to a `.js` entry script, which needs Node to run.
   const script = /\.[cm]?js$/i.test(executable)
   const command = script ? (findExecutable('node') ?? 'node') : executable
   const args = script ? [executable, 'app-server'] : ['app-server']
@@ -224,22 +194,18 @@ function spawnAppServer(executable: string, cwd: string, onMessage: (message: Co
 function startCodex(options: ProviderStartOptions): ProviderSession {
   const { emit } = options
   const mcp = codexMcpConfig(options.mcpServers)
-  // Server request ids restart with every app server, so they are scoped to this one.
   const requestPrefix = `codex-${randomUUID().slice(0, 8)}-`
   const queue: UserTurn[] = []
   const requests = new Map<string, CodexRawMessage>()
   let connection: AppServerConnection | undefined
   let threadId: string | undefined
   let turnId: string | undefined
-  /** A turn (a message or a compaction) is running; new messages wait in `queue`. */
   let inTurn = false
   let interruptPending = false
-  /** Identifies the latest `turn/start` request, so a late reply cannot claim a newer turn. */
   let pendingStart: object | undefined
   let stopRequested = false
   let failed = false
   let ready: Promise<void> | undefined
-  /** Always-ask approvals waiting for the user, by request id. Null means it was dropped (an interrupt or stop). */
   const asks = new Map<string, (answer: AgentAnswer | null) => void>()
   const allowedCalls = createAllowedCalls()
   const unregisterGates: (() => void)[] = []
@@ -249,7 +215,6 @@ function startCodex(options: ProviderStartOptions): ProviderSession {
 
   const ask = (requestId: string, event: Extract<AgentEvent, { type: 'approval' }>, signal: AbortSignal) =>
     new Promise<AgentAnswer | null>((resolve) => {
-      // The hook went away, so nobody waits for this answer any more: close its card.
       signal.addEventListener(
         'abort',
         () => {
@@ -265,9 +230,7 @@ function startCodex(options: ProviderStartOptions): ProviderSession {
       emit(event)
     })
 
-  /** Answers this thread's hook: user rules first (fail closed), then the always-ask list. */
   const gate = async ({ toolName, input, cwd, signal }: { toolName: string; input: unknown; cwd?: string; signal: AbortSignal }): Promise<HookDecision> => {
-    // The folder the hook reports the call runs in; a folder named in the input is part of the key too.
     const folder = cwd || options.cwd
     const userRule = await checkUserRules({ rulesFolder: options.rulesFolder, toolName, input, cwd: folder })
     if (userRule.ask) {
@@ -335,13 +298,11 @@ function startCodex(options: ProviderStartOptions): ProviderSession {
         input: codexInput(text ? turn : { ...turn, text: ' ' }),
       })
       .then(({ turn }) => {
-        // The reply can arrive after the turn already ended and the next one began.
         if (pendingStart !== request) return
         turnId ??= turn.id
         if (interruptPending) interruptTurn()
       })
       .catch((error: Error) => {
-        // A stop or exit ends the session; `stopped` reports it.
         if (stopRequested || error instanceof AppServerExited) return
         inTurn = false
         interruptPending = false
@@ -357,15 +318,12 @@ function startCodex(options: ProviderStartOptions): ProviderSession {
       inTurn = false
       turnId = undefined
       interruptPending = false
-      // The next queued message starts its turn right after this one.
       if (queue.length > 0) event = { ...event, more: true }
     }
     emit(event)
   }
   const mapper = new CodexEventMapper(onEvent)
 
-  // The protocol is experimental: a message that does not have the expected shape is reported
-  // (and a request refused) instead of being lost with the rest of its output.
   const onMessage = (message: CodexRawMessage) => {
     try {
       handleMessage(message)
@@ -401,8 +359,6 @@ function startCodex(options: ProviderStartOptions): ProviderSession {
       return
     }
     if (message.method === 'serverRequest/resolved') {
-      // Resolved without our answer, for example by the auto reviewer or an interrupt. Requests
-      // from subagent threads are shown too, so this is checked before the thread filter.
       const requestId = `${requestPrefix}${message.params?.requestId}`
       if (requests.delete(requestId)) {
         mapper.flush()
@@ -410,7 +366,6 @@ function startCodex(options: ProviderStartOptions): ProviderSession {
       }
       return
     }
-    // Codex runs subagents and reviewers in their own threads; only this thread is the conversation.
     const messageThread = message.params?.threadId
     if (threadId && typeof messageThread === 'string' && messageThread !== threadId) return
     if (message.method === 'turn/started') {
@@ -433,9 +388,7 @@ function startCodex(options: ProviderStartOptions): ProviderSession {
     if (stopRequested) void current.kill()
     ready = (async () => {
       await current.initialize()
-      // Until Codex names the thread, a hook call is matched to this session by its working folder.
-      // Not for a subagent: its folder is the project checkout, where other agents work too, and
-      // their hook calls must not reach this session's cards. It is matched by its thread only.
+      // A subagent's folder is the project checkout, where other agents work, so it is matched by thread only.
       if (alwaysAsk && !options.noFileEdits) {
         unregisterGates.push(registerGate({ key: folderKey(options.cwd), gate }))
       }
@@ -448,9 +401,6 @@ function startCodex(options: ProviderStartOptions): ProviderSession {
         developerInstructions: options.instructions ?? null,
         config: options.noTools ? await noToolsConfig(current, options.cwd) : { ...mcp.config, ...hook?.config },
       }
-      // The history is not needed: the runner keeps its own transcript. A
-      // branch is ephemeral, so nothing is written for it and resuming the
-      // agent branches from the original again, as the contract asks.
       const [method, params] = options.forkSessionId
         ? ['thread/fork', { threadId: options.forkSessionId, ephemeral: true, excludeTurns: true, ...settings }]
         : options.resumeSessionId
@@ -466,7 +416,7 @@ function startCodex(options: ProviderStartOptions): ProviderSession {
       startNextTurn()
     })()
     ready.catch(async (error: Error) => {
-      if (error instanceof AppServerExited) return // Reported below with the process output.
+      if (error instanceof AppServerExited) return
       let timer: ReturnType<typeof setTimeout> | undefined
       const status = await Promise.race([
         accountStatus(current).catch(() => undefined),
@@ -485,10 +435,8 @@ function startCodex(options: ProviderStartOptions): ProviderSession {
       unregister()
     }
     dropAsks()
-    // Text that streamed before the exit is still shown.
     mapper.flush()
     mapper.dispose()
-    // Only a stop ends the app server on purpose; any other exit is a failure.
     fail(stderr.trim() || `The Codex app server exited with code ${code}.`)
     return stopRequested && !inTurn && queue.length === 0
   }
@@ -508,8 +456,6 @@ function startCodex(options: ProviderStartOptions): ProviderSession {
   return {
     send,
     async interrupt() {
-      // Messages queued behind the turn stay queued and run next, as with Claude.
-      // A dropped always-ask approval blocks its tool call.
       dropAsks()
       for (const [requestId, request] of requests) {
         if (request.id !== undefined) connection?.respond(request.id, codexAnswerToResult(request, { kind: 'approval', allow: false }))
@@ -520,7 +466,6 @@ function startCodex(options: ProviderStartOptions): ProviderSession {
       // The turn was requested but Codex has not named it yet: interrupt once it does.
       else if (inTurn) interruptPending = true
       else if (!threadId && queue.length > 0) {
-        // Codex is still starting and has read nothing: drop the waiting messages and end the turn here, as Claude does.
         queue.length = 0
         emit({ type: 'turn-done' })
       }
@@ -529,7 +474,6 @@ function startCodex(options: ProviderStartOptions): ProviderSession {
       await ready?.catch(() => {})
       if (!connection || !threadId) return
       if (inTurn) throw new Error('Codex is running a turn. Compact once it ends.')
-      // Compaction runs as a turn that cannot take more input, so messages wait for it.
       inTurn = true
       try {
         await connection.request('thread/compact/start', { threadId })
@@ -548,8 +492,6 @@ function startCodex(options: ProviderStartOptions): ProviderSession {
         return
       }
       if (requestId.startsWith(CODEX_MESSAGE_QUESTION_PREFIX)) {
-        // Codex waits inside the turn (it sleeps) for the answer, which steers the turn. If the turn
-        // ended in the meantime, the steer fails and the answer becomes the next message.
         const text = codexQuestionAnswerText(answer)
         if (!connection || !threadId || !turnId) return send(text)
         const input = [{ type: 'text', text, text_elements: [] }]
@@ -580,7 +522,6 @@ async function accountStatus(connection: AppServerConnection): Promise<SignInSta
   return { state: 'signed-out', loginCommand: 'codex login' }
 }
 
-/** Starts the app server, reads the account, and ends it. No model call is made. */
 async function codexSignInStatus(): Promise<SignInStatus> {
   const executable = resolveCodex()
   if (!executable) return { state: 'not-installed', detail: 'The `codex` command was not found on PATH.' }
@@ -592,7 +533,6 @@ async function codexSignInStatus(): Promise<SignInStatus> {
         .initialize()
         .then(() => accountStatus(connection))
         .catch(async (error: Error): Promise<SignInStatus> => {
-          // An early exit explains itself on stderr.
           const stderr = error instanceof AppServerExited ? (await connection.exited).stderr.trim() : ''
           return { state: 'unknown', detail: stderr || error.message }
         }),

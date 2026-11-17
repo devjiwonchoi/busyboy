@@ -4,12 +4,10 @@ import { getProject } from './projects'
 
 const run = promisify(execFile)
 
-/** Enough for the picker to filter. A larger tree still matches by the names that fit. */
 const MAX_FILES = 2_000
 
 export type ProjectFile = { path: string }
 
-/** Files git tracks in `project`, relative to the repository root. */
 export async function listProjectFiles(project: string): Promise<ProjectFile[]> {
   const found = await getProject(project)
   if (!found) return []

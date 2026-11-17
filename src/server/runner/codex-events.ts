@@ -1,8 +1,4 @@
-// Turns `codex app-server` notifications and server requests into contract
-// events, and contract answers into the replies Codex expects. It has no
-// process handling, so a live run and a replayed recording map the same way.
-// Types follow the protocol of
-// codex-cli 0.167.0 (`codex app-server generate-ts`), reduced to the fields read here.
+// Types follow codex-cli 0.167.0 (codex app-server generate-ts), reduced to the fields read here.
 import { TEXT_DELTA_FLUSH_MS } from './claude-events'
 import {
   elicitationContent,
@@ -14,7 +10,6 @@ import {
 import { parseAskedQuestions } from './asked-questions'
 import type { AgentAnswer, AgentEvent } from './contract'
 
-/** A JSON-RPC message from the app server: a notification, or a server request when `id` is set. */
 export type CodexRawMessage = { id?: string | number; method: string; params?: Record<string, unknown> }
 
 type ThreadItem = {
@@ -31,20 +26,14 @@ type ThreadItem = {
   questions?: AsyncQuestion[] | null
 }
 
-/**
- * A question Codex puts in an agent message in Default mode, where `request_user_input`
- * is unavailable. `title` and string options are that tool's shape; `question` and
- * `{ label, description }` options are the other tool's, which the model also sends here.
- */
+// request_user_input is unavailable in Default mode, and the model also sends the other tool's shape here.
 type AsyncQuestion = { title?: string; question?: string; options?: unknown }
 
-/** Request ids of questions asked in agent messages; they are answered by steering the turn. */
 export const CODEX_MESSAGE_QUESTION_PREFIX = 'codex-ask-'
 
 type Turn = { id: string; status: 'completed' | 'interrupted' | 'failed' | 'inProgress'; error?: TurnError | null }
 type TurnError = { message: string; codexErrorInfo?: unknown; additionalDetails?: string | null }
 
-/** A path in a permission request, as the 0.167.0 protocol shapes it. */
 type SandboxPath =
   | { type: 'path'; path: string }
   | { type: 'glob_pattern'; pattern: string }
@@ -68,7 +57,6 @@ function sandboxPathLabel(path: SandboxPath) {
 
 const ACCESS_LABELS: Record<string, string> = { read: 'Read', write: 'Write', deny: 'No access' }
 
-/** The permissions a request asks for, as in `item/permissions/requestApproval` and command approvals. */
 type PermissionProfile = {
   network?: { enabled: boolean | null } | null
   fileSystem?: {
@@ -82,7 +70,6 @@ function permissionLines(permissions: PermissionProfile | null | undefined) {
   const entries = permissions?.fileSystem?.entries
   return [
     permissions?.network?.enabled && 'Network access',
-    // Newer servers describe paths as entries (granted in full on Allow); the read and write lists are their legacy form.
     ...(entries?.length
       ? entries.map((entry) => `${ACCESS_LABELS[entry.access] ?? entry.access}: ${sandboxPathLabel(entry.path)}`)
       : [
@@ -92,7 +79,6 @@ function permissionLines(permissions: PermissionProfile | null | undefined) {
   ]
 }
 
-/** Server requests that become an approval or a question. Others are refused. */
 export const CODEX_ANSWERABLE_REQUESTS = new Set([
   'item/commandExecution/requestApproval',
   'item/fileChange/requestApproval',
@@ -103,10 +89,7 @@ export const CODEX_ANSWERABLE_REQUESTS = new Set([
 
 const LABEL_LIMIT = 80
 
-/**
- * The command as the user would write it. Codex wraps commands in the login
- * shell (`/bin/zsh -lc '…'`) and reports the parsed commands separately.
- */
+// Codex wraps commands in the login shell and reports the parsed commands separately.
 function displayCommand(command: unknown, actions: unknown) {
   const parsed = Array.isArray(actions) ? actions.map((action: { command?: unknown }) => action.command) : []
   if (parsed.length && parsed.every((value) => typeof value === 'string' && value)) return parsed.join(' && ')
@@ -118,7 +101,6 @@ function shorten(value: string) {
   return line.length > LABEL_LIMIT ? `${line.slice(0, LABEL_LIMIT - 1)}…` : line
 }
 
-/** A short label such as `Shell: pnpm test` or `Edit: app/page.tsx`, or undefined for non-tool items. */
 function itemLabel(item: ThreadItem): string | undefined {
   switch (item.type) {
     case 'commandExecution': {
@@ -143,7 +125,6 @@ function itemLabel(item: ThreadItem): string | undefined {
   }
 }
 
-/** Readable text for failures Codex reports by code. Codex's own message follows when it adds detail. */
 const ERROR_TEXT: Record<string, string> = {
   contextWindowExceeded: 'Codex stopped: the conversation is longer than the model can read. Compact it or start a new agent.',
   sessionBudgetExceeded: "Codex stopped: the session's budget ran out.",
@@ -166,7 +147,6 @@ const ERROR_TEXT: Record<string, string> = {
 }
 const DETAIL_LIMIT = 500
 
-/** The error code: a string, or the single key of an object variant such as `{ httpConnectionFailed: {...} }`. */
 function errorCode(info: unknown): { code?: string; httpStatus?: number } {
   if (typeof info === 'string') return { code: info }
   if (!info || typeof info !== 'object') return {}
@@ -175,7 +155,6 @@ function errorCode(info: unknown): { code?: string; httpStatus?: number } {
   return { code, httpStatus: typeof status === 'number' ? status : undefined }
 }
 
-/** The event for a failed turn: signed out, or a readable provider error. */
 export function codexErrorEvent(error: TurnError | null | undefined): Extract<AgentEvent, { type: 'error' }> {
   const { code, httpStatus } = errorCode(error?.codexErrorInfo)
   if (code === 'unauthorized' || httpStatus === 401) {
@@ -187,38 +166,17 @@ export function codexErrorEvent(error: TurnError | null | undefined): Extract<Ag
   return { type: 'error', code: 'provider', message }
 }
 
-/**
- * Maps one Codex thread's notifications to contract events, in order.
- *
- * Each agent message is a text item with Codex's item id. Its streamed deltas
- * are gathered for TEXT_DELTA_FLUSH_MS and sent together, so a long reply adds
- * a few events per second instead of one per token. The completed item sends
- * its text only when it never streamed or differs from what streamed. Any
- * other event first sends the deltas still gathered, so order is kept.
- * Server requests go through `codexRequestToEvent`.
- */
 export class CodexEventMapper {
-  /** Full streamed text by item id, until the item completes. */
   private streamed = new Map<string, string>()
-  /** Deltas not sent yet, by item id, in arrival order. */
   private pending = new Map<string, string>()
   private timer: ReturnType<typeof setTimeout> | undefined
-  /** The last error Codex reported for the running turn without retrying; it explains the failure best. */
   private turnError: TurnError | undefined
-  /** MCP servers whose failed start was reported; Codex retries and reports it again. */
   private failedServers = new Set<string>()
-  /** A denial in the running turn could only `cancel` it (see `deniedWithCancel`). */
   private endedByDenial = false
 
   constructor(private readonly emit: (event: AgentEvent) => void) {}
 
-  /**
-   * A command was denied with `cancel`, because the request offered no
-   * `decline`. Claude takes a denial and goes on with the turn; Codex ends it.
-   * That gap cannot be closed from here, so instead of showing the turn as
-   * interrupted (which reads as the user's doing), it ends normally with a
-   * note saying what happened.
-   */
+  // A denial with cancel ends the Codex turn. Claude continues. That gap cannot be closed from here.
   deniedWithCancel() {
     this.endedByDenial = true
   }
@@ -242,13 +200,10 @@ export class CodexEventMapper {
         return
       }
       case 'error': {
-        // Codex retries some failures itself; only a final one explains the turn.
         if (params.willRetry !== true) this.turnError = params.error as TurnError
         return
       }
       case 'mcpServer/startupStatus/updated': {
-        // User-configured servers are inherited from Codex's own config, so a failure there
-        // is reported too, not only a server BusyBoy passed in.
         const name = typeof params.name === 'string' ? params.name.trim() : ''
         const status = params.status
         if (!name || this.failedServers.has(name)) return
@@ -264,7 +219,6 @@ export class CodexEventMapper {
       }
       case 'turn/completed': {
         const turn = params.turn as Turn
-        // The `error` notification repeats the failure with more detail than the completed turn.
         if (turn.status === 'failed') this.send(codexErrorEvent(this.turnError ?? turn.error))
         this.turnError = undefined
         const endedByDenial = this.endedByDenial
@@ -279,7 +233,6 @@ export class CodexEventMapper {
     }
   }
 
-  /** Sends gathered deltas now, for example before the session reports it stopped. */
   flush() {
     if (this.timer) clearTimeout(this.timer)
     this.timer = undefined
@@ -288,7 +241,6 @@ export class CodexEventMapper {
     for (const [itemId, text] of pending) this.emit({ type: 'text-delta', itemId, text })
   }
 
-  /** Stops the flush timer without sending anything. */
   dispose() {
     if (this.timer) clearTimeout(this.timer)
     this.timer = undefined
@@ -339,16 +291,10 @@ type ElicitationParams = {
   requestedSchema?: ElicitationSchema
 }
 
-/** Whether an elicitation is a form BusyBoy shows as questions. */
 function isForm(params: ElicitationParams) {
   return params.mode === 'form' || params.mode === 'openai/form' || params.mode === 'openaiForm'
 }
 
-/**
- * A reply BusyBoy sends without asking, with the reason it shows, for requests
- * it cannot present: forms with a required free-text field and no default, and
- * challenges such as `openai/userVerification`.
- */
 export function codexAutoReply(message: CodexRawMessage): { result: unknown; notice: string } | undefined {
   if (message.method !== 'mcpServer/elicitation/request') return undefined
   const params = (message.params ?? {}) as ElicitationParams
@@ -365,13 +311,7 @@ export function codexAutoReply(message: CodexRawMessage): { result: unknown; not
   return { result: decline, notice: `The MCP server ${params.serverName} asked for a ${params.mode} check BusyBoy does not support, so it was declined.` }
 }
 
-/**
- * A command decision as Codex sends it in `availableDecisions` and expects it back.
- * Unit variants are strings (`accept`, `decline`, …). Persistent variants are externally
- * tagged objects, for example `{ acceptWithExecpolicyAmendment: { execpolicy_amendment } }`.
- * Matching the strings with `includes` misses the objects and can answer with a decision
- * the request did not offer.
- */
+// Matching decision strings with includes misses Codex's externally tagged objects.
 type ListedDecision = { name: string; value: unknown }
 
 const COMMAND_DECISIONS = new Set([
@@ -383,7 +323,6 @@ const COMMAND_DECISIONS = new Set([
   'cancel',
 ])
 
-/** The decisions a command approval lists, or undefined when Codex did not send the list. */
 function listedDecisions(offered: unknown): ListedDecision[] | undefined {
   if (!Array.isArray(offered)) return undefined
   const decisions: ListedDecision[] = []
@@ -399,13 +338,11 @@ function listedDecisions(offered: unknown): ListedDecision[] | undefined {
   return decisions
 }
 
-/** The listed decision, or the bare name when Codex sent no list (those names are always valid then). */
 function listedValue(decisions: ListedDecision[] | undefined, name: string): unknown {
   if (!decisions) return name
   return decisions.find((decision) => decision.name === name)?.value
 }
 
-/** The command prefix a persistent execpolicy decision remembers, hidden when it is not one line. */
 function execpolicyPrefix(value: unknown): string | undefined {
   const amendment =
     value && typeof value === 'object'
@@ -419,7 +356,6 @@ function execpolicyPrefix(value: unknown): string | undefined {
         ? amendment
         : ''
   const prefix = text.trim()
-  // Codex's own prompt hides an amendment that spans lines; echoing it would not match that prompt.
   if (!prefix || /[\r\n]/.test(prefix)) return undefined
   return prefix
 }
@@ -437,10 +373,6 @@ function networkAmendment(value: unknown): { host?: string; action?: string } | 
   }
 }
 
-/**
- * Whether the card may offer a remembered allow, and how to name it.
- * A `humanCommand` checkpoint accepts only this once (`accept`, `decline`, `cancel`).
- */
 function sessionChoice(params: Record<string, unknown>): { offered: boolean; label?: string } {
   if (params.kind === 'humanCommand') return { offered: false }
   const decisions = listedDecisions(params.availableDecisions)
@@ -455,18 +387,12 @@ function sessionChoice(params: Record<string, unknown>): { offered: boolean; lab
   return { offered: false }
 }
 
-/**
- * The `decision` value that answers a command approval: one Codex listed, echoed in the
- * shape it was sent. A one-time allow is `accept`. Remembering it is `acceptForSession`
- * or the execpolicy or network object. A denial is `decline`, or `cancel` when that is
- * the only refusal, because `cancel` also ends the turn.
- */
+// cancel is the only refusal on some requests, and cancel also ends the turn.
 function commandApprovalDecision(params: Record<string, unknown>, allow: boolean, forSession: boolean): unknown {
   const human = params.kind === 'humanCommand'
   const decisions = listedDecisions(params.availableDecisions)
   if (allow && forSession && !human) {
     const session = listedValue(decisions, 'acceptForSession')
-    // No list: `acceptForSession` is valid. A list that omits it must not be answered with it.
     if (!decisions || decisions.some((decision) => decision.name === 'acceptForSession')) return session
     const prefix = listedValue(decisions, 'acceptWithExecpolicyAmendment')
     if (prefix !== undefined && execpolicyPrefix(prefix)) return prefix
@@ -485,7 +411,6 @@ function commandApprovalDecision(params: Record<string, unknown>, allow: boolean
   return 'decline'
 }
 
-/** The approval or question for an answerable server request, or undefined for any other request. */
 export function codexRequestToEvent(
   requestId: string,
   message: CodexRawMessage,
@@ -496,7 +421,6 @@ export function codexRequestToEvent(
     case 'item/commandExecution/requestApproval': {
       const command = displayCommand(params.command, params.commandActions)
       const network = params.networkApprovalContext as { host?: string; protocol?: string } | null | undefined
-      // `writeStdin` sends input to a command that is already running.
       const title =
         params.kind === 'writeStdin'
           ? 'Allow input to a running command?'
@@ -508,7 +432,6 @@ export function codexRequestToEvent(
         type: 'approval',
         requestId,
         title,
-        // Accepting also grants what the command asks for beyond the sandbox, so it is shown.
         detail: detailLines(
           reason,
           typeof params.cwd === 'string' && `In ${params.cwd}`,
@@ -537,7 +460,6 @@ export function codexRequestToEvent(
       }
     }
     case 'item/tool/requestUserInput': {
-      // `title` with string options, and `question` with labeled options, are both sent here.
       const questions = parseAskedQuestions(params.questions) ??
         parseAskedQuestions(params) ?? [
           { question: 'Codex asked a question BusyBoy could not read. Reply with the answer.', multiSelect: false, options: [] },
@@ -551,7 +473,6 @@ export function codexRequestToEvent(
         const questions = elicitationQuestions(elicitation.message ?? '', elicitation.requestedSchema ?? {})
         if (questions.length > 0) return { type: 'question', requestId, questions }
       }
-      // A link to open, or a form with nothing to choose: allowing accepts it as it is, so the values it sends are shown.
       const defaults = isForm(elicitation) ? elicitationDefaults(elicitation.requestedSchema ?? {}) : []
       return {
         type: 'approval',
@@ -566,15 +487,12 @@ export function codexRequestToEvent(
   }
 }
 
-/** The JSON-RPC result that answers a server request. */
 export function codexAnswerToResult(message: CodexRawMessage, answer: AgentAnswer): unknown {
   const params = message.params ?? {}
   const allow = answer.kind === 'question' || answer.allow
   const forSession = answer.kind === 'approval' && answer.allow && Boolean(answer.forSession)
   switch (message.method) {
     case 'item/commandExecution/requestApproval':
-      // Echo a listed decision, including an object Codex offered. A string check would miss those
-      // and answer `acceptForSession` or `cancel` when the request offered something else.
       return { decision: commandApprovalDecision(params, allow, forSession) }
     case 'item/fileChange/requestApproval':
       return { decision: allow ? (forSession ? 'acceptForSession' : 'accept') : 'decline' }
@@ -590,11 +508,9 @@ export function codexAnswerToResult(message: CodexRawMessage, answer: AgentAnswe
         questions.flatMap((item) => {
           if (!item || typeof item !== 'object') return []
           const id = (item as { id?: unknown }).id
-          // The same reading as the card, so the answer is stored under the question the user saw.
           const key = parseAskedQuestions(item)?.[0]?.question
           const value = key === undefined ? undefined : answer.answers[key]
           if (typeof id !== 'string' || value === undefined) return []
-          // Every question here is single-select, so the label is one answer even when it has a comma.
           return [[id, { answers: [value] }]]
         }),
       )
@@ -604,12 +520,10 @@ export function codexAnswerToResult(message: CodexRawMessage, answer: AgentAnswe
       const elicitation = params as ElicitationParams
       const decline = { action: 'decline', content: null, _meta: null }
       if (answer.kind === 'question') {
-        // Answered from question cards: the form content, typed as its schema asks.
         const content = elicitationContent(elicitation.message ?? '', elicitation.requestedSchema ?? {}, answer)
         return content ? { action: 'accept', content, _meta: null } : decline
       }
       if (!answer.allow) return decline
-      // A form with nothing to choose sends its defaults; a link sends no content.
       const content = isForm(elicitation) ? (elicitationContent('', elicitation.requestedSchema ?? {}, { kind: 'question', answers: {} }) ?? {}) : null
       return { action: 'accept', content, _meta: null }
     }
@@ -618,7 +532,6 @@ export function codexAnswerToResult(message: CodexRawMessage, answer: AgentAnswe
   }
 }
 
-/** The user message that answers questions Codex asked in an agent message. */
 export function codexQuestionAnswerText(answer: AgentAnswer) {
   if (answer.kind !== 'question') return 'I would rather not answer that. Continue without it.'
   return Object.entries(answer.answers)

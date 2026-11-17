@@ -6,19 +6,13 @@ import { useProjectsHome } from './support/projects-home'
 import { addRecordTask } from './support/record-tasks'
 import { startStandaloneServer } from './support/standalone-server'
 
-// Agents coming back after the server restarts. Scripts: tests/provider-scripts/task-resume.json,
-// director-resume.json, task-agents.json, and director-interrupt.json. Scripted sessions are saved under the temp folder like a provider's
-// own session files, so a restarted server resumes them with their history.
 
 const LONG_REQUEST = 'Write the release notes for this week.'
-// tests/provider-scripts/task-agents.json: one short turn, after which the agent waits idle.
 const QUICK_REQUEST = 'Add a CONTRIBUTING.md that explains how to run the project.'
-// tests/provider-scripts/director-interrupt.json: a reply that streams for a while.
 const SLOW_DIRECTOR_REQUEST = 'Write a long story about a lighthouse.'
 // Must match src/server/director/chat.ts.
 const REPLY_CUT_OFF_NOTE = 'BusyBoy restarted before the Director finished replying. Send your message again if you still need an answer.'
 const APPROVAL_REQUEST = 'Delete the build folder.'
-// Its resumed turn reports signed-out after the session, the way Claude does.
 const SIGNED_OUT_REQUEST = 'Summarize the open issues.'
 // Must match src/server/tasks.ts.
 const RESUME_WORKING_MESSAGE =
@@ -33,7 +27,6 @@ function storedTasks(home: string): StoredTask[] {
   return existsSync(file) ? (JSON.parse(readFileSync(file, 'utf8')) as { tasks: StoredTask[] }).tasks : []
 }
 
-/** The user messages a scripted session received, across every server that ran it. */
 function sessionMessages(sessionId: string | null | undefined): string[] {
   if (!sessionId) return []
   const file = join(tmpdir(), 'busyboy-scripted-sessions', `${sessionId}.json`)
@@ -63,12 +56,10 @@ test('a server that dies mid-task should resume the agent on its session without
     expect(before.activity).toBe('running')
     await expect.poll(() => sessionMessages(before.sessionId)).toEqual([LONG_REQUEST])
 
-    // Killed mid-turn: no shutdown handler runs, as in a crash.
     await server.stop('SIGKILL')
     await server.restart()
     await openApp(await context.newPage())
 
-    // A new agent on the same session, told to check its work instead of getting the request again.
     await expect.poll(() => storedTasks(home)[0]?.agentId).not.toBe(before.agentId)
     expect(storedTasks(home)[0].sessionId).toBe(before.sessionId)
     await expect.poll(() => sessionMessages(before.sessionId)).toEqual([LONG_REQUEST, RESUME_WORKING_MESSAGE])
@@ -88,7 +79,6 @@ test('quitting while a task waits for approval should ask again after the restar
     await expect.poll(() => storedTasks(home)[0]?.activity).toBe('needs-you')
     const before = storedTasks(home)[0]
 
-    // A clean stop: the server stops its agents, and that stop must not count as the task stopping.
     await server.stop('SIGTERM')
     expect(storedTasks(home)[0].activity).toBe('needs-you')
 
@@ -97,7 +87,6 @@ test('quitting while a task waits for approval should ask again after the restar
     await openApp(page)
 
     await expect.poll(() => sessionMessages(before.sessionId)).toEqual([APPROVAL_REQUEST, RESUME_WAITING_MESSAGE])
-    // Waiting on the new approval request, not merely idle.
     await expect.poll(() => storedTasks(home)[0]?.activity).toBe('needs-you')
     await expect(page.getByRole('listitem', { name: 'web · Clean build' }).locator('[data-status]')).toHaveAttribute('data-status', 'needs-you')
     await context.close()
@@ -126,7 +115,6 @@ test('restarting the server should continue the Director conversation', async ({
     await server.restart()
     await send('What word did I ask you to remember?')
 
-    // Only the same provider session knows the word.
     await expect(replies).toHaveText(['Noted.', 'Lighthouse.'])
     await expect(page.getByRole('log', { name: 'Transcript' }).getByRole('note')).toHaveCount(0)
     await context.close()
@@ -137,7 +125,6 @@ test('restarting the server should continue the Director conversation', async ({
 
 const FOOTER = { id: 'show-health-footer-a1b2c3', title: 'Show API health in the footer' }
 
-/** Marks a task in the list as `fields` say, as a server that stopped at that point left it. */
 function patchTask(home: string, id: string, fields: Partial<StoredTask>) {
   const file = join(home, 'task-list.json')
   const list = JSON.parse(readFileSync(file, 'utf8')) as { tasks: StoredTask[] }
@@ -148,7 +135,6 @@ function patchTask(home: string, id: string, fields: Partial<StoredTask>) {
 test('a task whose session cannot be resumed should stop and record why', async ({ page, context, baseURL }) => {
   const { home, projects } = await useProjectsHome(context, baseURL!, ['web'])
   await addRecordTask(home, { project: 'web', projectPath: projects.web, ...FOOTER })
-  // The scripted provider fails a `missing-` session the way Claude fails one it no longer has.
   patchTask(home, FOOTER.id, { activity: 'running', sessionId: 'missing-release-notes' })
 
   await openApp(page)
@@ -160,7 +146,6 @@ test('a task whose session cannot be resumed should stop and record why', async 
 test('a task whose agent never started should start once on the next start', async ({ page, context, baseURL }) => {
   const { home, projects } = await useProjectsHome(context, baseURL!, ['web'])
   await addRecordTask(home, { project: 'web', projectPath: projects.web, ...FOOTER })
-  // The server died after saving the task but before the provider confirmed a session.
   patchTask(home, FOOTER.id, { activity: 'running', sessionId: null, request: LONG_REQUEST })
 
   await openApp(page)
@@ -185,9 +170,7 @@ test('restarting should leave an idle task idle without starting its agent', asy
     await server.restart()
     await openApp(await context.newPage())
 
-    // The running task resumes, which also shows the resume pass is over.
     await expect.poll(() => sessionMessages(byTitle('Release notes')?.sessionId)).toEqual([LONG_REQUEST, RESUME_WORKING_MESSAGE])
-    // The idle one keeps its old agent id and session, and nothing was sent to it.
     expect(byTitle('Contributing guide')).toMatchObject({ agentId: idle.agentId, sessionId: idle.sessionId, activity: 'idle' })
     expect(sessionMessages(idle.sessionId)).toEqual([QUICK_REQUEST])
     await context.close()
@@ -205,7 +188,6 @@ test('a provider that cannot start after a restart should leave a note and resum
     await expect.poll(() => storedTasks(home)[0]?.sessionId).toMatch(/^scripted-/)
     const before = storedTasks(home)[0]
 
-    // The next start has no `claude` anywhere: the real adapter reports it missing once it starts.
     await server.stop('SIGKILL')
     await server.restart({ BUSYBOY_PROVIDER_SCRIPTS: '', BUSYBOY_CLAUDE_PATH: '', PATH: '/usr/bin:/bin' })
     await openApp(await context.newPage())
@@ -216,7 +198,6 @@ test('a provider that cannot start after a restart should leave a note and resum
     expect(storedTasks(home)[0].activity).toBe('running')
     expect(sessionMessages(before.sessionId)).toEqual([LONG_REQUEST])
 
-    // With the CLI back, the next start resumes it.
     await server.stop('SIGKILL')
     await server.restart()
     await openApp(await context.newPage())
@@ -238,15 +219,12 @@ test('stopping a task and quitting right away should not resume it', async ({ br
     const transcript = page.getByRole('log', { name: 'Transcript' })
     await expect(transcript).toHaveAttribute('data-connected', 'true')
     await createTask(context, 'Release notes', LONG_REQUEST)
-    // Wait until the provider confirmed its session and got the request: a task is running
-    // before that, and a session id read too early is still null.
     await expect.poll(() => sessionMessages(storedTasks(home)[0]?.sessionId)).toEqual([LONG_REQUEST])
     const before = storedTasks(home)[0]
     expect(before.activity).toBe('running')
 
     await transcript.getByRole('button', { name: 'Stop web · Release notes' }).click()
     await expect.poll(() => storedTasks(home)[0]?.activity).toBe('stopped')
-    // Quit at once: the server stops every agent on its way down.
     await page.close()
     await server.stop('SIGTERM')
 
@@ -273,7 +251,6 @@ test('quitting while the Director replies should say so in the chat after the re
     await expect(transcript).toHaveAttribute('data-connected', 'true')
     await page.getByRole('textbox', { name: 'Message' }).fill(SLOW_DIRECTOR_REQUEST)
     await page.getByRole('button', { name: 'Send' }).click()
-    // Streamed reply text means the turn really reached the provider.
     await expect(transcript.getByRole('group', { name: 'Reply in progress' })).not.toBeEmpty()
     await page.close()
     await server.stop('SIGTERM')
@@ -284,12 +261,9 @@ test('quitting while the Director replies should say so in the chat after the re
     const after = reopened.getByRole('log', { name: 'Transcript' })
     await expect(after.getByLabel('Your message')).toHaveText(SLOW_DIRECTOR_REQUEST)
     await expect(after.getByRole('note')).toHaveText(REPLY_CUT_OFF_NOTE)
-    // The page shows the note before it is saved; a kill before the saved state says the turn
-    // ended would show it again, as a real crash in that instant would.
     await expect
       .poll(() => (JSON.parse(readFileSync(join(home, 'director', 'state.json'), 'utf8')) as { turnOpen?: boolean }).turnOpen)
       .toBeUndefined()
-    // Shown once: a later start does not repeat it.
     await server.stop('SIGKILL')
     await server.restart()
     await reopened.reload()
@@ -318,7 +292,6 @@ test('a provider that signed out while BusyBoy was closed should leave a note an
       'Could not resume after BusyBoy restarted: Claude is not signed in. Run `claude` and use /login. It is tried again the next time BusyBoy starts.',
     )
     await expect(page.getByRole('listitem', { name: 'web · Open issues' }).locator('[data-status]')).toHaveAttribute('data-status', 'stopped')
-    // Still marked as working, so the next start tries again instead of leaving it idle.
     expect(storedTasks(home)[0]).toMatchObject({ activity: 'running', sessionId: before.sessionId })
     await context.close()
   } finally {

@@ -5,9 +5,7 @@ import type { ProjectGraph } from '@/server/records/project-graph'
 import type { TaskProgress } from '@/server/records/progress'
 import type { TaskPhase } from '@/server/records/task-phase'
 
-// The project graph is one stream for the whole window. Task rows read phases
-// and the chat list reads progress, so a graph update does not re-render the
-// composer or the terminal, and the window opens the stream once.
+// One graph stream for the window, so a graph update does not re-render the composer or the terminal.
 
 const empty = new Map<string, TaskPhase>()
 const calm: TaskProgress = { total: 0, verified: 0, state: 'calm' }
@@ -72,12 +70,10 @@ function subscribe(listener: () => void) {
   }
 }
 
-/** The phase of every task in the project graph. */
 export function useTaskPhases() {
   return useSyncExternalStore(subscribe, () => phases, () => empty)
 }
 
-/** Each project's aligned progress, and the sum across projects. */
 export function useProjectProgress() {
   return useSyncExternalStore(subscribe, () => progress, () => noProgress)
 }

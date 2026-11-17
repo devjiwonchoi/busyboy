@@ -4,7 +4,6 @@ import { Check, Copy } from 'lucide-react'
 import { useState } from 'react'
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupTextarea } from '@/components/ui/input-group'
 
-/** A shell command the user runs themselves, with a copy button. */
 export function CopyCommand({ label, command }: { label: string; command: string }) {
   const [copied, setCopied] = useState(false)
   return (

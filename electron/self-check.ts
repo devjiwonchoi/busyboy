@@ -10,19 +10,14 @@ import type { ShellPathResult } from './shell-env'
 const FLAG = '--self-check'
 const LOAD_TIMEOUT_MS = 30_000
 const REQUEST_TIMEOUT_MS = 5_000
-/** The whole check fails and exits after this, whatever is still pending. */
 export const SELF_CHECK_TIMEOUT_MS = 90_000
 const TERMINAL_TIMEOUT_MS = 20_000
 const TERMINAL_MARKER = 'busyboy-terminal-ok'
 
-// The typed command differs from its output (quotes on Unix shells, a caret
-// escape in cmd.exe), so the shell's echo of the input never contains the
-// marker. Match it anywhere: ConPTY positions the cursor instead of writing
-// newlines, so the output has no reliable line breaks.
+// ConPTY positions the cursor instead of writing newlines, and cmd.exe echoes with a caret escape.
 const terminalCommand = process.platform === 'win32' ? 'echo busyboy-terminal^-ok\r' : `echo busyboy-"terminal"-ok\r`
 
 function stripAnsi(text: string) {
-  // Cursor positioning starts a new row on screen; keep it as a line break.
   return text.replace(/\u001b\[\d*(;\d*)?H/g, '\n').replace(/\u001b\[[0-?]*[ -\/]*[@-~]|\u001b\][^\u0007\u001b]*(\u0007|\u001b\\)|\u001b[@-_]/g, '')
 }
 
@@ -67,7 +62,6 @@ async function waitForExit(pid: number) {
   return !isRunning(pid)
 }
 
-/** Starts a pty through the server, runs `echo`, closes it, and reports what happened. */
 async function runTerminalEcho(server: ServerHandle) {
   const headers = serverHeaders(server)
   const body = await startTerminal(server)
@@ -110,11 +104,6 @@ async function runTerminalEcho(server: ServerHandle) {
   return { cwd: body.cwd, shell: body.shell, printed: text.includes(TERMINAL_MARKER), exitedAfterClose, tail }
 }
 
-/**
- * `--self-check` or `--self-check=<output path>`; returns the absolute output
- * path, or null when not set. A relative path resolves against the working
- * directory; without a path the result goes to the system temp directory.
- */
 export function selfCheckOutputPath(argv: string[]): string | null {
   const arg = argv.find((value) => value === FLAG || value.startsWith(`${FLAG}=`))
   if (!arg) return null
@@ -122,20 +111,12 @@ export function selfCheckOutputPath(argv: string[]): string | null {
   return value ? resolve(value) : join(tmpdir(), 'busyboy-self-check.json')
 }
 
-/**
- * The self-check may run while the app is open, so it uses a throwaway
- * profile instead of sharing the user's cookies and storage. Call before ready.
- */
+// The self-check can run while the app is open, so it uses a throwaway profile.
 export function isolateSelfCheckProfile() {
   app.setPath('userData', mkdtempSync(join(tmpdir(), 'busyboy-self-check-')))
 }
 
-/**
- * Points the server at a temporary data folder where setup is complete, so
- * the check reaches the main screen on a fresh machine and never touches
- * the real ~/.busyboy. Returns a cleanup function. The file name and shape
- * match server/config.ts.
- */
+// A throwaway data folder, so the check never touches the real ~/.busyboy.
 export function createSelfCheckDataFolder() {
   const folder = mkdtempSync(join(tmpdir(), 'busyboy-self-check-home-'))
   const at = new Date().toISOString()
@@ -152,7 +133,6 @@ export function createSelfCheckDataFolder() {
 
 type FolderSnapshot = Map<string, string>
 
-/** Size and modification time of every entry under `dir`, without following links. */
 function snapshotFolder(dir: string): FolderSnapshot {
   const snapshot: FolderSnapshot = new Map()
   const walk = (current: string) => {
@@ -215,7 +195,6 @@ export function createSelfCheck() {
     async recordServer(server: ServerHandle) {
       result.checks.serverStarted = server.isRunning()
       result.details.serverUrl = server.url
-      // A request without the token must be refused.
       const response = await fetch(server.url, { signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) })
       await response.body?.cancel()
       result.checks.serverRejectsMissingToken = response.status === 403
@@ -245,10 +224,6 @@ export function createSelfCheck() {
       result.checks.pageLoaded = page.title === app.getName()
       result.checks.shellRendered = Boolean(page.shell && page.chatArea && page.bottomPanel)
     },
-    /**
-     * The tray follows the server's attention stream and shows its menu, and
-     * closing the window hides it while the server keeps running.
-     */
     async recordBackground(background: Background, window: BrowserWindow, server: ServerHandle) {
       const deadline = Date.now() + ATTENTION_TIMEOUT_MS
       while (background.updates() === 0 && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 100))
@@ -261,11 +236,9 @@ export function createSelfCheck() {
       await new Promise((resolve) => setTimeout(resolve, 200))
       result.checks.closeKeepsRunning = !window.isDestroyed() && !window.isVisible() && server.isRunning()
     },
-    /** Call before the server starts; `recordServerFolderUnchanged` compares after it stops. */
     snapshotServerFolder(dir: string) {
       serverFolder = { dir, before: snapshotFolder(dir) }
     },
-    /** The packaged server folder is read-only in practice (signed bundle, Program Files). */
     recordServerFolderUnchanged() {
       if (!serverFolder) return
       const changed = changedEntries(serverFolder.before, snapshotFolder(serverFolder.dir))
@@ -277,8 +250,6 @@ export function createSelfCheck() {
       result.details.terminal = terminal
       result.checks.terminalEchoed = terminal.printed
       result.checks.terminalClosed = terminal.exitedAfterClose
-      // Leave one shell running and followed (an unfollowed shell is killed
-      // after a grace period); stopping the server must end it.
       const open = await startTerminal(server)
       openTerminalPid = open.pid
       openTerminalStream = new AbortController()

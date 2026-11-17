@@ -1,8 +1,6 @@
 import { expect as baseExpect, test, type APIRequestContext, type Page } from '@playwright/test'
 import { useProjectsHome } from './support/projects-home'
 
-// Question payloads in the shapes Claude Code and Codex actually send, played from
-// tests/provider-scripts/question-formats.json and tests/provider-scripts/codex/question-formats.json.
 const ENCODED_QUESTION = 'Ask the license question in the encoded shape.'
 const OBJECT_QUESTION = 'Ask the color question as one object.'
 const MULTI_QUESTION = 'Ask which checks should run, and allow more than one.'

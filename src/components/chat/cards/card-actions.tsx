@@ -71,10 +71,6 @@ export function CardActionError() {
   )
 }
 
-/**
- * Reply and Stop, on every open card's action row. The reply follow-up
- * replaces Reply here; kind cards keep rendering this component.
- */
 export function CardTrailingActions() {
   const { card, replying, pending, onReplyChange, run } = useCardActions()
   return (

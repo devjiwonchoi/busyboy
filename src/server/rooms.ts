@@ -1,9 +1,6 @@
 import { randomBytes } from 'node:crypto'
 import { readSettings, updateSettings, type Settings } from './config'
 
-// A room is a sidebar row for several projects at once. It is not a manager:
-// each project can still have its own manager. The row shows those projects'
-// letter avatars overlapping.
 
 export type Room = { id: string; name: string; projects: string[] }
 
@@ -15,7 +12,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
-/** Rooms saved on the settings object. A bad entry is skipped. */
 export function roomsFrom(settings: Settings): Room[] {
   const value = settings.rooms
   if (!Array.isArray(value)) return []
@@ -33,7 +29,6 @@ export async function listRooms() {
   return roomsFrom(await readSettings())
 }
 
-/** Saves a room that names at least two projects. */
 export async function createRoom(input: { name?: string; projects: string[] }) {
   const name = input.name?.trim() ?? ''
   if (!name || name.length > MAX_NAME_LENGTH) throw new RoomError(`Use 1 to ${MAX_NAME_LENGTH} characters for the name.`)

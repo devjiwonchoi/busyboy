@@ -12,11 +12,7 @@ function subscribeNothing() {
   return () => {}
 }
 
-/**
- * Adds projects with the native folder picker or by dropping folders. Both need
- * the desktop app's bridge, which a plain browser lacks; there the typed path
- * form below is the way in.
- */
+// The native picker and drops need the desktop bridge, which a plain browser lacks.
 export function FolderPicker() {
   // Read after hydration: the server never has the bridge, so the first render matches it.
   const bridge = useSyncExternalStore(subscribeNothing, desktopBridge, () => undefined)

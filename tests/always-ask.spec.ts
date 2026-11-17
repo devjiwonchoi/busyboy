@@ -3,15 +3,11 @@ import { join } from 'node:path'
 import { expect as baseExpect, test, type APIRequestContext, type Page } from '@playwright/test'
 import { useProjectsHome } from './support/projects-home'
 
-// Task agents that run actions on the always-ask list, played from
-// tests/provider-scripts/always-ask.json (Claude) and, through the real Codex
-// adapter and its hook, tests/provider-scripts/codex/always-ask.json.
 const FORCE_PUSH_REQUEST = 'Force push the branch to origin.'
 const RELEASE_REQUEST = 'Run the release script.'
 const CLEAN_REQUEST = 'Remove the build folder.'
 const DIRECTOR_PUSH_REQUEST = 'Force push the main branch yourself.'
 
-// A Codex task starts the fake app server, a Node process, and its hook starts another.
 const expect = baseExpect.configure({ timeout: 15_000 })
 
 let home: string
@@ -29,11 +25,7 @@ async function openChat(page: Page) {
   await expect(page.getByRole('log', { name: 'Transcript' })).toHaveAttribute('data-connected', 'true')
 }
 
-/**
- * Opens the always-ask step once the list can be edited. Hydrating the controlled textarea sets its
- * value again, which drops or garbles anything filled before then, and on a busy runner the step
- * streams in after the page has loaded.
- */
+// Hydrating the controlled textarea sets its value again, which drops anything filled before then.
 async function openApprovals(page: Page) {
   await page.goto('/setup?step=approvals')
   const list = page.getByRole('textbox', { name: 'Always-ask list' })
@@ -74,7 +66,6 @@ test.describe('Claude task agents', () => {
     await expect(card).toContainText('Bash: git push --force origin HEAD')
     await card.getByRole('button', { name: 'B. Always allow this exact command' }).click()
 
-    // The agent runs the same push again, which passes without a card, then pushes another branch.
     await expect(card).toContainText('Bash: git push --force origin release')
     await card.getByRole('button', { name: 'C. Deny' }).click()
     await expect(openCards(page)).toHaveCount(0)
@@ -181,9 +172,7 @@ test.describe('Claude task agents', () => {
     await page.getByRole('button', { name: 'Continue' }).click()
 
     await expect(page.getByText('"./release.sh" is not a tool name. Write a command as Bash(./release.sh).')).toBeVisible()
-    // The edits stay in the box to fix.
     await expect(list).toHaveValue(/\n\.\/release\.sh$/)
-    // Nothing was saved, so the defaults still apply.
     expect((JSON.parse(readFileSync(join(home, 'app-settings.json'), 'utf8')) as { alwaysAsk?: unknown }).alwaysAsk ?? null).toBeNull()
   })
 
@@ -204,7 +193,6 @@ test.describe('Claude task agents', () => {
 
 test.describe('Codex task agents', () => {
   test.beforeEach(async ({ context, baseURL }) => {
-    // Only Codex is signed in, so the task agent runs on the real Codex adapter.
     ;({ home } = await useProjectsHome(context, baseURL!, ['web'], { claude: 'signed-out' }))
   })
 

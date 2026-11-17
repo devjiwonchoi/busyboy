@@ -2,14 +2,11 @@ import { app, Menu, nativeImage, Tray, type MenuItemConstructorOptions } from 'e
 import type { FocusTarget } from '../src/lib/focus-target'
 import type { AttentionTask } from '../src/server/attention'
 
-/** Longest task label in the menu; the menu bar menu grows as wide as its longest item. */
 const LABEL_LIMIT = 48
 
 export type TrayState = {
   tasks: AttentionTask[]
-  /** The Director replied while the window was not in front, and the user has not looked since. */
   directorReplied: boolean
-  /** The version of a downloaded update that is ready to install. */
   updateVersion?: string | null
 }
 
@@ -28,12 +25,7 @@ export const taskLabel = (task: AttentionTask) => shorten(`${task.project} · ${
 
 export const attentionCount = (state: TrayState) => state.tasks.length + (state.directorReplied ? 1 : 0)
 
-/**
- * The tray icon, drawn here instead of shipped as image files so packaging has
- * nothing extra to copy: a ring when nothing needs the user, and a ring with a
- * filled center when something does. Shape carries the meaning because a
- * macOS template image is drawn in the menu bar's own color.
- */
+// A macOS template image is drawn in the menu bar's own color, so shape carries the meaning.
 function drawIcon(attention: boolean) {
   const mac = process.platform === 'darwin'
   // macOS menu bar icons are 16 pt; draw at 2x for Retina. Windows tray icons are 16 px at 100% scaling.
@@ -48,7 +40,6 @@ function drawIcon(attention: boolean) {
   const SAMPLES = 4
   for (let y = 0; y < size; y++) {
     for (let x = 0; x < size; x++) {
-      // Supersample each pixel for smooth edges.
       let covered = 0
       for (let sy = 0; sy < SAMPLES; sy++) {
         for (let sx = 0; sx < SAMPLES; sx++) {
@@ -89,7 +80,6 @@ export function trayMenuTemplate(state: TrayState, actions: TrayActions): MenuIt
   return items
 }
 
-/** The menu bar (macOS) or notification area (Windows) icon and its menu. */
 export function createTray(actions: TrayActions) {
   const icons = { idle: drawIcon(false), attention: drawIcon(true) }
   const tray = new Tray(icons.idle)
@@ -117,7 +107,6 @@ export function createTray(actions: TrayActions) {
       render()
     },
     state: () => state,
-    /** The menu's labels, for the self-check. */
     menuLabels: () => labels,
     destroy: () => tray.destroy(),
   }
@@ -125,7 +114,6 @@ export function createTray(actions: TrayActions) {
 
 export type DesktopTray = ReturnType<typeof createTray>
 
-/** The dock badge on macOS, like T3 Code's: the count while the window is in the background, nothing while it is in front. */
 export function setBadge(count: number) {
   if (process.platform === 'darwin') app.setBadgeCount(count)
 }

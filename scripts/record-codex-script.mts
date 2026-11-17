@@ -1,14 +1,3 @@
-// Records a short real Codex run as a script for the fake Codex
-// (tests/fake-codex/codex.mjs), which replays it to the real adapter in journeys. It starts `codex app-server`
-// in a fresh temporary folder, answers every approval with accept and every
-// question with its first option (or --answer), and keeps only the messages
-// the Codex event mapping reads (src/server/runner/codex-events.ts).
-//
-//   node scripts/record-codex-script.mts tests/provider-scripts/codex/name.json \
-//     --description "What the run shows" [--policy untrusted] [--reviewer user] \
-//     [--sandbox workspace-write] [--plan] [--answer Blue] [--log raw.jsonl] [--timeout-ms 180000] "first prompt" ["second prompt" ...]
-//
-// Defaults are BusyBoy's Auto mode: on-request, auto_review, workspace-write.
 import { execFileSync, spawn } from 'node:child_process'
 import { appendFileSync, existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -51,7 +40,6 @@ function keepError(error: Record<string, any> | null | undefined) {
   return error ? { message: error.message, codexErrorInfo: error.codexErrorInfo, additionalDetails: error.additionalDetails ?? null } : null
 }
 
-/** Keeps a message in the shape the mapping reads, or drops it. */
 function keep(message: Message): Message | undefined {
   const { method, params = {} } = message
   if (message.id !== undefined && method && REQUESTS.has(method)) {
@@ -70,7 +58,6 @@ function keep(message: Message): Message | undefined {
     case 'item/started':
     case 'item/completed': {
       const item = params.item
-      // Started items become tool labels; completed agent messages become text.
       const kept = method === 'item/started' ? !NON_TOOL_ITEMS.has(item.type) : item.type === 'agentMessage'
       if (!kept) return undefined
       const fields: Record<string, unknown> = { type: item.type, id: item.id }

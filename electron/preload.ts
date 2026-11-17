@@ -11,8 +11,7 @@ import {
   type DesktopBridge,
 } from '../src/lib/desktop-bridge'
 
-// Runs sandboxed with context isolation, so the page gets these functions
-// and nothing else from Electron.
+// Sandboxed, with context isolation, so the page gets these functions and nothing else from Electron.
 const bridge: DesktopBridge = {
   pickFolders: () => ipcRenderer.invoke(PICK_FOLDERS_CHANNEL),
   pathForFile: (file) => webUtils.getPathForFile(file),

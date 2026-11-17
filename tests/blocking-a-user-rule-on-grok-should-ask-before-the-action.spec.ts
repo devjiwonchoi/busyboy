@@ -4,9 +4,6 @@ import { expect as baseExpect, test, type APIRequestContext, type Page } from '@
 import { fakeGrokURL } from './fake-grok/fake-grok'
 import { useProjectsHome } from './support/projects-home'
 
-// The real Grok adapter against tests/fake-grok (ACP on stdio, no network).
-// A tool call is a session/request_permission. Rules live in this journey's
-// stand-in for ~/.jwn, the data folder's user-jwn.
 const RULES = join(__dirname, 'fixtures', 'user-rules')
 
 const expect = baseExpect.configure({ timeout: 15_000 })
@@ -19,7 +16,6 @@ function installRule(home: string, name: string) {
   copyFileSync(join(RULES, name), join(folder, name))
 }
 
-/** What the fake recorded after BusyBoy allowed a command in this home's task worktree. */
 function allowedCommand(home: string) {
   const root = join(home, 'task-worktrees', 'web')
   if (!existsSync(root)) return undefined
@@ -84,7 +80,6 @@ test('a rule file Grok cannot read should block the command and ask', async ({ p
   await expect(card).toContainText('Bash: echo hello')
   await expect(card).toContainText('BusyBoy could not check the rules in ~/.jwn, so this action is blocked.')
   await expect(card).toContainText('broken.yaml')
-  // A failed check is not remembered: Allow is for this call only.
   await expect(card.getByRole('button', { name: /^[A-C]\. / })).toHaveText(['AAllow', 'BDeny'])
   await card.getByRole('button', { name: 'B. Deny' }).click()
 

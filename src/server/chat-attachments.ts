@@ -18,7 +18,6 @@ function bytesOf(data: string) {
   return Buffer.from(data, 'base64')
 }
 
-/** PNG, JPEG, GIF, and WebP, told by their first bytes rather than the claimed type. */
 function matchesImage(bytes: Buffer, mediaType: ImageMediaType) {
   if (mediaType === 'image/png') return bytes.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))
   if (mediaType === 'image/jpeg') return bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff
@@ -26,10 +25,6 @@ function matchesImage(bytes: Buffer, mediaType: ImageMediaType) {
   return bytes.subarray(0, 4).toString('ascii') === 'RIFF' && bytes.subarray(8, 12).toString('ascii') === 'WEBP'
 }
 
-/**
- * Writes attachments under `folder/attachments` and returns the turn to send.
- * Images stay bytes the harness can hand to the model; other files are only a path.
- */
 export async function attachmentsTurn({ folder, text, attachments }: { folder: string; text: string; attachments: AttachmentInput[] }): Promise<UserTurn> {
   const images: TurnImage[] = []
   const notes: string[] = []

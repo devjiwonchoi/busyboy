@@ -4,8 +4,6 @@ import { join } from 'node:path'
 import { expect, test, type Page } from '@playwright/test'
 import { useProjectsHome } from './support/projects-home'
 
-// Director prompts recorded from real Claude runs (tests/provider-scripts/director-*.json);
-// the question-tool, interrupt, batch, long-chat, text-blocks, and markdown scripts are hand-written.
 const QUESTION = 'What does git worktree do? Answer in one sentence.'
 const ONE_PROJECT_WORK = 'In @web, add a CONTRIBUTING.md that explains how to run the project.'
 const TWO_PROJECT_WORK = 'Add a /health endpoint to @api and show its status in the footer of @web.'
@@ -62,7 +60,6 @@ test("the Director's replies should come from the chosen companion", async ({ pa
 
   const transcript = page.getByRole('log', { name: 'Transcript' })
   await expect(transcript.getByLabel('Reply', { exact: true })).toContainText('check out more than one branch')
-  // The greeting is headed "Rippu, your director"; the reply carries the name alone.
   await expect(transcript.getByText('Rippu', { exact: true })).toBeVisible()
 })
 
@@ -83,7 +80,6 @@ test('asking for work should create a worktree and show the task in chat', async
   expect(task.worktree).toBe(join(home, 'task-worktrees', 'web', task.id))
   expect(git(task.worktree, 'rev-parse', '--abbrev-ref', 'HEAD')).toBe(task.branch)
   expect(git(task.worktree, 'rev-parse', 'HEAD')).toBe(git(projects.web, 'rev-parse', 'HEAD'))
-  // The task agent got the request and answered from the task-agents script.
   await expect(line.locator('[data-status]')).toHaveText('Idle')
 })
 
@@ -156,7 +152,6 @@ test('a message sent while the Director is answering should wait, and Send now s
   await expect(transcript.getByText('Interrupted', { exact: true })).toBeVisible()
   await expect(transcript.getByText('The end of the lighthouse story.')).toHaveCount(0)
   await expect(transcript).toHaveAttribute('data-status', 'idle')
-  // The interrupted turn left nothing waiting, and no error was shown.
   await expect(transcript.getByRole('note')).toHaveCount(0)
   await expect(transcript.getByRole('alert')).toHaveCount(0)
   expect(readFileSync(join(home, 'director', 'transcript.jsonl'), 'utf8')).toContain('"interrupted":true')
@@ -171,7 +166,6 @@ test('two quick messages should reach the Director as one turn', async ({ page, 
   await send(page, 'Second part.')
 
   await expect(transcript.getByLabel('Your message')).toHaveText(['First part.', 'Second part.'])
-  // The script only has a turn for the joined text, so one reply means one turn.
   await expect(transcript.getByLabel('Reply', { exact: true })).toHaveText('Got both parts in one message.')
   await expect(transcript.getByRole('note')).toHaveCount(0)
   await expect(transcript.getByRole('alert')).toHaveCount(0)
@@ -208,7 +202,6 @@ test('a reply with text blocks around a tool call should keep every block apart'
 
 test('a message sent while signed out should say no provider is signed in', async ({ page, context, baseURL }) => {
   const { home } = await useProjectsHome(context, baseURL!, ['web'], { claude: 'signed-out', codex: 'signed-out' })
-  // An earlier conversation must not make the Director use a provider the user signed out of.
   mkdirSync(join(home, 'director'))
   writeFileSync(join(home, 'director', 'state.json'), JSON.stringify({ provider: 'claude', sessionId: 'earlier-session' }))
   await openChat(page)
@@ -223,7 +216,6 @@ test('a message sent while signed out should say no provider is signed in', asyn
 
 test('a lost provider session should start a new conversation and still answer', async ({ page, context, baseURL }) => {
   const { home } = await useProjectsHome(context, baseURL!, ['web'])
-  // A session the provider no longer has: the scripted provider fails to resume `missing-` ids.
   mkdirSync(join(home, 'director'))
   writeFileSync(join(home, 'director', 'state.json'), JSON.stringify({ provider: 'claude', sessionId: 'missing-old-session' }))
   await openChat(page)
@@ -245,7 +237,6 @@ test('a long chat should compact while idle', async ({ page, context, baseURL })
   await send(page, LONG_REQUEST)
   const reply = transcript.getByLabel('Reply', { exact: true })
   await expect(reply.getByRole('listitem')).toHaveCount(12)
-  // Nothing compacts while the reply is fresh; it happens once the user has been idle.
   await expect(transcript.getByRole('note')).toHaveCount(0)
   await expect(transcript.getByRole('alert')).toHaveCount(0)
 
@@ -270,7 +261,6 @@ test('a Director reply with Markdown should show highlighted code and matched te
   const reply = page.getByRole('log', { name: 'Transcript' }).getByLabel('Reply', { exact: true })
   const fontSize = (selector: string) => reply.locator(selector).first().evaluate((node) => parseFloat(getComputedStyle(node).fontSize))
   const keyword = reply.locator('[data-streamdown=code-block-body] span', { hasText: /^export$/ })
-  // github-dark colors keywords #F97583; github-light would give #D73A49.
   await expect(keyword).toHaveCSS('color', 'rgb(249, 117, 131)')
 
   const body = await fontSize('p')

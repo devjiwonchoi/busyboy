@@ -10,8 +10,6 @@ import { isThemeName } from '@/lib/theme'
 import { PROVIDERS, setDefaultProvider } from '@/server/providers'
 import type { ProviderId } from '@/server/runner/contract'
 
-// Settings save where they are changed: no step to finish and nowhere to go on to.
-// Server actions are public endpoints, so every argument is checked at runtime.
 
 export async function setCompanionAction(id: unknown) {
   if (typeof id !== 'string' || !findCompanion(id)) throw new Error('Unknown director.')
@@ -36,7 +34,6 @@ export async function setDefaultProviderAction(id: unknown) {
 
 export type AddConnectorResult = { error?: string; added?: boolean }
 
-/** Adds an official connector with the harness CLI. The name has to be one BusyBoy offers. */
 export async function addConnectorAction(_previous: AddConnectorResult, form: FormData): Promise<AddConnectorResult> {
   const provider = form.get('provider')
   const name = form.get('name')
@@ -51,7 +48,6 @@ export async function addConnectorAction(_previous: AddConnectorResult, form: Fo
   return { added: true }
 }
 
-/** Saves the always-ask list from its text box, one rule per line. A line that could never match is refused. */
 export async function saveAlwaysAskAction(_previous: AlwaysAskResult, form: FormData): Promise<AlwaysAskResult> {
   const text = form.get('rules')
   const error = alwaysAskError(text)
@@ -59,6 +55,5 @@ export async function saveAlwaysAskAction(_previous: AlwaysAskResult, form: Form
     return { error }
   }
   await saveAlwaysAsk(text as string)
-  // No refresh: the box already shows what was saved.
   return { saved: true }
 }

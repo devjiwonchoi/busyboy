@@ -4,9 +4,6 @@ import { expect as baseExpect, test, type APIRequestContext, type Page } from '@
 import { fakeGrokURL } from './fake-grok/fake-grok'
 import { useProjectsHome } from './support/projects-home'
 
-// The real Grok adapter, driven through the chat against tests/fake-grok/grok.mjs.
-// The fake speaks ACP on stdio and does not use the network. Only Grok is signed in,
-// except the settings journey, which signs Claude in too so a default can be chosen.
 const PLAIN_PROMPT = 'Reply with exactly this sentence and nothing else: Hello from busyboy.'
 const FORCE_PUSH_REQUEST = 'Force push the branch to origin.'
 const DIRECTOR_PUSH_REQUEST = 'Force push the main branch yourself.'
@@ -38,7 +35,6 @@ const transcript = (page: Page) => page.getByRole('log', { name: 'Transcript' })
 const openCard = (page: Page, name: string) => transcript(page).getByRole('group', { name })
 const taskRow = (page: Page, title: string) => transcript(page).getByLabel(`web · ${title}`, { exact: true })
 
-/** What the fake recorded after BusyBoy allowed a command in this home's task worktree. */
 function allowedCommand(home: string) {
   const root = join(home, 'task-worktrees', 'web')
   if (!existsSync(root)) return undefined
@@ -81,7 +77,6 @@ test('always allowing a Grok force push should skip that command and ask for a d
   await expect(card).toContainText('Bash: git push --force origin HEAD')
   await card.getByRole('button', { name: 'B. Always allow this exact command' }).click()
 
-  // The same push is asked again and allowed from the earlier answer, so the next card is the other branch.
   await expect(card).toContainText('Bash: git push --force origin release')
   await card.getByRole('button', { name: 'C. Deny' }).click()
   await expect(taskRow(page, 'Force push')).toContainText('Idle')

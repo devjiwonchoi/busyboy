@@ -13,10 +13,6 @@ export const PROVIDERS: { id: ProviderId; name: string }[] = [
   { id: 'grok', name: 'Grok' },
 ]
 
-/**
- * Test mode only: forces sign-in states, for example `codex=signed-out`.
- * Scripted providers otherwise always report signed in.
- */
 export const TEST_SIGN_IN_COOKIE = 'busyboy-test-sign-in'
 
 const LOGIN_COMMANDS: Record<ProviderId, string> = { claude: 'claude /login', codex: 'codex login', grok: 'grok login' }
@@ -62,7 +58,6 @@ async function probe(provider: ProviderId): Promise<SignInStatus> {
   }
 }
 
-/** Sign-in state of one provider. Probes are cached briefly because the Claude probe starts a process. */
 export async function providerState(provider: ProviderId, { fresh = false } = {}): Promise<SignInStatus> {
   const override = await testOverride(provider)
   if (override) return override
@@ -78,7 +73,6 @@ export async function signedInProviders(): Promise<ProviderId[]> {
   return states.filter(([, state]) => state.state === 'signed-in').map(([id]) => id)
 }
 
-/** The provider new agents use: the only signed-in one, or the stored choice when several are. */
 export async function defaultProvider(): Promise<ProviderId | null> {
   const signedIn = await signedInProviders()
   if (signedIn.length <= 1) return signedIn[0] ?? null
@@ -92,9 +86,7 @@ export async function setDefaultProvider(provider: ProviderId) {
   })
 }
 
-// ---- Skills ----------------------------------------------------------------
 
-/** The `devjiwonchoi/skills` plugin. */
 export const SKILLS_PLUGIN = 'jwn'
 
 export type SkillsState = { installed: boolean; installCommand: string }
@@ -109,7 +101,6 @@ async function readText(file: string) {
   return readFile(file, 'utf8').catch(() => '')
 }
 
-/** Claude Code lists installed plugins in `<config dir>/plugins/installed_plugins.json`, keyed `name@marketplace`. */
 async function claudeHasPlugin() {
   const configDir = process.env.CLAUDE_CONFIG_DIR || join(homedir(), '.claude')
   try {
@@ -124,7 +115,6 @@ async function claudeHasPlugin() {
   }
 }
 
-/** Codex records installed plugins as `[plugins."name@marketplace"]` tables in `<CODEX_HOME>/config.toml`. */
 async function codexHasPlugin() {
   const codexHome = process.env.CODEX_HOME || join(homedir(), '.codex')
   const lines = (await readText(join(codexHome, 'config.toml'))).split('\n')
@@ -143,7 +133,6 @@ async function codexHasPlugin() {
   return found
 }
 
-/** Looks for the skills plugin under `GROK_HOME` (default `~/.grok`), in the table Codex uses. */
 async function grokHasPlugin() {
   const grokHome = process.env.GROK_HOME || join(homedir(), '.grok')
   const lines = (await readText(join(grokHome, 'config.toml'))).split('\n')

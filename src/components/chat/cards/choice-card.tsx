@@ -10,7 +10,6 @@ import type { CardViewProps } from './card-view-props'
 import { CardActionError, CardTrailingActions, useCardActions } from './card-actions'
 import { CardShell, CardShellActions, CardShellBody, CardShellHeader } from './card-shell'
 
-/** A question or an approval. Both are answered by picking lettered options. */
 export function ChoiceCard({ card }: CardViewProps<QuestionCard | ApprovalCard>) {
   const { pending, replying, run } = useCardActions()
   const detail = card.kind === 'approval' ? card.detail : undefined
@@ -44,10 +43,8 @@ function ChoiceOptions({
   pending: boolean
   onAnswer: (choices: string[][]) => void
 }) {
-  // Chosen labels by question index: two questions of one request may share their text.
   const [chosen, setChosen] = useState<string[][]>(() => card.questions.map(() => []))
   const descriptionId = useId()
-  // One single-choice question is answered by its click; anything more is answered with Answer.
   const answersOnClick = card.questions.length === 1 && !card.questions[0].multiSelect
   const complete = card.questions.every((_, index) => (chosen[index] ?? []).length > 0)
 
@@ -56,7 +53,6 @@ function ChoiceOptions({
       onAnswer([[label]])
       return
     }
-    // Mapped over the card's questions, so a choice is never lost or out of range if the card changes.
     setChosen((current) =>
       card.questions.map((_, index) => {
         const labels = current[index] ?? []
@@ -74,7 +70,6 @@ function ChoiceOptions({
   return (
     <>
       {card.questions.map(({ question, header, options, multiSelect }, questionIndex) => (
-        // Indexed keys and ids: two questions of one request may share their text.
         <fieldset key={questionIndex} className="space-y-1.5">
           <legend className="mb-1.5 font-medium">
             {header && <span className="text-muted-foreground">{header}: </span>}

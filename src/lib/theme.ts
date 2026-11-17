@@ -1,6 +1,4 @@
-// The appearance choice. Dark is the default, including when nothing is stored yet.
-// System follows the device. The boot script and `applyDocumentTheme` stay in step:
-// both read `data-theme` and toggle the `dark` class the color tokens hang on.
+// The boot script and applyDocumentTheme both toggle the dark class the color tokens hang on.
 
 export const THEMES = ['system', 'dark', 'light'] as const
 
@@ -14,7 +12,6 @@ export function isDarkTheme(theme: ThemeName, prefersDark: boolean) {
   return theme === 'dark' || (theme === 'system' && prefersDark)
 }
 
-/** Cookie the boot script reads. The settings file stays the stored choice. */
 export const THEME_COOKIE = 'busyboy-theme'
 
 /** Runs before paint. The document starts dark; this applies a saved light or system choice. */
@@ -45,7 +42,6 @@ function themeFromCookie() {
   }
 }
 
-/** Applies the saved theme. The cookie wins, so a reload keeps what Settings stored. */
 export function applyDocumentTheme() {
   const root = document.documentElement
   const theme = themeFromCookie() ?? (isThemeName(root.dataset.theme) ? root.dataset.theme : 'dark')
@@ -56,7 +52,6 @@ export function applyDocumentTheme() {
   if (root.classList.contains('dark') !== dark) root.classList.toggle('dark', dark)
 }
 
-/** Remembers the choice in the cookie the boot script reads on the next load. */
 export function rememberTheme(theme: ThemeName) {
   document.cookie = `${THEME_COOKIE}=${theme}; Path=/; Max-Age=34560000; SameSite=Lax`
   document.documentElement.dataset.theme = theme

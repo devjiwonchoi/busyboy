@@ -20,26 +20,19 @@ import { summarizeGraph, summarizeSubagents } from './records/status-summary'
 import type { McpServer } from './runner/contract'
 import { archiveTask, createTask, messageTask, readTasksAt, TaskError, taskView } from './tasks'
 
-// The tools busyboy offers its agents over MCP (app/api/mcp/route.ts). Every
-// call runs inside that request, so `dataFolder()` and the providers resolve
-// exactly as they do for the window.
 
 export const MCP_SERVER_NAME = 'busyboy'
 
 type JsonSchema = { type: 'object'; properties: Record<string, { type: string; description: string }>; required: string[] }
 
-/** Who calls a tool: the Director (or the window), a manager bound to its project, or a task agent bound to its project. */
 export type McpCaller = { kind: 'director' } | { kind: 'manager'; manager: string; project: string } | { kind: 'task'; project: string }
 
 export type McpTool = {
   name: string
   description: string
   inputSchema: JsonSchema
-  /** Task agents get only these tools; the Director gets every tool. */
   forTaskAgents?: boolean
-  /** A manager does not get this tool. */
   directorOnly?: boolean
-  /** Takes a `project`; a manager's call always uses its own project, so the tool is listed to it without one. */
   inProject?: boolean
   run: (input: Record<string, unknown>, caller: McpCaller) => Promise<string>
 }
@@ -52,7 +45,6 @@ function text(input: Record<string, unknown>, key: string) {
   return value
 }
 
-/** The project a task tool works in: a manager's own, whatever it passed. */
 function projectFor(input: Record<string, unknown>, caller: McpCaller) {
   return caller.kind === 'manager' ? caller.project : text(input, 'project')
 }
@@ -61,7 +53,6 @@ function managerOf(caller: McpCaller) {
   return caller.kind === 'manager' ? caller.manager : undefined
 }
 
-/** A manager reaches only the tasks of its own project. */
 async function checkOwnProject(taskId: string, caller: McpCaller) {
   if (caller.kind !== 'manager') return
   const task = (await readTasksAt(await dataFolder())).find(({ id }) => id === taskId)
@@ -70,7 +61,6 @@ async function checkOwnProject(taskId: string, caller: McpCaller) {
   }
 }
 
-/** Reports a tool's MemoryError to the agent like any other bad input. */
 function reportingMemoryErrors(tool: McpTool): McpTool {
   return {
     ...tool,
@@ -117,7 +107,6 @@ export const MCP_TOOLS: McpTool[] = [
           project: projectFor(input, caller),
           title: text(input, 'title'),
           request: text(input, 'request'),
-          // Bound to the project's stored name, which createTask resolves.
           taskMcp: (project) => busyboyMcpServers(project),
           chat: managerOf(caller),
         })
@@ -150,7 +139,6 @@ export const MCP_TOOLS: McpTool[] = [
           title: text(input, 'title'),
           request: text(input, 'request'),
           subagent: true,
-          // Bound to the project's stored name, which createTask resolves.
           taskMcp: (project) => busyboyMcpServers(project),
           chat: managerOf(caller),
         })
@@ -237,7 +225,6 @@ export const MCP_TOOLS: McpTool[] = [
   ...MEMORY_TOOLS.map(reportingMemoryErrors),
 ]
 
-/** The tools a caller may list and call. A manager's tools take no project: its own is used. */
 export function toolsFor(caller: McpCaller) {
   if (caller.kind === 'task') return MCP_TOOLS.filter((tool) => tool.forTaskAgents)
   if (caller.kind === 'director') return MCP_TOOLS
@@ -249,16 +236,8 @@ export function toolsFor(caller: McpCaller) {
   })
 }
 
-/**
- * How an agent reaches busyboy's MCP endpoint from the current request: the
- * server's own address, an MCP token (never the server token), and in test
- * mode the data folder cookie. A task agent's URL names its project and its
- * token is bound to that project; a manager's URL names the manager and its
- * token is bound to it. `folder` names the data folder when it is
- * not the current request's (a task resumed after a restart).
- */
+// The URL carries an MCP token, never the server token. A task token is bound to its project.
 export async function busyboyMcpServers(taskProject?: string, folder?: string, manager?: string): Promise<Record<string, McpServer>> {
-  // The server's own loopback address when it knows its port (desktop app, tests).
   const host = process.env.PORT ? `127.0.0.1:${process.env.PORT}` : ((await headers()).get('host') ?? '127.0.0.1:3000')
   const mcpHeaders: Record<string, string> = {}
   const token = process.env[SERVER_TOKEN_ENV]

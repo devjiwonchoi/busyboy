@@ -5,8 +5,6 @@ import { expect as baseExpect, test, type APIRequestContext, type Locator, type 
 import { homeRecordFolder } from './support/record-tasks'
 import { useProjectsHome } from './support/projects-home'
 
-// The agent writes ALIGN.md, STATUS.md, and VERIFY.md. The screenshots and the
-// trace are files the note cites. The script is tests/provider-scripts/verify-artifacts.json.
 const REQUEST = 'Finish the footer and record the verification.'
 const TRACE = Buffer.from('PK\u0003\u0004busyboy-trace')
 
@@ -14,7 +12,6 @@ const expect = baseExpect.configure({ timeout: 15_000 })
 
 test.use({ colorScheme: 'dark' })
 
-/** A solid PNG the note can cite. The bytes are the picture, not a screenshot baseline. */
 function png(width: number, height: number, rgb: [number, number, number]) {
   const chunk = (type: string, data: Buffer) => {
     const name = Buffer.from(type)
@@ -103,7 +100,6 @@ test('viewing the done plan should render a verify image and its trace link', as
   expect(response.status()).toBe(200)
   expect(Buffer.from(await response.body()).equals(TRACE)).toBe(true)
 
-  // The dialog hides the page behind it. The card underneath is still the one line.
   await page.keyboard.press('Escape')
   await expect(details).toBeHidden()
   await expect(done.getByRole('button')).toHaveText('View plan')

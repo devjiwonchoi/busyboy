@@ -1,7 +1,4 @@
-// Fails the build unless the packaged server works on its own: it copies the
-// server folder out of the repository (so no repository node_modules is
-// reachable), loads every package in src/lib/server-external-packages.ts with
-// Electron's Node, by name and through Next's aliases, and starts the server.
+// The copy is outside the repository, so a missing package cannot be satisfied by the checkout's node_modules.
 import { execFileSync, spawn } from 'node:child_process'
 import { randomBytes } from 'node:crypto'
 import { cpSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
@@ -17,9 +14,7 @@ const READY_TIMEOUT_MS = 30_000
 const LOADER_TIMEOUT_MS = 60_000
 const EXIT_TIMEOUT_MS = 10_000
 
-// Importing a package does not always load what it needs at runtime. These
-// smoke tests exercise it: node-pty loads its native binding lazily on Windows
-// and runs spawn-helper only when it spawns, so it spawns a shell that exits.
+// node-pty loads its native binding lazily and runs spawn-helper only when it spawns.
 const smokeTests: Record<string, string> = {
   'node-pty': `const shell = process.platform === 'win32' ? 'cmd.exe' : '/bin/sh'
 const args = process.platform === 'win32' ? ['/c', 'exit 0'] : ['-c', 'exit 0']
@@ -28,7 +23,6 @@ const code = await new Promise((resolve) => child.onExit(({ exitCode }) => resol
 if (code !== 0) throw new Error(\`a shell spawned through node-pty exited with \${code}\`)`,
 }
 
-// The electron package resolves to the path of its binary when loaded from Node.
 const electronBinary = createRequire(import.meta.url)('electron') as string
 
 function freePort(): Promise<number> {
@@ -42,10 +36,7 @@ function freePort(): Promise<number> {
   })
 }
 
-// Runs with Electron's Node (ELECTRON_RUN_AS_NODE), the same runtime and ABI
-// as the server's utilityProcess, so native modules load as they will in the
-// app. NODE_PATH and NODE_OPTIONS are cleared so nothing outside the copied
-// folder can be found.
+// ELECTRON_RUN_AS_NODE is the server's runtime, so native modules load as they will in the app.
 function isolatedEnv(extra: Record<string, string>): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = { ...process.env, ELECTRON_RUN_AS_NODE: '1', NEXT_TELEMETRY_DISABLED: '1', ...extra }
   delete env.NODE_PATH

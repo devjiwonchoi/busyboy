@@ -1,10 +1,4 @@
-// Writes one REMEMBER.md per finished task under the jwn record root, and reads
-// those records back by ISO week. The shape comes from the task-recording and
-// retro skills: front matter the delegation-rate script accepts, then the
-// evidence those counts were taken from.
-//
-// The Remember file is REMEMBER.md. RETRO.md is the name the script on main
-// still scans for; a task that only has the old file is still read.
+// RETRO.md is the name the delegation-rate script on main still scans. A task that only has the old file is still read.
 
 import { execFile, execFileSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
@@ -57,15 +51,11 @@ export type WeekDelegation = {
 
 type Stored = {
   approvedAt: string | null
-  /** User messages, including ones from before approval. The approval message is not one of these. */
   messages: string[]
   interruptions: string[]
-  /** Commits created while the agent was in a turn after approval. */
   agentCommits: string[]
   approvedHead: string | null
-  /** HEAD when the current post-approval turn started. Null between turns. */
   turnStart: string | null
-  /** Local date of the first record, kept when the file is written again. */
   finishedOn: string | null
 }
 
@@ -83,7 +73,6 @@ const stores = (globalStore[STORE_KEY] ??= new Map())
 const chains = (globalStore[CHAIN_KEY] ??= new Map())
 const persistChains = new Map<string, Promise<void>>()
 
-/** `YYYY-MM-DD` in the machine's local timezone, which is the user's date for a desktop app. */
 export function localIsoDate(date = new Date()): string {
   const month = String(date.getMonth() + 1).padStart(2, '0')
   const day = String(date.getDate()).padStart(2, '0')
@@ -134,7 +123,6 @@ function writeObservations(folder: string) {
   return writeFile(temporary, `${JSON.stringify(body, null, 2)}\n`).then(() => rename(temporary, file))
 }
 
-/** One writer at a time per folder, so two tasks cannot tear the same file. The snapshot is taken when the write runs. */
 function schedulePersist(folder: string): Promise<void> {
   const next = (persistChains.get(folder) ?? Promise.resolve()).catch(() => {}).then(() => writeObservations(folder))
   persistChains.set(folder, next)
@@ -175,11 +163,6 @@ async function commitsAfter(cwd: string, from: string): Promise<string[]> {
   }
 }
 
-/**
- * Records a user message on the task agent. The plan approval is not an
- * intervention. Messages BusyBoy sends itself (a restart resume) are not either.
- * Counts stay in memory immediately, so the turn that follows can see them.
- */
 export function observeTaskMessage({
   folder,
   task,
@@ -206,7 +189,6 @@ export function observeTaskMessage({
   void schedulePersist(folder).catch((error: unknown) => console.error(`busyboy: could not save remember notes for ${task.id}`, error))
 }
 
-/** A turn ended. Agent commits from the turn are recorded, and a finished task is written. */
 export function observeTaskTurn({
   folder,
   task,
@@ -233,15 +215,12 @@ export function observeTaskTurn({
   })
 }
 
-/** The user put the task away. Write the record even when STATUS.md never said done. */
 export function finishRememberRecord({ folder, task, root }: { folder: string; task: RememberTask; root: string }): Promise<void> {
   if (task.kind === 'subagent') return Promise.resolve()
   return enqueue(folder, task.id, () => writeRemember({ folder, task, root, finishedByHand: true }))
 }
 
-// ---- Counts ------------------------------------------------------------------
 
-/** End state items: `##` headings under `# Success criteria`, or light-form `Done when` lines. */
 export function endStateItems(align: string): EndStateItem[] {
   const lines = visibleLines(align)
   const start = lines.findIndex((line) => /^# Success criteria\s*$/i.test(line))
@@ -297,7 +276,6 @@ function matchesItem(cell: string, item: EndStateItem) {
   return item.id !== null && value === item.id.toLowerCase()
 }
 
-/** How many end state items VERIFY.md records as met. An item with no result is unmet. */
 export function endStateItemsMet(verify: string | null, items: EndStateItem[]): number {
   if (!verify || items.length === 0) return 0
   const met = items.map(() => false)
@@ -325,7 +303,6 @@ export function endStateItemsMet(verify: string | null, items: EndStateItem[]): 
   return met.filter(Boolean).length
 }
 
-/** The last result for an item wins, so a later verify replaces an earlier one. */
 function applyResult(met: boolean[], items: EndStateItem[], cell: string, result: string) {
   items.forEach((item, index) => {
     if (matchesItem(cell, item)) met[index] = MET.test(result.trim())
@@ -357,14 +334,8 @@ async function branchPoint(cwd: string): Promise<string | null> {
   return null
 }
 
-/**
- * Distinct changes a human asked for on the task's pull request.
- * Approvals, bots, and the agent's own REVIEW.md findings are not changes.
- * No pull request, or no way to ask GitHub, is zero.
- */
 async function reviewChangeRequests(worktree: string): Promise<number> {
-  // Test journeys use a fake origin. Asking `gh` from the server there never finds a pull
-  // request, and a stuck CLI must not hold up the record.
+  // Test journeys use a fake origin, and a stuck gh must not hold up the record.
   if (process.env.BUSYBOY_TEST_MODE === '1') return 0
   let origin = ''
   try {
@@ -423,10 +394,7 @@ child.on('error', () => finish(null))
 child.on('close', (code) => finish(code === 0 ? out : null))
 `
 
-/**
- * Asks `gh` from a worker so a stuck CLI cannot hold up the record.
- * Stdin is closed. No answer within two seconds counts as no pull request.
- */
+// A stuck gh must not hold up the record. No answer within two seconds counts as no pull request.
 function ghText(cwd: string, args: string[]): Promise<string | null> {
   return new Promise((resolve) => {
     let worker: Worker
@@ -473,7 +441,6 @@ function delegationReasons(interventions: number, total: number, met: number): s
   return reasons
 }
 
-// ---- Writing -----------------------------------------------------------------
 
 async function readRecord(dataFolder: string, task: RememberTask, file: string): Promise<string | null> {
   const located = await locateTaskRecords(dataFolder, task)
@@ -508,8 +475,6 @@ async function writeRemember({
   if (!done && !finishedByHand) return
 
   const obs = observations(folder, task.id)
-  // ALIGN can say approved when this process missed the Approve message. The file's mtime is
-  // when the agent saved that status, which is the approval turn, so later user messages still count.
   if (!obs.approvedAt && align && /^(?:\W*Version:[^·\n]*·)?\W*Status:\s*approved\b/im.test(align)) {
     const located = await locateTaskRecords(folder, task)
     const stats = located && 'folder' in located ? await lstat(join(located.folder, 'ALIGN.md')).catch(() => null) : null
@@ -606,7 +571,6 @@ function renderRemember(input: {
   ].join('\n')
 }
 
-// ---- Week --------------------------------------------------------------------
 
 type Civil = { y: number; m: number; d: number }
 
@@ -657,7 +621,6 @@ function mondayOf(year: number, week: number): number {
   return january4 - (isoDow(january4) - 1) + (week - 1) * 7
 }
 
-/** Monday-through-Sunday bounds of a local ISO week. The default week is the current one. */
 export function isoWeekRange(week?: string, today = localIsoDate()): { week: string; weekStart: string; weekEnd: string } {
   let year: number
   let weekNumber: number
@@ -764,7 +727,6 @@ async function recordFiles(root: string): Promise<string[]> {
       return
     }
     for (const entry of entries) {
-      // A link could point outside the record root.
       if (entry.isSymbolicLink()) continue
       const path = join(directory, entry.name)
       if (entry.isDirectory()) await walk(path, depth + 1)
@@ -772,7 +734,6 @@ async function recordFiles(root: string): Promise<string[]> {
     }
   }
   await walk(root, 0)
-  // One record per task. The new name wins when both files are still in the folder.
   const byDirectory = new Map<string, string>()
   for (const path of found) {
     const directory = dirname(path)
@@ -782,10 +743,6 @@ async function recordFiles(root: string): Promise<string[]> {
   return [...byDirectory.values()].sort()
 }
 
-/**
- * Records whose `date` falls in one local ISO week. `root` is the record root
- * (`$JWN_HOME` or `~/.jwn`). Pass `YYYY-Www` to select another week.
- */
 export async function readRecordsForWeek(root: string, week?: string): Promise<WeekDelegation> {
   const range = isoWeekRange(week)
   const records: DelegationRecord[] = []
@@ -808,8 +765,6 @@ export async function readRecordsForWeek(root: string, week?: string): Promise<W
       })
       continue
     }
-    // The script accepts a valid date before it checks the other fields, and then ignores
-    // a directory file whose date is outside the week. A broken date is still an error.
     const date = parsed === 'missing front matter' || parsed === 'unclosed front matter' || parsed === 'date must be YYYY-MM-DD' || parsed === 'missing date' ? null : frontDate(text)
     if (date && (date < range.weekStart || date > range.weekEnd)) continue
     rejected.push({ path, reason: parsed })

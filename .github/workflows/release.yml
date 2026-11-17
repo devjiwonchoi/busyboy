@@ -1,19 +1,6 @@
 name: Release
 
-# Cuts the next patch release of the macOS and Windows apps from main:
-#   Actions → Release → Run workflow
-# The version is the latest vX.Y.Z tag with its patch raised by one. Installed
-# apps pick the release up through their updater, including BusyBoy 0.0.22 and
-# earlier (see scripts/release-feed.mts for what those check).
-# With dry_run, the installers stay as run artifacts and nothing is published.
-#
-# The Next.js app and the Electron bundle are JavaScript, so they are built
-# once. macOS downloads that bundle with pnpm's symlinks. Windows downloads a
-# second archive whose packages are real directories, with each package's
-# pnpm siblings nested inside it, because Windows tar cannot create the links.
-# Each platform installs the native
-# modules for its own architecture and packages. Publishing still waits for
-# every platform, so one release keeps one update feed.
+# Windows tar cannot create pnpm's symlinks, so Windows gets real directories with each package's siblings nested inside.
 on:
   workflow_dispatch:
     inputs:
@@ -22,7 +9,6 @@ on:
         type: boolean
         default: false
 
-# Each run computes its version from the tags the previous run published.
 concurrency:
   group: release
   cancel-in-progress: false
@@ -36,7 +22,6 @@ env:
 jobs:
   version:
     name: Resolve next patch version
-    # The release environment, which holds the key that signs the update manifest, only allows main.
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -46,12 +31,9 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-          # Nothing here pushes with git; don't leave the token on disk.
           persist-credentials: false
       - id: version
         run: |
-          # Only plain vX.Y.Z tags count: a tag such as v0.0.23-rc.1 is not a release, and
-          # nothing but digits may reach the arithmetic below.
           latest="$(git tag --list 'v*' --sort=-v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -n 1 || true)"
           if [ -z "$latest" ]; then
             echo "::error::No vX.Y.Z tag to count from."
@@ -64,7 +46,6 @@ jobs:
 
   bundle:
     name: Build the shared app bundle
-    # Starts with the version job. Packaging waits for both.
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -91,7 +72,6 @@ jobs:
           node scripts/pack-desktop-bundle.mts
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          # Not release-*: the publish job downloads every artifact named release-*.
           name: desktop-bundle
           path: |
             desktop-bundle.tar
@@ -102,7 +82,6 @@ jobs:
   macos:
     name: Build macOS release
     needs: [version, bundle]
-    # Apple Silicon, like every release so far.
     runs-on: macos-latest
     timeout-minutes: 60
     environment: release
@@ -142,10 +121,7 @@ jobs:
             fi
           done
 
-      # electron-builder signs with the Developer ID .p12 in CSC_LINK and
-      # notarizes with an App Store Connect API key, which it reads from a file.
-      # The build then asks Gatekeeper about the app and runs the signature
-      # check an installed BusyBoy runs on an update.
+      # electron-builder reads the Developer ID and the App Store Connect API key from the environment.
       - name: Build, sign, and notarize the DMG and ZIP
         env:
           CSC_LINK: ${{ secrets.CSC_LINK }}
@@ -190,8 +166,7 @@ jobs:
           # Signed and notarized even in a dry run, so not kept longer than it takes to look at them.
           retention-days: 3
 
-  # Unsigned, like every Windows release so far. Each architecture builds on
-  # its own runner, because the server's native modules are built for the host.
+  # Unsigned, like every Windows release so far. Native modules are built for the host, so each architecture builds on its own runner.
   windows:
     name: Build Windows release (${{ matrix.arch }})
     needs: [version, bundle]
@@ -233,7 +208,6 @@ jobs:
         env:
           VERSION: ${{ needs.version.outputs.version }}
         run: node scripts/build-desktop.mts --release --skip-next --skip-electron --version "$VERSION"
-      # Each architecture writes its own latest.yml; the publish job merges them.
       - name: Name the update feed by architecture
         run: mv release/latest.yml "release/latest-${{ matrix.arch }}.yml"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -254,7 +228,6 @@ jobs:
     timeout-minutes: 15
     permissions:
       contents: write
-    # UPDATE_SIGNING_KEY lives in the release environment.
     environment: release
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -269,9 +242,7 @@ jobs:
           path: release
           merge-multiple: true
 
-      # Merges the Windows feeds, signs the update manifest, and checks both the
-      # way an installed BusyBoy does. A dry run does this too, so it shows
-      # whether installed apps would accept the release.
+      # Checked the way BusyBoy 0.0.22 accepts an update, including a dry run.
       - name: Prepare and check the update feed
         env:
           UPDATE_SIGNING_KEY: ${{ secrets.UPDATE_SIGNING_KEY }}
@@ -281,8 +252,6 @@ jobs:
       - name: List what would be published
         run: ls -l release
 
-      # The release stays a draft until every file is uploaded, so an installed
-      # app never sees a release without its ZIP or its feed files.
       - name: Publish GitHub release
         if: ${{ !inputs.dry_run }}
         env:
