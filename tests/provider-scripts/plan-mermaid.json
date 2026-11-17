@@ -1,0 +1,24 @@
+{
+  "provider": "claude",
+  "description": "Hand-written: a draft ALIGN.md with one mermaid flowchart and one mermaid fence that does not parse.",
+  "turns": [
+    {
+      "prompt": "Add a footer and show the end-to-end workflow.",
+      "steps": [
+        {
+          "writeFile": {
+            "path": ".jwn/<cwd-name>/ALIGN.md",
+            "text": "# ALIGN: Add a site footer\n\nVersion: 1 · Status: draft\n\n## E2E workflow\n\n```mermaid\nflowchart TD\n  A[Open the app] --> B[See the footer]\n```\n\n```mermaid\nnot a flowchart\n```\n\n# Goal\n\nEvery page of the web app ends with a footer that shows the project name.\n\n# Summary\n\n- What: a footer with the project name on every page\n"
+          }
+        },
+        {
+          "event": {
+            "type": "text",
+            "itemId": "plan-mermaid",
+            "text": "The plan is ready for your approval."
+          }
+        }
+      ]
+    }
+  ]
+}
