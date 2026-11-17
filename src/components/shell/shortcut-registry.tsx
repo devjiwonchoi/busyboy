@@ -16,6 +16,12 @@ export type Shortcut = {
   shift?: boolean
   alt?: boolean
   label: string
+  /**
+   * When several shortcuts match one key, the first whose `handles` returns
+   * true runs. Omit it to always handle the key. Escape to stop a reply uses
+   * this so the Director and a side chat can share the key.
+   */
+  handles?: (event: KeyboardEvent) => boolean
   run: () => void
 }
 
@@ -79,6 +85,7 @@ export function ShortcutRegistryProvider({ children }: { children: React.ReactNo
       if (event.isComposing && !event.metaKey && !event.ctrlKey) return
       for (const shortcut of registry.current.values()) {
         if (!matchesShortcut(shortcut, event, mac)) continue
+        if (shortcut.handles && !shortcut.handles(event)) continue
         event.preventDefault()
         shortcut.run()
         return
@@ -89,6 +96,25 @@ export function ShortcutRegistryProvider({ children }: { children: React.ReactNo
   }, [])
 
   return <ShortcutRegistryContext value={registry.current}>{children}</ShortcutRegistryContext>
+}
+
+/**
+ * Registers Escape while mounted. The key is set here, not as a JSX `key`:
+ * React does not pass that prop through, so the shortcut would match nothing.
+ */
+export function EscapeShortcut({
+  id,
+  label,
+  handles,
+  run,
+}: {
+  id: string
+  label: string
+  handles?: (event: KeyboardEvent) => boolean
+  run: () => void
+}) {
+  useShortcut({ id, key: 'Escape', label, handles, run })
+  return null
 }
 
 /** Registers a keyboard shortcut while the calling component is mounted. */
@@ -102,7 +128,16 @@ export function useShortcut(shortcut: Shortcut) {
 
   const { id, key, mod, shift, alt, label } = shortcut
   useEffect(() => {
-    const entry: Shortcut = { id, key, mod, shift, alt, label, run: () => latest.current.run() }
+    const entry: Shortcut = {
+      id,
+      key,
+      mod,
+      shift,
+      alt,
+      label,
+      handles: (event) => latest.current.handles?.(event) ?? true,
+      run: () => latest.current.run(),
+    }
     registry.set(id, entry)
     return () => {
       if (registry.get(id) === entry) registry.delete(id)

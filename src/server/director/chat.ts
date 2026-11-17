@@ -70,9 +70,13 @@ export type ChatEntry =
 export type DirectorStatus = 'idle' | 'answering' | 'compacting'
 
 export type DirectorUpdate =
-  | { type: 'reset'; entries: ChatEntry[]; tasks: TaskView[]; cards: TaskCard[]; status: DirectorStatus; draft: string }
+  | { type: 'reset'; entries: ChatEntry[]; tasks: TaskView[]; cards: TaskCard[]; status: DirectorStatus; draft: string; queue: string[] }
   /** Appends the entry, or replaces the one with the same id. */
   | { type: 'entry'; entry: ChatEntry }
+  /** Replaces the transcript, after a message is edited away. */
+  | { type: 'entries'; entries: ChatEntry[] }
+  /** Messages waiting to be sent after the current reply. Empty when nothing is queued. */
+  | { type: 'queue'; messages: string[] }
   /** The Director's reply as it streams; empty when no reply is streaming. */
   | { type: 'draft'; text: string }
   | { type: 'status'; status: DirectorStatus }
@@ -272,8 +276,13 @@ async function load(director: Director) {
   for (const line of lines) {
     if (!line.trim()) continue
     try {
-      const entry = JSON.parse(line) as unknown
-      if (isEntry(entry)) byId.set(entry.id, entry)
+      const value = JSON.parse(line) as unknown
+      // A later removal drops the entry, including one that lived in an older segment.
+      if (isRemoval(value)) {
+        byId.delete(value.id)
+        continue
+      }
+      if (isEntry(value)) byId.set(value.id, value)
     } catch {
       // A line cut short by a crash; skip it.
     }
@@ -296,6 +305,13 @@ async function load(director: Director) {
     // Missing or unreadable: the next message starts a new provider session.
     director.state = {}
   }
+}
+
+/** A transcript line that drops an entry. Appended so rotated segments do not bring it back. */
+function isRemoval(value: unknown): value is { id: string; kind: 'removed' } {
+  if (!value || typeof value !== 'object') return false
+  const entry = value as Record<string, unknown>
+  return entry.kind === 'removed' && typeof entry.id === 'string'
 }
 
 /** Keeps only lines this version can show; anything else in the file is skipped. */
@@ -334,6 +350,15 @@ function broadcast(director: Director, update: DirectorUpdate) {
   for (const listener of director.listeners) listener(update)
 }
 
+function noteQueue(director: Director) {
+  broadcast(director, { type: 'queue', messages: [...director.pending] })
+}
+
+function recount(director: Director) {
+  const lastCompaction = director.entries.findLastIndex((entry) => entry.kind === 'note' && entry.compacted)
+  director.charsSinceCompact = director.entries.slice(lastCompaction + 1).reduce((sum, entry) => sum + entryLength(entry), 0)
+}
+
 function setStatus(director: Director, status: DirectorStatus) {
   if (director.status === status) return
   director.status = status
@@ -355,6 +380,16 @@ function setDraft(director: Director, text: string) {
 }
 
 /** Appends a new entry, or replaces the one with the same id (a later line, including one in a newer segment, wins). */
+/** Drops an entry from future reads without rewriting rotated transcript segments. */
+function rememberRemoval(director: Director, id: string) {
+  const folder = directorFolder(director)
+  const line = `${JSON.stringify({ id, at: new Date().toISOString(), kind: 'removed' })}\n`
+  director.writes = director.writes
+    .catch(() => {})
+    .then(() => appendTranscriptLine(folder, line, director.transcriptFile))
+    .catch((error: unknown) => console.error(`busyboy: could not save the ${roleOf(director)} transcript`, error))
+}
+
 function saveEntry(director: Director, entry: ChatEntry) {
   const index = director.entries.findIndex(({ id }) => id === entry.id)
   if (index === -1) {
@@ -537,7 +572,10 @@ function recoverLostSession(director: Director, agentId: string, { resend = true
   director.state = { turnOpen: director.state.turnOpen }
   saveState(director)
   saveEntry(director, newEntry('note', { text: 'The previous conversation could not be resumed. Started a new one.', tone: 'info' }))
-  if (resend && director.lastSent) director.pending.unshift(director.lastSent)
+  if (resend && director.lastSent) {
+    director.pending.unshift(director.lastSent)
+    noteQueue(director)
+  }
   endTurn(director)
 }
 
@@ -581,6 +619,7 @@ async function flush(director: Director) {
   if (!target) return
   const text = director.pending.join('\n\n')
   director.pending = []
+  noteQueue(director)
   director.lastSent = text
   setStatus(director, 'answering')
   const turn = ++director.turn
@@ -651,8 +690,10 @@ export type SendToDirectorInput = {
 }
 
 /**
- * Shows the message at once, interrupts a reply in progress, and sends the
- * message after the batch window, together with any sent within it.
+ * Shows the message at once. A reply in progress keeps going and the message
+ * waits, visible as the queue, until the turn ends (or Send now interrupts).
+ * While the Director is idle, messages sent inside the batch window go out
+ * together as one turn.
  */
 export async function sendToDirector({ folder, chat, text, resolveProvider, mcp }: SendToDirectorInput) {
   const director = getDirector(folder, chat ?? null)
@@ -662,12 +703,14 @@ export async function sendToDirector({ folder, chat, text, resolveProvider, mcp 
   saveEntry(director, newEntry('user', { text: trimmed }))
   clearTimeout(director.idleTimer)
   director.idleTimer = undefined
-  // A reply or a compaction in progress gives way to the user.
-  if (director.status !== 'idle' && director.agentId) {
+  // Compaction gives way to the user. A reply keeps going: the message waits and is sent when
+  // the turn ends, unless the user chooses Send now.
+  if (director.status === 'compacting' && director.agentId) {
     interruptAgent(director.agentId).catch((error: unknown) => console.error('busyboy: could not interrupt the Director', error))
   }
   // Queued before the sign-in check, so messages keep the order they were sent in.
   director.pending.push(trimmed)
+  noteQueue(director)
   // Open from the moment a message waits for a reply, so a Quit during the
   // batch window or the sign-in check is noticed on the next start too.
   markTurnOpen(director, true)
@@ -685,6 +728,7 @@ export async function sendToDirector({ folder, chat, text, resolveProvider, mcp 
     const index = director.pending.lastIndexOf(trimmed)
     if (index !== -1) {
       director.pending.splice(index, 1)
+      noteQueue(director)
       saveEntry(director, newEntry('note', { text: 'No provider is signed in. Open Setup to sign in.', tone: 'error' }))
       if (director.status === 'idle' && director.pending.length === 0) markTurnOpen(director, false)
     }
@@ -693,8 +737,67 @@ export async function sendToDirector({ folder, chat, text, resolveProvider, mcp 
   }
   director.compactBlocked = false
   director.target = { provider, mcp }
+  // A batch timer started now would also stop endTurn from sending the queue when the reply
+  // finishes (endTurn waits while a timer is set). The reply's end sends it.
+  if (director.status === 'answering') return
   clearTimeout(director.batchTimer)
   director.batchTimer = setTimeout(() => void flush(director), directorTiming().batchMs)
+}
+
+/**
+ * Interrupts the current reply and sends the queued messages now. While the
+ * Director is idle, sends whatever is still waiting for the batch window.
+ */
+export async function sendDirectorQueueNow(folder: string, chat: string | null = null) {
+  const director = getDirector(folder, chat)
+  await director.ready
+  if (director.pending.length === 0 || director.closed) return
+  clearTimeout(director.batchTimer)
+  director.batchTimer = undefined
+  clearTimeout(director.idleTimer)
+  director.idleTimer = undefined
+  if (isAnswering(director) && director.agentId) {
+    const agentId = director.agentId
+    const agent = getAgent(agentId)
+    if (agent && agent.status !== 'stopped') {
+      await interruptAgent(agentId)
+      // A turn that was not actually running never ends on interrupt; send once it is idle.
+      // Read status through isAnswering: the await lets events change it.
+      if (!isAnswering(director) && !director.probing) void flush(director)
+      return
+    }
+  }
+  if (!director.probing) void flush(director)
+}
+
+/**
+ * Replaces the latest message to this chat and everything the turn said after
+ * it, then sends `text`. Task and card rows stay: the chat only shows tasks
+ * its transcript names. Refused while a reply or a queued send is in progress.
+ */
+export async function reviseDirectorMessage(input: SendToDirectorInput & { entryId: string }) {
+  const director = getDirector(input.folder, input.chat ?? null)
+  await director.ready
+  if (director.closed) return
+  if (director.status !== 'idle' || director.pending.length > 0) {
+    throw new Error('Wait for the reply to finish before editing.')
+  }
+  const index = director.entries.findIndex((entry) => entry.id === input.entryId)
+  const entry = director.entries[index]
+  if (!entry || entry.kind !== 'user' || entry.to) throw new Error('That message cannot be edited.')
+  const last = director.entries.findLast((item) => item.kind === 'user' && !item.to)
+  if (!last || last.id !== entry.id) throw new Error('Only the latest message can be edited.')
+  const removed: ChatEntry[] = []
+  const kept: ChatEntry[] = []
+  director.entries.forEach((item, itemIndex) => {
+    if (itemIndex >= index && item.kind !== 'tasks' && item.kind !== 'card') removed.push(item)
+    else kept.push(item)
+  })
+  director.entries = kept
+  recount(director)
+  for (const item of removed) rememberRemoval(director, item.id)
+  broadcast(director, { type: 'entries', entries: director.entries })
+  await sendToDirector(input)
 }
 
 /**
@@ -708,6 +811,7 @@ export async function stopDirector(folder: string, chat: string | null = null) {
   clearTimeout(director.batchTimer)
   director.batchTimer = undefined
   director.pending = []
+  noteQueue(director)
   // Only a reply can be stopped; an idle compaction is the Director's own housekeeping.
   if (director.status !== 'answering') {
     markTurnOpen(director, false)
@@ -781,7 +885,15 @@ export async function subscribeToDirector(folder: string, listener: (update: Dir
   const director = getDirector(folder, chat)
   await director.ready
   const tasks = await listTasksAt(folder)
-  listener({ type: 'reset', entries: director.entries, tasks, cards: cardsOf(director), status: director.status, draft: director.draft })
+  listener({
+    type: 'reset',
+    entries: director.entries,
+    tasks,
+    cards: cardsOf(director),
+    status: director.status,
+    draft: director.draft,
+    queue: [...director.pending],
+  })
   director.listeners.add(listener)
   return () => {
     director.listeners.delete(listener)
@@ -842,8 +954,9 @@ export async function subscribeToChats(folder: string, listener: (chats: ChatSum
   let following: Director[] = []
   let queued = false
   const onUpdate = (update: DirectorUpdate) => {
-    // A streaming reply and task status changes do not show in the list.
-    if (update.type !== 'draft' && update.type !== 'task') refresh()
+    // A streaming reply, the send queue, and task status changes do not show in the list.
+    if (update.type === 'draft' || update.type === 'task' || update.type === 'queue') return
+    refresh()
   }
   const send = async () => {
     queued = false

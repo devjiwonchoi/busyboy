@@ -1,9 +1,10 @@
 'use client'
 
 import { Plus, X } from 'lucide-react'
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { askSideQuestionAction, closeSideChatAction } from '@/app/(main)/side-chat-actions'
 import { ChatComposer } from '@/components/chat/composer'
+import { EscapeShortcut } from '@/components/shell/shortcut-registry'
 import { useSearchParams } from 'next/navigation'
 import { DirectorMessage } from '@/components/chat/director-chat'
 import { managerPersona, type Persona } from '@/components/chat/persona'
@@ -51,9 +52,27 @@ export function SideChat({ persona, managers }: { persona: Persona; managers: { 
   return <SideChatTabs key={open ?? ''} persona={open ? managerPersona(name) : persona} chat={open} />
 }
 
+/** Escape stops this side chat when it is the one answering, or when the Director is idle. */
+function sideHandlesEscape(event: KeyboardEvent) {
+  if (event.repeat) return false
+  const target = event.target
+  if (target instanceof Element && target.closest('[data-side-chat]')) return true
+  return document.querySelector('[role="log"][aria-label="Transcript"][data-status="answering"]') === null
+}
+
 function SideChatTabs({ persona, chat: mainChat }: { persona: Persona; chat: string | null }) {
   const [chats, setChats] = useState<Chat[]>(() => [newChat()])
   const [active, setActive] = useState(() => chats[0].key)
+  const [asking, setAsking] = useState<Set<string>>(() => new Set())
+  const reportAsking = useCallback((key: string, isAsking: boolean) => {
+    setAsking((current) => {
+      if (current.has(key) === isAsking) return current
+      const next = new Set(current)
+      if (isAsking) next.add(key)
+      else next.delete(key)
+      return next
+    })
+  }, [])
   const agents = useRef(new Map<string, string>())
   /** Tabs still open: an agent whose ask returns after its tab closed is ended, not kept. */
   const open = useRef(new Set(chats.map((chat) => chat.key)))
@@ -84,7 +103,13 @@ function SideChatTabs({ persona, chat: mainChat }: { persona: Persona; chat: str
   }
 
   return (
-    <Tabs value={active} onValueChange={(value) => setActive(value as string)} className="flex h-full flex-col gap-0">
+    <Tabs
+      value={active}
+      onValueChange={(value) => setActive(value as string)}
+      data-side-chat=""
+      data-asking={asking.has(active) ? '' : undefined}
+      className="flex h-full flex-col gap-0"
+    >
       <div className="flex items-center gap-1 overflow-x-auto p-2 pb-0">
         <TabsList aria-label="Side chats" variant="line" className="h-8">
           {chats.map((chat) => (
@@ -107,6 +132,8 @@ function SideChatTabs({ persona, chat: mainChat }: { persona: Persona; chat: str
           <SideChatThread
             persona={persona}
             mainChat={mainChat}
+            active={chat.key === active}
+            onAsking={(isAsking) => reportAsking(chat.key, isAsking)}
             onTitle={(title) => patch(chat.key, { title })}
             onAgent={(agentId) => {
               if (agentId && !open.current.has(chat.key)) {
@@ -127,18 +154,29 @@ function SideChatTabs({ persona, chat: mainChat }: { persona: Persona; chat: str
 function SideChatThread({
   persona,
   mainChat,
+  active,
+  onAsking,
   onTitle,
   onAgent,
 }: {
   persona: Persona
   /** The manager whose conversation this branches from; null for the Director's. */
   mainChat: string | null
+  active: boolean
+  onAsking: (isAsking: boolean) => void
   onTitle: (title: string) => void
   onAgent: (agentId: string | undefined) => void
 }) {
   const [exchanges, setExchanges] = useState<Exchange[]>([])
   const current = exchanges.at(-1)
   const live = current?.state === 'asking' && current.agentId ? current : undefined
+  const asking = current?.state === 'asking'
+  const onAskingRef = useRef(onAsking)
+  onAskingRef.current = onAsking
+  useEffect(() => {
+    onAskingRef.current(Boolean(asking))
+    return () => onAskingRef.current(false)
+  }, [asking])
   /** This chat's side agent; questions after the first continue its conversation. */
   const agent = useRef<string | undefined>(undefined)
   const scroller = useRef<HTMLDivElement>(null)
@@ -258,6 +296,9 @@ function SideChatThread({
 
   return (
     <div className="flex h-full flex-col">
+      {active && asking && (
+        <EscapeShortcut id="stop-side-reply" label="Stop the side reply" handles={sideHandlesEscape} run={stop} />
+      )}
       <div ref={scroller} className="min-h-0 flex-1 overflow-y-auto">
         <section role="log" aria-label="Side chat" className="flex flex-col gap-3 p-3">
           {exchanges.map((exchange) => (

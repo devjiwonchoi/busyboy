@@ -121,12 +121,17 @@ test('a Codex turn that hits the usage limit should show a readable error', asyn
   await expect(transcript.getByLabel('Reply', { exact: true })).toHaveText('Hello from busyboy.')
 })
 
-test('a message sent while a Codex Director is answering should interrupt it', async ({ page }) => {
+test('a message sent while a Codex Director is answering should wait, and Send now should interrupt it', async ({ page }) => {
   await sendToCodexDirector(page, SLOW_REQUEST)
   const transcript = page.getByRole('log', { name: 'Transcript' })
   await expect(transcript.getByLabel('Reply in progress')).toContainText('Once upon a time, a lighthouse')
 
   await send(page, INTERRUPTING_REQUEST)
+
+  const queued = page.getByRole('status', { name: 'Queued message' })
+  await expect(queued).toContainText(INTERRUPTING_REQUEST)
+  await expect(transcript.getByLabel('Reply in progress')).toContainText('Once upon a time, a lighthouse')
+  await queued.getByRole('button', { name: 'Send now' }).click()
 
   const replies = transcript.getByLabel('Reply', { exact: true })
   await expect(replies.last()).toHaveText('Hi!')
