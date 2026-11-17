@@ -80,19 +80,29 @@ export function taskInstructions(task: Pick<TaskRecord, 'id' | 'project' | 'work
   return [
     `You are a busyboy task agent for the project "${task.project}".`,
     `You work in the git worktree ${task.worktree} on the branch ${task.branch}. Stay inside this worktree.`,
-    'Plan the task with the `align` skill before you change anything, and follow the plan once it is approved.',
     `Keep every record of this task (the plan and any status, verify, or review notes your skills write) in ${recordFolder}/. That is this task's folder in the jwn record root. Do not write those files into the worktree.`,
     '',
-    'Approval:',
+    'Before you change anything, judge whether the task is trivial.',
+    'A task is trivial only when there is exactly one obvious place and way to make the change, there is no design choice for the user, and the change is easy to revert. A typo, a rename, a single config value, and a small bug with a clear cause are trivial. When you are in any doubt, the task is not trivial: save a draft and wait, as below.',
+    '',
+    'A trivial task:',
+    // An approved ALIGN.md is the record of the plan. readDraftPlan skips "Status: approved", so no plan card opens.
+    `- Save the plan as ${recordFolder}/ALIGN.md with "Status: approved", in the same shape the align skill uses (a goal and todos), then do the work in this same turn. Do not end your turn to wait for approval. BusyBoy shows no plan card for an approved plan.`,
+    '- Always-ask rules still apply. A matching tool call waits for the user even though you did not ask them to approve the plan.',
+    '',
+    'Any other task:',
+    'Plan it with the `align` skill before you change anything, and follow the plan once it is approved.',
     // The align skill saves the plan only after approval, but the card needs the draft on disk before the agent waits.
     `- When the plan is ready for approval, save it as ${recordFolder}/ALIGN.md with "Status: draft", present it, and end your turn. BusyBoy shows it to the user as a plan card.`,
     `- The message "${APPROVE_MESSAGE}" approves the plan as saved: change its Status line to approved and carry on. Any other reply asks for changes; revise the draft and end your turn again.`,
+    '',
+    'While you work:',
     '- Do reversible actions without asking, then say what you did. Ask before irreversible ones.',
     `- Record progress in ${recordFolder}/STATUS.md as you go: a State line (running, or done when the task is finished) and a "| Todo | Result |" table whose rows match the plan's todos. BusyBoy shows a progress card from that table, and a one-line done card once State is done.`,
     '- When you open pull requests, add a "# Pull requests" table to that STATUS.md with columns Number, Title, URL, Check, and Review. One row per pull request, in stack order, the base of the stack first. BusyBoy lists them on a card and does not merge them.',
     ...(alwaysAsk.length > 0
       ? [
-          '- BusyBoy asks the user before every tool call that matches one of these rules, even when the plan approved it, so expect to wait for an answer there:',
+          '- BusyBoy asks the user before every tool call that matches one of these rules, including on a trivial task, even when the plan approved it, so expect to wait for an answer there:',
           ...alwaysAsk.map((rule) => `  - ${rule}`),
         ]
       : []),

@@ -1,0 +1,30 @@
+{
+  "provider": "claude",
+  "description": "Hand-written: a trivial typo fix that records an approved plan and finishes in the same turn, so no plan card is shown.",
+  "turns": [
+    {
+      "prompt": "Fix the typo recieve in the welcome heading.",
+      "steps": [
+        {
+          "writeFile": {
+            "path": ".jwn/<cwd-name>/ALIGN.md",
+            "text": "# ALIGN: Fix the welcome typo\n\nVersion: 1 · Status: approved\n\n# Goal\n\nThe welcome heading spells receive correctly. One word changes, in the heading, and nothing else.\n\n# Todos\n\n## 1 · Correct the heading\n- Goal: replace recieve with receive.\n- Done when: the heading says receive.\n\n# Summary\n\n- What: the welcome heading spells receive correctly\n"
+          }
+        },
+        {
+          "writeFile": {
+            "path": ".jwn/<cwd-name>/STATUS.md",
+            "text": "# STATUS: fix-the-welcome-typo\n\n- Stage: Ship\n- State: done\n\n| Todo | Result |\n| --- | --- |\n| 1 | done |\n"
+          }
+        },
+        {
+          "event": {
+            "type": "text",
+            "itemId": "typo-fixed",
+            "text": "Fixed the typo in the welcome heading."
+          }
+        }
+      ]
+    }
+  ]
+}
