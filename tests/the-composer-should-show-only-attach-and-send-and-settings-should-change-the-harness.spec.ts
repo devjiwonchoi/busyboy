@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync } from 'node:fs'
+import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { expect, test, type Page } from '@playwright/test'
 import { useProjectsHome } from './support/projects-home'
@@ -68,8 +68,6 @@ test('the composer should show only attach and send, and Settings should change 
   expect(box.height).toBeGreaterThan(56)
   expect(box.height).toBeLessThan(160)
 
-  mkdirSync('/opt/cursor/artifacts', { recursive: true })
-  await composer.screenshot({ path: '/opt/cursor/artifacts/chat-composer.png', animations: 'disabled', caret: 'hide' })
   await expect(composer).toHaveScreenshot('empty-composer.png', { animations: 'disabled', caret: 'hide' })
 
   await textbox.fill('Hello')
@@ -85,7 +83,6 @@ test('the composer should show only attach and send, and Settings should change 
   await harness.getByRole('radio', { name: 'Use Codex by default' }).click()
   await expect(harness.getByRole('radio', { name: 'Use Codex by default' })).toBeChecked()
   await expect.poll(() => JSON.parse(readFileSync(join(home, 'app-settings.json'), 'utf8')).defaultProvider).toBe('codex')
-  await harness.screenshot({ path: '/opt/cursor/artifacts/settings-harness.png' })
 
   await page.getByRole('link', { name: 'Back to chat' }).click()
   await expect(page.getByRole('log', { name: 'Transcript' })).toHaveAttribute('data-connected', 'true')
