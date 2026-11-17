@@ -6,8 +6,9 @@
 //   node scripts/prepare-standalone.mts [--assets-only]
 //
 // --assets-only skips the native-package install. The release workflow builds
-// the standalone output once, keeps pnpm's symlinks, and each platform
-// installs its own native modules when it packages the app.
+// the standalone output once. macOS keeps pnpm's symlinks; Windows gets a
+// copy with those links turned into real files. Each platform installs its
+// own native modules when it packages the app.
 import { cpSync, existsSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { installServerPackages } from './install-server-packages.mts'
