@@ -9,7 +9,9 @@
         { "event": { "type": "text-delta", "itemId": "msg_1:text:0", "text": " at @web." } },
         { "event": { "type": "tool", "label": "Bash: ls" } },
         { "event": { "type": "text-delta", "itemId": "msg_2:text:0", "text": "It has a README" } },
-        { "event": { "type": "text-delta", "itemId": "msg_2:text:0", "text": " and a src folder." } },
+        {
+          "event": { "type": "text-delta", "itemId": "msg_2:text:0", "text": " and a src folder." }
+        },
         { "event": { "type": "text", "itemId": "msg_3:text:0", "text": "Want a task for it?" } }
       ]
     }

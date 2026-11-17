@@ -1,14 +1,15 @@
-'use client'
+"use client";
 
-import { Check, Copy, Pencil, RotateCcw } from 'lucide-react'
-import { useEffect, useState } from 'react'
-import { Button } from '@/components/ui/button'
-import { cn } from '@/lib/utils'
+import { Check, Copy, Pencil, RotateCcw } from "lucide-react";
+import { useEffect, useState } from "react";
+
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 function formatMessageTime(at: string) {
-  const date = new Date(at)
-  if (Number.isNaN(date.getTime())) return ''
-  return new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' }).format(date)
+  const date = new Date(at);
+  if (Number.isNaN(date.getTime())) return "";
+  return new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" }).format(date);
 }
 
 export function MessageActions({
@@ -18,27 +19,27 @@ export function MessageActions({
   onEdit,
   onRetry,
 }: {
-  text: string
-  at: string
-  align: 'start' | 'end'
-  onEdit?: () => void
-  onRetry?: () => void
+  text: string;
+  at: string;
+  align: "start" | "end";
+  onEdit?: () => void;
+  onRetry?: () => void;
 }) {
-  const [copied, setCopied] = useState(false)
-  const time = formatMessageTime(at)
+  const [copied, setCopied] = useState(false);
+  const time = formatMessageTime(at);
 
   useEffect(() => {
-    if (!copied) return
-    const timer = setTimeout(() => setCopied(false), 1500)
-    return () => clearTimeout(timer)
-  }, [copied])
+    if (!copied) return;
+    const timer = setTimeout(() => setCopied(false), 1500);
+    return () => clearTimeout(timer);
+  }, [copied]);
 
   async function copy() {
     try {
-      await navigator.clipboard.writeText(text)
-      setCopied(true)
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
     } catch {
-      setCopied(false)
+      setCopied(false);
     }
   }
 
@@ -47,10 +48,10 @@ export function MessageActions({
       role="toolbar"
       aria-label="Message actions"
       className={cn(
-        'pointer-events-none absolute top-0 z-10 flex items-center gap-0.5 rounded-full border border-border bg-popover/95 p-0.5 opacity-0 shadow-sm transition-opacity',
-        'group-focus-within/message:pointer-events-auto group-focus-within/message:opacity-100',
-        'group-hover/message:pointer-events-auto group-hover/message:opacity-100',
-        align === 'end' ? 'right-0' : 'left-0',
+        "pointer-events-none absolute top-0 z-10 flex items-center gap-0.5 rounded-full border border-border bg-popover/95 p-0.5 opacity-0 shadow-sm transition-opacity",
+        "group-focus-within/message:pointer-events-auto group-focus-within/message:opacity-100",
+        "group-hover/message:pointer-events-auto group-hover/message:opacity-100",
+        align === "end" ? "right-0" : "left-0",
       )}
     >
       {time && (
@@ -58,7 +59,13 @@ export function MessageActions({
           {time}
         </time>
       )}
-      <Button type="button" size="icon-xs" variant="ghost" aria-label={copied ? 'Copied' : 'Copy'} onClick={() => void copy()}>
+      <Button
+        type="button"
+        size="icon-xs"
+        variant="ghost"
+        aria-label={copied ? "Copied" : "Copy"}
+        onClick={() => void copy()}
+      >
         {copied ? <Check /> : <Copy />}
       </Button>
       {onEdit && (
@@ -72,5 +79,5 @@ export function MessageActions({
         </Button>
       )}
     </div>
-  )
+  );
 }

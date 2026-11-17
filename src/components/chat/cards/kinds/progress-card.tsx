@@ -1,36 +1,56 @@
-'use client'
+"use client";
 
-import { useState } from 'react'
-import { Check, Circle } from 'lucide-react'
-import { cardGroupLabel, type ProgressCard, type ProgressStepState } from '@/server/cards/model'
-import { PhaseMark } from '../../phase-mark'
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { Spinner } from '@/components/ui/spinner'
-import type { CardViewProps } from '../card-view-props'
-import { useCardActions } from '../card-actions'
-import { CardShell, CardShellActions, CardShellBody, CardShellHeader } from '../card-shell'
+import { Check, Circle } from "lucide-react";
+import { useState } from "react";
+
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Spinner } from "@/components/ui/spinner";
+import { cardGroupLabel, type ProgressCard, type ProgressStepState } from "@/server/cards/model";
+
+import { PhaseMark } from "../../phase-mark";
+import { useCardActions } from "../card-actions";
+import { CardShell, CardShellActions, CardShellBody, CardShellHeader } from "../card-shell";
+import type { CardViewProps } from "../card-view-props";
 
 const STATE_WORD: Record<ProgressStepState, string> = {
-  done: 'Done',
-  running: 'Running',
-  pending: 'Not started',
-}
+  done: "Done",
+  running: "Running",
+  pending: "Not started",
+};
 
 function StepMark({ state }: { state: ProgressStepState }) {
-  if (state === 'done') {
+  if (state === "done") {
     return (
-      <span data-step-mark="done" className="bg-success flex size-3.5 shrink-0 items-center justify-center rounded-full text-white" aria-hidden>
+      <span
+        data-step-mark="done"
+        className="bg-success flex size-3.5 shrink-0 items-center justify-center rounded-full text-white"
+        aria-hidden
+      >
         <Check className="size-2.5" strokeWidth={3} />
       </span>
-    )
+    );
   }
-  if (state === 'running') {
-    return <Spinner data-step-mark="running" aria-hidden className="text-muted-foreground size-3.5" />
+  if (state === "running") {
+    return (
+      <Spinner data-step-mark="running" aria-hidden className="text-muted-foreground size-3.5" />
+    );
   }
-  return <Circle data-step-mark="pending" className="text-muted-foreground/60 size-3.5 shrink-0" aria-hidden />
+  return (
+    <Circle
+      data-step-mark="pending"
+      className="text-muted-foreground/60 size-3.5 shrink-0"
+      aria-hidden
+    />
+  );
 }
 
-function StepList({ steps, spelled }: { steps: ProgressCard['steps']; spelled?: boolean }) {
+function StepList({ steps, spelled }: { steps: ProgressCard["steps"]; spelled?: boolean }) {
   return (
     <ol className="space-y-1.5">
       {steps.map((step) => (
@@ -38,16 +58,18 @@ function StepList({ steps, spelled }: { steps: ProgressCard['steps']; spelled?: 
           <StepMark state={step.state} />
           <span className="sr-only">{STATE_WORD[step.state]}: </span>
           <span className="min-w-0">{step.label}</span>
-          {spelled && <span className="text-muted-foreground ml-auto shrink-0">{STATE_WORD[step.state]}</span>}
+          {spelled && (
+            <span className="text-muted-foreground ml-auto shrink-0">{STATE_WORD[step.state]}</span>
+          )}
         </li>
       ))}
     </ol>
-  )
+  );
 }
 
 export function ProgressCardView({ card }: CardViewProps<ProgressCard>) {
-  const { replying } = useCardActions()
-  const [details, setDetails] = useState(false)
+  const { replying } = useCardActions();
+  const [details, setDetails] = useState(false);
   return (
     <CardShell label={cardGroupLabel(card)} replying={replying}>
       <CardShellHeader
@@ -63,7 +85,11 @@ export function ProgressCardView({ card }: CardViewProps<ProgressCard>) {
         <StepList steps={card.steps} />
       </CardShellBody>
       <CardShellActions>
-        <button type="button" className="text-muted-foreground cursor-pointer border-0 bg-transparent p-0 text-xs font-normal" onClick={() => setDetails(true)}>
+        <button
+          type="button"
+          className="text-muted-foreground cursor-pointer border-0 bg-transparent p-0 text-xs font-normal"
+          onClick={() => setDetails(true)}
+        >
           View details
         </button>
       </CardShellActions>
@@ -79,5 +105,5 @@ export function ProgressCardView({ card }: CardViewProps<ProgressCard>) {
         </DialogContent>
       </Dialog>
     </CardShell>
-  )
+  );
 }

@@ -1,18 +1,24 @@
-'use client'
+"use client";
 
-import { useActionState, useState } from 'react'
-import { chooseCompanionAction, removeCompanionImageAction, setCompanionImageAction } from '@/app/setup/actions'
-import { CompanionAvatar } from '@/components/companion/companion-avatar'
-import { Button } from '@/components/ui/button'
-import { Field, FieldDescription, FieldError, FieldLabel } from '@/components/ui/field'
-import { Input } from '@/components/ui/input'
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
-import { MAX_IMAGE_BYTES, MAX_IMAGE_TEXT } from '@/lib/companion-limits'
-import { cn } from '@/lib/utils'
-import type { Companion } from '@/server/companions'
-import { StepFooter } from './step-footer'
+import { useActionState, useState } from "react";
 
-const FORM_ID = 'companion-form'
+import {
+  chooseCompanionAction,
+  removeCompanionImageAction,
+  setCompanionImageAction,
+} from "@/app/setup/actions";
+import { CompanionAvatar } from "@/components/companion/companion-avatar";
+import { Button } from "@/components/ui/button";
+import { Field, FieldDescription, FieldError, FieldLabel } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { MAX_IMAGE_BYTES, MAX_IMAGE_TEXT } from "@/lib/companion-limits";
+import { cn } from "@/lib/utils";
+import type { Companion } from "@/server/companions";
+
+import { StepFooter } from "./step-footer";
+
+const FORM_ID = "companion-form";
 
 export function CompanionStep({
   companions,
@@ -20,29 +26,34 @@ export function CompanionStep({
   defaultId,
   imageUrl,
 }: {
-  companions: Companion[]
-  selected?: string
-  defaultId: string
-  imageUrl?: string
+  companions: Companion[];
+  selected?: string;
+  defaultId: string;
+  imageUrl?: string;
 }) {
-  const [state, action, pending] = useActionState(chooseCompanionAction, {})
-  const [value, setValue] = useState(selected ?? defaultId)
-  const chosen = companions.find((companion) => companion.id === value)
+  const [state, action, pending] = useActionState(chooseCompanionAction, {});
+  const [value, setValue] = useState(selected ?? defaultId);
+  const chosen = companions.find((companion) => companion.id === value);
   return (
     <>
       <form id={FORM_ID} action={action} className="space-y-3">
-        <CompanionChoices companions={companions} value={value} imageUrl={imageUrl} onChange={setValue} />
+        <CompanionChoices
+          companions={companions}
+          value={value}
+          imageUrl={imageUrl}
+          onChange={setValue}
+        />
         {state.error && <FieldError>{state.error}</FieldError>}
       </form>
       <CompanionImageForm hasImage={Boolean(imageUrl)} />
       <StepFooter>
         <Button type="submit" form={FORM_ID} disabled={pending || !chosen}>
-          {chosen ? `Continue with ${chosen.name}` : 'Continue'}
+          {chosen ? `Continue with ${chosen.name}` : "Continue"}
         </Button>
       </StepFooter>
       <CharacterNote />
     </>
-  )
+  );
 }
 
 export function CompanionChoices({
@@ -51,10 +62,10 @@ export function CompanionChoices({
   imageUrl,
   onChange,
 }: {
-  companions: Companion[]
-  value?: string
-  imageUrl?: string
-  onChange: (id: string) => void
+  companions: Companion[];
+  value?: string;
+  imageUrl?: string;
+  onChange: (id: string) => void;
 }) {
   return (
     <RadioGroup
@@ -82,31 +93,37 @@ export function CompanionChoices({
         </RadioGroupItem>
       ))}
     </RadioGroup>
-  )
+  );
 }
 
 export function CharacterNote({ className }: { className?: string }) {
-  return <p className={cn('text-muted-foreground text-center text-xs', className)}>Temporary emoji stand in for character art.</p>
+  return (
+    <p className={cn("text-muted-foreground text-center text-xs", className)}>
+      Temporary emoji stand in for character art.
+    </p>
+  );
 }
 
 export function CompanionImageForm({ hasImage }: { hasImage: boolean }) {
-  const [state, action, pending] = useActionState(setCompanionImageAction, {})
-  const [tooLarge, setTooLarge] = useState(false)
+  const [state, action, pending] = useActionState(setCompanionImageAction, {});
+  const [tooLarge, setTooLarge] = useState(false);
   // Checked before sending: a body over the server action limit fails before the action can explain why.
-  const error = tooLarge ? `Choose a picture under ${MAX_IMAGE_TEXT}.` : state.error
+  const error = tooLarge ? `Choose a picture under ${MAX_IMAGE_TEXT}.` : state.error;
   return (
     <form
       action={action}
       onSubmit={(event) => {
-        const file = new FormData(event.currentTarget).get('image')
-        const large = file instanceof File && file.size > MAX_IMAGE_BYTES
-        setTooLarge(large)
-        if (large) event.preventDefault()
+        const file = new FormData(event.currentTarget).get("image");
+        const large = file instanceof File && file.size > MAX_IMAGE_BYTES;
+        setTooLarge(large);
+        if (large) event.preventDefault();
       }}
     >
       <Field data-invalid={Boolean(error)}>
         <FieldLabel htmlFor="companion-image">Your own picture</FieldLabel>
-        <FieldDescription>Optional. It stays on this computer, in the BusyBoy data folder.</FieldDescription>
+        <FieldDescription>
+          Optional. It stays on this computer, in the BusyBoy data folder.
+        </FieldDescription>
         <div className="flex flex-wrap gap-2">
           <Input
             id="companion-image"
@@ -128,5 +145,5 @@ export function CompanionImageForm({ hasImage }: { hasImage: boolean }) {
         {error && <FieldError>{error}</FieldError>}
       </Field>
     </form>
-  )
+  );
 }

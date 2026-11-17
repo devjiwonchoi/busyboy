@@ -1,23 +1,23 @@
-'use server'
+"use server";
 
-import { listProjectFiles } from '@/server/project-files'
-import { defaultProvider } from '@/server/providers'
-import { listSkills, skillInvocation, type ComposerSkill } from '@/server/skills'
+import { listProjectFiles } from "@/server/project-files";
+import { defaultProvider } from "@/server/providers";
+import { listSkills, skillInvocation, type ComposerSkill } from "@/server/skills";
 
-const MAX_NAME_LENGTH = 64
+const MAX_NAME_LENGTH = 64;
 
 export async function composerSkillsAction(project?: string): Promise<ComposerSkill[]> {
-  if (project !== undefined && (typeof project !== 'string' || project.length > MAX_NAME_LENGTH)) {
-    throw new Error('The project must be a name.')
+  if (project !== undefined && (typeof project !== "string" || project.length > MAX_NAME_LENGTH)) {
+    throw new Error("The project must be a name.");
   }
-  const provider = await defaultProvider()
-  const skills = await listSkills(project)
-  return skills.map((skill) => ({ ...skill, invocation: skillInvocation(provider, skill.name) }))
+  const provider = await defaultProvider();
+  const skills = await listSkills(project);
+  return skills.map((skill) => ({ ...skill, invocation: skillInvocation(provider, skill.name) }));
 }
 
 export async function projectFilesAction(project: string): Promise<{ path: string }[]> {
-  if (typeof project !== 'string' || !project.trim() || project.length > MAX_NAME_LENGTH) {
-    throw new Error('The project must be a name.')
+  if (typeof project !== "string" || !project.trim() || project.length > MAX_NAME_LENGTH) {
+    throw new Error("The project must be a name.");
   }
-  return listProjectFiles(project.trim())
+  return listProjectFiles(project.trim());
 }

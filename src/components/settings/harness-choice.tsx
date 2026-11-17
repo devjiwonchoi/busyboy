@@ -1,28 +1,41 @@
-'use client'
+"use client";
 
-import { useOptimistic, useTransition } from 'react'
-import { setDefaultProviderAction } from '@/app/settings/actions'
-import { Field, FieldContent, FieldDescription, FieldLabel, FieldTitle } from '@/components/ui/field'
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
+import { useOptimistic, useTransition } from "react";
+
+import { setDefaultProviderAction } from "@/app/settings/actions";
+import {
+  Field,
+  FieldContent,
+  FieldDescription,
+  FieldLabel,
+  FieldTitle,
+} from "@/components/ui/field";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 
 export type HarnessOption = {
-  id: string
-  name: string
-  status: string
-  selectable: boolean
-}
+  id: string;
+  name: string;
+  status: string;
+  selectable: boolean;
+};
 
-export function HarnessChoice({ harnesses, selected }: { harnesses: HarnessOption[]; selected?: string }) {
-  const [value, setValue] = useOptimistic(selected)
-  const [, startTransition] = useTransition()
+export function HarnessChoice({
+  harnesses,
+  selected,
+}: {
+  harnesses: HarnessOption[];
+  selected?: string;
+}) {
+  const [value, setValue] = useOptimistic(selected);
+  const [, startTransition] = useTransition();
   return (
     <RadioGroup
       aria-label="Harness"
       value={value ?? null}
       onValueChange={(id) =>
         startTransition(async () => {
-          setValue(id as string)
-          await setDefaultProviderAction(id)
+          setValue(id as string);
+          await setDefaultProviderAction(id);
         })
       }
     >
@@ -38,5 +51,5 @@ export function HarnessChoice({ harnesses, selected }: { harnesses: HarnessOptio
         </FieldLabel>
       ))}
     </RadioGroup>
-  )
+  );
 }

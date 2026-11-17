@@ -14,7 +14,13 @@
         {
           "raw": {
             "method": "item/completed",
-            "params": { "item": { "type": "agentMessage", "id": "msg-skill", "text": "Using the align skill." } }
+            "params": {
+              "item": {
+                "type": "agentMessage",
+                "id": "msg-skill",
+                "text": "Using the align skill."
+              }
+            }
           }
         },
         {

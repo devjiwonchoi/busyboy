@@ -1,28 +1,29 @@
-'use client'
+"use client";
 
-import { createContext, useContext, useState, type ReactNode } from 'react'
-import { stopTaskAction } from '@/app/(main)/director-actions'
-import type { TaskCard } from '@/server/cards/model'
-import { Alert, AlertDescription } from '@/components/ui/alert'
-import { Button } from '@/components/ui/button'
+import { createContext, useContext, useState, type ReactNode } from "react";
+
+import { stopTaskAction } from "@/app/(main)/director-actions";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import type { TaskCard } from "@/server/cards/model";
 
 type CardActionState = {
-  card: TaskCard
-  replying: boolean
-  pending: boolean
-  error: string | null
-  onReplyChange: (replying: boolean) => void
-  run: (action: () => Promise<void>, failure: string) => Promise<void>
-}
+  card: TaskCard;
+  replying: boolean;
+  pending: boolean;
+  error: string | null;
+  onReplyChange: (replying: boolean) => void;
+  run: (action: () => Promise<void>, failure: string) => Promise<void>;
+};
 
-const CardActionContext = createContext<CardActionState | null>(null)
+const CardActionContext = createContext<CardActionState | null>(null);
 
 export function useCardActions() {
-  const value = useContext(CardActionContext)
+  const value = useContext(CardActionContext);
   if (!value) {
-    throw new Error('Card actions are only available inside an open timeline card.')
+    throw new Error("Card actions are only available inside an open timeline card.");
   }
-  return value
+  return value;
 }
 
 export function CardActionProvider({
@@ -31,26 +32,26 @@ export function CardActionProvider({
   onReplyChange,
   children,
 }: {
-  card: TaskCard
-  replying: boolean
-  onReplyChange: (replying: boolean) => void
-  children: ReactNode
+  card: TaskCard;
+  replying: boolean;
+  onReplyChange: (replying: boolean) => void;
+  children: ReactNode;
 }) {
-  const [pending, setPending] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   async function run(action: () => Promise<void>, failure: string) {
     // Answering with the card's own buttons ends the composer's reply to it, so the card closing
     // afterwards is not taken for a reply that lost its card.
-    if (replying) onReplyChange(false)
-    setPending(true)
-    setError(null)
+    if (replying) onReplyChange(false);
+    setPending(true);
+    setError(null);
     try {
-      await action()
+      await action();
     } catch {
-      setError(failure)
+      setError(failure);
     } finally {
-      setPending(false)
+      setPending(false);
     }
   }
 
@@ -58,24 +59,30 @@ export function CardActionProvider({
     <CardActionContext.Provider value={{ card, replying, pending, error, onReplyChange, run }}>
       {children}
     </CardActionContext.Provider>
-  )
+  );
 }
 
 export function CardActionError() {
-  const { error } = useCardActions()
-  if (!error) return null
+  const { error } = useCardActions();
+  if (!error) return null;
   return (
     <Alert variant="destructive">
       <AlertDescription>{error}</AlertDescription>
     </Alert>
-  )
+  );
 }
 
 export function CardTrailingActions() {
-  const { card, replying, pending, onReplyChange, run } = useCardActions()
+  const { card, replying, pending, onReplyChange, run } = useCardActions();
   return (
     <>
-      <Button type="button" size="sm" variant="ghost" aria-pressed={replying} onClick={() => onReplyChange(!replying)}>
+      <Button
+        type="button"
+        size="sm"
+        variant="ghost"
+        aria-pressed={replying}
+        onClick={() => onReplyChange(!replying)}
+      >
         Reply
       </Button>
       {card.stopsTask !== false && (
@@ -84,11 +91,13 @@ export function CardTrailingActions() {
           size="sm"
           variant="ghost"
           disabled={pending}
-          onClick={() => run(() => stopTaskAction(card.taskId), 'The task could not be stopped. Try again.')}
+          onClick={() =>
+            run(() => stopTaskAction(card.taskId), "The task could not be stopped. Try again.")
+          }
         >
           Stop task
         </Button>
       )}
     </>
-  )
+  );
 }

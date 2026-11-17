@@ -1,47 +1,66 @@
-import { execFileSync } from 'node:child_process'
-import { cpSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
-import { dirname, join } from 'node:path'
-import { TEST_REMEMBER_ROOT } from '@/server/records/remember-record'
-import { recordDirectory, repoSegments } from '@/server/records/record-path'
-import { TASKS_FILE, WORKTREES_FOLDER } from '@/server/tasks'
+import { execFileSync } from "node:child_process";
+import { cpSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 
-const FIXTURES = join(__dirname, '..', 'fixtures', 'records')
+import { recordDirectory, repoSegments } from "@/server/records/record-path";
+import { TEST_REMEMBER_ROOT } from "@/server/records/remember-record";
+import { TASKS_FILE, WORKTREES_FOLDER } from "@/server/tasks";
 
-type RecordTask = { project: string; projectPath: string; id: string; title: string; files?: Record<string, string> }
+const FIXTURES = join(__dirname, "..", "fixtures", "records");
 
-export async function homeRecordFolder(home: string, task: { id: string; project: string; worktree: string }) {
-  const folder = recordDirectory(join(home, TEST_REMEMBER_ROOT), await repoSegments(task), task.id)
-  if (!folder) throw new Error(`No record folder for ${task.project}/${task.id}.`)
-  return folder
+type RecordTask = {
+  project: string;
+  projectPath: string;
+  id: string;
+  title: string;
+  files?: Record<string, string>;
+};
+
+export async function homeRecordFolder(
+  home: string,
+  task: { id: string; project: string; worktree: string },
+) {
+  const folder = recordDirectory(join(home, TEST_REMEMBER_ROOT), await repoSegments(task), task.id);
+  if (!folder) throw new Error(`No record folder for ${task.project}/${task.id}.`);
+  return folder;
 }
 
-export async function addRecordTask(home: string, { project, projectPath, id, title, files }: RecordTask) {
-  const worktree = join(home, WORKTREES_FOLDER, project, id)
-  const branch = `busyboy/${id}`
-  mkdirSync(dirname(worktree), { recursive: true })
-  execFileSync('git', ['-C', projectPath, 'worktree', 'add', '-q', '-b', branch, '--', worktree, 'HEAD'], { stdio: 'ignore' })
-  const records = await homeRecordFolder(home, { id, project, worktree })
-  mkdirSync(records, { recursive: true })
+export async function addRecordTask(
+  home: string,
+  { project, projectPath, id, title, files }: RecordTask,
+) {
+  const worktree = join(home, WORKTREES_FOLDER, project, id);
+  const branch = `busyboy/${id}`;
+  mkdirSync(dirname(worktree), { recursive: true });
+  execFileSync(
+    "git",
+    ["-C", projectPath, "worktree", "add", "-q", "-b", branch, "--", worktree, "HEAD"],
+    { stdio: "ignore" },
+  );
+  const records = await homeRecordFolder(home, { id, project, worktree });
+  mkdirSync(records, { recursive: true });
   if (files) {
-    for (const [name, text] of Object.entries(files)) writeFileSync(join(records, name), text)
+    for (const [name, text] of Object.entries(files)) writeFileSync(join(records, name), text);
   } else {
-    cpSync(join(FIXTURES, id), records, { recursive: true })
+    cpSync(join(FIXTURES, id), records, { recursive: true });
   }
 
-  const file = join(home, TASKS_FILE)
-  const list = existsSync(file) ? (JSON.parse(readFileSync(file, 'utf8')) as { tasks: unknown[] }) : { tasks: [] }
+  const file = join(home, TASKS_FILE);
+  const list = existsSync(file)
+    ? (JSON.parse(readFileSync(file, "utf8")) as { tasks: unknown[] })
+    : { tasks: [] };
   list.tasks.push({
     id,
     project,
     title,
     request: title,
-    provider: 'claude',
+    provider: "claude",
     agentId: `no-agent-${id}`,
     sessionId: null,
     worktree,
     branch,
     createdAt: new Date(list.tasks.length * 1000).toISOString(),
-  })
-  writeFileSync(file, `${JSON.stringify({ version: 1, ...list }, null, 2)}\n`)
-  return { worktree, records }
+  });
+  writeFileSync(file, `${JSON.stringify({ version: 1, ...list }, null, 2)}\n`);
+  return { worktree, records };
 }

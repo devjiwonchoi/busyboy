@@ -1,26 +1,46 @@
-import type { Metadata } from 'next'
-import { connection } from 'next/server'
-import Link from 'next/link'
-import { Suspense } from 'react'
-import { AddProjectForm } from '@/components/setup/add-project-form'
-import { AlwaysAskForm } from '@/components/setup/always-ask-form'
-import { CompanionStep } from '@/components/setup/companion-step'
-import { CopyCommand } from '@/components/setup/copy-command'
-import { FolderPicker } from '@/components/setup/folder-picker'
-import { SetupSteps } from '@/components/setup/setup-steps'
-import { StepFooter } from '@/components/setup/step-footer'
-import { Badge } from '@/components/ui/badge'
-import { Button, buttonVariants } from '@/components/ui/button'
-import { Empty, EmptyDescription, EmptyHeader } from '@/components/ui/empty'
-import { Field, FieldContent, FieldLabel, FieldTitle } from '@/components/ui/field'
-import { Item, ItemActions, ItemContent, ItemDescription, ItemGroup, ItemTitle } from '@/components/ui/item'
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
-import { Skeleton } from '@/components/ui/skeleton'
-import { alwaysAskRules } from '@/server/always-ask-list'
-import { COMPANIONS, companionImageUrl, currentCompanion, DEFAULT_COMPANION_ID } from '@/server/companions'
-import { isSetupComplete, readSettings } from '@/server/config'
-import { defaultProvider, PROVIDERS, providerState, signedInProviders, skillsState } from '@/server/providers'
-import type { SignInStatus } from '@/server/runner/contract'
+import type { Metadata } from "next";
+import Link from "next/link";
+import { connection } from "next/server";
+import { Suspense } from "react";
+
+import { AddProjectForm } from "@/components/setup/add-project-form";
+import { AlwaysAskForm } from "@/components/setup/always-ask-form";
+import { CompanionStep } from "@/components/setup/companion-step";
+import { CopyCommand } from "@/components/setup/copy-command";
+import { FolderPicker } from "@/components/setup/folder-picker";
+import { SetupSteps } from "@/components/setup/setup-steps";
+import { StepFooter } from "@/components/setup/step-footer";
+import { Badge } from "@/components/ui/badge";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { Empty, EmptyDescription, EmptyHeader } from "@/components/ui/empty";
+import { Field, FieldContent, FieldLabel, FieldTitle } from "@/components/ui/field";
+import {
+  Item,
+  ItemActions,
+  ItemContent,
+  ItemDescription,
+  ItemGroup,
+  ItemTitle,
+} from "@/components/ui/item";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Skeleton } from "@/components/ui/skeleton";
+import { alwaysAskRules } from "@/server/always-ask-list";
+import {
+  COMPANIONS,
+  companionImageUrl,
+  currentCompanion,
+  DEFAULT_COMPANION_ID,
+} from "@/server/companions";
+import { isSetupComplete, readSettings } from "@/server/config";
+import {
+  defaultProvider,
+  PROVIDERS,
+  providerState,
+  signedInProviders,
+  skillsState,
+} from "@/server/providers";
+import type { SignInStatus } from "@/server/runner/contract";
+
 import {
   continueFromAgentsAction,
   continueFromApprovalsAction,
@@ -28,13 +48,13 @@ import {
   removeProjectAction,
   restoreAlwaysAskAction,
   startChattingAction,
-} from './actions'
-import { neighborSteps, parseStep, stepHref, STEPS, type StepId } from './steps'
+} from "./actions";
+import { neighborSteps, parseStep, stepHref, STEPS, type StepId } from "./steps";
 
-export const metadata: Metadata = { title: 'Setup · BusyBoy' }
+export const metadata: Metadata = { title: "Setup · BusyBoy" };
 
 // Steps read local state, which Cache Components would otherwise prerender at build time.
-export default function SetupPage({ searchParams }: PageProps<'/setup'>) {
+export default function SetupPage({ searchParams }: PageProps<"/setup">) {
   return (
     <div className="flex min-h-dvh flex-col">
       <header className="flex h-10 shrink-0 items-center border-b pr-2 pl-[var(--title-bar-inset,0.75rem)] [app-region:drag]">
@@ -49,51 +69,61 @@ export default function SetupPage({ searchParams }: PageProps<'/setup'>) {
         </Suspense>
       </main>
     </div>
-  )
+  );
 }
 
 async function BackToChat() {
-  await connection()
-  if (!isSetupComplete(await readSettings())) return null
+  await connection();
+  if (!isSetupComplete(await readSettings())) return null;
   return (
-    <Link href="/" className={buttonVariants({ variant: 'ghost', size: 'sm', className: 'ml-auto [app-region:no-drag]' })}>
+    <Link
+      href="/"
+      className={buttonVariants({
+        variant: "ghost",
+        size: "sm",
+        className: "ml-auto [app-region:no-drag]",
+      })}
+    >
       Back to chat
     </Link>
-  )
+  );
 }
 
 const HEADINGS: Record<StepId, { title: string; description: string }> = {
   companion: {
-    title: 'Pick a Director',
-    description: 'The main agent who leads every project manager. You can change this later in settings.',
+    title: "Pick a Director",
+    description:
+      "The main agent who leads every project manager. You can change this later in settings.",
   },
   agents: {
-    title: 'Sign in to an agent',
-    description: 'BusyBoy uses the Claude Code, Codex, and Grok CLIs you already have. It never signs in for you.',
+    title: "Sign in to an agent",
+    description:
+      "BusyBoy uses the Claude Code, Codex, and Grok CLIs you already have. It never signs in for you.",
   },
   skills: {
-    title: 'Add skills',
-    description: 'Agents work best with the jwn plugin from devjiwonchoi/skills. You can skip this and add it later.',
+    title: "Add skills",
+    description:
+      "Agents work best with the jwn plugin from devjiwonchoi/skills. You can skip this and add it later.",
   },
   approvals: {
-    title: 'Always ask before',
+    title: "Always ask before",
     description:
-      'Agents do reversible work on their own and tell you what they did. Before any action on this list a task agent asks you first, every time, even in Auto mode, and your director never runs one: it hands that work to a task.',
+      "Agents do reversible work on their own and tell you what they did. Before any action on this list a task agent asks you first, every time, even in Auto mode, and your director never runs one: it hands that work to a task.",
   },
   start: {
-    title: 'Add projects',
+    title: "Add projects",
     description:
-      'A project is a folder that is a git repository. Add some now, or start without one and add it when a task needs it.',
+      "A project is a folder that is a git repository. Add some now, or start without one and add it when a task needs it.",
   },
-}
+};
 
-async function CurrentStep({ searchParams }: Pick<PageProps<'/setup'>, 'searchParams'>) {
-  const step = parseStep((await searchParams).step)
+async function CurrentStep({ searchParams }: Pick<PageProps<"/setup">, "searchParams">) {
+  const step = parseStep((await searchParams).step);
   // Awaiting searchParams alone still lets Next prerender this part at request
   // time, which rejects the clock reads in providerState; this renders it per request.
-  await connection()
-  const { title, description } = HEADINGS[step]
-  const index = STEPS.findIndex(({ id }) => id === step)
+  await connection();
+  const { title, description } = HEADINGS[step];
+  const index = STEPS.findIndex(({ id }) => id === step);
   return (
     <>
       <SetupSteps current={step} />
@@ -104,60 +134,73 @@ async function CurrentStep({ searchParams }: Pick<PageProps<'/setup'>, 'searchPa
         <h1 className="text-xl font-semibold">{title}</h1>
         <p className="text-muted-foreground text-sm">{description}</p>
       </div>
-      {step === 'companion' && <CompanionPage />}
-      {step === 'agents' && <AgentsPage />}
-      {step === 'skills' && <SkillsPage />}
-      {step === 'approvals' && <ApprovalsPage />}
-      {step === 'start' && <StartPage />}
+      {step === "companion" && <CompanionPage />}
+      {step === "agents" && <AgentsPage />}
+      {step === "skills" && <SkillsPage />}
+      {step === "approvals" && <ApprovalsPage />}
+      {step === "start" && <StartPage />}
     </>
-  )
+  );
 }
-
 
 async function CompanionPage() {
-  const [companion, imageUrl] = await Promise.all([currentCompanion(), companionImageUrl()])
-  return <CompanionStep companions={COMPANIONS} selected={companion?.id} defaultId={DEFAULT_COMPANION_ID} imageUrl={imageUrl} />
+  const [companion, imageUrl] = await Promise.all([currentCompanion(), companionImageUrl()]);
+  return (
+    <CompanionStep
+      companions={COMPANIONS}
+      selected={companion?.id}
+      defaultId={DEFAULT_COMPANION_ID}
+      imageUrl={imageUrl}
+    />
+  );
 }
 
+const STATUS_TEXT: Record<SignInStatus["state"], string> = {
+  "signed-in": "Signed in",
+  "signed-out": "Signed out",
+  "not-installed": "Not installed",
+  outdated: "Update needed",
+  unknown: "Could not check",
+};
 
-const STATUS_TEXT: Record<SignInStatus['state'], string> = {
-  'signed-in': 'Signed in',
-  'signed-out': 'Signed out',
-  'not-installed': 'Not installed',
-  outdated: 'Update needed',
-  unknown: 'Could not check',
-}
-
-const AGENTS_FORM = 'agents-form'
+const AGENTS_FORM = "agents-form";
 
 async function AgentsPage() {
-  const { previous } = neighborSteps('agents')
+  const { previous } = neighborSteps("agents");
   const [states, current] = await Promise.all([
-    Promise.all(PROVIDERS.map(async (provider) => ({ ...provider, state: await providerState(provider.id) }))),
+    Promise.all(
+      PROVIDERS.map(async (provider) => ({ ...provider, state: await providerState(provider.id) })),
+    ),
     defaultProvider(),
-  ])
-  const signedIn = states.filter(({ state }) => state.state === 'signed-in')
+  ]);
+  const signedIn = states.filter(({ state }) => state.state === "signed-in");
   return (
     <>
       <ItemGroup aria-label="Agents" className="gap-2">
         {states.map(({ id, name, state }) => (
           <Item key={id} role="listitem" variant="outline">
             <Row name={name} status={STATUS_TEXT[state.state]} />
-            {state.state === 'signed-out' && (
+            {state.state === "signed-out" && (
               <>
                 {/* Setup is its own screen outside the app shell, so the terminal panel isn't here; the user copies the command. */}
-                <ItemDescription className="basis-full">Run this in a terminal, then choose Check again.</ItemDescription>
+                <ItemDescription className="basis-full">
+                  Run this in a terminal, then choose Check again.
+                </ItemDescription>
                 <CopyCommand label={`${name} login command`} command={state.loginCommand} />
               </>
             )}
-            {state.state === 'outdated' && (
+            {state.state === "outdated" && (
               <>
-                <ItemDescription className="basis-full line-clamp-none">{state.detail}</ItemDescription>
+                <ItemDescription className="basis-full line-clamp-none">
+                  {state.detail}
+                </ItemDescription>
                 <CopyCommand label={`${name} update command`} command={state.updateCommand} />
               </>
             )}
-            {(state.state === 'not-installed' || state.state === 'unknown') && (
-              <ItemDescription className="basis-full line-clamp-none">{state.detail}</ItemDescription>
+            {(state.state === "not-installed" || state.state === "unknown") && (
+              <ItemDescription className="basis-full line-clamp-none">
+                {state.detail}
+              </ItemDescription>
             )}
           </Item>
         ))}
@@ -170,7 +213,11 @@ async function AgentsPage() {
       {/* One form for the choice and Continue, so Continue saves the default agent. */}
       <form id={AGENTS_FORM} action={continueFromAgentsAction} className="space-y-2">
         {signedIn.length > 1 && (
-          <RadioGroup name="defaultProvider" aria-label="Default agent" defaultValue={current ?? undefined}>
+          <RadioGroup
+            name="defaultProvider"
+            aria-label="Default agent"
+            defaultValue={current ?? undefined}
+          >
             {signedIn.map(({ id, name }) => (
               <FieldLabel key={id} htmlFor={`default-${id}`}>
                 <Field orientation="horizontal">
@@ -184,13 +231,16 @@ async function AgentsPage() {
           </RadioGroup>
         )}
       </form>
-      <StepFooter previous={previous} hint={signedIn.length === 0 ? 'Sign in to an agent to continue.' : undefined}>
+      <StepFooter
+        previous={previous}
+        hint={signedIn.length === 0 ? "Sign in to an agent to continue." : undefined}
+      >
         <Button type="submit" form={AGENTS_FORM} disabled={signedIn.length === 0}>
           Continue
         </Button>
       </StepFooter>
     </>
-  )
+  );
 }
 
 function Row({ name, status }: { name: string; status: string }) {
@@ -203,21 +253,20 @@ function Row({ name, status }: { name: string; status: string }) {
         <Badge variant="secondary">{status}</Badge>
       </ItemActions>
     </>
-  )
+  );
 }
 
-
 async function SkillsPage() {
-  const { previous, next } = neighborSteps('skills')
+  const { previous, next } = neighborSteps("skills");
   const rows = await Promise.all(
     PROVIDERS.map(async ({ id, name }) => {
-      const state = await providerState(id)
-      if (state.state === 'not-installed') return null
-      return { id, name, skills: await skillsState(id) }
+      const state = await providerState(id);
+      if (state.state === "not-installed") return null;
+      return { id, name, skills: await skillsState(id) };
     }),
-  )
-  const runnable = rows.filter((row) => row !== null)
-  const nextHref = stepHref(next!)
+  );
+  const runnable = rows.filter((row) => row !== null);
+  const nextHref = stepHref(next!);
   return (
     <>
       {runnable.length === 0 ? (
@@ -226,14 +275,16 @@ async function SkillsPage() {
         <ItemGroup aria-label="Skills" className="gap-2">
           {runnable.map(({ id, name, skills }) => (
             <Item key={id} role="listitem" variant="outline">
-              <Row name={name} status={skills.installed ? 'Installed' : 'Not installed'} />
-              {!skills.installed && <CopyCommand label={`${name} install command`} command={skills.installCommand} />}
+              <Row name={name} status={skills.installed ? "Installed" : "Not installed"} />
+              {!skills.installed && (
+                <CopyCommand label={`${name} install command`} command={skills.installCommand} />
+              )}
             </Item>
           ))}
         </ItemGroup>
       )}
       <StepFooter previous={previous}>
-        <Link href={nextHref} className={buttonVariants({ variant: 'ghost' })}>
+        <Link href={nextHref} className={buttonVariants({ variant: "ghost" })}>
           Skip
         </Link>
         <Link href={nextHref} className={buttonVariants()}>
@@ -241,26 +292,30 @@ async function SkillsPage() {
         </Link>
       </StepFooter>
     </>
-  )
+  );
 }
 
-
-const APPROVALS_FORM = 'approvals-form'
+const APPROVALS_FORM = "approvals-form";
 
 async function ApprovalsPage() {
-  const { previous, next } = neighborSteps('approvals')
-  const rules = await alwaysAskRules()
+  const { previous, next } = neighborSteps("approvals");
+  const rules = await alwaysAskRules();
   return (
     <>
       {/* Keyed by the list, so Restore defaults shows the restored text in the box. */}
-      <AlwaysAskForm key={rules.join('\n')} id={APPROVALS_FORM} rules={rules} save={continueFromApprovalsAction} />
+      <AlwaysAskForm
+        key={rules.join("\n")}
+        id={APPROVALS_FORM}
+        rules={rules}
+        save={continueFromApprovalsAction}
+      />
       <StepFooter previous={previous}>
         <form action={restoreAlwaysAskAction}>
           <Button type="submit" variant="ghost">
             Restore defaults
           </Button>
         </form>
-        <Link href={stepHref(next!)} className={buttonVariants({ variant: 'ghost' })}>
+        <Link href={stepHref(next!)} className={buttonVariants({ variant: "ghost" })}>
           Skip
         </Link>
         <Button type="submit" form={APPROVALS_FORM}>
@@ -268,14 +323,21 @@ async function ApprovalsPage() {
         </Button>
       </StepFooter>
     </>
-  )
+  );
 }
 
-
 async function StartPage() {
-  const { previous } = neighborSteps('start')
-  const [{ projects }, signedIn, companion] = await Promise.all([readSettings(), signedInProviders(), currentCompanion()])
-  const hint = !companion ? 'Pick a director first.' : signedIn.length === 0 ? 'Sign in to an agent first.' : undefined
+  const { previous } = neighborSteps("start");
+  const [{ projects }, signedIn, companion] = await Promise.all([
+    readSettings(),
+    signedInProviders(),
+    currentCompanion(),
+  ]);
+  const hint = !companion
+    ? "Pick a director first."
+    : signedIn.length === 0
+      ? "Sign in to an agent first."
+      : undefined;
   return (
     <>
       {projects.length === 0 ? (
@@ -294,7 +356,12 @@ async function StartPage() {
               </ItemContent>
               <ItemActions>
                 <form action={removeProjectAction.bind(null, project.name)}>
-                  <Button type="submit" variant="ghost" size="sm" aria-label={`Remove ${project.name}`}>
+                  <Button
+                    type="submit"
+                    variant="ghost"
+                    size="sm"
+                    aria-label={`Remove ${project.name}`}
+                  >
                     Remove
                   </Button>
                 </form>
@@ -308,10 +375,10 @@ async function StartPage() {
       <StepFooter previous={previous} hint={hint}>
         <form action={startChattingAction}>
           <Button type="submit" disabled={Boolean(hint)}>
-            {projects.length === 0 ? 'Start without a project' : 'Start chatting'}
+            {projects.length === 0 ? "Start without a project" : "Start chatting"}
           </Button>
         </form>
       </StepFooter>
     </>
-  )
+  );
 }

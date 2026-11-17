@@ -1,10 +1,12 @@
-'use server'
+"use server";
 
-import { commandPalette, type PaletteChat, type SearchHit } from '@/server/search-chats'
+import { commandPalette, type PaletteChat, type SearchHit } from "@/server/search-chats";
 
-const QUERY_LIMIT = 200
+const QUERY_LIMIT = 200;
 
-export async function commandPaletteAction(query: unknown): Promise<{ chats: PaletteChat[]; hits: SearchHit[] }> {
-  const text = typeof query === 'string' ? query.slice(0, QUERY_LIMIT) : ''
-  return commandPalette(text)
+export async function commandPaletteAction(
+  query: unknown,
+): Promise<{ chats: PaletteChat[]; hits: SearchHit[] }> {
+  const text = typeof query === "string" ? query.slice(0, QUERY_LIMIT) : "";
+  return commandPalette(text);
 }

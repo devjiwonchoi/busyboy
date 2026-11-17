@@ -1,14 +1,16 @@
-import type { Metadata } from 'next'
-import Script from 'next/script'
-import { ThemeSync } from '@/components/theme/theme-sync'
-import { THEME_BOOT } from '@/lib/theme'
-import './globals.css'
+import type { Metadata } from "next";
+import Script from "next/script";
+
+import { ThemeSync } from "@/components/theme/theme-sync";
+import { THEME_BOOT } from "@/lib/theme";
+
+import "./globals.css";
 
 // next/font/google downloads the font during next build and fails offline.
 export const metadata: Metadata = {
-  title: 'BusyBoy',
-  description: 'Run coding tasks across projects with your installed agent CLIs.',
-}
+  title: "BusyBoy",
+  description: "Run coding tasks across projects with your installed agent CLIs.",
+};
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   // Dark is the default. A saved choice is applied by the boot script before paint, from a cookie,
@@ -23,5 +25,5 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         {children}
       </body>
     </html>
-  )
+  );
 }

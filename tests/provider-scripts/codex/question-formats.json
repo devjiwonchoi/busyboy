@@ -42,7 +42,9 @@
         {
           "raw": {
             "method": "turn/completed",
-            "params": { "turn": { "id": "color-labeled-turn", "status": "completed", "error": null } }
+            "params": {
+              "turn": { "id": "color-labeled-turn", "status": "completed", "error": null }
+            }
           }
         }
       ]
