@@ -3,6 +3,7 @@ import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { appendTranscriptLine, readTranscript, type TranscriptCursor } from './transcript-log'
 import { alwaysAskRulesAt } from '../always-ask-list'
+import { readChatHarness } from '../chat-harness'
 import { pathKey, samePath } from '../paths'
 import { BUSYBOY_FILES_RULE } from '../runner/always-ask'
 import { directorTiming } from './context'
@@ -72,8 +73,21 @@ export type ChatEntry =
 
 export type DirectorStatus = 'idle' | 'answering' | 'compacting'
 
+export type ContextUsage = { usedTokens: number; contextWindow?: number }
+
 export type DirectorUpdate =
-  | { type: 'reset'; entries: ChatEntry[]; tasks: TaskView[]; cards: TaskCard[]; status: DirectorStatus; draft: string; queue: string[] }
+  | {
+      type: 'reset'
+      entries: ChatEntry[]
+      tasks: TaskView[]
+      cards: TaskCard[]
+      status: DirectorStatus
+      draft: string
+      queue: string[]
+      usage: ContextUsage | null
+    }
+  /** The latest context report, or null when a new conversation starts. */
+  | { type: 'usage'; usage: ContextUsage | null }
   /** Appends the entry, or replaces the one with the same id. */
   | { type: 'entry'; entry: ChatEntry }
   /** Replaces the transcript, after a message is edited away. */
@@ -135,6 +149,10 @@ type Director = {
   instructions?: string
   /** The always-ask list the running agent was started with, as JSON. */
   alwaysAsk?: string
+  /** Model and effort the running agent was started with, as JSON. */
+  harnessKey?: string
+  /** The latest context report for the running session. */
+  usage: ContextUsage | null
   status: DirectorStatus
   /** The reply streaming in the turn in progress: `blocks` joined, as the user sees it. */
   draft: string
@@ -249,6 +267,7 @@ function getDirector(folder: string, chat: string | null = null): Director {
     probing: 0,
     turn: 0,
     charsSinceCompact: 0,
+    usage: null,
     writes: Promise.resolve(),
     transcriptFile: {},
     listeners: new Set(),
@@ -428,8 +447,13 @@ function saveState(director: Director) {
 // ---- The Director agent ----------------------------------------------------------
 
 async function ensureAgent(director: Director, provider: ProviderId, mcp: McpServers, instructions: string, alwaysAsk: string[]) {
+  const stored = await readChatHarness(directorFolder(director))
+  const model = stored?.provider === provider ? stored.model : undefined
+  const effort = stored?.provider === provider ? stored.effort : undefined
+  const harnessKey = JSON.stringify({ model: model ?? null, effort: effort ?? null })
   const existing = director.agentId ? getAgent(director.agentId) : undefined
-  const sameSetup = director.instructions === instructions && director.alwaysAsk === JSON.stringify(alwaysAsk)
+  const sameSetup =
+    director.instructions === instructions && director.alwaysAsk === JSON.stringify(alwaysAsk) && director.harnessKey === harnessKey
   if (existing && existing.provider === provider && sameSetup) {
     if (existing.status === 'stopped') {
       director.unconfirmedResume = Boolean(existing.sessionId)
@@ -444,8 +468,10 @@ async function ensureAgent(director: Director, provider: ProviderId, mcp: McpSer
     director.agentId = undefined
     await stopAgent(existing.id).catch(() => {})
   } else if (existing) {
-    // The default provider changed: its conversation cannot carry over.
+    // The harness changed: its conversation cannot carry over.
     director.agentId = undefined
+    director.usage = null
+    broadcast(director, { type: 'usage', usage: null })
     void stopAgent(existing.id)
     saveEntry(director, newEntry('note', { text: `Started a new conversation on ${provider}.`, tone: 'info' }))
   }
@@ -457,10 +483,21 @@ async function ensureAgent(director: Director, provider: ProviderId, mcp: McpSer
   // Every other match is refused, so the Director never runs it, even where Auto mode would.
   // Its folder is inside BusyBoy's data folder, next to the task list and settings, so the rest
   // of the data folder is private: changing BusyBoy's state goes through BusyBoy's tools.
-  const agent = startAgent({ provider, cwd, instructions, mcpServers: mcp, resumeSessionId, alwaysAsk, privateFolder: director.folder })
+  const agent = startAgent({
+    provider,
+    cwd,
+    instructions,
+    mcpServers: mcp,
+    resumeSessionId,
+    alwaysAsk,
+    privateFolder: director.folder,
+    model,
+    effort,
+  })
   director.agentId = agent.id
   director.instructions = instructions
   director.alwaysAsk = JSON.stringify(alwaysAsk)
+  director.harnessKey = harnessKey
   subscribeToAgent(agent.id, 0, (envelope) => onAgentEvent(director, agent.id, envelope))
   return agent.id
 }
@@ -541,6 +578,10 @@ function onAgentEvent(director: Director, agentId: string, { event }: AgentEvent
         saveEntry(director, newEntry('director', { text: director.draft, interrupted: Boolean(event.interrupted) || undefined }))
       }
       endTurn(director)
+      break
+    case 'usage':
+      director.usage = { usedTokens: event.usedTokens, ...(event.contextWindow ? { contextWindow: event.contextWindow } : {}) }
+      broadcast(director, { type: 'usage', usage: director.usage })
       break
     case 'stopped':
       closeDirectorApproval(director.folder, agentId)
@@ -915,6 +956,7 @@ export async function subscribeToDirector(folder: string, listener: (update: Dir
     status: director.status,
     draft: director.draft,
     queue: director.pending.map((turn) => displayText(turn)),
+    usage: director.usage,
   })
   director.listeners.add(listener)
   return () => {

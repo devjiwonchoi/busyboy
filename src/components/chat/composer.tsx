@@ -85,6 +85,8 @@ export const ChatComposer = forwardRef<
     onTextChange?: (text: string) => void
     /** When `token` changes, the box is replaced with `text`. */
     seed?: { token: number; text: string } | null
+    /** Rendered on the left of the toolbar. The harness picker uses this slot. */
+    toolbar?: ReactNode
   }
 >(function ChatComposer(
   {
@@ -104,6 +106,7 @@ export const ChatComposer = forwardRef<
     onEmptyArrowUp,
     onTextChange,
     seed,
+    toolbar,
   },
   ref,
 ) {
@@ -414,6 +417,7 @@ export const ChatComposer = forwardRef<
           </div>
         </ComposerPopup>
         <ComposerActions>
+          {toolbar}
           <ComposerActionGroup align="start">
             <input
               id={pickerId}

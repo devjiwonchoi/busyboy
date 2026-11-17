@@ -5,7 +5,7 @@ import { Streamdown, type ControlsConfig, type LinkSafetyConfig } from 'streamdo
 
 // Streamdown 2 highlights code only through this plugin; without it every token is one color.
 // Its default themes are github-light and github-dark, and Streamdown switches tokens to the
-// dark colors with the `dark:` variant, which globals.css ties to prefers-color-scheme.
+// dark colors with the `dark:` variant, which globals.css ties to the `dark` class.
 const plugins = { code }
 
 // Code copy stays: it is a single button and the one control a chat reply needs. Every

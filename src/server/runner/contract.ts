@@ -46,6 +46,10 @@ export type StartAgentInput = {
   privateFolder?: string
   /** Ask before anything that could change the folder (see SUBAGENT_EDIT_RULE in `always-ask.ts`). */
   noFileEdits?: boolean
+  /** Model id the harness should use. Left out for the harness's own default. */
+  model?: string
+  /** Effort the harness should use, when that harness has one. Left out for its default. */
+  effort?: string
 }
 
 export type McpServer = (
@@ -105,6 +109,12 @@ export type AgentEvent =
   /** The agent process ended. `finished` is false when it ended mid-turn or crashed. */
   | { type: 'stopped'; finished: boolean }
   | { type: 'error'; message: string; code?: AgentErrorCode }
+  /**
+   * How full the context is, when the harness reports it. `usedTokens` is the
+   * latest turn's input (including cache), and `contextWindow` is the model's
+   * window when the harness sends one.
+   */
+  | { type: 'usage'; usedTokens: number; contextWindow?: number }
 
 /** `lost-session`: the session to resume no longer exists, so only a new conversation can continue. */
 export type AgentErrorCode = 'signed-out' | 'not-installed' | 'no-script' | 'provider' | 'lost-session'
@@ -151,7 +161,7 @@ export type SignInStatus =
 // ---- Provider side -------------------------------------------------------
 
 export type ProviderStartOptions = Required<Pick<StartAgentInput, 'cwd' | 'permissionMode'>> &
-  Pick<StartAgentInput, 'instructions' | 'resumeSessionId' | 'provider' | 'mcpServers' | 'forkSessionId' | 'noTools' | 'alwaysAsk' | 'privateFolder' | 'noFileEdits'> & {
+  Pick<StartAgentInput, 'instructions' | 'resumeSessionId' | 'provider' | 'mcpServers' | 'forkSessionId' | 'noTools' | 'alwaysAsk' | 'privateFolder' | 'noFileEdits' | 'model' | 'effort'> & {
     /** Every event the provider produces. Call it in order; the runner stamps seq numbers. */
     emit: (event: AgentEvent) => void
   }

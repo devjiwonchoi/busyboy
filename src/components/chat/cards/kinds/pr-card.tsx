@@ -39,9 +39,14 @@ export function PrCardView({ card }: CardViewProps<PrCard>) {
               ) : (
                 <span className="size-1.5 shrink-0" aria-hidden />
               )}
-              <span className="min-w-0 truncate">
+              <a
+                href={pull.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="min-w-0 truncate text-inherit no-underline"
+              >
                 #{pull.number} {pull.title}
-              </span>
+              </a>
               {pull.check !== 'none' && <span className="text-muted-foreground ml-auto shrink-0">{CHECK_LABEL[pull.check]}</span>}
               {pull.check === 'none' && pull.review && <span className="text-muted-foreground ml-auto shrink-0">{pull.review}</span>}
             </li>

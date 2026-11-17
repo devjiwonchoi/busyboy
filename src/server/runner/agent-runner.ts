@@ -188,6 +188,8 @@ function launch(agent: AgentRecord, resumeSessionId?: string) {
       alwaysAsk: agent.input.alwaysAsk,
       privateFolder: agent.input.privateFolder,
       noFileEdits: agent.input.noFileEdits,
+      model: agent.input.model,
+      effort: agent.input.effort,
       emit: (event) => record(agent, event),
     })
     if (agent.status === 'starting') agent.status = 'idle'

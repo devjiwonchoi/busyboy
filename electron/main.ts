@@ -1,6 +1,9 @@
-import { dirname, join } from 'node:path'
+import { spawn } from 'node:child_process'
+import { existsSync, statSync } from 'node:fs'
+import { isAbsolute, dirname, join, normalize } from 'node:path'
 import { app, BrowserWindow, dialog, ipcMain, session, shell } from 'electron'
-import { FOCUS_CHANNEL, INSTALL_UPDATE_CHANNEL, PICK_FOLDERS_CHANNEL, UPDATE_READY_CHANNEL, UPDATE_STATE_CHANNEL } from '../src/lib/desktop-bridge'
+import { FOCUS_CHANNEL, INSTALL_UPDATE_CHANNEL, OPEN_IN_EDITOR_CHANNEL, PICK_FOLDERS_CHANNEL, REVEAL_IN_FOLDER_CHANNEL, UPDATE_READY_CHANNEL, UPDATE_STATE_CHANNEL } from '../src/lib/desktop-bridge'
+import { findExecutable } from '../src/server/runner/find-executable'
 import { FOCUS_PARAM, formatFocusTarget, type FocusTarget } from '../src/lib/focus-target'
 import { SERVER_TOKEN_COOKIE } from '../src/lib/server-token'
 import {
@@ -242,6 +245,52 @@ function registerFolderPicker() {
   })
 }
 
+/** A folder the page may open: an absolute directory, nothing else. */
+function localFolder(value: unknown) {
+  if (typeof value !== 'string' || !isAbsolute(value) || value.includes('\0')) return null
+  const folder = normalize(value)
+  try {
+    if (!existsSync(folder) || !statSync(folder).isDirectory()) return null
+  } catch {
+    return null
+  }
+  return folder
+}
+
+function editorCommand() {
+  const configured = process.env.BUSYBOY_EDITOR
+  if (configured && !configured.includes('\0')) {
+    return isAbsolute(configured) ? configured : (findExecutable(configured) ?? configured)
+  }
+  return findExecutable('cursor') || findExecutable('code') || findExecutable('codium') || findExecutable('subl')
+}
+
+/** Opens a task worktree in an editor, or reveals it in the file manager. Only app pages may ask. */
+function registerWorktreeActions() {
+  ipcMain.handle(OPEN_IN_EDITOR_CHANNEL, (event, folder: unknown) => {
+    if (!isAppOrigin(event.senderFrame?.url)) return
+    const path = localFolder(folder)
+    if (!path) return
+    const command = editorCommand()
+    if (!command) {
+      void shell.openPath(path)
+      return
+    }
+    try {
+      const child = spawn(command, [path], { detached: true, stdio: 'ignore' })
+      child.on('error', () => void shell.openPath(path))
+      child.unref()
+    } catch {
+      void shell.openPath(path)
+    }
+  })
+  ipcMain.handle(REVEAL_IN_FOLDER_CHANNEL, (event, folder: unknown) => {
+    if (!isAppOrigin(event.senderFrame?.url)) return
+    const path = localFolder(folder)
+    if (path) shell.showItemInFolder(path)
+  })
+}
+
 /** The update actions behind the preload bridge. Only app pages may use them. */
 function registerUpdateActions() {
   ipcMain.handle(UPDATE_STATE_CHANNEL, (event) => (isAppOrigin(event.senderFrame?.url) ? (updates?.readyVersion() ?? null) : null))
@@ -294,6 +343,7 @@ function registerAppEvents() {
   void app.whenReady().then(async () => {
     registerFolderPicker()
     registerUpdateActions()
+    registerWorktreeActions()
     if (selfCheckPath) {
       await runSelfCheck(selfCheckPath)
       return

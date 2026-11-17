@@ -3,12 +3,15 @@
 import { FitAddon } from '@xterm/addon-fit'
 import { Terminal } from '@xterm/xterm'
 import '@xterm/xterm/css/xterm.css'
-import { Plus, RotateCcw, SquareTerminal, X } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
+import { FolderOpen, Plus, RotateCcw, SquareTerminal, X } from 'lucide-react'
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
+import { desktopBridge } from '@/lib/desktop-bridge'
 import { useShellState, useTaskSelection } from '@/components/shell/shell-state'
 import {
+  COMMAND_PALETTE_KEYS,
   isMacPlatform,
   matchesShortcut,
+  NEW_TASK_KEYS,
   TOGGLE_PANEL_KEYS,
   TOGGLE_SIDEBAR_KEYS,
   useShortcut,
@@ -22,6 +25,10 @@ const FONT_FAMILY = 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Lib
 
 const toggleFromTerminalKeys = { key: '`', mod: true } as const
 
+function subscribeNothing() {
+  return () => {}
+}
+
 /**
  * Keys the terminal passes to the app instead of the shell. The sidebar toggle
  * works from the terminal everywhere, matched exactly as the app matches it.
@@ -32,6 +39,8 @@ const toggleFromTerminalKeys = { key: '`', mod: true } as const
 function isAppShortcut(event: KeyboardEvent) {
   const mac = isMacPlatform()
   if (matchesShortcut(TOGGLE_SIDEBAR_KEYS, event, mac)) return true
+  if (matchesShortcut(COMMAND_PALETTE_KEYS, event, mac)) return true
+  if (matchesShortcut(NEW_TASK_KEYS, event, mac)) return true
   const mod = mac ? event.metaKey && !event.ctrlKey : event.ctrlKey && !event.metaKey
   if (!mod || event.shiftKey) return false
   if (event.code === 'Backquote' && !event.altKey) return true
@@ -60,6 +69,7 @@ export function TerminalPanel() {
   const [started, setStarted] = useState(false)
   const [shell, setShell] = useState<Pick<StartedTerminal, 'cwd' | 'task'> | null>(null)
   const { selectedTask } = useTaskSelection()
+  const bridge = useSyncExternalStore(subscribeNothing, desktopBridge, () => undefined)
   // Until the shell reports where it started it is already on its way to the selected task.
   const selectionDiffers = shell !== null && (selectedTask?.id ?? null) !== (shell.task?.id ?? null)
   const [ended, setEnded] = useState<string | null>(null)
@@ -109,10 +119,21 @@ export function TerminalPanel() {
             New terminal
           </Button>
         ) : null}
+        {shell?.task && shell.cwd && bridge?.openInEditor && bridge.revealInFolder ? (
+          <div className={selectionDiffers && !ended ? 'flex shrink-0 items-center gap-1' : 'ml-auto flex shrink-0 items-center gap-1'}>
+            <Button variant="outline" size="xs" onClick={() => void bridge.openInEditor(shell.cwd)}>
+              Open in editor
+            </Button>
+            <Button variant="ghost" size="xs" onClick={() => void bridge.revealInFolder(shell.cwd)}>
+              <FolderOpen />
+              Reveal in folder
+            </Button>
+          </div>
+        ) : null}
         <Button
           variant="ghost"
           size="icon-xs"
-          className={selectionDiffers && !ended ? 'shrink-0' : 'ml-auto shrink-0'}
+          className={selectionDiffers && !ended || (shell?.task && bridge?.openInEditor) ? 'shrink-0' : 'ml-auto shrink-0'}
           aria-label="Close terminal"
           onClick={close}
         >
@@ -196,14 +217,14 @@ function TerminalView({
     const observer = new ResizeObserver(() => fit())
     observer.observe(host)
 
-    const scheme = window.matchMedia('(prefers-color-scheme: dark)')
     const onSchemeChange = () => {
-      // The tokens switch with the media query; read them after styles update.
+      // The tokens follow the `dark` class; read them after styles update.
       requestAnimationFrame(() => {
         term.options.theme = readTerminalTheme(host)
       })
     }
-    scheme.addEventListener('change', onSchemeChange)
+    const scheme = new MutationObserver(onSchemeChange)
+    scheme.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] })
 
     const end = (message: string) => {
       term.options.disableStdin = true
@@ -254,7 +275,7 @@ function TerminalView({
       abort.abort()
       if (id) killTerminal(id)
       observer.disconnect()
-      scheme.removeEventListener('change', onSchemeChange)
+      scheme.disconnect()
       terminalRef.current = null
       term.dispose()
     }

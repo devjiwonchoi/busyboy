@@ -4,7 +4,9 @@ import { refresh } from 'next/cache'
 import type { AlwaysAskResult } from '@/components/setup/always-ask-form'
 import { alwaysAskError, saveAlwaysAsk } from '@/server/always-ask-list'
 import { chooseCompanion, findCompanion } from '@/server/companions'
+import { updateSettings } from '@/server/config'
 import { addConnector } from '@/server/connectors'
+import { isThemeName } from '@/lib/theme'
 import { PROVIDERS, setDefaultProvider } from '@/server/providers'
 import type { ProviderId } from '@/server/runner/contract'
 
@@ -15,6 +17,15 @@ export async function setCompanionAction(id: unknown) {
   if (typeof id !== 'string' || !findCompanion(id)) throw new Error('Unknown director.')
   await chooseCompanion(id)
   refresh()
+}
+
+export async function setThemeAction(theme: unknown) {
+  if (!isThemeName(theme)) throw new Error('Unknown theme.')
+  await updateSettings((settings) => {
+    settings.theme = theme
+  })
+  // The page already applied the class and the cookie. A refresh here would reload Settings
+  // under the click that chose the theme.
 }
 
 export async function setDefaultProviderAction(id: unknown) {

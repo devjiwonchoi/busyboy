@@ -3,7 +3,9 @@ import {
   DESKTOP_BRIDGE_KEY,
   FOCUS_CHANNEL,
   INSTALL_UPDATE_CHANNEL,
+  OPEN_IN_EDITOR_CHANNEL,
   PICK_FOLDERS_CHANNEL,
+  REVEAL_IN_FOLDER_CHANNEL,
   UPDATE_READY_CHANNEL,
   UPDATE_STATE_CHANNEL,
   type DesktopBridge,
@@ -31,6 +33,8 @@ const bridge: DesktopBridge = {
     return () => void ipcRenderer.off(UPDATE_READY_CHANNEL, handler)
   },
   installUpdate: () => ipcRenderer.invoke(INSTALL_UPDATE_CHANNEL),
+  openInEditor: (folder) => ipcRenderer.invoke(OPEN_IN_EDITOR_CHANNEL, folder),
+  revealInFolder: (folder) => ipcRenderer.invoke(REVEAL_IN_FOLDER_CHANNEL, folder),
 }
 
 contextBridge.exposeInMainWorld(DESKTOP_BRIDGE_KEY, bridge)

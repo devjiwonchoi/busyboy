@@ -6,6 +6,7 @@ import { Suspense } from 'react'
 import { ConnectorAddForm } from '@/components/settings/connector-add-form'
 import { CompanionSettings } from '@/components/settings/companion-settings'
 import { DefaultAgent } from '@/components/settings/default-agent'
+import { ThemeChoice } from '@/components/settings/theme-choice'
 import { AddProjectForm } from '@/components/setup/add-project-form'
 import { AlwaysAskForm } from '@/components/setup/always-ask-form'
 import { CompanionImageForm } from '@/components/setup/companion-step'
@@ -85,6 +86,10 @@ const HEADINGS: Record<SectionId, { title: string; description: string }> = {
     title: 'Director',
     description: 'The main agent who leads every manager. Pick a character. You can change it any time.',
   },
+  appearance: {
+    title: 'Appearance',
+    description: 'BusyBoy starts in dark. System follows this device.',
+  },
   agents: {
     title: 'Agents',
     description: 'BusyBoy uses the Claude Code and Codex CLIs you already have. It never signs in for you.',
@@ -112,12 +117,18 @@ function Section({ id }: { id: SectionId }) {
         <p className="text-muted-foreground text-sm">{description}</p>
       </div>
       {id === 'companion' && <CompanionSection />}
+      {id === 'appearance' && <AppearanceSection />}
       {id === 'agents' && <AgentsSection />}
       {id === 'connectors' && <ConnectorsSection />}
       {id === 'approvals' && <ApprovalsSection />}
       {id === 'projects' && <ProjectsSection />}
     </>
   )
+}
+
+async function AppearanceSection() {
+  const { theme } = await readSettings()
+  return <ThemeChoice selected={theme} />
 }
 
 async function CompanionSection() {
