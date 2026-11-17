@@ -1,25 +1,34 @@
-'use client'
+"use client";
 
-import { PanelBottom, Settings } from 'lucide-react'
-import Link from 'next/link'
-import { useEffect, useRef, useSyncExternalStore } from 'react'
-import { usePanelRef } from 'react-resizable-panels'
-import { buttonVariants } from '@/components/ui/button'
-import { Kbd } from '@/components/ui/kbd'
-import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable'
-import { Toggle } from '@/components/ui/toggle'
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
-import { CommandPalette } from './command-palette'
-import { FocusHandler } from './focus-handler'
-import { ShellStateProvider, useShellState } from './shell-state'
-import { UpdateButton } from './update-button'
-import { formatShortcut, isMacPlatform, ShortcutRegistryProvider, TOGGLE_PANEL_KEYS, useShortcut, type Shortcut } from './shortcut-registry'
+import { PanelBottom, Settings } from "lucide-react";
+import Link from "next/link";
+import { useEffect, useRef, useSyncExternalStore } from "react";
+import { usePanelRef } from "react-resizable-panels";
+
+import { buttonVariants } from "@/components/ui/button";
+import { Kbd } from "@/components/ui/kbd";
+import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
+import { Toggle } from "@/components/ui/toggle";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+
+import { CommandPalette } from "./command-palette";
+import { FocusHandler } from "./focus-handler";
+import { ShellStateProvider, useShellState } from "./shell-state";
+import {
+  formatShortcut,
+  isMacPlatform,
+  ShortcutRegistryProvider,
+  TOGGLE_PANEL_KEYS,
+  useShortcut,
+  type Shortcut,
+} from "./shortcut-registry";
+import { UpdateButton } from "./update-button";
 
 type AppShellProps = {
-  children: React.ReactNode
-  chats: React.ReactNode
-  panel: React.ReactNode
-}
+  children: React.ReactNode;
+  chats: React.ReactNode;
+  panel: React.ReactNode;
+};
 
 export function AppShell(props: AppShellProps) {
   return (
@@ -30,34 +39,39 @@ export function AppShell(props: AppShellProps) {
         </TooltipProvider>
       </ShellStateProvider>
     </ShortcutRegistryProvider>
-  )
+  );
 }
 
-const PANEL_DEFAULT_SIZE = 288
-const PANEL_MIN_SIZE = 120
+const PANEL_DEFAULT_SIZE = 288;
+const PANEL_MIN_SIZE = 120;
 
 function useBottomPanel(panelOpen: boolean, setPanelOpen: (open: boolean) => void) {
-  const panelRef = usePanelRef()
-  const lastSize = useRef(PANEL_DEFAULT_SIZE)
+  const panelRef = usePanelRef();
+  const lastSize = useRef(PANEL_DEFAULT_SIZE);
   useEffect(() => {
-    const handle = panelRef.current
-    if (!handle) return
-    if (panelOpen && handle.isCollapsed()) handle.resize(lastSize.current)
-    if (!panelOpen && !handle.isCollapsed()) handle.collapse()
-  }, [panelOpen, panelRef])
+    const handle = panelRef.current;
+    if (!handle) return;
+    if (panelOpen && handle.isCollapsed()) handle.resize(lastSize.current);
+    if (!panelOpen && !handle.isCollapsed()) handle.collapse();
+  }, [panelOpen, panelRef]);
   const onResize = (size: { inPixels: number }) => {
-    if (size.inPixels >= PANEL_MIN_SIZE) lastSize.current = size.inPixels
-    const open = size.inPixels > 0
-    if (open !== panelOpen) setPanelOpen(open)
-  }
-  return { panelRef, onResize }
+    if (size.inPixels >= PANEL_MIN_SIZE) lastSize.current = size.inPixels;
+    const open = size.inPixels > 0;
+    if (open !== panelOpen) setPanelOpen(open);
+  };
+  return { panelRef, onResize };
 }
 
 function ShellLayout({ children, chats, panel }: AppShellProps) {
-  const { panelOpen, setPanelOpen, togglePanel } = useShellState()
-  const bottomPanel = useBottomPanel(panelOpen, setPanelOpen)
+  const { panelOpen, setPanelOpen, togglePanel } = useShellState();
+  const bottomPanel = useBottomPanel(panelOpen, setPanelOpen);
 
-  useShortcut({ id: 'toggle-panel', label: 'Toggle bottom panel', ...TOGGLE_PANEL_KEYS, run: togglePanel })
+  useShortcut({
+    id: "toggle-panel",
+    label: "Toggle bottom panel",
+    ...TOGGLE_PANEL_KEYS,
+    run: togglePanel,
+  });
 
   return (
     <div data-slot="app-shell" className="flex h-dvh min-h-0 w-full flex-col overflow-hidden">
@@ -80,7 +94,13 @@ function ShellLayout({ children, chats, panel }: AppShellProps) {
           <Tooltip>
             <TooltipTrigger
               // A link styled as a button: Base UI's Button would give it role="button".
-              render={<Link href="/settings" aria-label="Settings" className={buttonVariants({ variant: 'ghost', size: 'icon-sm' })} />}
+              render={
+                <Link
+                  href="/settings"
+                  aria-label="Settings"
+                  className={buttonVariants({ variant: "ghost", size: "icon-sm" })}
+                />
+              }
             >
               <Settings />
             </TooltipTrigger>
@@ -93,11 +113,16 @@ function ShellLayout({ children, chats, panel }: AppShellProps) {
         <main className="min-h-0 min-w-0 flex-1">
           <ResizablePanelGroup orientation="vertical">
             <ResizablePanel id="chat" minSize={160}>
-              <div data-slot="chat-area" role="region" aria-label="Chat" className="h-full overflow-auto">
+              <div
+                data-slot="chat-area"
+                role="region"
+                aria-label="Chat"
+                className="h-full overflow-auto"
+              >
                 {children}
               </div>
             </ResizablePanel>
-            <ResizableHandle className={panelOpen ? undefined : 'hidden'} />
+            <ResizableHandle className={panelOpen ? undefined : "hidden"} />
             <ResizablePanel
               id="bottom-panel"
               panelRef={bottomPanel.panelRef}
@@ -107,7 +132,12 @@ function ShellLayout({ children, chats, panel }: AppShellProps) {
               minSize={PANEL_MIN_SIZE}
               onResize={bottomPanel.onResize}
             >
-              <section data-slot="bottom-panel" aria-label="Bottom panel" hidden={!panelOpen} className="h-full">
+              <section
+                data-slot="bottom-panel"
+                aria-label="Bottom panel"
+                hidden={!panelOpen}
+                className="h-full"
+              >
                 {panel}
               </section>
             </ResizablePanel>
@@ -115,15 +145,15 @@ function ShellLayout({ children, chats, panel }: AppShellProps) {
         </main>
       </div>
     </div>
-  )
+  );
 }
 
 function subscribeNothing() {
-  return () => {}
+  return () => {};
 }
 
 function useIsMac() {
-  return useSyncExternalStore(subscribeNothing, isMacPlatform, () => true)
+  return useSyncExternalStore(subscribeNothing, isMacPlatform, () => true);
 }
 
 function ToggleButton({
@@ -133,21 +163,23 @@ function ToggleButton({
   onClick,
   icon,
 }: {
-  label: string
-  shortcut: Pick<Shortcut, 'key' | 'mod'>
-  pressed: boolean
-  onClick: () => void
-  icon: React.ReactNode
+  label: string;
+  shortcut: Pick<Shortcut, "key" | "mod">;
+  pressed: boolean;
+  onClick: () => void;
+  icon: React.ReactNode;
 }) {
-  const mac = useIsMac()
+  const mac = useIsMac();
   return (
     <Tooltip>
-      <TooltipTrigger render={<Toggle size="sm" aria-label={label} pressed={pressed} onPressedChange={onClick} />}>
+      <TooltipTrigger
+        render={<Toggle size="sm" aria-label={label} pressed={pressed} onPressedChange={onClick} />}
+      >
         {icon}
       </TooltipTrigger>
       <TooltipContent>
         {label} <Kbd>{formatShortcut(shortcut, mac)}</Kbd>
       </TooltipContent>
     </Tooltip>
-  )
+  );
 }

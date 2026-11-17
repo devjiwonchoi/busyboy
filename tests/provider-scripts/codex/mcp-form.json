@@ -33,7 +33,12 @@
           },
           "echoReply": true
         },
-        { "raw": { "method": "turn/completed", "params": { "turn": { "id": "turn-1", "status": "completed", "error": null } } } }
+        {
+          "raw": {
+            "method": "turn/completed",
+            "params": { "turn": { "id": "turn-1", "status": "completed", "error": null } }
+          }
+        }
       ]
     }
   ]

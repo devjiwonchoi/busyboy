@@ -5,7 +5,9 @@
     {
       "prompt": "What do you manage?",
       "steps": [
-        { "raw": { "type": "system", "subtype": "init", "session_id": "manager-question-session" } },
+        {
+          "raw": { "type": "system", "subtype": "init", "session_id": "manager-question-session" }
+        },
         { "echoInstructions": true }
       ]
     },

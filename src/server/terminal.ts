@@ -1,68 +1,74 @@
-import { randomUUID } from 'node:crypto'
-import { chmodSync, existsSync, statSync } from 'node:fs'
-import { userInfo } from 'node:os'
-import { dirname, join } from 'node:path'
-import { spawn, type IPty } from 'node-pty'
-import { onServerShutdown } from './shutdown'
-import { isTestMode } from './working-directory'
+import { randomUUID } from "node:crypto";
+import { chmodSync, existsSync, statSync } from "node:fs";
+import { userInfo } from "node:os";
+import { dirname, join } from "node:path";
 
-const SCROLLBACK_LIMIT = 256 * 1024
-const DETACHED_GRACE_MS = 15_000
+import { spawn, type IPty } from "node-pty";
+
+import { onServerShutdown } from "./shutdown";
+import { isTestMode } from "./working-directory";
+
+const SCROLLBACK_LIMIT = 256 * 1024;
+const DETACHED_GRACE_MS = 15_000;
 /** Waits between SIGHUP, SIGTERM, and SIGKILL when a shell will not exit. */
-const KILL_ESCALATION_MS = 1_000
-const STOP_ALL_TIMEOUT_MS = 3_000
-const MIN_SIZE = 2
-const MAX_SIZE = 1000
+const KILL_ESCALATION_MS = 1_000;
+const STOP_ALL_TIMEOUT_MS = 3_000;
+const MIN_SIZE = 2;
+const MAX_SIZE = 1000;
 
 export type TerminalEvent =
-  | { type: 'data'; data: string }
+  | { type: "data"; data: string }
   /** `killed` is set when Busyboy ended the shell rather than the shell exiting by itself. */
-  | { type: 'exit'; exitCode: number; signal?: number; killed?: boolean }
+  | { type: "exit"; exitCode: number; signal?: number; killed?: boolean };
 
-type Listener = (event: TerminalEvent) => void
+type Listener = (event: TerminalEvent) => void;
 
 type Terminal = {
-  id: string
-  cwd: string
-  shell: string
-  pty: IPty
-  scrollback: string[]
-  scrollbackLength: number
-  exited: boolean
-  exit: Extract<TerminalEvent, { type: 'exit' }> | null
-  listeners: Set<Listener>
-  detachedTimer: ReturnType<typeof setTimeout> | null
-}
+  id: string;
+  cwd: string;
+  shell: string;
+  pty: IPty;
+  scrollback: string[];
+  scrollbackLength: number;
+  exited: boolean;
+  exit: Extract<TerminalEvent, { type: "exit" }> | null;
+  listeners: Set<Listener>;
+  detachedTimer: ReturnType<typeof setTimeout> | null;
+};
 
 type Registry = {
-  terminals: Map<string, Terminal>
-  dying: Set<Terminal>
-  exitHookInstalled: boolean
-}
+  terminals: Map<string, Terminal>;
+  dying: Set<Terminal>;
+  exitHookInstalled: boolean;
+};
 
 // Kept on globalThis so `next dev` reloads of this module reuse the same
 // registry instead of orphaning live shells.
-const registryKey = Symbol.for('busyboy.terminals')
-const registry: Registry = ((globalThis as Record<symbol, unknown>)[registryKey] as Registry | undefined) ?? {
+const registryKey = Symbol.for("busyboy.terminals");
+const registry: Registry = ((globalThis as Record<symbol, unknown>)[registryKey] as
+  | Registry
+  | undefined) ?? {
   terminals: new Map(),
   dying: new Set(),
   exitHookInstalled: false,
-}
-;(globalThis as Record<symbol, unknown>)[registryKey] = registry
+};
+(globalThis as Record<symbol, unknown>)[registryKey] = registry;
 
 // node-pty 1.1.0 ships spawn-helper without the executable bit. Turbopack compiles createRequire().resolve() into a module id, not a path.
-let spawnHelperChecked = false
+let spawnHelperChecked = false;
 function ensureSpawnHelperExecutable() {
-  if (spawnHelperChecked || process.platform === 'win32') return
-  spawnHelperChecked = true
+  if (spawnHelperChecked || process.platform === "win32") return;
+  spawnHelperChecked = true;
   try {
-    const { createRequire } = process.getBuiltinModule('node:module')
-    const packageDir = dirname(createRequire(join(process.cwd(), 'noop.js')).resolve('node-pty/package.json'))
-    for (const dir of ['build/Release', `prebuilds/${process.platform}-${process.arch}`]) {
-      const helper = join(packageDir, dir, 'spawn-helper')
-      if (!existsSync(helper)) continue
-      if ((statSync(helper).mode & 0o111) === 0) chmodSync(helper, 0o755)
-      return
+    const { createRequire } = process.getBuiltinModule("node:module");
+    const packageDir = dirname(
+      createRequire(join(process.cwd(), "noop.js")).resolve("node-pty/package.json"),
+    );
+    for (const dir of ["build/Release", `prebuilds/${process.platform}-${process.arch}`]) {
+      const helper = join(packageDir, dir, "spawn-helper");
+      if (!existsSync(helper)) continue;
+      if ((statSync(helper).mode & 0o111) === 0) chmodSync(helper, 0o755);
+      return;
     }
   } catch {
     // Spawning reports the real problem if the helper is unusable.
@@ -71,77 +77,79 @@ function ensureSpawnHelperExecutable() {
 
 function accountShell() {
   try {
-    return userInfo().shell
+    return userInfo().shell;
   } catch {
-    return null
+    return null;
   }
 }
 
 // Journeys pin a plain shell with BUSYBOY_TEST_SHELL so the developer's profile cannot change what they see.
 export function loginShell(): { file: string; args: string[] } {
-  const testShell = process.env.BUSYBOY_TEST_SHELL
-  if (testShell && isTestMode()) return { file: testShell, args: [] }
-  if (process.platform === 'win32') {
-    return { file: process.env.COMSPEC || 'cmd.exe', args: [] }
+  const testShell = process.env.BUSYBOY_TEST_SHELL;
+  if (testShell && isTestMode()) return { file: testShell, args: [] };
+  if (process.platform === "win32") {
+    return { file: process.env.COMSPEC || "cmd.exe", args: [] };
   }
-  const file = process.env.SHELL || accountShell() || (process.platform === 'darwin' ? '/bin/zsh' : '/bin/sh')
-  return { file, args: ['-l'] }
+  const file =
+    process.env.SHELL || accountShell() || (process.platform === "darwin" ? "/bin/zsh" : "/bin/sh");
+  return { file, args: ["-l"] };
 }
 
 function shellEnvironment(cwd: string): Record<string, string> {
-  const env: Record<string, string> = {}
+  const env: Record<string, string> = {};
   for (const [key, value] of Object.entries(process.env)) {
-    if (value !== undefined) env[key] = value
+    if (value !== undefined) env[key] = value;
   }
-  for (const key of ['PORT', 'HOSTNAME', 'NODE_ENV', 'NEXT_RUNTIME']) delete env[key]
+  for (const key of ["PORT", "HOSTNAME", "NODE_ENV", "NEXT_RUNTIME"]) delete env[key];
   for (const key of Object.keys(env)) {
-    if (key.startsWith('BUSYBOY_') || key.startsWith('__NEXT') || key.startsWith('NEXT_PRIVATE')) delete env[key]
+    if (key.startsWith("BUSYBOY_") || key.startsWith("__NEXT") || key.startsWith("NEXT_PRIVATE"))
+      delete env[key];
   }
-  env.TERM = 'xterm-256color'
-  env.COLORTERM = 'truecolor'
-  env.TERM_PROGRAM = 'busyboy'
+  env.TERM = "xterm-256color";
+  env.COLORTERM = "truecolor";
+  env.TERM_PROGRAM = "busyboy";
   // Without a matching PWD, shells print the resolved path (/private/var/...) instead of the folder they were opened in.
-  env.PWD = cwd
-  return env
+  env.PWD = cwd;
+  return env;
 }
 
 function clampSize(value: number, fallback: number) {
-  if (!Number.isFinite(value)) return fallback
-  return Math.min(MAX_SIZE, Math.max(MIN_SIZE, Math.floor(value)))
+  if (!Number.isFinite(value)) return fallback;
+  return Math.min(MAX_SIZE, Math.max(MIN_SIZE, Math.floor(value)));
 }
 
 function emit(terminal: Terminal, event: TerminalEvent) {
-  for (const listener of terminal.listeners) listener(event)
+  for (const listener of terminal.listeners) listener(event);
 }
 
 function installExitHook() {
-  if (registry.exitHookInstalled) return
-  registry.exitHookInstalled = true
-  process.once('exit', () => {
-    const stubborn = [...registry.dying]
-    killAllTerminals()
-    for (const terminal of stubborn) signal(terminal, 'SIGKILL')
-  })
+  if (registry.exitHookInstalled) return;
+  registry.exitHookInstalled = true;
+  process.once("exit", () => {
+    const stubborn = [...registry.dying];
+    killAllTerminals();
+    for (const terminal of stubborn) signal(terminal, "SIGKILL");
+  });
   // Output streams stay open while their shell lives, so the shells have to end or the Next server never exits.
-  process.once('SIGTERM', killAllTerminals)
-  process.once('SIGINT', killAllTerminals)
+  process.once("SIGTERM", killAllTerminals);
+  process.once("SIGINT", killAllTerminals);
   // On Windows the desktop app then terminates the process, which runs none of the signal hooks.
-  onServerShutdown(stopAllTerminals)
+  onServerShutdown(stopAllTerminals);
 }
 
-export type StartTerminalOptions = { cwd: string; cols: number; rows: number }
+export type StartTerminalOptions = { cwd: string; cols: number; rows: number };
 
 export function startTerminal({ cwd, cols, rows }: StartTerminalOptions) {
-  ensureSpawnHelperExecutable()
-  const shell = loginShell()
-  const id = randomUUID()
+  ensureSpawnHelperExecutable();
+  const shell = loginShell();
+  const id = randomUUID();
   const process_ = spawn(shell.file, shell.args, {
-    name: 'xterm-256color',
+    name: "xterm-256color",
     cwd,
     cols: clampSize(cols, 80),
     rows: clampSize(rows, 24),
     env: shellEnvironment(cwd),
-  })
+  });
 
   const terminal: Terminal = {
     id,
@@ -154,99 +162,100 @@ export function startTerminal({ cwd, cols, rows }: StartTerminalOptions) {
     exit: null,
     listeners: new Set(),
     detachedTimer: null,
-  }
-  registry.terminals.set(id, terminal)
-  installExitHook()
+  };
+  registry.terminals.set(id, terminal);
+  installExitHook();
 
   process_.onData((data) => {
-    terminal.scrollback.push(data)
-    terminal.scrollbackLength += data.length
+    terminal.scrollback.push(data);
+    terminal.scrollbackLength += data.length;
     while (terminal.scrollbackLength > SCROLLBACK_LIMIT && terminal.scrollback.length > 1) {
-      terminal.scrollbackLength -= terminal.scrollback.shift()!.length
+      terminal.scrollbackLength -= terminal.scrollback.shift()!.length;
     }
-    emit(terminal, { type: 'data', data })
-  })
+    emit(terminal, { type: "data", data });
+  });
   process_.onExit(({ exitCode, signal }) => {
-    terminal.exited = true
-    registry.dying.delete(terminal)
-    if (registry.terminals.get(id) !== terminal) return
-    terminal.exit = { type: 'exit', exitCode, signal }
-    emit(terminal, terminal.exit)
-    terminal.listeners.clear()
-    if (terminal.detachedTimer) clearTimeout(terminal.detachedTimer)
-    terminal.detachedTimer = setTimeout(() => forget(terminal), DETACHED_GRACE_MS)
-  })
+    terminal.exited = true;
+    registry.dying.delete(terminal);
+    if (registry.terminals.get(id) !== terminal) return;
+    terminal.exit = { type: "exit", exitCode, signal };
+    emit(terminal, terminal.exit);
+    terminal.listeners.clear();
+    if (terminal.detachedTimer) clearTimeout(terminal.detachedTimer);
+    terminal.detachedTimer = setTimeout(() => forget(terminal), DETACHED_GRACE_MS);
+  });
 
-  scheduleDetachedKill(terminal)
-  return { id, cwd, shell: shell.file, pid: process_.pid }
+  scheduleDetachedKill(terminal);
+  return { id, cwd, shell: shell.file, pid: process_.pid };
 }
 
 function scheduleDetachedKill(terminal: Terminal) {
-  if (terminal.detachedTimer) clearTimeout(terminal.detachedTimer)
+  if (terminal.detachedTimer) clearTimeout(terminal.detachedTimer);
   terminal.detachedTimer = setTimeout(() => {
-    if (terminal.listeners.size === 0) killTerminal(terminal.id)
-  }, DETACHED_GRACE_MS)
+    if (terminal.listeners.size === 0) killTerminal(terminal.id);
+  }, DETACHED_GRACE_MS);
 }
 
 export function attachTerminal(id: string, listener: Listener): (() => void) | null {
-  const terminal = registry.terminals.get(id)
-  if (!terminal) return null
+  const terminal = registry.terminals.get(id);
+  if (!terminal) return null;
   const replay = () => {
-    if (terminal.scrollback.length > 0) listener({ type: 'data', data: terminal.scrollback.join('') })
-  }
+    if (terminal.scrollback.length > 0)
+      listener({ type: "data", data: terminal.scrollback.join("") });
+  };
   if (terminal.exit) {
-    replay()
-    listener(terminal.exit)
-    return () => {}
+    replay();
+    listener(terminal.exit);
+    return () => {};
   }
   if (terminal.detachedTimer) {
-    clearTimeout(terminal.detachedTimer)
-    terminal.detachedTimer = null
+    clearTimeout(terminal.detachedTimer);
+    terminal.detachedTimer = null;
   }
-  replay()
-  terminal.listeners.add(listener)
+  replay();
+  terminal.listeners.add(listener);
   return () => {
-    if (!terminal.listeners.delete(listener)) return
-    if (terminal.listeners.size === 0 && registry.terminals.has(id)) scheduleDetachedKill(terminal)
-  }
+    if (!terminal.listeners.delete(listener)) return;
+    if (terminal.listeners.size === 0 && registry.terminals.has(id)) scheduleDetachedKill(terminal);
+  };
 }
 
 function withLivePty(id: string, action: (pty: IPty) => void) {
-  const terminal = registry.terminals.get(id)
-  if (!terminal || terminal.exited) return false
+  const terminal = registry.terminals.get(id);
+  if (!terminal || terminal.exited) return false;
   try {
-    action(terminal.pty)
-    return true
+    action(terminal.pty);
+    return true;
   } catch {
-    return false
+    return false;
   }
 }
 
 export function writeTerminal(id: string, data: string) {
-  return withLivePty(id, (pty) => pty.write(data))
+  return withLivePty(id, (pty) => pty.write(data));
 }
 
 export function resizeTerminal(id: string, cols: number, rows: number) {
-  return withLivePty(id, (pty) => pty.resize(clampSize(cols, pty.cols), clampSize(rows, pty.rows)))
+  return withLivePty(id, (pty) => pty.resize(clampSize(cols, pty.cols), clampSize(rows, pty.rows)));
 }
 
 function forget(terminal: Terminal) {
-  if (terminal.detachedTimer) clearTimeout(terminal.detachedTimer)
-  terminal.detachedTimer = null
-  if (registry.terminals.get(terminal.id) === terminal) registry.terminals.delete(terminal.id)
+  if (terminal.detachedTimer) clearTimeout(terminal.detachedTimer);
+  terminal.detachedTimer = null;
+  if (registry.terminals.get(terminal.id) === terminal) registry.terminals.delete(terminal.id);
 }
 
-function finish(terminal: Terminal, event: Extract<TerminalEvent, { type: 'exit' }>) {
-  forget(terminal)
-  emit(terminal, event)
-  terminal.listeners.clear()
+function finish(terminal: Terminal, event: Extract<TerminalEvent, { type: "exit" }>) {
+  forget(terminal);
+  emit(terminal, event);
+  terminal.listeners.clear();
 }
 
-function signal(terminal: Terminal, name?: 'SIGHUP' | 'SIGTERM' | 'SIGKILL') {
-  if (terminal.exited) return
+function signal(terminal: Terminal, name?: "SIGHUP" | "SIGTERM" | "SIGKILL") {
+  if (terminal.exited) return;
   try {
     // node-pty on Windows takes no signal. Its kill ends the console's process tree.
-    terminal.pty.kill(process.platform === 'win32' ? undefined : name)
+    terminal.pty.kill(process.platform === "win32" ? undefined : name);
   } catch {
     // Already gone.
   }
@@ -254,39 +263,39 @@ function signal(terminal: Terminal, name?: 'SIGHUP' | 'SIGTERM' | 'SIGKILL') {
 
 // SIGHUP is what a closed terminal window sends, and the shell passes it on to its jobs.
 export function killTerminal(id: string) {
-  const terminal = registry.terminals.get(id)
-  if (!terminal) return false
+  const terminal = registry.terminals.get(id);
+  if (!terminal) return false;
   if (terminal.exited) {
-    forget(terminal)
-    return true
+    forget(terminal);
+    return true;
   }
-  finish(terminal, { type: 'exit', exitCode: -1, killed: true })
-  signal(terminal, 'SIGHUP')
-  registry.dying.add(terminal)
-  if (process.platform === 'win32') return true
-  const escalate = (steps: Array<'SIGTERM' | 'SIGKILL'>) => {
-    const [next, ...rest] = steps
-    if (!next) return
+  finish(terminal, { type: "exit", exitCode: -1, killed: true });
+  signal(terminal, "SIGHUP");
+  registry.dying.add(terminal);
+  if (process.platform === "win32") return true;
+  const escalate = (steps: Array<"SIGTERM" | "SIGKILL">) => {
+    const [next, ...rest] = steps;
+    if (!next) return;
     setTimeout(() => {
-      if (terminal.exited) return
-      signal(terminal, next)
-      escalate(rest)
-    }, KILL_ESCALATION_MS).unref()
-  }
-  escalate(['SIGTERM', 'SIGKILL'])
-  return true
+      if (terminal.exited) return;
+      signal(terminal, next);
+      escalate(rest);
+    }, KILL_ESCALATION_MS).unref();
+  };
+  escalate(["SIGTERM", "SIGKILL"]);
+  return true;
 }
 
 export function killAllTerminals() {
   for (const [id, terminal] of registry.terminals) {
-    if (!terminal.exited) killTerminal(id)
+    if (!terminal.exited) killTerminal(id);
   }
 }
 
 async function stopAllTerminals() {
-  killAllTerminals()
-  const deadline = Date.now() + STOP_ALL_TIMEOUT_MS
+  killAllTerminals();
+  const deadline = Date.now() + STOP_ALL_TIMEOUT_MS;
   while (registry.dying.size > 0 && Date.now() < deadline) {
-    await new Promise((resolve) => setTimeout(resolve, 50))
+    await new Promise((resolve) => setTimeout(resolve, 50));
   }
 }

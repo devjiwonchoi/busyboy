@@ -2,20 +2,20 @@
 // reload or the Back button lands on the same one without client state.
 
 export const SECTIONS = [
-  { id: 'companion', title: 'Director' },
-  { id: 'appearance', title: 'Appearance' },
-  { id: 'agents', title: 'Agents' },
-  { id: 'connectors', title: 'Connectors' },
-  { id: 'approvals', title: 'Approvals' },
-  { id: 'projects', title: 'Projects' },
-] as const
+  { id: "companion", title: "Director" },
+  { id: "appearance", title: "Appearance" },
+  { id: "agents", title: "Agents" },
+  { id: "connectors", title: "Connectors" },
+  { id: "approvals", title: "Approvals" },
+  { id: "projects", title: "Projects" },
+] as const;
 
-export type SectionId = (typeof SECTIONS)[number]['id']
+export type SectionId = (typeof SECTIONS)[number]["id"];
 
 export function parseSection(value: unknown): SectionId {
-  return SECTIONS.find(({ id }) => id === value)?.id ?? 'companion'
+  return SECTIONS.find(({ id }) => id === value)?.id ?? "companion";
 }
 
 export function sectionHref(id: SectionId) {
-  return id === 'companion' ? '/settings' : `/settings?section=${id}`
+  return id === "companion" ? "/settings" : `/settings?section=${id}`;
 }

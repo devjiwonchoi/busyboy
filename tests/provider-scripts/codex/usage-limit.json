@@ -25,7 +25,11 @@
               "turn": {
                 "id": "turn-1",
                 "status": "failed",
-                "error": { "message": "You've hit your usage limit.", "codexErrorInfo": "usageLimitExceeded", "additionalDetails": null }
+                "error": {
+                  "message": "You've hit your usage limit.",
+                  "codexErrorInfo": "usageLimitExceeded",
+                  "additionalDetails": null
+                }
               }
             }
           }

@@ -1,8 +1,9 @@
-import type { ChatEntry } from '@/server/director/chat'
-import { Badge } from '@/components/ui/badge'
-import { CardShell, CardShellBody, CardShellHeader } from './card-shell'
+import { Badge } from "@/components/ui/badge";
+import type { ChatEntry } from "@/server/director/chat";
 
-export function ClosedCard({ entry }: { entry: Extract<ChatEntry, { kind: 'card' }> }) {
+import { CardShell, CardShellBody, CardShellHeader } from "./card-shell";
+
+export function ClosedCard({ entry }: { entry: Extract<ChatEntry, { kind: "card" }> }) {
   return (
     <CardShell label={`Card from ${entry.project} · ${entry.taskTitle}`}>
       <CardShellHeader title={`${entry.project} · ${entry.taskTitle}`} />
@@ -11,5 +12,5 @@ export function ClosedCard({ entry }: { entry: Extract<ChatEntry, { kind: 'card'
         <Badge variant="outline">{entry.outcome}</Badge>
       </CardShellBody>
     </CardShell>
-  )
+  );
 }

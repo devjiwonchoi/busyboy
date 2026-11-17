@@ -4,7 +4,9 @@
   "turns": [
     {
       "prompt": "/align",
-      "steps": [{ "event": { "type": "text", "itemId": "skill", "text": "Using the align skill." } }]
+      "steps": [
+        { "event": { "type": "text", "itemId": "skill", "text": "Using the align skill." } }
+      ]
     },
     {
       "prompt": "@README.md",

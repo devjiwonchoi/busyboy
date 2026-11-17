@@ -2,7 +2,7 @@ name: CI
 
 on:
   pull_request:
-    branches: [main, v2, 'v2-*', 'cursor/**']
+    branches: [main, v2, "v2-*", "cursor/**"]
   push:
     branches: [main, v2]
 
@@ -14,7 +14,7 @@ permissions:
   contents: read
 
 env:
-  NODE_VERSION: '24.x'
+  NODE_VERSION: "24.x"
 
 jobs:
   checks:

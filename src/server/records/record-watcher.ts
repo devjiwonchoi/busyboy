@@ -1,144 +1,154 @@
-import { watch, type FSWatcher } from 'node:fs'
-import { basename, dirname } from 'node:path'
-import { SETTINGS_FILE } from '../config'
-import { pathKey } from '../paths'
-import { readTasksAt, subscribeToTasks, TASKS_FILE, type TaskRecord } from '../tasks'
-import { readProjectGraph, type ProjectGraph } from './project-graph'
-import { taskRecordDirectory } from './record-location'
+import { watch, type FSWatcher } from "node:fs";
+import { basename, dirname } from "node:path";
 
+import { SETTINGS_FILE } from "../config";
+import { pathKey } from "../paths";
+import { readTasksAt, subscribeToTasks, TASKS_FILE, type TaskRecord } from "../tasks";
+import { readProjectGraph, type ProjectGraph } from "./project-graph";
+import { taskRecordDirectory } from "./record-location";
 
 // Changes arrive in bursts, so one rebuild per burst still lands inside 2 seconds.
-const DEBOUNCE_MS = 100
+const DEBOUNCE_MS = 100;
 // On macOS libuv shares one FSEvents stream and drops events when a watch is added.
-const RESCAN_MS = 1_000
+const RESCAN_MS = 1_000;
 
-type Listener = (graph: ProjectGraph) => void
+type Listener = (graph: ProjectGraph) => void;
 
 type Hub = {
-  folder: string
-  listeners: Set<Listener>
-  graph: ProjectGraph | null
-  json: string
-  watchers: Map<string, FSWatcher>
-  timer: ReturnType<typeof setTimeout> | null
-  rescan: ReturnType<typeof setInterval>
-  refreshing: Promise<void> | null
-  dirty: boolean
-  closed: boolean
-  stopTasks: () => void
-}
+  folder: string;
+  listeners: Set<Listener>;
+  graph: ProjectGraph | null;
+  json: string;
+  watchers: Map<string, FSWatcher>;
+  timer: ReturnType<typeof setTimeout> | null;
+  rescan: ReturnType<typeof setInterval>;
+  refreshing: Promise<void> | null;
+  dirty: boolean;
+  closed: boolean;
+  stopTasks: () => void;
+};
 
 // On globalThis so dev reloads of this module keep one hub (and one set of watchers) per folder.
-const HUBS_KEY = Symbol.for('busyboy.record-hubs')
-const globalStore = globalThis as typeof globalThis & { [HUBS_KEY]?: Map<string, Hub> }
-const hubs = (globalStore[HUBS_KEY] ??= new Map())
+const HUBS_KEY = Symbol.for("busyboy.record-hubs");
+const globalStore = globalThis as typeof globalThis & { [HUBS_KEY]?: Map<string, Hub> };
+const hubs = (globalStore[HUBS_KEY] ??= new Map());
 
 function schedule(hub: Hub) {
-  if (hub.closed) return
-  if (hub.timer) clearTimeout(hub.timer)
+  if (hub.closed) return;
+  if (hub.timer) clearTimeout(hub.timer);
   hub.timer = setTimeout(() => {
-    hub.timer = null
-    void refresh(hub)
-  }, DEBOUNCE_MS)
+    hub.timer = null;
+    void refresh(hub);
+  }, DEBOUNCE_MS);
 }
 
 function refresh(hub: Hub): Promise<void> {
   if (hub.refreshing) {
-    hub.dirty = true
-    return hub.refreshing
+    hub.dirty = true;
+    return hub.refreshing;
   }
   hub.refreshing = (async () => {
     do {
-      hub.dirty = false
-      const tasks = await readTasksAt(hub.folder).catch(() => null)
-      if (hub.closed) return
-      await rewatch(hub, tasks)
-      const graph = await readProjectGraph(hub.folder)
-      if (hub.closed) return
-      const json = JSON.stringify(graph)
-      if (json === hub.json) continue
-      hub.graph = graph
-      hub.json = json
+      hub.dirty = false;
+      const tasks = await readTasksAt(hub.folder).catch(() => null);
+      if (hub.closed) return;
+      await rewatch(hub, tasks);
+      const graph = await readProjectGraph(hub.folder);
+      if (hub.closed) return;
+      const json = JSON.stringify(graph);
+      if (json === hub.json) continue;
+      hub.graph = graph;
+      hub.json = json;
       for (const listener of hub.listeners) {
         try {
-          listener(graph)
+          listener(graph);
         } catch (error) {
-          console.error('[records] a project graph listener failed:', error)
+          console.error("[records] a project graph listener failed:", error);
         }
       }
-    } while (hub.dirty)
+    } while (hub.dirty);
   })().finally(() => {
-    hub.refreshing = null
-  })
-  return hub.refreshing
+    hub.refreshing = null;
+  });
+  return hub.refreshing;
 }
 
-function addWatcher(hub: Hub, path: string, recursive: boolean, accept: (name: string | null) => boolean) {
-  if (hub.closed) return
-  const key = `${recursive ? 'r' : 'd'}:${path}`
-  if (hub.watchers.has(key)) return
+function addWatcher(
+  hub: Hub,
+  path: string,
+  recursive: boolean,
+  accept: (name: string | null) => boolean,
+) {
+  if (hub.closed) return;
+  const key = `${recursive ? "r" : "d"}:${path}`;
+  if (hub.watchers.has(key)) return;
   try {
     const watcher = watch(path, { recursive }, (_event, name) => {
-      if (accept(typeof name === 'string' ? name : null)) schedule(hub)
-    })
-    watcher.on('error', () => {
-      watcher.close()
-      hub.watchers.delete(key)
-      schedule(hub)
-    })
-    hub.watchers.set(key, watcher)
+      if (accept(typeof name === "string" ? name : null)) schedule(hub);
+    });
+    watcher.on("error", () => {
+      watcher.close();
+      hub.watchers.delete(key);
+      schedule(hub);
+    });
+    hub.watchers.set(key, watcher);
   } catch {
     // Not there yet: the parent folder's watcher reports when it appears.
   }
 }
 
 async function rewatch(hub: Hub, tasks: TaskRecord[] | null) {
-  const wanted = new Set<string>()
+  const wanted = new Set<string>();
   const want = (path: string, recursive: boolean, accept: (name: string | null) => boolean) => {
-    wanted.add(`${recursive ? 'r' : 'd'}:${path}`)
-    addWatcher(hub, path, recursive, accept)
-  }
-  want(hub.folder, false, (name) => name === null || name === TASKS_FILE || name === SETTINGS_FILE)
-  if (!tasks) return
+    wanted.add(`${recursive ? "r" : "d"}:${path}`);
+    addWatcher(hub, path, recursive, accept);
+  };
+  want(hub.folder, false, (name) => name === null || name === TASKS_FILE || name === SETTINGS_FILE);
+  if (!tasks) return;
   for (const task of tasks) {
-    if (typeof task?.worktree !== 'string' || typeof task.id !== 'string' || typeof task.project !== 'string') continue
-    if (task.kind === 'subagent') continue
-    if (task.archivedAt) continue
-    const directory = await taskRecordDirectory(hub.folder, task)
-    if (hub.closed) return
-    if (typeof directory !== 'string') continue
-    const parent = dirname(directory)
-    const name = basename(directory)
-    want(parent, false, (entry) => entry === null || entry === name)
-    want(directory, true, () => true)
+    if (
+      typeof task?.worktree !== "string" ||
+      typeof task.id !== "string" ||
+      typeof task.project !== "string"
+    )
+      continue;
+    if (task.kind === "subagent") continue;
+    if (task.archivedAt) continue;
+    const directory = await taskRecordDirectory(hub.folder, task);
+    if (hub.closed) return;
+    if (typeof directory !== "string") continue;
+    const parent = dirname(directory);
+    const name = basename(directory);
+    want(parent, false, (entry) => entry === null || entry === name);
+    want(directory, true, () => true);
   }
   for (const [key, watcher] of hub.watchers) {
     if (!wanted.has(key)) {
-      watcher.close()
-      hub.watchers.delete(key)
+      watcher.close();
+      hub.watchers.delete(key);
     }
   }
 }
 
 function close(hub: Hub) {
-  hub.closed = true
-  if (hub.timer) clearTimeout(hub.timer)
-  clearInterval(hub.rescan)
-  for (const watcher of hub.watchers.values()) watcher.close()
-  hub.watchers.clear()
-  hub.stopTasks()
-  hubs.delete(pathKey(hub.folder))
+  hub.closed = true;
+  if (hub.timer) clearTimeout(hub.timer);
+  clearInterval(hub.rescan);
+  for (const watcher of hub.watchers.values()) watcher.close();
+  hub.watchers.clear();
+  hub.stopTasks();
+  hubs.delete(pathKey(hub.folder));
 }
 
 export async function subscribeToProjectGraph(folder: string, listener: Listener) {
-  const key = pathKey(folder)
-  let hub = hubs.get(key)
+  const key = pathKey(folder);
+  let hub = hubs.get(key);
   if (!hub) {
     const created: Hub = {
       folder,
       listeners: new Set(),
       graph: null,
-      json: '',
+      json: "",
       watchers: new Map(),
       timer: null,
       rescan: setInterval(() => void refresh(created), RESCAN_MS),
@@ -146,20 +156,20 @@ export async function subscribeToProjectGraph(folder: string, listener: Listener
       dirty: false,
       closed: false,
       stopTasks: subscribeToTasks(folder, () => schedule(created)),
-    }
-    hubs.set(key, (hub = created))
+    };
+    hubs.set(key, (hub = created));
   }
-  const current = hub
-  let sent = false
+  const current = hub;
+  let sent = false;
   const deliver: Listener = (graph) => {
-    sent = true
-    listener(graph)
-  }
-  current.listeners.add(deliver)
-  if (!current.graph) await refresh(current)
-  if (!sent && current.graph) deliver(current.graph)
+    sent = true;
+    listener(graph);
+  };
+  current.listeners.add(deliver);
+  if (!current.graph) await refresh(current);
+  if (!sent && current.graph) deliver(current.graph);
   return () => {
-    if (!current.listeners.delete(deliver)) return
-    if (current.listeners.size === 0 && !current.closed) close(current)
-  }
+    if (!current.listeners.delete(deliver)) return;
+    if (current.listeners.size === 0 && !current.closed) close(current);
+  };
 }

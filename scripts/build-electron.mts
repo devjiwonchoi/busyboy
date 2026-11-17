@@ -1,21 +1,22 @@
-import { join } from 'node:path'
-import { build } from 'esbuild'
+import { join } from "node:path";
 
-const root = join(import.meta.dirname, '..')
+import { build } from "esbuild";
+
+const root = join(import.meta.dirname, "..");
 
 await build({
   entryPoints: {
-    main: join(root, 'electron', 'main.ts'),
+    main: join(root, "electron", "main.ts"),
     // Sandboxed preload scripts cannot require other files, so preload is bundled on its own.
-    preload: join(root, 'electron', 'preload.ts'),
+    preload: join(root, "electron", "preload.ts"),
   },
-  outdir: join(root, 'dist-electron'),
-  outExtension: { '.js': '.cjs' },
+  outdir: join(root, "dist-electron"),
+  outExtension: { ".js": ".cjs" },
   bundle: true,
-  platform: 'node',
-  format: 'cjs',
-  target: 'node22',
-  external: ['electron'],
-  sourcemap: 'linked',
-  logLevel: 'warning',
-})
+  platform: "node",
+  format: "cjs",
+  target: "node22",
+  external: ["electron"],
+  sourcemap: "linked",
+  logLevel: "warning",
+});

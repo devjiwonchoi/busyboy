@@ -1,4 +1,5 @@
-import { contextBridge, ipcRenderer, webUtils } from 'electron'
+import { contextBridge, ipcRenderer, webUtils } from "electron";
+
 import {
   DESKTOP_BRIDGE_KEY,
   FOCUS_CHANNEL,
@@ -9,7 +10,7 @@ import {
   UPDATE_READY_CHANNEL,
   UPDATE_STATE_CHANNEL,
   type DesktopBridge,
-} from '../src/lib/desktop-bridge'
+} from "../src/lib/desktop-bridge";
 
 // Sandboxed, with context isolation, so the page gets these functions and nothing else from Electron.
 const bridge: DesktopBridge = {
@@ -18,22 +19,22 @@ const bridge: DesktopBridge = {
   onFocus: (listener) => {
     // Only the target text reaches the page, never the IPC event and its sender.
     const handler = (_event: Electron.IpcRendererEvent, target: unknown) => {
-      if (typeof target === 'string') listener(target)
-    }
-    ipcRenderer.on(FOCUS_CHANNEL, handler)
-    return () => void ipcRenderer.off(FOCUS_CHANNEL, handler)
+      if (typeof target === "string") listener(target);
+    };
+    ipcRenderer.on(FOCUS_CHANNEL, handler);
+    return () => void ipcRenderer.off(FOCUS_CHANNEL, handler);
   },
   readyUpdate: () => ipcRenderer.invoke(UPDATE_STATE_CHANNEL),
   onUpdateReady: (listener) => {
     const handler = (_event: Electron.IpcRendererEvent, version: unknown) => {
-      if (typeof version === 'string') listener(version)
-    }
-    ipcRenderer.on(UPDATE_READY_CHANNEL, handler)
-    return () => void ipcRenderer.off(UPDATE_READY_CHANNEL, handler)
+      if (typeof version === "string") listener(version);
+    };
+    ipcRenderer.on(UPDATE_READY_CHANNEL, handler);
+    return () => void ipcRenderer.off(UPDATE_READY_CHANNEL, handler);
   },
   installUpdate: () => ipcRenderer.invoke(INSTALL_UPDATE_CHANNEL),
   openInEditor: (folder) => ipcRenderer.invoke(OPEN_IN_EDITOR_CHANNEL, folder),
   revealInFolder: (folder) => ipcRenderer.invoke(REVEAL_IN_FOLDER_CHANNEL, folder),
-}
+};
 
-contextBridge.exposeInMainWorld(DESKTOP_BRIDGE_KEY, bridge)
+contextBridge.exposeInMainWorld(DESKTOP_BRIDGE_KEY, bridge);

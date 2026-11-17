@@ -1,20 +1,21 @@
-import Link from 'next/link'
-import { stepHref, type StepId } from '@/app/setup/steps'
-import { Button, buttonVariants } from '@/components/ui/button'
+import Link from "next/link";
+
+import { stepHref, type StepId } from "@/app/setup/steps";
+import { Button, buttonVariants } from "@/components/ui/button";
 
 export function StepFooter({
   previous,
   hint,
   children,
 }: {
-  previous?: StepId
-  hint?: string
-  children: React.ReactNode
+  previous?: StepId;
+  hint?: string;
+  children: React.ReactNode;
 }) {
   return (
     <div className="flex flex-wrap items-center gap-3 border-t pt-6">
       {previous ? (
-        <Link href={stepHref(previous)} className={buttonVariants({ variant: 'outline' })}>
+        <Link href={stepHref(previous)} className={buttonVariants({ variant: "outline" })}>
           Back
         </Link>
       ) : (
@@ -27,5 +28,5 @@ export function StepFooter({
         {children}
       </div>
     </div>
-  )
+  );
 }

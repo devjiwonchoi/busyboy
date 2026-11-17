@@ -17,6 +17,7 @@ The user maintains `README.md`. Do not change it.
 ## Build UI from the component library
 
 The UI library is shadcn on Base UI (`base-mira` style, see `components.json`) with the `@coss` and `@spell` registries.
+
 - Use a component from, in order: the shadcn base components, then `@coss`, then `@spell`. Add one with `pnpm shadcn add <name>`, `pnpm shadcn add @coss/<name>`, or `pnpm shadcn add @spell/<name>`.
 - Edit an added component only when needed, and say why in a comment next to the change.
 - Write a custom component only when none of them supports the need, and say why in the commit message.

@@ -1,13 +1,14 @@
-'use client'
+"use client";
 
-import { useActionState } from 'react'
-import { addTypedProjectAction, type FormResult } from '@/app/setup/actions'
-import { Button } from '@/components/ui/button'
-import { Field, FieldError, FieldLabel } from '@/components/ui/field'
-import { Input } from '@/components/ui/input'
+import { useActionState } from "react";
+
+import { addTypedProjectAction, type FormResult } from "@/app/setup/actions";
+import { Button } from "@/components/ui/button";
+import { Field, FieldError, FieldLabel } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
 
 export function AddProjectForm() {
-  const [state, action, pending] = useActionState<FormResult, FormData>(addTypedProjectAction, {})
+  const [state, action, pending] = useActionState<FormResult, FormData>(addTypedProjectAction, {});
   return (
     <form action={action}>
       <Field data-invalid={Boolean(state.error)}>
@@ -21,7 +22,7 @@ export function AddProjectForm() {
             autoComplete="off"
             spellCheck={false}
             aria-invalid={Boolean(state.error)}
-            aria-describedby={state.error ? 'project-folder-error' : undefined}
+            aria-describedby={state.error ? "project-folder-error" : undefined}
             className="font-mono"
           />
           <Button type="submit" variant="outline" disabled={pending}>
@@ -31,5 +32,5 @@ export function AddProjectForm() {
         {state.error && <FieldError id="project-folder-error">{state.error}</FieldError>}
       </Field>
     </form>
-  )
+  );
 }

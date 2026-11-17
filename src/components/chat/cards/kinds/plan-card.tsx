@@ -1,30 +1,39 @@
-'use client'
+"use client";
 
-import { useId, useState } from 'react'
-import { approveCardAction } from '@/app/(main)/director-actions'
-import { cardGroupLabel, type PlanCard } from '@/server/cards/model'
-import { PhaseMark } from '../../phase-mark'
-import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { Markdown } from '../../markdown'
-import type { CardViewProps } from '../card-view-props'
-import { CardActionError, useCardActions } from '../card-actions'
-import { CardShell, CardShellActions, CardShellBody, CardShellHeader } from '../card-shell'
+import { useId, useState } from "react";
+
+import { approveCardAction } from "@/app/(main)/director-actions";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { cardGroupLabel, type PlanCard } from "@/server/cards/model";
+
+import { Markdown } from "../../markdown";
+import { PhaseMark } from "../../phase-mark";
+import { CardActionError, useCardActions } from "../card-actions";
+import { CardShell, CardShellActions, CardShellBody, CardShellHeader } from "../card-shell";
+import type { CardViewProps } from "../card-view-props";
 
 export function PlanCardView({ card }: CardViewProps<PlanCard>) {
-  const { pending, replying, onReplyChange, run } = useCardActions()
-  const [details, setDetails] = useState(false)
-  const endStateId = useId()
+  const { pending, replying, onReplyChange, run } = useCardActions();
+  const [details, setDetails] = useState(false);
+  const endStateId = useId();
 
   function approve() {
-    setDetails(false)
-    void run(() => approveCardAction(card.id), 'The plan could not be approved. Try again.')
+    setDetails(false);
+    void run(() => approveCardAction(card.id), "The plan could not be approved. Try again.");
   }
 
   function requestChanges() {
-    setDetails(false)
-    onReplyChange(true)
+    setDetails(false);
+    onReplyChange(true);
   }
 
   return (
@@ -56,7 +65,12 @@ export function PlanCardView({ card }: CardViewProps<PlanCard>) {
         <CardActionError />
       </CardShellBody>
       <CardShellActions>
-        <Button type="button" variant="ghost" className="text-muted-foreground px-2 font-normal" onClick={() => setDetails(true)}>
+        <Button
+          type="button"
+          variant="ghost"
+          className="text-muted-foreground px-2 font-normal"
+          onClick={() => setDetails(true)}
+        >
           View details
         </Button>
         <Button type="button" className="px-3" disabled={pending} onClick={approve}>
@@ -71,7 +85,10 @@ export function PlanCardView({ card }: CardViewProps<PlanCard>) {
                 {card.project} · {card.taskTitle}
               </DialogDescription>
               {/* Warning tint: this plan is still a draft waiting on the user. */}
-              <Badge variant="outline" className="border-warning/40 bg-warning/10 text-warning-foreground">
+              <Badge
+                variant="outline"
+                className="border-warning/40 bg-warning/10 text-warning-foreground"
+              >
                 Waiting for approval
               </Badge>
             </div>
@@ -81,7 +98,13 @@ export function PlanCardView({ card }: CardViewProps<PlanCard>) {
             <Markdown text={card.plan} />
           </div>
           <DialogFooter className="-mx-4 border-t px-4 pt-3">
-            <Button type="button" size="sm" variant="outline" disabled={pending} onClick={requestChanges}>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={pending}
+              onClick={requestChanges}
+            >
               Request changes
             </Button>
             <Button type="button" size="sm" disabled={pending} onClick={approve}>
@@ -91,5 +114,5 @@ export function PlanCardView({ card }: CardViewProps<PlanCard>) {
         </DialogContent>
       </Dialog>
     </CardShell>
-  )
+  );
 }

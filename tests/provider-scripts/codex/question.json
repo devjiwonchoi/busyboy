@@ -27,10 +27,7 @@
                 "questions": [
                   {
                     "title": "Which color do you prefer?",
-                    "options": [
-                      "Red",
-                      "Blue"
-                    ]
+                    "options": ["Red", "Blue"]
                   }
                 ]
               }

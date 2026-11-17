@@ -1,5 +1,5 @@
-import { TerminalPanel } from '@/components/terminal/terminal-panel'
+import { TerminalPanel } from "@/components/terminal/terminal-panel";
 
 export default function PanelDefault() {
-  return <TerminalPanel />
+  return <TerminalPanel />;
 }

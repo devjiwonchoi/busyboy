@@ -1,14 +1,23 @@
-'use client'
+"use client";
 
-import { useOptimistic, useTransition } from 'react'
-import { setCompanionAction } from '@/app/settings/actions'
-import { CharacterNote, CompanionChoices } from '@/components/setup/companion-step'
-import type { Companion } from '@/server/companions'
+import { useOptimistic, useTransition } from "react";
 
-export function CompanionSettings({ companions, selected, imageUrl }: { companions: Companion[]; selected?: string; imageUrl?: string }) {
-  const [value, setValue] = useOptimistic(selected)
-  const [, startTransition] = useTransition()
-  const chosen = companions.find((companion) => companion.id === value)
+import { setCompanionAction } from "@/app/settings/actions";
+import { CharacterNote, CompanionChoices } from "@/components/setup/companion-step";
+import type { Companion } from "@/server/companions";
+
+export function CompanionSettings({
+  companions,
+  selected,
+  imageUrl,
+}: {
+  companions: Companion[];
+  selected?: string;
+  imageUrl?: string;
+}) {
+  const [value, setValue] = useOptimistic(selected);
+  const [, startTransition] = useTransition();
+  const chosen = companions.find((companion) => companion.id === value);
   return (
     <div className="space-y-6">
       <CompanionChoices
@@ -17,8 +26,8 @@ export function CompanionSettings({ companions, selected, imageUrl }: { companio
         imageUrl={imageUrl}
         onChange={(id) =>
           startTransition(async () => {
-            setValue(id)
-            await setCompanionAction(id)
+            setValue(id);
+            await setCompanionAction(id);
           })
         }
       />
@@ -36,5 +45,5 @@ export function CompanionSettings({ companions, selected, imageUrl }: { companio
       )}
       <CharacterNote />
     </div>
-  )
+  );
 }
