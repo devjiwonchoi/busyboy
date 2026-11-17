@@ -1,5 +1,5 @@
 // utilityProcess.fork cannot start a server that lives inside app.asar.
-import { execFileSync } from 'node:child_process'
+import { execFileSync, spawnSync } from 'node:child_process'
 import { cpSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { basename, join } from 'node:path'
@@ -43,8 +43,6 @@ const version = releaseVersion()
 const release = args.has('--release')
 const mac = process.platform === 'darwin'
 
-// The identity every release has used. Apps already installed only accept an
-// update signed by this team with this bundle id, so neither may change.
 const APP_ID = 'dev.jiwon.busyboy'
 const DEVELOPER_TEAM = '5PA4R2B5FF'
 /** The requirement BusyBoy 0.0.22 and earlier check before they install an update. */
@@ -170,8 +168,16 @@ await checkPackagedServer(packagedServer)
 
 if (release && mac) {
   const appBundle = join(executable, '..', '..', '..')
+  if (APP_ID !== 'dev.jiwon.busyboy' || DEVELOPER_TEAM !== '5PA4R2B5FF') {
+    throw new Error('Installed apps only accept the bundle id dev.jiwon.busyboy signed by team 5PA4R2B5FF.')
+  }
   // Gatekeeper's own check that the app is signed and notarized.
   execFileSync('spctl', ['--assess', '--type', 'execute', '-vv', appBundle], { stdio: 'inherit' })
+  const signed = spawnSync('codesign', ['-d', '--verbose=2', appBundle], { encoding: 'utf8' })
+  const details = `${signed.stdout ?? ''}\n${signed.stderr ?? ''}`
+  if (!details.includes(`Identifier=${APP_ID}`) || !details.includes(`TeamIdentifier=${DEVELOPER_TEAM}`)) {
+    throw new Error(`The signed app is not ${APP_ID} from team ${DEVELOPER_TEAM}.\n${details}`)
+  }
   // BusyBoy 0.0.22 unpacks the ZIP with ditto and checks this signature requirement.
   const zip = join(outputDir, `${manifest.productName}-${version}-${builder.Arch[builder.archFromString(process.arch)]}.zip`)
   const unpacked = mkdtempSync(join(tmpdir(), 'busyboy-update-check-'))

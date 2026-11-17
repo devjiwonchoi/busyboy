@@ -91,11 +91,7 @@ async function* input(): AsyncGenerator<SDKUserMessage> {
   }
 }
 
-/**
- * A stand-in for busyboy's MCP endpoint, for recording the Director. Its tool
- * definitions copy src/server/mcp-tools.ts and src/server/memory-tools.ts,
- * which cannot load under plain Node; keep them in step.
- */
+// mcp-tools.ts cannot load under plain Node, so the recorder uses this stand-in.
 async function startToolStandIn(projects: string[], status: string) {
   const tools = [
     { name: 'list_projects', description: 'List the projects busyboy can create tasks in, with the folder of each.', inputSchema: { type: 'object', properties: {}, required: [] } },
@@ -111,6 +107,43 @@ async function startToolStandIn(projects: string[], status: string) {
           request: { type: 'string', description: "The user's request for this project, complete and in the user's words." },
         },
         required: ['project', 'title', 'request'],
+      },
+    },
+    {
+      name: 'run_subagent',
+      description:
+        "Start a subagent for one short action in one project that changes no files: merge or close a pull request, check CI, run one command. It runs in the project's own checkout, plans nothing, and its one-line result shows in the chat. Use create_task for anything that edits files.",
+      inputSchema: {
+        type: 'object',
+        properties: {
+          project: { type: 'string', description: 'The project name, as list_projects returns it.' },
+          title: { type: 'string', description: 'A short title, a few words.' },
+          request: { type: 'string', description: "The action, complete and in the user's words." },
+        },
+        required: ['project', 'title', 'request'],
+      },
+    },
+    {
+      name: 'message_task',
+      description:
+        "Send an existing task's agent another message: a review comment to address, a change on the same branch, a question about its work. The agent carries on in the task's own worktree and branch with its conversation so far, and is started again when it had ended. Use this instead of create_task for follow-up work on a task. An archived task is restored first. Does not work for subagents or while the task waits on a card.",
+      inputSchema: {
+        type: 'object',
+        properties: {
+          task: { type: 'string', description: 'The task id, as create_task and task_status give it.' },
+          message: { type: 'string', description: "What the agent should do next, complete and in the user's words." },
+        },
+        required: ['task', 'message'],
+      },
+    },
+    {
+      name: 'archive_task',
+      description:
+        "Put away a task or subagent that is finished or no longer wanted, so it leaves task_status. Its agent ends and its worktree is removed unless it has uncommitted changes (files git ignores go with it); its branch, records, and conversation are kept, and message_task brings it back. A task that is still working must be stopped by the user first.",
+      inputSchema: {
+        type: 'object',
+        properties: { task: { type: 'string', description: 'The task id, as create_task and task_status give it.' } },
+        required: ['task'],
       },
     },
     {
@@ -172,6 +205,12 @@ async function startToolStandIn(projects: string[], status: string) {
     if (name === 'memory_search') return 'Nothing in memory matches.'
     if (name === 'memory_forget') return `There is no memory ${input.id} there.`
     if (name === 'list_projects') return JSON.stringify(projects.map((project) => ({ name: project, path: `/code/${project}` })))
+    if (name === 'run_subagent') {
+      const id = `${input.title.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-a1b2c3`
+      return `Started subagent ${id} in ${input.project}. Its result will show in the chat; task_status reports it too.`
+    }
+    if (name === 'message_task') return `Sent to task ${input.task}. Its agent is working on it now.`
+    if (name === 'archive_task') return `Archived task ${input.task}.`
     const id = `${input.title.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-a1b2c3`
     return `Created task ${id} in ${input.project} on branch busyboy/${id}. Its agent is planning the work now.`
   }
