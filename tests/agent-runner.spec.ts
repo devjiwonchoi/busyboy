@@ -78,6 +78,9 @@ test('a question tool call from the Director should be answered with a request t
 })
 
 test.describe('with the real Claude adapter', () => {
+  test.beforeEach(() => {
+    test.skip(process.platform === 'win32', 'The fake Claude CLI is a POSIX process-group script.')
+  })
   test.use({ baseURL: fakeClaudeURL })
 
   test('stopping the Director should end the processes it started', async ({ page, context }) => {

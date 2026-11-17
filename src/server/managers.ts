@@ -1,5 +1,6 @@
 import { randomBytes } from 'node:crypto'
 import { dataFolder, readSettingsAt, updateSettings, type ManagerEntry } from './config'
+import { pathKey } from './paths'
 import { addProject, getProject, ProjectError } from './projects'
 
 // A manager is a chat of its own that looks after one project: the user talks
@@ -27,7 +28,7 @@ export async function listManagersAt(folder: string): Promise<Manager[]> {
   const { managers, projects } = await readSettingsAt(folder)
   const names = new Set(projects.map(({ name }) => name.toLowerCase()))
   const listed = managers.filter(({ project }) => names.has(project.toLowerCase()))
-  store.known.set(folder, new Set(listed.map(({ id }) => id)))
+  store.known.set(pathKey(folder), new Set(listed.map(({ id }) => id)))
   return listed
 }
 
@@ -46,19 +47,20 @@ export async function getManagerAt(folder: string, id: string) {
  * whatever shows chats does at once.
  */
 export function isListedManager(folder: string, id: string) {
-  return store.known.get(folder)?.has(id) ?? true
+  return store.known.get(pathKey(folder))?.has(id) ?? true
 }
 
 /** Calls `listener` whenever a manager in `folder` is created or removed. */
 export function subscribeToManagers(folder: string, listener: () => void) {
-  let set = store.listeners.get(folder)
-  if (!set) store.listeners.set(folder, (set = new Set()))
+  const key = pathKey(folder)
+  let set = store.listeners.get(key)
+  if (!set) store.listeners.set(key, (set = new Set()))
   set.add(listener)
   return () => set.delete(listener)
 }
 
 function notify(folder: string) {
-  for (const listener of store.listeners.get(folder) ?? []) listener()
+  for (const listener of store.listeners.get(pathKey(folder)) ?? []) listener()
 }
 
 /**

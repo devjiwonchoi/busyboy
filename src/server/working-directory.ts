@@ -3,6 +3,7 @@ import { homedir } from 'node:os'
 import { basename, isAbsolute, join } from 'node:path'
 import { SERVER_TOKEN_ENV, TEST_MODE_ENV } from '@/lib/server-token'
 import { dataFolder } from './config'
+import { samePath } from './paths'
 import { readTasksAt, TaskError, WORKTREES_FOLDER, type TaskRecord } from './tasks'
 
 /**
@@ -76,7 +77,8 @@ export async function currentWorkingDirectory({
   const inPlace = isSegment(task.project) && isSegment(task.id) && worktrees !== null
   // Only compared, never opened, so Turbopack need not trace it; without the ignore comment it
   // traces the whole project for a path built at run time.
-  if (!worktree || !inPlace || worktree !== join(/*turbopackIgnore: true*/ worktrees, task.project, task.id)) {
+  // Case, slashes, and a `\\?\` prefix still name the folder BusyBoy created.
+  if (!worktree || !inPlace || !samePath(worktree, join(/*turbopackIgnore: true*/ worktrees, task.project, task.id))) {
     throw new TaskError(`The worktree of "${task.title}" is not one of BusyBoy's task worktrees.`)
   }
 

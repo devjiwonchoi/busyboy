@@ -3,6 +3,7 @@ import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { appendTranscriptLine, readTranscript, type TranscriptCursor } from './transcript-log'
 import { alwaysAskRulesAt } from '../always-ask-list'
+import { pathKey, samePath } from '../paths'
 import { BUSYBOY_FILES_RULE } from '../runner/always-ask'
 import { directorTiming } from './context'
 import { directorPrompt, managerPrompt } from './prompt'
@@ -171,6 +172,9 @@ const directors = (globalStore[DIRECTORS_KEY] ??= new Map())
 const directorFolder = (director: Director) =>
   director.chat ? join(director.folder, MANAGERS_FOLDER, director.chat) : join(director.folder, DIRECTOR_FOLDER)
 
+/** One chat per data folder, whichever slash or case the folder was named with. */
+const directorKey = (folder: string, chat: string | null) => (chat ? `${pathKey(folder)}\n${chat}` : pathKey(folder))
+
 /** The chat that shows a task or card of `owner`: its manager's, or the Director's once that manager is gone from the list. */
 function chatOf(folder: string, owner: string | null | undefined) {
   return owner && isListedManager(folder, owner) ? owner : null
@@ -182,14 +186,15 @@ const watched = (watchedStore[WATCHED_KEY] ??= new Set())
 
 /** Follows a data folder's tasks and cards once, however many chats it has. */
 function watchFolder(folder: string) {
-  if (watched.has(folder)) return
-  watched.add(folder)
+  const key = pathKey(folder)
+  if (watched.has(key)) return
+  watched.add(key)
   // Read once, so cards are routed by the real list from the start (see isListedManager).
   void listManagersAt(folder).catch(() => {})
   subscribeToTasks(folder, (task) => {
     // Every loaded chat gets every task: a chat shows only the tasks its transcript names.
     for (const director of directors.values()) {
-      if (director.folder === folder) broadcast(director, { type: 'task', task })
+      if (samePath(director.folder, folder)) broadcast(director, { type: 'task', task })
     }
   })
   subscribeToCards(folder, (update) => {
@@ -220,7 +225,7 @@ function cardsOf(director: Director) {
 }
 
 function getDirector(folder: string, chat: string | null = null): Director {
-  const key = chat ? `${folder}\n${chat}` : folder
+  const key = directorKey(folder, chat)
   let director = directors.get(key)
   if (director) return director
   director = {
@@ -869,7 +874,8 @@ export async function adoptTasks(folder: string, taskIds: string[]) {
 
 /** Ends the agent of a removed manager. Its transcript stays on disk. */
 export async function closeChat(folder: string, chat: string) {
-  const director = directors.get(`${folder}\n${chat}`)
+  const key = directorKey(folder, chat)
+  const director = directors.get(key)
   if (!director) return
   director.closed = true
   clearTimeout(director.batchTimer)
@@ -878,5 +884,5 @@ export async function closeChat(folder: string, chat: string) {
   const agentId = director.agentId
   director.agentId = undefined
   if (agentId) await stopAgent(agentId).catch(() => {})
-  directors.delete(`${folder}\n${chat}`)
+  directors.delete(key)
 }

@@ -4,6 +4,7 @@ import { lstat, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { promisify } from 'node:util'
 import { alwaysAskRulesAt } from './always-ask-list'
+import { gitPath, pathKey } from './paths'
 import { dataFolder } from './config'
 import { REVERT_AND_REMEMBER } from './director/context'
 import { memoryPrompt } from './memory'
@@ -169,7 +170,8 @@ export async function readTasksAt(folder: string): Promise<TaskRecord[]> {
 /** Applies `change` to the task list in `folder`, one update at a time. */
 function updateTasksAt<T>(folder: string, change: (tasks: TaskRecord[]) => T): Promise<T> {
   const file = join(folder, TASKS_FILE)
-  const next = (writeQueues.get(file) ?? Promise.resolve())
+  const key = pathKey(file)
+  const next = (writeQueues.get(key) ?? Promise.resolve())
     .catch(() => {})
     .then(async () => {
       const tasks = await readTasksAt(folder)
@@ -179,7 +181,7 @@ function updateTasksAt<T>(folder: string, change: (tasks: TaskRecord[]) => T): P
       await rename(temporary, file)
       return result
     })
-  writeQueues.set(file, next)
+  writeQueues.set(key, next)
   return next
 }
 
@@ -226,15 +228,16 @@ export function taskView(task: TaskRecord): TaskView {
 export function subscribeToTasks(folder: string, listener: (task: TaskView) => void) {
   // Whatever shows tasks (the window, the tray) is the first sign the data folder is in use.
   void resumeTasks(folder)
-  let set = listeners.get(folder)
-  if (!set) listeners.set(folder, (set = new Set()))
+  const key = pathKey(folder)
+  let set = listeners.get(key)
+  if (!set) listeners.set(key, (set = new Set()))
   set.add(listener)
   return () => set.delete(listener)
 }
 
 function notify(folder: string, task: TaskRecord) {
   const view = taskView(task)
-  for (const listener of listeners.get(folder) ?? []) listener(view)
+  for (const listener of listeners.get(pathKey(folder)) ?? []) listener(view)
 }
 
 // ---- Operations --------------------------------------------------------------
@@ -563,7 +566,8 @@ const resumes = (resumeStore[RESUMES_KEY] ??= new Map())
  * Nothing starts it again yet; the user can stop it.
  */
 export function resumeTasks(folder: string): Promise<void> {
-  let resume = resumes.get(folder)
+  const key = pathKey(folder)
+  let resume = resumes.get(key)
   if (!resume) {
     resume = (async () => {
       const tasks = await readTasksAt(folder).catch(() => [] as TaskRecord[])
@@ -591,7 +595,7 @@ export function resumeTasks(folder: string): Promise<void> {
         }).catch((error: unknown) => console.error(`busyboy: could not resume task ${listed.id}`, error))
       }
     })()
-    resumes.set(folder, resume)
+    resumes.set(key, resume)
   }
   return resume
 }
@@ -662,7 +666,7 @@ const taskQueues = (orderStore[ORDER_KEY] ??= new Map())
 
 /** Runs `work` after everything queued earlier for the same task: messages, archive, restore. */
 function inTaskOrder<T>(folder: string, taskId: string, work: () => Promise<T>): Promise<T> {
-  const key = `${folder}\n${taskId}`
+  const key = `${pathKey(folder)}\n${taskId}`
   const next = (taskQueues.get(key) ?? Promise.resolve()).catch(() => {}).then(work)
   taskQueues.set(key, next)
   void next.catch(() => {}).finally(() => {
@@ -821,7 +825,8 @@ async function removeWorktree(folder: string, task: TaskRecord) {
     }
     // Asked of the repository, not the worktree: git cannot remove the folder it runs in.
     const repository = await git(task.worktree, 'rev-parse', '--path-format=absolute', '--git-common-dir')
-    await run('git', [`--git-dir=${repository}`, 'worktree', 'remove', '--', task.worktree], { env: agentEnvironment() as NodeJS.ProcessEnv })
+    // `--git-dir=` is one argument git parses itself; a backslash there is an escape, so `C:\repo` misses the worktree and a clean archive is kept.
+    await run('git', [`--git-dir=${gitPath(repository)}`, 'worktree', 'remove', '--', gitPath(task.worktree)], { env: agentEnvironment() as NodeJS.ProcessEnv })
     return true
   } catch {
     // Changed or untracked files (or a worktree git cannot read): keep it as it is.
