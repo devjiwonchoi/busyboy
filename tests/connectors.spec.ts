@@ -5,8 +5,9 @@ import { join } from 'node:path'
 import { expect as baseExpect, test, type Page } from '@playwright/test'
 import { useProjectsHome } from './support/projects-home'
 
-// The harness config the test server reads (playwright.config.ts). A fake MCP
-// server stands in for Slack and a local notes server.
+// The harness config the test server reads (playwright.config.ts). A fake HTTP
+// MCP server stands in for Slack and notes. A fake stdio server, built with the
+// MCP SDK, stands in for a local connector.
 const port = process.env.PLAYWRIGHT_PORT ?? '3100'
 const harnessHome = join(tmpdir(), `busyboy-e2e-default-home-${port}`)
 const claudeConfig = join(harnessHome, 'claude-config')
@@ -66,10 +67,33 @@ function writeHarness(url: string) {
   )
 }
 
+function writeLocalConnector() {
+  mkdirSync(claudeConfig, { recursive: true })
+  writeFileSync(
+    join(claudeConfig, 'settings.json'),
+    JSON.stringify({
+      mcpServers: {
+        local: { command: process.execPath, args: [join(process.cwd(), 'tests', 'fake-mcp', 'stdio-server.mjs')] },
+      },
+    }),
+  )
+}
+
 async function send(page: Page, text: string) {
   await page.getByRole('textbox', { name: 'Message' }).fill(text)
   await page.getByRole('button', { name: 'Send' }).click()
 }
+
+test('a local stdio connector should show as connected', async ({ page, context, baseURL }) => {
+  writeLocalConnector()
+  await useProjectsHome(context, baseURL!, ['web'], { claude: 'signed-in' })
+  await page.goto('/')
+  await page.getByRole('link', { name: 'Settings' }).click()
+  await page.getByRole('navigation', { name: 'Settings sections' }).getByRole('link', { name: 'Connectors' }).click()
+
+  const claude = page.getByRole('region', { name: 'Claude Code connectors' })
+  await expect(claude.getByRole('listitem', { name: 'local' }).locator('[data-status]')).toHaveText('Connected')
+})
 
 test('inherited connectors should show their live status, and a missing one can be added from the harness command', async ({ page, context, baseURL }) => {
   const mcp = await startFakeMcp()

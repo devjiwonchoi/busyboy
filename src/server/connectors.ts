@@ -239,7 +239,6 @@ async function probeStdio(server: Listed): Promise<Pick<ConnectorServer, 'status
     child.stdout?.setEncoding('utf8')
     child.stdout?.on('data', (chunk: string) => {
       output += chunk
-      // MCP stdio frames the JSON with Content-Length; the body still carries the result.
       if (/"result"\s*:/.test(output) || /protocolVersion/.test(output)) finish({ status: 'connected' })
     })
     child.on('error', () => finish({ status: 'failed', detail: `The command ${server.command} could not start.` }))
@@ -252,7 +251,10 @@ async function probeStdio(server: Listed): Promise<Pick<ConnectorServer, 'status
       method: 'initialize',
       params: { protocolVersion: '2025-03-26', capabilities: {}, clientInfo: { name: 'busyboy', version: '0.0.0' } },
     })
-    child.stdin?.end(`Content-Length: ${Buffer.byteLength(body)}\r\n\r\n${body}`)
+    // MCP stdio is one JSON message per line. Leave stdin open until the server
+    // answers or the timeout kills it; closing stdin ends the handshake first.
+    child.stdin?.on('error', () => {})
+    child.stdin?.write(`${body}\n`)
     setTimeout(() => finish({ status: 'failed', detail: 'The server did not answer in time.' }), PROBE_MS).unref()
   })
 }
