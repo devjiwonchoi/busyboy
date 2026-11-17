@@ -1,8 +1,9 @@
 'use client'
 
-import { ArrowUp, Square } from 'lucide-react'
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { ArrowUp, Plus, Square, X } from 'lucide-react'
+import { forwardRef, useEffect, useId, useImperativeHandle, useRef, useState, type DragEvent as ReactDragEvent, type ReactNode } from 'react'
 import { composerSkillsAction, projectFilesAction } from '@/app/(main)/composer-actions'
+import { attachmentProblem, imageMediaType, type AttachmentInput } from '@/lib/chat-attachments'
 import { Button } from '@/components/ui/button'
 import {
   Composer,
@@ -18,6 +19,12 @@ import {
   getComposerText,
 } from '@/components/ui/composer'
 import type { ComposerSkill } from '@/server/skills'
+
+export type ComposerMessage = { text: string; attachments: AttachmentInput[] }
+
+type DraftAttachment = AttachmentInput & { id: string; bytes: number; previewUrl?: string }
+
+export type ChatComposerHandle = { addFiles: (files: FileList | File[]) => void }
 
 /** localStorage key for one chat's composer draft. The Director uses `director`. */
 export function draftStorageKey(chatId: string) {
@@ -44,62 +51,76 @@ function writeDraft(chatId: string, text: string) {
 /**
  * The message box. Enter sends, Shift+Enter adds a line.
  * `@` opens a picker and `/` opens skills and commands. Arrow keys move,
- * Enter chooses, Escape or Tab closes the picker.
+ * Enter chooses, Escape or Tab closes the picker. A plus button, a paste,
+ * or a drop adds files.
  * ArrowUp in an empty box is not a registry shortcut: it only edits the
  * previous message, and a global binding would take the key from every field.
  */
-export function ChatComposer({
-  projects,
-  filesProject,
-  showCommands = true,
-  canStop = false,
-  canArchive = false,
-  onCommand,
-  placeholder,
-  onSend,
-  onStop,
-  label = 'Message',
-  sendLabel = 'Send',
-  leading,
-  draftKey,
-  onEmptyArrowUp,
-  onTextChange,
-  seed,
-}: {
-  /** Project names for the Director's `@` picker. Ignored while `filesProject` is set. */
-  projects: string[]
-  /** When set, `@` lists this project's tracked files instead of projects. */
-  filesProject?: string | null
-  /** BusyBoy commands in the `/` picker. A side question leaves them out. */
-  showCommands?: boolean
-  canStop?: boolean
-  canArchive?: boolean
-  onCommand?: (command: 'stop' | 'archive') => void
-  placeholder: string
-  /** May reject; the text then comes back into an empty box. */
-  onSend: (text: string) => Promise<void> | void
-  /** Shown as a Stop button while there is work to stop. */
-  onStop?: () => void
-  /** Accessible names, so a second composer on the screen (the side chat) is told apart. */
-  label?: string
-  sendLabel?: string
-  /** Rendered at the start of the box. The reply chip uses this slot. */
-  leading?: ReactNode
-  /** Remembers the draft for this chat across remounts and reloads. */
-  draftKey?: string
-  /** ArrowUp while the box is empty. */
-  onEmptyArrowUp?: () => void
-  onTextChange?: (text: string) => void
-  /** When `token` changes, the box is replaced with `text`. */
-  seed?: { token: number; text: string } | null
-}) {
+export const ChatComposer = forwardRef<
+  ChatComposerHandle,
+  {
+    /** Project names for the Director's `@` picker. Ignored while `filesProject` is set. */
+    projects: string[]
+    /** When set, `@` lists this project's tracked files instead of projects. */
+    filesProject?: string | null
+    /** BusyBoy commands in the `/` picker. A side question leaves them out. */
+    showCommands?: boolean
+    canStop?: boolean
+    canArchive?: boolean
+    onCommand?: (command: 'stop' | 'archive') => void
+    placeholder: string
+    /** May reject; the text and attachments then come back into an empty box. */
+    onSend: (message: ComposerMessage) => Promise<void> | void
+    /** Shown as a Stop button while there is work to stop. */
+    onStop?: () => void
+    /** Accessible names, so a second composer on the screen (the side chat) is told apart. */
+    label?: string
+    sendLabel?: string
+    /** Rendered at the start of the box. The reply chip uses this slot. */
+    leading?: ReactNode
+    /** Remembers the draft for this chat across remounts and reloads. */
+    draftKey?: string
+    /** ArrowUp while the box is empty. */
+    onEmptyArrowUp?: () => void
+    onTextChange?: (text: string) => void
+    /** When `token` changes, the box is replaced with `text`. */
+    seed?: { token: number; text: string } | null
+  }
+>(function ChatComposer(
+  {
+    projects,
+    filesProject,
+    showCommands = true,
+    canStop = false,
+    canArchive = false,
+    onCommand,
+    placeholder,
+    onSend,
+    onStop,
+    label = 'Message',
+    sendLabel = 'Send',
+    leading,
+    draftKey,
+    onEmptyArrowUp,
+    onTextChange,
+    seed,
+  },
+  ref,
+) {
   const [value, setValue] = useState<ComposerValue>([])
+  const [attachments, setAttachments] = useState<DraftAttachment[]>([])
+  const [error, setError] = useState<string | null>(null)
+  const [dragging, setDragging] = useState(false)
   const [queryCharacter, setQueryCharacter] = useState<string | null>(null)
   const [skills, setSkills] = useState<ComposerSkill[]>([])
   const [files, setFiles] = useState<{ path: string }[]>([])
   const rootRef = useRef<HTMLDivElement>(null)
+  const picker = useRef<HTMLInputElement>(null)
+  const pickerId = useId()
   const valueRef = useRef(value)
   valueRef.current = value
+  const attachmentsRef = useRef(attachments)
+  attachmentsRef.current = attachments
   // Set once the stored draft has been read, so the empty first render cannot wipe it.
   const restored = useRef(!draftKey)
   const onTextChangeRef = useRef(onTextChange)
@@ -107,6 +128,14 @@ export function ChatComposer({
   const onEmptyArrowUpRef = useRef(onEmptyArrowUp)
   onEmptyArrowUpRef.current = onEmptyArrowUp
   const appliedSeed = useRef<number | null>(null)
+
+  useEffect(() => {
+    return () => {
+      for (const attachment of attachmentsRef.current) {
+        if (attachment.previewUrl) URL.revokeObjectURL(attachment.previewUrl)
+      }
+    }
+  }, [])
 
   useEffect(() => {
     let current = true
@@ -141,9 +170,9 @@ export function ChatComposer({
   }, [filesProject])
 
   // A chosen row becomes a token. getComposerText sends `text` when it is set
-  // (a Codex skill is `$name`, a Claude skill is `/name`) and otherwise the
-  // trigger plus the label. Plain text would match the query again and reopen
-  // the picker, so the next Enter would pick instead of send.
+  // (a Codex skill is `$name`, a Claude skill is `/name`, a file is `@path`)
+  // and otherwise the trigger plus the label. Plain text would match the query
+  // again and reopen the picker, so the next Enter would pick instead of send.
   const projectItems: ComposerItemValue[] = projects.map((name) => ({ id: `project:${name}`, label: name, kind: 'project' }))
   const fileItems: ComposerItemValue[] = files.map((file) => {
     const slash = Math.max(file.path.lastIndexOf('/'), file.path.lastIndexOf('\\'))
@@ -223,6 +252,10 @@ export function ChatComposer({
     if (seedToken === undefined || seedText === undefined) return
     if (appliedSeed.current === seedToken) return
     appliedSeed.current = seedToken
+    setAttachments((current) => {
+      release(current)
+      return []
+    })
     commit([{ type: 'text', text: seedText }])
     rootRef.current?.querySelector<HTMLElement>('[data-slot="composer-input"]')?.focus()
   }, [seedToken, seedText])
@@ -237,7 +270,7 @@ export function ChatComposer({
       if (!onEmptyArrowUpRef.current) return
       // An open @ or / picker owns the arrow keys (it stops the event). This is the extra guard.
       if (target instanceof Element && target.closest('[data-slot="composer-input"]')?.hasAttribute('aria-controls')) return
-      if (getComposerText(valueRef.current).trim()) return
+      if (getComposerText(valueRef.current).trim() || attachmentsRef.current.length > 0) return
       event.preventDefault()
       onEmptyArrowUpRef.current()
     }
@@ -245,34 +278,130 @@ export function ChatComposer({
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [])
 
-  function send(draft: ComposerValue) {
-    const message = getComposerText(draft).trim()
-    if (!message) return
-    commit([])
-    Promise.resolve(onSend(message)).catch(() => {
-      // Bring the message back only if nothing new was typed meanwhile.
-      if (getComposerText(valueRef.current).trim()) return
-      commit([{ type: 'text', text: message }])
+  function removeAttachment(id: string) {
+    setAttachments((current) => {
+      const found = current.find((attachment) => attachment.id === id)
+      if (found?.previewUrl) URL.revokeObjectURL(found.previewUrl)
+      return current.filter((attachment) => attachment.id !== id)
     })
+  }
+
+  async function takeFiles(list: FileList | File[]) {
+    const incoming = [...list]
+    if (incoming.length === 0) return
+    setError(null)
+    const next: DraftAttachment[] = []
+    let total = attachments.reduce((sum, attachment) => sum + attachment.bytes, 0)
+    let count = attachments.length
+    try {
+      for (const file of incoming) {
+        const mediaType = file.type || 'application/octet-stream'
+        const problem = attachmentProblem({ name: file.name, mediaType, bytes: file.size, already: count, totalBytes: total })
+        if (problem) {
+          setError(problem)
+          break
+        }
+        const data = await readBase64(file)
+        const preview = imageMediaType(file.name, mediaType) ? URL.createObjectURL(file) : undefined
+        next.push({ id: crypto.randomUUID(), name: file.name || 'file', mediaType, data, bytes: file.size, previewUrl: preview })
+        total += file.size
+        count += 1
+      }
+    } catch (reason) {
+      setError(reason instanceof Error && reason.message ? reason.message : 'The file could not be read.')
+    }
+    if (next.length > 0) setAttachments((current) => [...current, ...next])
+  }
+
+  useImperativeHandle(ref, () => ({ addFiles: (incoming) => void takeFiles(incoming) }))
+
+  function send(draft: ComposerValue) {
+    const text = getComposerText(draft).trim()
+    const sending = attachments.map(({ name, mediaType, data }) => ({ name, mediaType, data }))
+    if (!text && sending.length === 0) return
+    const snapshot = attachments
+    commit([])
+    setAttachments([])
+    setError(null)
+    Promise.resolve(onSend({ text, attachments: sending })).then(
+      () => release(snapshot),
+      () => {
+        // A send failure is shown by the chat. This box only reports a file it
+        // refused before sending, and puts the draft back when sending fails.
+        if (!getComposerText(valueRef.current).trim() && text) commit([{ type: 'text', text }])
+        setAttachments((current) => {
+          if (current.length > 0) {
+            release(snapshot)
+            return current
+          }
+          return snapshot
+        })
+      },
+    )
+  }
+
+  function onDragOver(event: ReactDragEvent) {
+    if (![...event.dataTransfer.types].includes('Files')) return
+    event.preventDefault()
+    setDragging(true)
   }
 
   const fileMentions = Boolean(filesProject)
   const listLabel = queryCharacter === '/' ? 'Choose a skill or command' : fileMentions ? 'Choose a file' : 'Choose a project'
 
   return (
-    <div ref={rootRef} className="w-full">
+    <div
+      ref={rootRef}
+      className={`w-full rounded-[1.25rem] border border-zinc-700/80 bg-[#141416] text-zinc-100 ${dragging ? 'ring-2 ring-white/30' : ''}`}
+      onDragOver={onDragOver}
+      onDragLeave={() => setDragging(false)}
+      onDrop={(event) => {
+        if (!event.dataTransfer.files.length) return
+        event.preventDefault()
+        // The chat column also accepts a drop; one drop should add the files once.
+        event.stopPropagation()
+        setDragging(false)
+        void takeFiles(event.dataTransfer.files)
+      }}
+    >
+      {/* Chips sit outside the adaptive grid, which is only plus, input, and send. */}
+      {leading && <div className="px-2 pt-2">{leading}</div>}
+      {attachments.length > 0 && (
+        <ul aria-label="Attachments" className="flex flex-wrap gap-1.5 px-2 pt-2">
+          {attachments.map((attachment) => (
+            <li key={attachment.id} className="flex items-center gap-1 rounded-lg bg-white/10 py-0.5 pr-0.5 pl-0.5">
+              {attachment.previewUrl ? (
+                <img src={attachment.previewUrl} alt={attachment.name} className="size-9 rounded-md object-cover" />
+              ) : (
+                <span className="max-w-36 truncate px-2 text-xs text-zinc-200">{attachment.name}</span>
+              )}
+              <Button type="button" size="icon-sm" variant="ghost" className="text-zinc-400 hover:bg-white/10 hover:text-white" aria-label={`Remove ${attachment.name}`} onClick={() => removeAttachment(attachment.id)}>
+                <X />
+              </Button>
+            </li>
+          ))}
+        </ul>
+      )}
       <Composer
+        layout="adaptive"
         value={value}
         onValueChange={change}
         onSubmit={send}
+        allowEmpty={attachments.length > 0}
         onQueryChange={(query) => setQueryCharacter(query?.character ?? null)}
+        onPaste={(event) => {
+          const pasted = [...(event.clipboardData?.files ?? [])]
+          if (pasted.length === 0) return
+          event.preventDefault()
+          void takeFiles(pasted)
+        }}
         triggers={[
           { character: '@', items: fileMentions ? fileItems : projectItems, filter: fileMentions ? fuzzyMatch : undefined },
           { character: '/', items: [...skillItems, ...commandItems], filter: fuzzyMatch },
         ]}
+        className="border-0 bg-transparent text-zinc-100 shadow-none ring-0 [--composer-radius:1.25rem]"
       >
-        {leading && <div className="px-1 pt-1">{leading}</div>}
-        <ComposerInput aria-label={label} placeholder={placeholder} />
+        <ComposerInput aria-label={label} placeholder={placeholder} className="text-zinc-100" />
         <ComposerPopup className="overflow-hidden border-zinc-700 shadow-xl">
           <div className="mention-menu">
             <ComposerList aria-label={listLabel}>
@@ -285,15 +414,32 @@ export function ChatComposer({
           </div>
         </ComposerPopup>
         <ComposerActions>
+          <ComposerActionGroup align="start">
+            <input
+              id={pickerId}
+              ref={picker}
+              type="file"
+              multiple
+              className="sr-only"
+              aria-label="Choose a file"
+              onChange={(event) => {
+                if (event.target.files) void takeFiles(event.target.files)
+                event.target.value = ''
+              }}
+            />
+            <Button type="button" size="icon" variant="ghost" className="text-zinc-300 hover:bg-white/10 hover:text-white" aria-label="Add attachment" onClick={() => picker.current?.click()}>
+              <Plus />
+            </Button>
+          </ComposerActionGroup>
           <ComposerActionGroup align="end">
             {onStop && (
-              <Button type="button" variant="outline" size="icon-sm" aria-label="Stop" onClick={onStop}>
+              <Button type="button" variant="outline" size="icon-sm" className="border-zinc-600 text-zinc-200" aria-label="Stop" onClick={onStop}>
                 <Square />
               </Button>
             )}
             <ComposerSubmit
               render={
-                <Button size="icon-sm" aria-label={sendLabel}>
+                <Button size="icon-lg" className="rounded-full bg-white text-black hover:bg-zinc-200" aria-label={sendLabel}>
                   <ArrowUp />
                 </Button>
               }
@@ -301,9 +447,14 @@ export function ChatComposer({
           </ComposerActionGroup>
         </ComposerActions>
       </Composer>
+      {error && (
+        <p role="alert" className="px-3 pt-1 pb-2 text-xs text-red-400">
+          {error}
+        </p>
+      )}
     </div>
   )
-}
+})
 
 function PickerRow({ item, prefix }: { item: ComposerItemValue; prefix?: string }) {
   const kind = item.kind === 'skill' ? 'Skill' : item.kind === 'command' ? 'Command' : null
@@ -337,4 +488,22 @@ function fuzzyMatch(item: ComposerItemValue, query: string) {
     from = found + 1
   }
   return named || (item.description ?? '').toLowerCase().includes(needle)
+}
+
+function release(drafts: DraftAttachment[]) {
+  for (const draft of drafts) {
+    if (draft.previewUrl) URL.revokeObjectURL(draft.previewUrl)
+  }
+}
+
+function readBase64(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => {
+      const result = typeof reader.result === 'string' ? reader.result : ''
+      resolve(result.slice(result.indexOf(',') + 1))
+    }
+    reader.onerror = () => reject(reader.error ?? new Error('The file could not be read.'))
+    reader.readAsDataURL(file)
+  })
 }

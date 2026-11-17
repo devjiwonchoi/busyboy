@@ -25,6 +25,10 @@ const contentSecurityPolicy = [
 
 const nextConfig: NextConfig = {
   cacheComponents: true,
+  // Image attachments travel in the server action body as base64. Four megabytes
+  // of image bytes is about five and a half of base64, so the default 1 MB cap
+  // would refuse an ordinary screenshot.
+  experimental: { serverActions: { bodySizeLimit: '12mb' } },
   // Next warns when Cache Components is on without this; new apps should enable both.
   partialPrefetching: true,
   // The desktop app runs .next/standalone/server.js inside Electron.

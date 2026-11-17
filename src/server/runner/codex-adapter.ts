@@ -15,6 +15,7 @@ import {
   codexRequestToEvent,
   type CodexRawMessage,
 } from './codex-events'
+import { codexInput, modelText, textTurn, type UserTurn } from './user-turn'
 import type {
   AgentAnswer,
   AgentEvent,
@@ -224,7 +225,7 @@ function startCodex(options: ProviderStartOptions): ProviderSession {
   const mcp = codexMcpConfig(options.mcpServers)
   // Server request ids restart with every app server, so they are scoped to this one.
   const requestPrefix = `codex-${randomUUID().slice(0, 8)}-`
-  const queue: string[] = []
+  const queue: UserTurn[] = []
   const requests = new Map<string, CodexRawMessage>()
   let connection: AppServerConnection | undefined
   let threadId: string | undefined
@@ -298,15 +299,16 @@ function startCodex(options: ProviderStartOptions): ProviderSession {
 
   const startNextTurn = () => {
     if (inTurn || !connection || !threadId) return
-    const text = queue.shift()
-    if (text === undefined) return
+    const turn = queue.shift()
+    if (turn === undefined) return
     inTurn = true
     const request = {}
     pendingStart = request
+    const text = modelText(turn)
     connection
       .request<{ turn: { id: string } }>('turn/start', {
         threadId,
-        input: [{ type: 'text', text, text_elements: [] }],
+        input: codexInput(text ? turn : { ...turn, text: ' ' }),
       })
       .then(({ turn }) => {
         // The reply can arrive after the turn already ended and the next one began.
@@ -474,8 +476,8 @@ function startCodex(options: ProviderStartOptions): ProviderSession {
     })
     .then((finished) => emit({ type: 'stopped', finished }))
 
-  const send = (text: string) => {
-    queue.push(text)
+  const send = (turn: UserTurn | string) => {
+    queue.push(typeof turn === 'string' ? textTurn(turn) : turn)
     startNextTurn()
   }
 

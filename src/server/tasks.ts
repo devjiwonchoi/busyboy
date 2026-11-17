@@ -25,6 +25,9 @@ import { agentEnvironment } from './runner/find-executable'
 import { trackWorkCards } from './cards/work-cards'
 import { finishRememberRecord, observeTaskMessage, observeTaskTurn } from './records/remember-record'
 import { rememberRoot } from './records/remember-root'
+import type { AttachmentInput } from '@/lib/chat-attachments'
+import { attachmentsTurn } from './chat-attachments'
+import { displayText } from './runner/user-turn'
 import { APPROVE_MESSAGE, hasOpenCard, stopTaskAgent, trackTaskCards } from './task-cards'
 import type { AgentEvent, AgentStatus, McpServer, ProviderId, StartAgentInput } from './runner/contract'
 
@@ -703,9 +706,9 @@ function inTaskOrder<T>(folder: string, taskId: string, work: () => Promise<T>):
  * started again on its stored session in the same worktree first, so the work carries on where
  * it was instead of in a new task from the project's HEAD.
  */
-export function messageTaskAt(folder: string, taskId: string, text: string): Promise<TaskView> {
+export function messageTaskAt(folder: string, taskId: string, message: TaskMessage): Promise<{ view: TaskView; shown: string }> {
   // One at a time per task: two messages to an ended agent must not start two agents.
-  return inTaskOrder(folder, taskId, () => deliverMessage(folder, taskId, text))
+  return inTaskOrder(folder, taskId, () => deliverMessage(folder, taskId, message))
 }
 
 /** Resolves once the agent's process has ended, or after a few seconds if it does not end. */
@@ -726,11 +729,16 @@ function agentEnded(agentId: string, timeoutMs = 5000): Promise<void> {
   })
 }
 
-async function deliverMessage(folder: string, taskId: string, text: string): Promise<TaskView> {
-  const message = text.trim()
-  if (!message) throw new TaskError('Give the message to send.')
+type TaskMessage = string | { text: string; attachments?: AttachmentInput[] }
+
+async function deliverMessage(folder: string, taskId: string, input: TaskMessage): Promise<{ view: TaskView; shown: string }> {
+  const text = typeof input === 'string' ? input : input.text
+  const attachments = typeof input === 'string' ? [] : (input.attachments ?? [])
   const task = (await readTasksAt(folder)).find(({ id }) => id === taskId)
   if (!task) throw new TaskError(`There is no task ${taskId}.`)
+  const turn = await attachmentsTurn({ folder: task.worktree, text, attachments })
+  const message = displayText(turn)
+  if (!message) throw new TaskError('Give the message to send.')
   const name = `${task.project} · ${task.title}`
   // More work for an archived task means it is wanted again.
   if (task.archivedAt && task.kind !== 'subagent') await restore(folder, task)
@@ -742,8 +750,8 @@ async function deliverMessage(folder: string, taskId: string, text: string): Pro
   if (task.activity === 'stopped') await agentEnded(task.agentId)
   const live = getAgent(task.agentId)
   if (live && live.status !== 'stopped') {
-    sendMessage(task.agentId, message)
-    return taskView(task)
+    sendMessage(task.agentId, turn)
+    return { view: taskView(task), shown: message }
   }
 
   try {
@@ -767,17 +775,17 @@ async function deliverMessage(folder: string, taskId: string, text: string): Pro
   removeAgent(ended)
   try {
     // Without a stored session the provider never kept the request, so the new conversation gets it first.
-    sendMessage(agent.id, sessionId ? message : `${task.request}\n\n${message}`)
+    sendMessage(agent.id, sessionId ? turn : { ...turn, text: `${task.request}\n\n${turn.text}` })
   } catch {
     // It stopped in between (a lost session, a missing CLI); the watcher has noted why.
     throw new TaskError(`${name} could not start again: ${startError(agent.id)}`)
   }
   notify(folder, task)
-  return taskView(task)
+  return { view: taskView(task), shown: message }
 }
 
 export async function messageTask(taskId: string, text: string) {
-  return messageTaskAt(await dataFolder(), taskId, text)
+  return (await messageTaskAt(await dataFolder(), taskId, text)).view
 }
 
 // ---- Archive ------------------------------------------------------------------

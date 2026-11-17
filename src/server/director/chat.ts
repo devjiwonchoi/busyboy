@@ -22,9 +22,12 @@ import {
   subscribeToAgent,
 } from '../runner/agent-runner'
 import type { AgentEventEnvelope, McpServer, ProviderId } from '../runner/contract'
+import type { AttachmentInput } from '@/lib/chat-attachments'
+import { attachmentsTurn } from '../chat-attachments'
+import { combineTurns, displayText, modelText, type UserTurn } from '../runner/user-turn'
 import { cardRecordTitle, isStoredCardKind, type StoredCardKind } from '../cards/model'
 import { closeDirectorApproval, openCards, openDirectorApproval, replyToCard, subscribeToCards, type TaskCard } from '../task-cards'
-import { listTasksAt, messageTaskAt, subscribeToTasks, type TaskView } from '../tasks'
+import { listTasksAt, messageTaskAt, readTasksAt, subscribeToTasks, type TaskView } from '../tasks'
 
 type McpServers = Record<string, McpServer>
 
@@ -138,9 +141,9 @@ type Director = {
   /** The turn's text blocks by item id, in the order they started. */
   blocks: Map<string, string>
   /** Messages waiting for the batch window to close. */
-  pending: string[]
-  /** The text of the latest turn, sent again if resuming the session fails. */
-  lastSent?: string
+  pending: UserTurn[]
+  /** The latest turn, sent again if resuming the session fails. */
+  lastSent?: UserTurn
   /** The agent was started or resumed on a stored session that the provider has not confirmed yet. */
   unconfirmedResume?: boolean
   /** The provider said the stored session does not exist; recovered when that turn or process ends. */
@@ -351,7 +354,7 @@ function broadcast(director: Director, update: DirectorUpdate) {
 }
 
 function noteQueue(director: Director) {
-  broadcast(director, { type: 'queue', messages: [...director.pending] })
+  broadcast(director, { type: 'queue', messages: director.pending.map((turn) => displayText(turn)) })
 }
 
 function recount(director: Director) {
@@ -617,10 +620,10 @@ async function flush(director: Director) {
   if (director.status !== 'idle' || director.pending.length === 0) return
   const target = director.target
   if (!target) return
-  const text = director.pending.join('\n\n')
+  const outgoing = combineTurns(director.pending)
   director.pending = []
   noteQueue(director)
-  director.lastSent = text
+  director.lastSent = outgoing
   setStatus(director, 'answering')
   const turn = ++director.turn
   try {
@@ -646,7 +649,7 @@ async function flush(director: Director) {
     // It stopped while starting: a lost session was already recovered and the
     // turn queued again, and any other failure was reported by its events.
     if (director.agentId !== agentId || getAgent(agentId)?.status === 'stopped') return
-    sendMessage(agentId, text)
+    sendMessage(agentId, outgoing)
   } catch (error) {
     saveEntry(director, newEntry('note', { text: error instanceof Error ? error.message : String(error), tone: 'error' }))
     setStatus(director, 'idle')
@@ -681,6 +684,7 @@ export type SendToDirectorInput = {
   /** The manager to send to; leave out for the Director. */
   chat?: string | null
   text: string
+  attachments?: AttachmentInput[]
   /**
    * Resolves the provider for the next turn, after the message shows, given the
    * provider the Director already uses. Null when no provider can be used.
@@ -695,12 +699,13 @@ export type SendToDirectorInput = {
  * While the Director is idle, messages sent inside the batch window go out
  * together as one turn.
  */
-export async function sendToDirector({ folder, chat, text, resolveProvider, mcp }: SendToDirectorInput) {
+export async function sendToDirector({ folder, chat, text, attachments, resolveProvider, mcp }: SendToDirectorInput) {
   const director = getDirector(folder, chat ?? null)
   await director.ready
-  const trimmed = text.trim()
-  if (!trimmed) return
-  saveEntry(director, newEntry('user', { text: trimmed }))
+  const turn = await attachmentsTurn({ folder: directorFolder(director), text, attachments: attachments ?? [] })
+  const shown = displayText(turn)
+  if (!shown) return
+  saveEntry(director, newEntry('user', { text: shown }))
   clearTimeout(director.idleTimer)
   director.idleTimer = undefined
   // Compaction gives way to the user. A reply keeps going: the message waits and is sent when
@@ -709,7 +714,7 @@ export async function sendToDirector({ folder, chat, text, resolveProvider, mcp 
     interruptAgent(director.agentId).catch((error: unknown) => console.error('busyboy: could not interrupt the Director', error))
   }
   // Queued before the sign-in check, so messages keep the order they were sent in.
-  director.pending.push(trimmed)
+  director.pending.push(turn)
   noteQueue(director)
   // Open from the moment a message waits for a reply, so a Quit during the
   // batch window or the sign-in check is noticed on the next start too.
@@ -725,7 +730,7 @@ export async function sendToDirector({ folder, chat, text, resolveProvider, mcp 
   director.idleTimer = undefined
   if (!provider) {
     // Unless a batch with an earlier message already took it to the Director.
-    const index = director.pending.lastIndexOf(trimmed)
+    const index = director.pending.lastIndexOf(turn)
     if (index !== -1) {
       director.pending.splice(index, 1)
       noteQueue(director)
@@ -834,18 +839,29 @@ export async function stopDirector(folder: string, chat: string | null = null) {
  * shows in the chat as the user's message, marked with where it went, and is
  * never sent to the Director.
  */
-export async function replyToTaskCard({ folder, cardId, text }: { folder: string; cardId: string; text: string }) {
-  const trimmed = text.trim()
-  if (!trimmed) {
-    return
-  }
+export async function replyToTaskCard({
+  folder,
+  cardId,
+  text,
+  attachments,
+}: {
+  folder: string
+  cardId: string
+  text: string
+  attachments?: AttachmentInput[]
+}) {
   const card = openCards(folder).find(({ id }) => id === cardId)
   // The reply shows where its card does.
   const director = getDirector(folder, chatOf(folder, card?.chat))
   await director.ready
-  replyToCard({ folder, cardId, text: trimmed })
+  const task = card ? (await readTasksAt(folder)).find(({ id }) => id === card.taskId) : undefined
+  const turn = await attachmentsTurn({ folder: task?.worktree ?? directorFolder(director), text, attachments: attachments ?? [] })
+  const shown = displayText(turn)
+  if (!shown) return
+  const imagePaths = turn.images.map((image) => `Attached image: ${image.path}`).join('\n')
+  replyToCard({ folder, cardId, text: [modelText(turn), imagePaths].filter(Boolean).join('\n') })
   if (card) {
-    saveEntry(director, newEntry('user', { text: trimmed, to: `${card.project} · ${card.taskTitle}` }))
+    saveEntry(director, newEntry('user', { text: shown, to: `${card.project} · ${card.taskTitle}` }))
   }
 }
 
@@ -854,16 +870,22 @@ export async function replyToTaskCard({ folder, cardId, text }: { folder: string
  * ended. Like a card reply, it shows in the chat marked with where it went and never reaches
  * the Director.
  */
-export async function sendToTask({ folder, taskId, text }: { folder: string; taskId: string; text: string }) {
-  const trimmed = text.trim()
-  if (!trimmed) {
-    return
-  }
-  const task = await messageTaskAt(folder, taskId, trimmed)
+export async function sendToTask({
+  folder,
+  taskId,
+  text,
+  attachments,
+}: {
+  folder: string
+  taskId: string
+  text: string
+  attachments?: AttachmentInput[]
+}) {
+  const { view, shown } = await messageTaskAt(folder, taskId, { text, attachments })
   // The message shows in the chat that shows the task.
-  const director = getDirector(folder, chatOf(folder, task.chat))
+  const director = getDirector(folder, chatOf(folder, view.chat))
   await director.ready
-  saveEntry(director, newEntry('user', { text: trimmed, to: `${task.project} · ${task.title}` }))
+  saveEntry(director, newEntry('user', { text: shown, to: `${view.project} · ${view.title}` }))
 }
 
 /** Adds a task the Director, or the manager `chat`, just created to its turn's task group. */
@@ -892,7 +914,7 @@ export async function subscribeToDirector(folder: string, listener: (update: Dir
     cards: cardsOf(director),
     status: director.status,
     draft: director.draft,
-    queue: [...director.pending],
+    queue: director.pending.map((turn) => displayText(turn)),
   })
   director.listeners.add(listener)
   return () => {

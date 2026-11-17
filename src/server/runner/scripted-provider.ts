@@ -24,6 +24,7 @@ import type {
   ProviderSession,
   ProviderStartOptions,
 } from './contract'
+import { harnessReceipt, type UserTurn } from './user-turn'
 
 export const SCRIPTS_ENV = 'BUSYBOY_PROVIDER_SCRIPTS'
 
@@ -44,6 +45,7 @@ export const MISSING_SESSION_PREFIX = 'missing-'
  * - `delayMs`: wait before the next step.
  * - `echoInstructions`: reply with the instructions the agent was started with, so a
  *   journey can check what reached the prompt (for example memory).
+ * - `echoAttachments`: reply with the image blocks and file paths this turn carried.
  * - `writeInstructions`: write those instructions to this file in the agent's working
  *   folder, for an agent whose replies no screen shows yet (a task agent).
  * An approval or question (from `event` or `canUseTool`) pauses the replay until it is
@@ -56,6 +58,7 @@ export type ScriptStep =
   | { canUseTool: ClaudePermissionRequest; then?: Record<string, ScriptStep[]> }
   | { delayMs: number }
   | { echoInstructions: true }
+  | { echoAttachments: true }
   | { writeInstructions: string }
   | { writeFile: { path: string; text: string } }
   | { toolCall: { name: string; input: Record<string, unknown> }; then?: Record<string, ScriptStep[]> }
@@ -235,7 +238,9 @@ function startScripted(folder: string, options: ProviderStartOptions): ProviderS
   const mapper = RAW_MAPPERS[provider]?.((event) => {
     if (event.type !== 'session') emit(event)
   })
-  const queue: string[] = []
+  const queue: UserTurn[] = []
+  /** The turn whose steps are playing, so `echoAttachments` can report it. */
+  let received: UserTurn = { text: '', note: '', images: [] }
   const answers = new Map<string, (answer: AgentAnswer) => void>()
   let cancelTurn: (() => void) | undefined
   let running = false
@@ -321,6 +326,10 @@ function startScripted(folder: string, options: ProviderStartOptions): ProviderS
         emit({ type: 'text', itemId: `script-instructions-${++requestCount}`, text: options.instructions ?? '' })
         continue
       }
+      if ('echoAttachments' in step) {
+        emit({ type: 'text', itemId: `script-attachments-${++requestCount}`, text: harnessReceipt(received) || 'no attachments' })
+        continue
+      }
       let events: AgentEvent[]
       let then: Record<string, ScriptStep[]> | undefined
       if ('canUseTool' in step) {
@@ -346,7 +355,9 @@ function startScripted(folder: string, options: ProviderStartOptions): ProviderS
     if (running) return
     running = true
     while (queue.length && !stopped) {
-      const text = queue.shift()!
+      const message = queue.shift()!
+      received = message
+      const text = message.text.trim()
       inTurn = true
       turnDone = false
       try {
@@ -392,8 +403,8 @@ function startScripted(folder: string, options: ProviderStartOptions): ProviderS
   } else queueMicrotask(() => emit({ type: 'session', sessionId }))
 
   return {
-    send(text) {
-      queue.push(text)
+    send(turn) {
+      queue.push(turn)
       void drain()
     },
     async interrupt() {
