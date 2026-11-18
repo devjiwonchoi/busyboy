@@ -20,7 +20,6 @@ export function startBackground(_server: ServerHandle, options: BackgroundOption
 
   return {
     tray,
-    updates: () => 0,
     windowFocused() {
       if (tray.state().directorReplied) tray.update({ directorReplied: false });
       setBadge(0);

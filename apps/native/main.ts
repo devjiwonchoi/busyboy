@@ -170,7 +170,6 @@ async function runSelfCheck(outputPath: string) {
       notify: false,
     });
     await check.recordBackground(background, window, server);
-    await check.recordTerminal(server);
     background.stop();
     background = null;
     window.destroy();
