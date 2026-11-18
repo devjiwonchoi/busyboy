@@ -11,7 +11,7 @@
     "dev:desktop": "pnpm --filter @busyboy/native dev",
     "build:desktop": "pnpm --filter @busyboy/native build:desktop",
     "typecheck": "pnpm --filter @busyboy/web --filter @busyboy/native typecheck",
-    "lint": "oxlint && knip",
+    "lint": "oxlint && knip && node scripts/check-no-korean.mts",
     "format": "oxfmt",
     "format:check": "oxfmt --check",
     "test:e2e": "pnpm --filter @busyboy/web test:e2e"
