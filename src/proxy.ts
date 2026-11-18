@@ -3,8 +3,6 @@ import { timingSafeEqual } from "node:crypto";
 import { NextResponse, type NextRequest } from "next/server";
 
 import {
-  ALWAYS_ASK_PATH,
-  alwaysAskTokenFor,
   MCP_MANAGER_PARAM,
   MCP_PATH,
   MCP_TASK_PROJECT_PARAM,
@@ -72,12 +70,8 @@ export async function proxy(request: NextRequest) {
   return (await setupRedirect(request)) ?? NextResponse.next();
 }
 
-// why: The MCP token and the always-ask token are derived from the server token and open only their own routes.
+// why: The MCP token is derived from the server token and opens only the MCP route.
 function hasMcpToken(request: NextRequest, serverToken: string) {
-  if (request.nextUrl.pathname === ALWAYS_ASK_PATH) {
-    const provided = request.headers.get(MCP_TOKEN_HEADER);
-    return Boolean(provided && sameToken(provided, alwaysAskTokenFor(serverToken)));
-  }
   if (request.nextUrl.pathname !== MCP_PATH) return false;
   const provided = request.headers.get(MCP_TOKEN_HEADER);
   if (!provided) return false;

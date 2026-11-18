@@ -118,7 +118,7 @@ test.describe("Claude task agents", () => {
 });
 
 test.describe("Codex task agents", () => {
-  test("a command matching a YAML rule should ask through the Codex hook", async ({
+  test("a command matching a YAML rule should ask through Codex", async ({
     page,
     context,
     baseURL,
@@ -129,7 +129,7 @@ test.describe("Codex task agents", () => {
     await createTask(context.request, "Print the token", "Print the secret token with Codex.");
 
     const card = openCard(page, "Approval from web · Print the token");
-    await expect(card).toContainText("Bash: echo secret-token");
+    await expect(card).toContainText("echo secret-token");
     await expect(card).toContainText(
       "Blocked by a rule in ~/.jwn: Do not print the secret token (Bash(echo secret-token*))",
     );

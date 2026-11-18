@@ -3,18 +3,13 @@ import { randomUUID } from "node:crypto";
 import { createInterface } from "node:readline";
 
 // why: Not Claude-specific: it spawns any CLI as the leader of its own process group.
-import { alwaysAskApproval, createAllowedCalls, matchAlwaysAsk } from "./always-ask";
+import { createAllowedCalls } from "./always-ask";
+import { codexRulesSource, translateAskRules } from "./always-ask-translator";
 import {
   spawnClaudeProcess as spawnProcessGroup,
   type ClaudeProcess as GroupProcess,
 } from "./claude-process";
-import {
-  folderKey,
-  registerGate,
-  threadKey,
-  trustedHookConfig,
-  type HookDecision,
-} from "./codex-always-ask";
+import { prepareCodexAskHome } from "./codex-ask-home";
 import {
   CODEX_ANSWERABLE_REQUESTS,
   CODEX_MESSAGE_QUESTION_PREFIX,
@@ -36,7 +31,7 @@ import type {
   SignInStatus,
 } from "./contract";
 import { agentEnvironment, findExecutable } from "./find-executable";
-import { checkUserRules, userRuleApproval, userRulesHookNeeded } from "./user-rules";
+import { failedRuleCheck, loadUserRules, userRuleDetail } from "./user-rules";
 import { codexInput, modelText, textTurn, type UserTurn } from "./user-turn";
 
 export const CODEX_PATH_ENV = "BUSYBOY_CODEX_PATH";
@@ -49,9 +44,27 @@ function resolveCodex() {
   return process.env[CODEX_PATH_ENV] || findExecutable("codex");
 }
 
-export function codexThreadSettings(mode: PermissionMode, noTools = false) {
+export function codexThreadSettings(
+  mode: PermissionMode,
+  noTools = false,
+  ask = false,
+  noFileEdits = false,
+) {
   // why: Codex has no switch for no tools over app-server.
   if (noTools) return { approvalPolicy: "never", approvalsReviewer: "user", sandbox: "read-only" };
+  if (noFileEdits) {
+    return { approvalPolicy: "on-request", approvalsReviewer: "user", sandbox: "read-only" };
+  }
+  if (ask && mode === "full-access") {
+    return {
+      approvalPolicy: "on-request",
+      approvalsReviewer: "user",
+      sandbox: "danger-full-access",
+    };
+  }
+  if (ask) {
+    return { approvalPolicy: "on-request", approvalsReviewer: "user", sandbox: "workspace-write" };
+  }
   return mode === "full-access"
     ? { approvalPolicy: "never", approvalsReviewer: "user", sandbox: "danger-full-access" }
     : {
@@ -223,8 +236,10 @@ function spawnAppServer(
   executable: string,
   cwd: string,
   onMessage: (message: CodexRawMessage) => void,
+  codexHome?: string,
 ) {
   const env = agentEnvironment() as NodeJS.ProcessEnv;
+  if (codexHome) env.CODEX_HOME = codexHome;
   const script = /\.[cm]?js$/i.test(executable);
   const command = script ? (findExecutable("node") ?? "node") : executable;
   const args = script ? [executable, "app-server"] : ["app-server"];
@@ -255,118 +270,12 @@ function startCodex(options: ProviderStartOptions): ProviderSession {
   let stopRequested = false;
   let failed = false;
   let ready: Promise<void> | undefined;
-  const asks = new Map<string, (answer: AgentAnswer | null) => void>();
   const allowedCalls = createAllowedCalls();
-  const unregisterGates: (() => void)[] = [];
-  const alwaysAsk =
-    !options.noTools &&
-    ((options.alwaysAsk?.length ?? 0) > 0 ||
-      Boolean(options.privateFolder) ||
-      Boolean(options.noFileEdits) ||
-      userRulesHookNeeded(options.rulesFolder));
 
-  const ask = (
-    requestId: string,
-    event: Extract<AgentEvent, { type: "approval" }>,
-    signal: AbortSignal,
-  ) =>
-    new Promise<AgentAnswer | null>((resolve) => {
-      signal.addEventListener(
-        "abort",
-        () => {
-          if (asks.delete(requestId)) {
-            resolve(null);
-            emit({ type: "answered", requestId });
-          }
-        },
-        { once: true },
-      );
-      asks.set(requestId, resolve);
-      mapper.flush();
-      emit(event);
-    });
-
-  const gate = async ({
-    toolName,
-    input,
-    cwd,
-    signal,
-  }: {
-    toolName: string;
-    input: unknown;
-    cwd?: string;
-    signal: AbortSignal;
-  }): Promise<HookDecision> => {
-    const folder = cwd || options.cwd;
-    const userRule = await checkUserRules({
-      rulesFolder: options.rulesFolder,
-      toolName,
-      input,
-      cwd: folder,
-      recordFolder: options.recordFolder,
-    });
-    if (userRule.ask) {
-      const call = { toolName, input, rule: userRule.ruleKey, cwd: folder };
-      if (!(userRule.remember && allowedCalls.has(call))) {
-        const requestId = `${requestPrefix}user-rule-${randomUUID()}`;
-        const answer = await ask(
-          requestId,
-          userRuleApproval({
-            requestId,
-            toolName,
-            input,
-            detail: userRule.detail,
-            remember: userRule.remember,
-          }),
-          signal,
-        );
-        asks.delete(requestId);
-        if (!(answer?.kind === "approval" && answer.allow)) {
-          return {
-            allow: false,
-            reason:
-              (answer?.kind === "approval" && answer.message) || "The user declined this action.",
-          };
-        }
-        if (answer.forSession && userRule.remember) allowedCalls.add(call);
-      }
-    }
-    const rule = matchAlwaysAsk({
-      rules: options.alwaysAsk ?? [],
-      toolName,
-      input,
-      folder: options.cwd,
-      recordFolder: options.recordFolder,
-      privateFolder: options.privateFolder,
-      noFileEdits: options.noFileEdits,
-    });
-    const call = { toolName, input, rule: rule ?? "", cwd: folder };
-    if (!rule || allowedCalls.has(call)) {
-      return { allow: true, reason: "" };
-    }
-    const requestId = `${requestPrefix}always-ask-${randomUUID()}`;
-    const answer = await ask(
-      requestId,
-      alwaysAskApproval({ requestId, toolName, input, rule }),
-      signal,
-    );
-    asks.delete(requestId);
-    if (answer?.kind === "approval" && answer.allow) {
-      if (answer.forSession) allowedCalls.add(call);
-      return { allow: true, reason: "" };
-    }
-    return {
-      allow: false,
-      reason: (answer?.kind === "approval" && answer.message) || "The user declined this action.",
-    };
-  };
-
-  const dropAsks = () => {
-    for (const [requestId, resolve] of asks.entries()) {
-      asks.delete(requestId);
-      resolve(null);
-      emit({ type: "answered", requestId });
-    }
+  const rememberedCommand = (message: CodexRawMessage) => {
+    const command = message.params?.command;
+    if (typeof command !== "string" || !command) return null;
+    return { toolName: "Bash", input: { command }, rule: "codex-command", cwd: options.cwd };
   };
 
   const fail = (message: string, code: "provider" | "signed-out" | "lost-session" = "provider") => {
@@ -453,6 +362,11 @@ function startCodex(options: ProviderStartOptions): ProviderSession {
         connection?.respondError(message.id, `BusyBoy does not handle ${message.method}.`);
         return;
       }
+      const remembered = rememberedCommand(message);
+      if (remembered && allowedCalls.has(remembered)) {
+        connection?.respond(message.id, { decision: "accept" });
+        return;
+      }
       requests.set(requestId, message);
       mapper.flush();
       emit(event);
@@ -489,29 +403,48 @@ function startCodex(options: ProviderStartOptions): ProviderSession {
       return false;
     }
     for (const notice of mcp.skipped) emit({ type: "error", code: "provider", message: notice });
-    connection = spawnAppServer(executable, options.cwd, onMessage);
+    let codexHome: string | undefined;
+    let ask = false;
+    if (!options.noTools) {
+      let blocked = "";
+      let blocks: string[] = [];
+      try {
+        const loaded = await loadUserRules(options.rulesFolder);
+        blocks = loaded.map((rule) => rule.block);
+        const translated = translateAskRules({
+          rules: [...(options.alwaysAsk ?? []), ...blocks],
+          privateFolder: options.privateFolder,
+        });
+        for (const rule of translated.codex) {
+          const user = loaded.find((entry) => entry.block === rule.rule);
+          if (user) rule.justification = userRuleDetail(user);
+        }
+        ask = translated.codex.length > 0;
+        if (ask) {
+          codexHome = await prepareCodexAskHome({ source: codexRulesSource(translated.codex) });
+        }
+      } catch (error) {
+        const check = failedRuleCheck(error);
+        blocked = check.ask ? check.detail : "";
+        ask = true;
+        codexHome = await prepareCodexAskHome({ source: "", blocked });
+      }
+    }
+    connection = spawnAppServer(executable, options.cwd, onMessage, codexHome);
     const current = connection;
     if (stopRequested) void current.kill();
     ready = (async () => {
       await current.initialize();
-      // why: A subagent's folder is the project checkout, where other agents work, so it is matched by thread only.
-      if (alwaysAsk && !options.noFileEdits) {
-        unregisterGates.push(registerGate({ key: folderKey(options.cwd), gate }));
-      }
-      const hook = alwaysAsk
-        ? await trustedHookConfig({
-            request: (method, params) => current.request(method, params),
-            cwd: options.cwd,
-            executable,
-          })
-        : undefined;
       const settings = {
         cwd: options.cwd,
-        ...codexThreadSettings(options.permissionMode, options.noTools),
+        ...codexThreadSettings(
+          options.permissionMode,
+          options.noTools,
+          ask,
+          Boolean(options.noFileEdits),
+        ),
         developerInstructions: options.instructions ?? null,
-        config: options.noTools
-          ? await noToolsConfig(current, options.cwd)
-          : { ...mcp.config, ...hook?.config },
+        config: options.noTools ? await noToolsConfig(current, options.cwd) : mcp.config,
       };
       const [method, params] = options.forkSessionId
         ? [
@@ -525,11 +458,7 @@ function startCodex(options: ProviderStartOptions): ProviderSession {
             ]
           : ["thread/start", settings];
       const response = await current.request<{ thread: { id: string } }>(method, params);
-      await hook?.verify(response.thread.id);
       threadId = response.thread.id;
-      if (alwaysAsk) {
-        unregisterGates.push(registerGate({ key: threadKey(threadId), gate }));
-      }
       emit({ type: "session", sessionId: threadId });
       startNextTurn();
     })();
@@ -555,10 +484,6 @@ function startCodex(options: ProviderStartOptions): ProviderSession {
       void current.kill();
     });
     const { code, stderr } = await current.exited;
-    for (const unregister of unregisterGates) {
-      unregister();
-    }
-    dropAsks();
     mapper.flush();
     mapper.dispose();
     fail(stderr.trim() || `The Codex app server exited with code ${code}.`);
@@ -580,7 +505,6 @@ function startCodex(options: ProviderStartOptions): ProviderSession {
   return {
     send,
     async interrupt() {
-      dropAsks();
       for (const [requestId, request] of requests) {
         if (request.id !== undefined)
           connection?.respond(
@@ -614,11 +538,6 @@ function startCodex(options: ProviderStartOptions): ProviderSession {
       }
     },
     answer(requestId, answer: AgentAnswer) {
-      const ask = asks.get(requestId);
-      if (ask) {
-        ask(answer);
-        return;
-      }
       if (requestId.startsWith(CODEX_MESSAGE_QUESTION_PREFIX)) {
         const text = codexQuestionAnswerText(answer);
         if (!connection || !threadId || !turnId) return send(text);
@@ -631,6 +550,10 @@ function startCodex(options: ProviderStartOptions): ProviderSession {
       const request = requests.get(requestId);
       if (!request || request.id === undefined) return;
       requests.delete(requestId);
+      const remembered = rememberedCommand(request);
+      if (remembered && answer.kind === "approval" && answer.allow && answer.forSession) {
+        allowedCalls.add(remembered);
+      }
       const result = codexAnswerToResult(request, answer);
       if ((result as { decision?: unknown }).decision === "cancel") mapper.deniedWithCancel();
       connection?.respond(request.id, result);

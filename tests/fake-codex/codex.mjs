@@ -42,6 +42,84 @@ function listHooks(hooks) {
   );
 }
 
+function loadPolicy() {
+  const home = process.env.CODEX_HOME;
+  if (!home) return { rules: [], blocked: "" };
+  const dir = join(home, "rules");
+  let names = [];
+  try {
+    names = readdirSync(dir);
+  } catch {
+    return { rules: [], blocked: "" };
+  }
+  let blocked = "";
+  try {
+    blocked = readFileSync(join(dir, "blocked.txt"), "utf8");
+  } catch {
+    blocked = "";
+  }
+  const rules = [];
+  for (const name of names.filter((entry) => entry.endsWith(".rules"))) {
+    const text = readFileSync(join(dir, name), "utf8");
+    for (const block of text.matchAll(/prefix_rule\(([\s\S]*?)\)\n/g)) {
+      const body = block[1];
+      const pattern = /pattern = \[([^\]]*)\]/.exec(body);
+      if (!pattern) continue;
+      const tokens = [...pattern[1].matchAll(/"((?:\\.|[^"\\])*)"/g)].map((match) =>
+        match[1].replaceAll('\\"', '"').replaceAll("\\\\", "\\"),
+      );
+      const decision = /decision = "(\w+)"/.exec(body)?.[1] ?? "allow";
+      const justification = /justification = "((?:\\.|[^"\\])*)"/.exec(body)?.[1] ?? "";
+      rules.push({
+        tokens,
+        decision,
+        justification: justification.replaceAll('\\"', '"').replaceAll("\\\\", "\\"),
+      });
+    }
+  }
+  return { rules, blocked };
+}
+
+function commandText(call) {
+  const command = call.tool_input?.command ?? call.tool_input?.cmd ?? "";
+  return Array.isArray(command) ? command.join(" ") : String(command);
+}
+
+async function policyDenies(command) {
+  const { rules, blocked } = loadPolicy();
+  const tokens = command.trim().split(/\s+/);
+  if (blocked) return !(await askCommand(command, blocked, false));
+  const matches = rules.filter((rule) =>
+    rule.tokens.every((token, index) => tokens[index] === token),
+  );
+  if (matches.some((rule) => rule.decision === "forbidden")) return true;
+  const prompt = matches.find((rule) => rule.decision === "prompt");
+  if (!prompt) return false;
+  return !(await askCommand(command, prompt.justification, true));
+}
+
+async function askCommand(command, reason, remember) {
+  const id = nextRequestId++;
+  const reply = new Promise((resolve) => waitingReplies.set(id, resolve));
+  const decisions = remember
+    ? ["accept", "acceptForSession", "decline"]
+    : ["accept", "decline"];
+  send({
+    id,
+    method: "item/commandExecution/requestApproval",
+    params: {
+      threadId,
+      turnId: current?.id,
+      command,
+      reason,
+      availableDecisions: decisions,
+    },
+  });
+  const result = await reply;
+  const decision = replyDecision(result);
+  return decision === "accept" || String(decision).startsWith("accept");
+}
+
 async function hooksDeny(call) {
   const trusted = threadHooks
     .filter(({ trustStatus }) => trustStatus === "trusted")
@@ -147,7 +225,8 @@ async function playTurn(turn) {
   } of turn.steps) {
     if (own.ended) return;
     if (preToolUse) {
-      const branch = then?.[(await hooksDeny(preToolUse)) ? "deny" : "allow"];
+      const denied = (await policyDenies(commandText(preToolUse))) || (await hooksDeny(preToolUse));
+      const branch = then?.[denied ? "deny" : "allow"];
       if (own.ended) return;
       if (branch) return playTurn({ steps: branch });
       continue;

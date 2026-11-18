@@ -279,7 +279,7 @@ test.describe("Codex task agents", () => {
     await createTask(context.request, "Force push", FORCE_PUSH_REQUEST);
 
     const card = openCard(page, "Approval from web · Force push");
-    await expect(card).toContainText("Bash: git push --force origin HEAD");
+    await expect(card).toContainText("Allow Shell: git push --force origin HEAD?");
     await card.getByRole("button", { name: "A. Allow" }).click();
 
     await expect(
