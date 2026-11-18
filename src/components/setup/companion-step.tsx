@@ -2,11 +2,7 @@
 
 import { useActionState, useState } from "react";
 
-import {
-  chooseCompanionAction,
-  removeCompanionImageAction,
-  setCompanionImageAction,
-} from "@/app/setup/actions";
+import { removeCompanionImageAction, setCompanionImageAction } from "@/app/setup/actions";
 import { CompanionAvatar } from "@/components/companion/companion-avatar";
 import { Button } from "@/components/ui/button";
 import { Field, FieldDescription, FieldError, FieldLabel } from "@/components/ui/field";
@@ -15,46 +11,6 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { MAX_IMAGE_BYTES, MAX_IMAGE_TEXT } from "@/lib/companion-limits";
 import { cn } from "@/lib/utils";
 import type { Companion } from "@/server/companions";
-
-import { StepFooter } from "./step-footer";
-
-const FORM_ID = "companion-form";
-
-export function CompanionStep({
-  companions,
-  selected,
-  defaultId,
-  imageUrl,
-}: {
-  companions: Companion[];
-  selected?: string;
-  defaultId: string;
-  imageUrl?: string;
-}) {
-  const [state, action, pending] = useActionState(chooseCompanionAction, {});
-  const [value, setValue] = useState(selected ?? defaultId);
-  const chosen = companions.find((companion) => companion.id === value);
-  return (
-    <>
-      <form id={FORM_ID} action={action} className="space-y-4">
-        <CompanionChoices
-          companions={companions}
-          value={value}
-          imageUrl={imageUrl}
-          onChange={setValue}
-        />
-        {state.error && <FieldError>{state.error}</FieldError>}
-      </form>
-      <CompanionImageForm hasImage={Boolean(imageUrl)} />
-      <StepFooter>
-        <Button type="submit" form={FORM_ID} disabled={pending || !chosen}>
-          {chosen ? `Continue with ${chosen.name}` : "Continue"}
-        </Button>
-      </StepFooter>
-      <CharacterNote />
-    </>
-  );
-}
 
 export function CompanionChoices({
   companions,

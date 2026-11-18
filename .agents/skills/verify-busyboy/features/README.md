@@ -42,3 +42,4 @@ Each feature file starts with an H1 and one paragraph. It then uses these four H
 - [Progress and done cards](./progress-and-done-cards.md) shows the todo steps, then the done card after the task is told to ship.
 - [PR card](./pr-card.md) lists the stack and merges it in order.
 - [Settings](./settings.md) opens settings and saves a new Director.
+- [First run](./first-run.md) signs in to a harness and opens the Director with no project.

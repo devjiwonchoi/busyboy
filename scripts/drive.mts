@@ -596,9 +596,16 @@ async function runJourney(drive: Drive, name: string | undefined): Promise<Resul
     await waitForCompanion(drive.dataDir, "ming");
     const checked = await drive.page.getByRole("radio", { name: "Ming the seal" }).isChecked();
     if (!checked) return fail("Ming the seal is saved, and the radio is not checked.");
+    if ((await drive.page.getByRole("link", { name: "Approvals" }).count()) !== 0)
+      return fail("Approvals is still a settings section.");
+    const version = (readJson(join(root, "package.json")) as { version?: string }).version;
+    if (!version) return fail("package.json has no version.");
+    await drive.page
+      .getByText(`BusyBoy ${version}`, { exact: true })
+      .waitFor({ timeout: actionMs });
     return result(
       true,
-      `Settings saved companion "ming" in ${join(drive.dataDir, "app-settings.json")}, and the Ming the seal radio is checked.`,
+      `Settings saved companion "ming" in ${join(drive.dataDir, "app-settings.json")}, the Ming the seal radio is checked, and the header says BusyBoy ${version}.`,
     );
   }
   if (name === "approve-plan") {
@@ -646,9 +653,55 @@ async function runJourney(drive: Drive, name: string | undefined): Promise<Resul
       `Merge in order closed the pull request card. ${log} records both merges, and the done line says Done.`,
     );
   }
+  if (name === "first-run") {
+    const director = await firstRun(drive);
+    return result(
+      true,
+      `A fresh profile signed in and opened the Director as ${director}, with no projects.`,
+    );
+  }
   return fail(
-    "Unknown journey. Journeys: director-send, approve-plan, progress-and-done, pr-card, settings.",
+    "Unknown journey. Journeys: director-send, approve-plan, progress-and-done, pr-card, settings, first-run.",
   );
+}
+
+const DIRECTORS: Record<string, string> = {
+  jota: "Jota",
+  rippu: "Rippu",
+  ming: "Ming",
+  yam: "Yam",
+  jjeromming: "Jjeromming",
+};
+
+async function firstRun(drive: Drive) {
+  rmSync(join(drive.dataDir, "app-settings.json"), { force: true });
+  await drive.page.goto(drive.url, { waitUntil: "domcontentloaded", timeout: readyMs });
+  await drive.page
+    .getByRole("heading", { name: "Sign in to an agent" })
+    .waitFor({ timeout: readyMs });
+  for (const heading of ["Pick a Director", "Add skills", "Always ask before", "Add projects"]) {
+    if ((await drive.page.getByRole("heading", { name: heading }).count()) > 0)
+      throw new Error(`Setup still shows ${heading}.`);
+  }
+  await drive.page.getByRole("button", { name: "Continue" }).click();
+  const log = transcript(drive.page);
+  await log.waitFor({ timeout: readyMs });
+  await waitForAttribute(log, "data-connected", "true", readyMs);
+  const settings = readJson(join(drive.dataDir, "app-settings.json")) as {
+    companion?: string | null;
+    projects?: unknown[];
+  };
+  const name = settings.companion ? DIRECTORS[settings.companion] : undefined;
+  if (!name) throw new Error(`Companion ${String(settings.companion)} is not a director.`);
+  if ((settings.projects ?? []).length !== 0)
+    throw new Error("A fresh profile started with a project.");
+  await drive.page.getByRole("link", { name: `${name}, director` }).waitFor({ timeout: actionMs });
+  await drive.page
+    .getByText(`${name}, your director`, { exact: true })
+    .waitFor({ timeout: actionMs });
+  if ((await drive.page.getByText("No managers yet.").count()) > 0)
+    throw new Error("The chat list explains an empty manager list.");
+  return name;
 }
 
 async function inspect(drive: Drive) {
@@ -661,7 +714,8 @@ async function inspect(drive: Drive) {
     title: await drive.page.title(),
     transcriptConnected: connected,
     transcriptStatus: status,
-    setupHeading: (await drive.page.getByRole("heading", { name: "Pick a Director" }).count()) > 0,
+    setupHeading:
+      (await drive.page.getByRole("heading", { name: "Sign in to an agent" }).count()) > 0,
     settingsMain: (await drive.page.getByRole("main", { name: "Settings" }).count()) > 0,
   };
 }
@@ -918,7 +972,7 @@ async function launchElectron(dataDir: string) {
   });
   const page = await app.firstWindow({ timeout: readyMs });
   page.setDefaultTimeout(actionMs);
-  await page.getByRole("heading", { name: "Pick a Director" }).waitFor({ timeout: readyMs });
+  await page.getByRole("heading", { name: "Sign in to an agent" }).waitFor({ timeout: readyMs });
   return { app, page, url: page.url() };
 }
 
@@ -1270,8 +1324,8 @@ async function doctor() {
       else problems.push("The transcript is not connected, so the chat is not usable yet.");
       if (!page.title?.includes("BusyBoy"))
         problems.push("The page title does not identify BusyBoy.");
-    } else if (page.setupHeading) lines.push("setup: Pick a Director is visible");
-    else problems.push("The desktop window is not showing Pick a Director.");
+    } else if (page.setupHeading) lines.push("setup: Sign in to an agent is visible");
+    else problems.push("The desktop window is not showing Sign in to an agent.");
   } catch (error) {
     problems.push(error instanceof Error ? error.message : String(error));
   }
@@ -1286,7 +1340,7 @@ function help() {
   return `pnpm drive launch [--surface next|electron]
 pnpm drive doctor
 pnpm drive step <open-chat|send-message|approve-plan|open-settings|show-progress|ship-footer|merge-pulls> [--text TEXT]
-pnpm drive journey <director-send|approve-plan|progress-and-done|pr-card|settings>
+pnpm drive journey <director-send|approve-plan|progress-and-done|pr-card|settings|first-run>
 pnpm drive click --role ROLE --name NAME
 pnpm drive fill --role ROLE --name NAME --value VALUE
 pnpm drive press --key KEY

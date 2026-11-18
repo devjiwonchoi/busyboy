@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
 
 import { useProjectsHome } from "./support/projects-home";
-import { createGitRepository } from "./support/test-home";
+import { createGitRepository, useTestHome } from "./support/test-home";
 
 const QUESTION = "What do you manage?";
 const WORK = "Add a contributing guide.";
@@ -71,7 +71,7 @@ test("creating a manager for a project should open its chat and list it", async 
 }) => {
   const { home } = await useProjectsHome(context, baseURL!, ["web", "api"]);
   await openChat(page);
-  await expect(chatList(page).getByText("No managers yet.")).toBeVisible();
+  await expect(chatList(page).getByText("No managers yet.")).toHaveCount(0);
 
   await chatList(page).getByRole("button", { name: "New manager" }).click();
   const form = page.getByRole("dialog", { name: "New manager" });
@@ -258,7 +258,7 @@ test("removing a manager should take it off the list and show its tasks in the D
     .getByRole("button", { name: "Remove" })
     .click();
 
-  await expect(chatList(page).getByText("No managers yet.")).toBeVisible();
+  await expect(chatList(page).getByText("No managers yet.")).toHaveCount(0);
   await expect(page.getByRole("textbox", { name: "Message" })).toHaveAttribute(
     "aria-placeholder",
     "Message BusyBoy",
@@ -271,4 +271,44 @@ test("removing a manager should take it off the list and show its tasks in the D
   expect(storedTasks(home)).toMatchObject([{ title: "Contributing guide", chat: null }]);
   expect(settingsOf(home).managers).toEqual([]);
   expect(settingsOf(home).projects.map(({ name }) => name)).toEqual(["web"]);
+});
+
+test("creating a manager when there are no projects should add the folder", async ({
+  page,
+  context,
+  baseURL,
+}) => {
+  const home = await useTestHome(context, baseURL!, { claude: "signed-in" });
+  writeFileSync(
+    join(home, "app-settings.json"),
+    `${JSON.stringify(
+      {
+        version: 1,
+        setupCompletedAt: new Date(0).toISOString(),
+        defaultProvider: "claude",
+        theme: "dark",
+        companion: "jota",
+        companionImage: null,
+        projects: [],
+        managers: [],
+        alwaysAsk: null,
+      },
+      null,
+      2,
+    )}\n`,
+  );
+  const docs = createGitRepository("docs");
+  await openChat(page);
+  await expect(chatList(page).getByText("No managers yet.")).toHaveCount(0);
+
+  await chatList(page).getByRole("button", { name: "New manager" }).click();
+  const form = page.getByRole("dialog", { name: "New manager" });
+  await form.getByRole("radio", { name: "Another folder" }).click();
+  await form.getByRole("textbox", { name: "Folder path" }).fill(docs);
+  await form.getByRole("button", { name: "Create manager" }).click();
+
+  await expect(transcript(page).getByText("docs, manager of docs")).toBeVisible();
+  const settings = settingsOf(home);
+  expect(settings.projects.map(({ name }) => name)).toEqual(["docs"]);
+  expect(settings.managers).toMatchObject([{ name: "docs", project: "docs" }]);
 });

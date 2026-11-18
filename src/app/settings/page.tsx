@@ -4,23 +4,18 @@ import { redirect } from "next/navigation";
 import { connection } from "next/server";
 import { Suspense } from "react";
 
-import {
-  recheckProvidersAction,
-  removeProjectAction,
-  restoreAlwaysAskAction,
-} from "@/app/setup/actions";
+import { recheckProvidersAction, removeProjectAction } from "@/app/setup/actions";
 import { CompanionSettings } from "@/components/settings/companion-settings";
 import { ConnectorAddForm } from "@/components/settings/connector-add-form";
 import { HarnessChoice } from "@/components/settings/harness-choice";
 import { ThemeChoice } from "@/components/settings/theme-choice";
 import { AddProjectForm } from "@/components/setup/add-project-form";
-import { AlwaysAskForm } from "@/components/setup/always-ask-form";
 import { CompanionImageForm } from "@/components/setup/companion-step";
 import { CopyCommand } from "@/components/setup/copy-command";
 import { FolderPicker } from "@/components/setup/folder-picker";
+import { UpdateButton } from "@/components/shell/update-button";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
-import { Empty, EmptyDescription, EmptyHeader } from "@/components/ui/empty";
 import {
   Item,
   ItemActions,
@@ -31,15 +26,14 @@ import {
 } from "@/components/ui/item";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
-import { alwaysAskRules } from "@/server/always-ask-list";
+import { TooltipProvider } from "@/components/ui/tooltip";
+import { APP_VERSION } from "@/lib/app-version";
 import { COMPANIONS, companionImageUrl, currentCompanion } from "@/server/companions";
 import { isSetupComplete, readSettings } from "@/server/config";
 import { listConnectors, type ConnectorStatus } from "@/server/connectors";
 import { defaultProvider, PROVIDERS, providerState, skillsState } from "@/server/providers";
-import { DEFAULT_ALWAYS_ASK } from "@/server/runner/always-ask";
 import type { SignInStatus } from "@/server/runner/contract";
 
-import { saveAlwaysAskAction } from "./actions";
 import { parseSection, sectionHref, SECTIONS, type SectionId } from "./sections";
 
 export const metadata: Metadata = { title: "Settings · BusyBoy" };
@@ -49,16 +43,15 @@ export default function SettingsPage({ searchParams }: PageProps<"/settings">) {
     <div className="flex h-dvh flex-col">
       <header className="flex h-10 shrink-0 items-center border-b pr-2 pl-[var(--title-bar-inset,0.75rem)] [app-region:drag]">
         <span className="text-sm font-medium">Settings</span>
-        <Link
-          href="/"
-          className={buttonVariants({
-            variant: "ghost",
-            size: "sm",
-            className: "ml-auto [app-region:no-drag]",
-          })}
-        >
-          Back to chat
-        </Link>
+        <div className="ml-auto flex items-center gap-2 [app-region:no-drag]">
+          <p className="text-muted-foreground text-xs">BusyBoy {APP_VERSION}</p>
+          <TooltipProvider>
+            <UpdateButton />
+          </TooltipProvider>
+          <Link href="/" className={buttonVariants({ variant: "ghost", size: "sm" })}>
+            Back to chat
+          </Link>
+        </div>
       </header>
       <Suspense fallback={<Skeleton className="m-6 h-96" />}>
         <Body searchParams={searchParams} />
@@ -124,11 +117,6 @@ const HEADINGS: Record<SectionId, { title: string; description: string }> = {
     description:
       "MCP servers configured for Claude Code and Codex. BusyBoy uses those sign-ins and does not keep a token of its own.",
   },
-  approvals: {
-    title: "Approvals",
-    description:
-      "Before any action on this list a task agent asks you first, every time, even in Auto mode.",
-  },
   projects: {
     title: "Projects",
     description: "Folders that are git repositories. Removing one keeps its folder.",
@@ -147,7 +135,6 @@ function Section({ id }: { id: SectionId }) {
       {id === "appearance" && <AppearanceSection />}
       {id === "agents" && <AgentsSection />}
       {id === "connectors" && <ConnectorsSection />}
-      {id === "approvals" && <ApprovalsSection />}
       {id === "projects" && <ProjectsSection />}
     </>
   );
@@ -277,13 +264,7 @@ async function ConnectorsSection() {
           className="space-y-4"
         >
           <h2 className="text-sm font-medium">{harness.name}</h2>
-          {harness.servers.length === 0 ? (
-            <Empty className="border p-4">
-              <EmptyHeader>
-                <EmptyDescription>No connectors yet.</EmptyDescription>
-              </EmptyHeader>
-            </Empty>
-          ) : (
+          {harness.servers.length > 0 && (
             <ItemGroup aria-label={`${harness.name} servers`}>
               {harness.servers.map((server) => (
                 <Item key={server.name} role="listitem" aria-label={server.name} variant="outline">
@@ -331,29 +312,11 @@ async function ConnectorsSection() {
   );
 }
 
-async function ApprovalsSection() {
-  const rules = await alwaysAskRules();
-  return (
-    <AlwaysAskForm
-      id="approvals-form"
-      rules={rules}
-      save={saveAlwaysAskAction}
-      restore={{ rules: DEFAULT_ALWAYS_ASK, action: restoreAlwaysAskAction }}
-    />
-  );
-}
-
 async function ProjectsSection() {
   const { projects } = await readSettings();
   return (
     <>
-      {projects.length === 0 ? (
-        <Empty className="border p-4">
-          <EmptyHeader>
-            <EmptyDescription>No projects yet.</EmptyDescription>
-          </EmptyHeader>
-        </Empty>
-      ) : (
+      {projects.length > 0 && (
         <ItemGroup aria-label="Projects">
           {projects.map((project) => (
             <Item key={project.name} role="listitem" variant="outline">

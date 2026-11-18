@@ -4,6 +4,8 @@ import { dirname, join } from "node:path";
 
 import { expect, test, type Page } from "@playwright/test";
 
+import { COMPANIONS } from "@/server/companions";
+
 import { createGitRepository, removeFolder, useTestHome } from "./support/test-home";
 
 const folders: string[] = [];
@@ -20,7 +22,7 @@ function readSettings(home: string) {
 
 const chats = (page: Page) => page.getByRole("navigation", { name: "Chats" });
 
-test("picking a director and changing it in settings should update the sidebar", async ({
+test("a random director can be changed in settings and the sidebar updates", async ({
   page,
   context,
   baseURL,
@@ -34,36 +36,31 @@ test("picking a director and changing it in settings should update the sidebar",
   await page.emulateMedia({ colorScheme: "dark" });
 
   await page.goto("/setup");
-  await expect(page.getByRole("heading", { name: "Pick a Director" })).toBeVisible();
-  await expect(page.getByRole("radio", { name: /^Jota the cat/ })).toBeChecked();
-  await page.screenshot({ path: test.info().outputPath("setup-default-jota.png"), fullPage: true });
-
-  await page.getByRole("radio", { name: /^Yam the elephant/ }).click();
-  await expect(page.getByRole("button", { name: "Continue with Yam" })).toBeEnabled();
-  await page.screenshot({ path: test.info().outputPath("setup-picked-yam.png"), fullPage: true });
-  await page.getByRole("button", { name: "Continue with Yam" }).click();
-
   await expect(page.getByRole("heading", { name: "Sign in to an agent" })).toBeVisible();
   await page.getByRole("button", { name: "Continue" }).click();
-  await page.getByRole("link", { name: "Skip" }).click();
-  await expect(page.getByRole("heading", { name: "Always ask before" })).toBeVisible();
-  await page.getByRole("link", { name: "Skip" }).click();
+
+  await expect(page).toHaveURL(/\/$/);
+  await expect(chats(page)).toHaveAttribute("data-loaded", "true");
+  const assigned = COMPANIONS.find((entry) => entry.id === readSettings(home).companion);
+  expect(assigned).toBeTruthy();
+  const director = chats(page).getByRole("link", { name: `${assigned!.name}, director` });
+  await expect(director).toBeVisible();
+  await expect(chats(page).getByText("Director", { exact: true })).toBeVisible();
+  await expect(director.locator("[data-emoji]")).toHaveAttribute("data-emoji", assigned!.emoji);
+  await expect(chats(page).getByRole("link").first()).toHaveAccessibleName(
+    `${assigned!.name}, director`,
+  );
+
+  await page.getByRole("link", { name: "Settings" }).click();
+  await page.getByRole("link", { name: "Projects" }).click();
   await page.getByLabel("Folder path").fill(shop);
   await page.getByRole("button", { name: "Add folder" }).click();
   await expect(page.getByRole("list", { name: "Projects" })).toContainText("shop");
   await page.getByLabel("Folder path").fill(web);
   await page.getByRole("button", { name: "Add folder" }).click();
   await expect(page.getByRole("list", { name: "Projects" })).toContainText("web");
-  await page.getByRole("button", { name: "Start chatting" }).click();
-
-  await expect(page).toHaveURL(/\/$/);
+  await page.getByRole("link", { name: "Back to chat" }).click();
   await expect(chats(page)).toHaveAttribute("data-loaded", "true");
-  const director = chats(page).getByRole("link", { name: "Yam, director" });
-  await expect(director).toBeVisible();
-  await expect(chats(page).getByText("Director", { exact: true })).toBeVisible();
-  await expect(director.locator("[data-emoji]")).toHaveAttribute("data-emoji", "🐘");
-  await expect(chats(page).getByRole("link").first()).toHaveAccessibleName("Yam, director");
-  await expect(chats(page).getByRole("button", { name: "Search chats" })).toBeVisible();
 
   const form = page.getByRole("dialog", { name: "New manager" });
   await chats(page).getByRole("button", { name: "New manager" }).click();
@@ -94,7 +91,9 @@ test("picking a director and changing it in settings should update the sidebar",
   const room = chats(page).getByRole("listitem", { name: "Records" });
   await expect(room.locator("[data-letter]")).toHaveCount(2);
   await expect(chats(page).getByText(userInfo().username, { exact: true })).toBeVisible();
-  await expect(chats(page).getByRole("link").first()).toHaveAccessibleName("Yam, director");
+  await expect(chats(page).getByRole("link").first()).toHaveAccessibleName(
+    `${assigned!.name}, director`,
+  );
 
   await chats(page).getByRole("button", { name: "Search chats" }).click();
   await chats(page).getByRole("textbox", { name: "Search chats" }).fill("Skills");
@@ -103,34 +102,31 @@ test("picking a director and changing it in settings should update the sidebar",
   await chats(page).getByRole("button", { name: "Search chats" }).click();
   await expect(webby).toBeVisible();
 
+  const next = COMPANIONS.find((entry) => entry.id !== assigned!.id)!;
   await page.getByRole("link", { name: "Settings" }).click();
   await expect(page.getByRole("heading", { name: "Director", exact: true })).toBeVisible();
-  await expect(page.getByRole("radio", { name: /^Yam the elephant/ })).toBeChecked();
-  await expect(page.locator("dd").filter({ hasText: "Yam" })).toBeVisible();
-  await expect(page.locator("dd").filter({ hasText: "Formal · encouraging" })).toBeVisible();
-
-  await page.getByRole("radio", { name: /^Jjeromming the squirrel/ }).click();
-  await expect.poll(() => readSettings(home).companion).toBe("jjeromming");
-  await expect(page.getByRole("radio", { name: /^Jjeromming the squirrel/ })).toBeChecked();
-  await expect(page.locator("dd").filter({ hasText: "Jjeromming" })).toBeVisible();
-  await expect(page.locator("dd").filter({ hasText: "Direct · quick" })).toBeVisible();
+  await expect(
+    page.getByRole("radio", { name: new RegExp(`^${assigned!.name} the`) }),
+  ).toBeChecked();
+  await page.getByRole("radio", { name: new RegExp(`^${next.name} the`) }).click();
+  await expect.poll(() => readSettings(home).companion).toBe(next.id);
+  await expect(page.getByRole("radio", { name: new RegExp(`^${next.name} the`) })).toBeChecked();
+  await expect(page.locator("dd").filter({ hasText: next.name })).toBeVisible();
+  await expect(page.locator("dd").filter({ hasText: next.speech })).toBeVisible();
   await expect(page.getByRole("button", { name: "Continue" })).toHaveCount(0);
-  await page.screenshot({
-    path: test.info().outputPath("settings-jjeromming.png"),
-    fullPage: true,
-  });
 
   await page.getByRole("link", { name: "Back to chat" }).click();
   await expect(chats(page)).toHaveAttribute("data-loaded", "true");
-  await expect(chats(page).getByRole("link", { name: "Jjeromming, director" })).toBeVisible();
+  await expect(chats(page).getByRole("link", { name: `${next.name}, director` })).toBeVisible();
   await expect(
-    chats(page).getByRole("link", { name: "Jjeromming, director" }).locator("[data-emoji]"),
-  ).toHaveAttribute("data-emoji", "🐿️");
+    chats(page)
+      .getByRole("link", { name: `${next.name}, director` })
+      .locator("[data-emoji]"),
+  ).toHaveAttribute("data-emoji", next.emoji);
   await expect(
     chats(page).getByRole("listitem", { name: "Webby" }).locator("[data-letter]"),
   ).toHaveAttribute("data-letter", "W");
   await expect(
     chats(page).getByRole("listitem", { name: "Records" }).locator("[data-letter]"),
   ).toHaveCount(2);
-  await page.screenshot({ path: test.info().outputPath("sidebar-jjeromming.png") });
 });

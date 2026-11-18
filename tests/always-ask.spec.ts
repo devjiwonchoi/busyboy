@@ -7,7 +7,6 @@ import { expect as baseExpect, test, type APIRequestContext, type Page } from "@
 import { useProjectsHome } from "./support/projects-home";
 
 const FORCE_PUSH_REQUEST = "Force push the branch to origin.";
-const RELEASE_REQUEST = "Run the release script.";
 const CLEAN_REQUEST = "Remove the build folder.";
 const DIRECTOR_PUSH_REQUEST = "Force push the main branch yourself.";
 const ARTIFACT_REQUEST = "Download the CI screenshots into the task record.";
@@ -41,20 +40,6 @@ async function openChat(page: Page) {
     "data-connected",
     "true",
   );
-}
-
-// why: Hydrating the controlled textarea sets its value again, which drops anything filled before then.
-async function openApprovals(page: Page) {
-  await page.goto("/setup?step=approvals");
-  const list = page.getByRole("textbox", { name: "Always-ask list" });
-  await expect
-    .poll(() =>
-      list.evaluate((element) =>
-        Object.keys(element).some((key) => key.startsWith("__reactProps$")),
-      ),
-    )
-    .toBe(true);
-  return list;
 }
 
 const transcript = (page: Page) => page.getByRole("log", { name: "Transcript" });
@@ -291,64 +276,6 @@ test.describe("Claude task agents", () => {
         encoding: "utf8",
       }),
     ).toBe("");
-  });
-
-  test("adding a rule in Setup should make task agents ask before that action", async ({
-    page,
-    context,
-  }) => {
-    const list = await openApprovals(page);
-    await expect(list).toHaveValue(/^Force push or delete a remote branch\n/);
-    await list.fill(`${await list.inputValue()}\nBash(./release.sh*)`);
-    await page.getByRole("button", { name: "Continue" }).click();
-    await expect(page.getByRole("heading", { name: "Add projects" })).toBeVisible();
-    const saved = JSON.parse(readFileSync(join(home, "app-settings.json"), "utf8")) as {
-      alwaysAsk: string[];
-    };
-    expect(saved.alwaysAsk.at(-1)).toBe("Bash(./release.sh*)");
-
-    await openChat(page);
-    await createTask(context.request, "Release", RELEASE_REQUEST);
-    const card = openCard(page, "Approval from web · Release");
-    await expect(card).toContainText("On your always-ask list: Bash(./release.sh*)");
-    await card.getByRole("button", { name: "A. Allow" }).click();
-    await expect(
-      transcript(page).getByRole("group", { name: "Card from web · Release" }),
-    ).toContainText("A · Allow");
-  });
-
-  test("saving a bare command as a rule in Setup should be refused", async ({ page }) => {
-    const list = await openApprovals(page);
-    await list.fill(`${await list.inputValue()}\n./release.sh`);
-    await page.getByRole("button", { name: "Continue" }).click();
-
-    await expect(
-      page.getByText('"./release.sh" is not a tool name. Write a command as Bash(./release.sh).'),
-    ).toBeVisible();
-    await expect(list).toHaveValue(/\n\.\/release\.sh$/);
-    expect(
-      (JSON.parse(readFileSync(join(home, "app-settings.json"), "utf8")) as { alwaysAsk?: unknown })
-        .alwaysAsk ?? null,
-    ).toBeNull();
-  });
-
-  test("clicking Restore defaults should bring back the default always-ask list", async ({
-    page,
-  }) => {
-    const list = await openApprovals(page);
-    await list.fill("Bash(./release.sh*)");
-    await page.getByRole("button", { name: "Continue" }).click();
-    await expect(page.getByRole("heading", { name: "Add projects" })).toBeVisible();
-
-    await openApprovals(page);
-    await expect(list).toHaveValue("Bash(./release.sh*)");
-    await page.getByRole("button", { name: "Restore defaults" }).click();
-
-    await expect(list).toHaveValue(/Delete outside the task folder/);
-    expect(
-      (JSON.parse(readFileSync(join(home, "app-settings.json"), "utf8")) as { alwaysAsk: unknown })
-        .alwaysAsk,
-    ).toBeNull();
   });
 });
 

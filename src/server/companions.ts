@@ -1,3 +1,4 @@
+import { randomInt } from "node:crypto";
 import { mkdir, open, readFile, rename, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
 
@@ -120,6 +121,14 @@ export async function chooseCompanion(id: string) {
   if (!findCompanion(id)) throw new Error("Unknown companion.");
   await updateSettings((settings) => {
     settings.companion = id;
+  });
+}
+
+export async function assignRandomCompanion() {
+  await updateSettings((settings) => {
+    if (findCompanion(settings.companion)) return;
+    const companion = COMPANIONS[randomInt(COMPANIONS.length)];
+    if (companion) settings.companion = companion.id;
   });
 }
 

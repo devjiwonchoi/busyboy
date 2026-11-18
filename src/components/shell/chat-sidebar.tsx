@@ -156,23 +156,20 @@ export function ChatSidebar({
             progress={recordProgress}
           />
         </div>
-        <ItemGroup aria-label="Managers" className="gap-1">
-          {visibleManagers.map((manager) => (
-            <ManagerItem
-              key={manager.chat}
-              manager={manager}
-              active={manager.chat === active}
-              progress={progressOf(recordProgress.projects, manager.project)}
-            />
-          ))}
-          {visibleRooms.map((room) => (
-            <RoomItem key={room.id} room={room} managers={managers} />
-          ))}
-        </ItemGroup>
-        {chats !== null && managers.length === 0 && rooms.length === 0 && (
-          <p className="text-muted-foreground px-2 py-2 text-xs">
-            No managers yet. Create one for a project to talk to it here.
-          </p>
+        {(visibleManagers.length > 0 || visibleRooms.length > 0) && (
+          <ItemGroup aria-label="Managers" className="gap-1">
+            {visibleManagers.map((manager) => (
+              <ManagerItem
+                key={manager.chat}
+                manager={manager}
+                active={manager.chat === active}
+                progress={progressOf(recordProgress.projects, manager.project)}
+              />
+            ))}
+            {visibleRooms.map((room) => (
+              <RoomItem key={room.id} room={room} managers={managers} />
+            ))}
+          </ItemGroup>
         )}
       </div>
       <div className="flex items-center gap-2 p-2">

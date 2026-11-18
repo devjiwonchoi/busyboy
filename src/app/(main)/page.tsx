@@ -5,6 +5,7 @@ import { Suspense } from "react";
 import { DirectorChat } from "@/components/chat/director-chat";
 import { managerPersona } from "@/components/chat/persona";
 import { currentCompanion, directorPersona } from "@/server/companions";
+import { ensureHarnessSkills } from "@/server/link-skills";
 import { listManagers } from "@/server/managers";
 import { listProjects } from "@/server/projects";
 
@@ -20,6 +21,7 @@ export default function ChatPage({ searchParams }: { searchParams: Search }) {
 
 async function Chat({ searchParams }: { searchParams: Search }) {
   await connection();
+  await ensureHarnessSkills();
   const { manager: asked } = await searchParams;
   if (typeof asked === "string") return <ManagerChat id={asked} />;
   const [projects, companion, persona] = await Promise.all([
