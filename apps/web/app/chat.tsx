@@ -46,7 +46,7 @@ function apply(current: DirectorView, update: ChatAction): DirectorView {
     case "draft":
       return { ...current, draft: update.text, revision: current.revision + 1 };
     case "status":
-      return { ...current, status: update.status };
+      return { ...current, status: update.status, revision: current.revision + 1 };
     case "disconnected":
       return { ...current, connected: false };
     case "error":

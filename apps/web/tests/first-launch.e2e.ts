@@ -26,4 +26,17 @@ describe("first launch", { serial: true }, () => {
 
     await expect(screen.getByRole("article", "Reply")).toContainText("finished.");
   });
+
+  test("the chat shows thinking until the reply starts", async ({ app, screen }) => {
+    await app.open("/");
+    await screen.getByRole("textbox", "Message").waitFor();
+
+    await screen.getByRole("textbox", "Message").fill("Think first.");
+    await screen.getByRole("button", "Send").tap();
+    // tests/fixtures/fake-claude waits 1.5 s before its first word.
+    await screen.getByText("Thinking…").waitFor();
+    await screen.getByRole("article", "Reply").nth(1).waitFor();
+
+    await expect(screen.getByText("Thinking…")).toHaveCount(0);
+  });
 });

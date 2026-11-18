@@ -23,10 +23,26 @@ export function Transcript({ view }: { view: DirectorView }) {
         {view.entries.map((entry) => (
           <MessageView key={entry.id} entry={entry} />
         ))}
-        {view.draft ? <ReplyBubble text={view.draft} /> : null}
+        {view.draft ? (
+          <ReplyBubble text={view.draft} />
+        ) : view.status === "answering" ? (
+          <Thinking />
+        ) : null}
         <div key={view.revision} ref={scrollLogToEnd} />
       </div>
     </div>
+  );
+}
+
+function Thinking() {
+  return (
+    <Message>
+      <MessageContent>
+        <p role="status" className="text-muted-foreground animate-pulse text-sm">
+          Thinking…
+        </p>
+      </MessageContent>
+    </Message>
   );
 }
 
