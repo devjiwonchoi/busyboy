@@ -7,6 +7,7 @@ import {
   OPEN_IN_EDITOR_CHANNEL,
   PICK_FOLDERS_CHANNEL,
   REVEAL_IN_FOLDER_CHANNEL,
+  APP_VERSION_CHANNEL,
   UPDATE_READY_CHANNEL,
   UPDATE_STATE_CHANNEL,
   type DesktopBridge,
@@ -25,6 +26,7 @@ const bridge: DesktopBridge = {
     return () => void ipcRenderer.off(FOCUS_CHANNEL, handler);
   },
   readyUpdate: () => ipcRenderer.invoke(UPDATE_STATE_CHANNEL),
+  appVersion: () => ipcRenderer.invoke(APP_VERSION_CHANNEL),
   onUpdateReady: (listener) => {
     const handler = (_event: Electron.IpcRendererEvent, version: unknown) => {
       if (typeof version === "string") listener(version);

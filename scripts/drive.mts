@@ -598,14 +598,12 @@ async function runJourney(drive: Drive, name: string | undefined): Promise<Resul
     if (!checked) return fail("Ming the seal is saved, and the radio is not checked.");
     if ((await drive.page.getByRole("link", { name: "Approvals" }).count()) !== 0)
       return fail("Approvals is still a settings section.");
-    const version = (readJson(join(root, "package.json")) as { version?: string }).version;
-    if (!version) return fail("package.json has no version.");
-    await drive.page
-      .getByText(`BusyBoy ${version}`, { exact: true })
-      .waitFor({ timeout: actionMs });
+    await drive.page.getByText("BusyBoy dev", { exact: true }).waitFor({ timeout: actionMs });
+    if ((await drive.page.getByText("BusyBoy 0.0.0", { exact: true }).count()) !== 0)
+      return fail("Settings shows package.json's 0.0.0 instead of the running app.");
     return result(
       true,
-      `Settings saved companion "ming" in ${join(drive.dataDir, "app-settings.json")}, the Ming the seal radio is checked, and the header says BusyBoy ${version}.`,
+      `Settings saved companion "ming" in ${join(drive.dataDir, "app-settings.json")}, the Ming the seal radio is checked, and the header says BusyBoy dev.`,
     );
   }
   if (name === "approve-plan") {

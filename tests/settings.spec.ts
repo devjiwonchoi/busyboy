@@ -3,8 +3,6 @@ import { dirname, join } from "node:path";
 
 import { expect, test, type Page } from "@playwright/test";
 
-import { APP_VERSION } from "@/lib/app-version";
-
 import { useProjectsHome } from "./support/projects-home";
 import {
   createGitRepository,
@@ -33,7 +31,7 @@ async function openSettings(page: Page) {
   await expect(page.getByRole("main", { name: "Settings" })).toBeVisible();
 }
 
-test("settings should show the running version and the chat should not", async ({
+test("a browser should label Settings as dev and the chat should not", async ({
   page,
   context,
   baseURL,
@@ -45,12 +43,39 @@ test("settings should show the running version and the chat should not", async (
 
   await page.goto("/");
   await expect(page.getByRole("region", { name: "Chat" })).toBeVisible();
-  await expect(page.getByText(`BusyBoy ${APP_VERSION}`, { exact: true })).toHaveCount(0);
+  await expect(page.getByText("BusyBoy dev", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("BusyBoy 0.0.0", { exact: true })).toHaveCount(0);
 
   await page.getByRole("link", { name: "Settings" }).click();
-  await expect(page.getByText(`BusyBoy ${APP_VERSION}`, { exact: true })).toBeVisible();
+  await expect(page.getByText("BusyBoy dev", { exact: true })).toBeVisible();
+  await expect(page.getByText("BusyBoy 0.0.0", { exact: true })).toHaveCount(0);
   await page.getByRole("link", { name: "Projects" }).click();
-  await expect(page.getByText(`BusyBoy ${APP_VERSION}`, { exact: true })).toBeVisible();
+  await expect(page.getByText("BusyBoy dev", { exact: true })).toBeVisible();
+});
+
+test("settings should show the desktop app version from the bridge", async ({
+  page,
+  context,
+  baseURL,
+}) => {
+  const { home, projects } = await useProjectsHome(context, baseURL!, ["web"], {
+    claude: "signed-in",
+  });
+  folders.push(home, ...Object.values(projects).map((path) => dirname(path)));
+  await page.addInitScript(() => {
+    Object.assign(window, {
+      busyboyDesktop: { appVersion: async () => "0.0.30" },
+    });
+  });
+
+  await page.goto("/");
+  await expect(page.getByRole("region", { name: "Chat" })).toBeVisible();
+  await expect(page.getByText("BusyBoy 0.0.30", { exact: true })).toHaveCount(0);
+
+  await page.getByRole("link", { name: "Settings" }).click();
+  await expect(page.getByText("BusyBoy 0.0.30", { exact: true })).toBeVisible();
+  await expect(page.getByText("BusyBoy dev", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("BusyBoy 0.0.0", { exact: true })).toHaveCount(0);
 });
 
 test("choosing a companion in settings should save it without a Continue button", async ({

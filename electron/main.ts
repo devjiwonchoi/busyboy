@@ -10,6 +10,7 @@ import {
   OPEN_IN_EDITOR_CHANNEL,
   PICK_FOLDERS_CHANNEL,
   REVEAL_IN_FOLDER_CHANNEL,
+  APP_VERSION_CHANNEL,
   UPDATE_READY_CHANNEL,
   UPDATE_STATE_CHANNEL,
 } from "../src/lib/desktop-bridge";
@@ -298,6 +299,10 @@ function registerWorktreeActions() {
 }
 
 function registerUpdateActions() {
+  // why: The shared Next bundle is built with package.json still at 0.0.0. The packaged app version is this one.
+  ipcMain.handle(APP_VERSION_CHANNEL, (event) =>
+    isAppOrigin(event.senderFrame?.url) ? app.getVersion() : null,
+  );
   ipcMain.handle(UPDATE_STATE_CHANNEL, (event) =>
     isAppOrigin(event.senderFrame?.url) ? (updates?.readyVersion() ?? null) : null,
   );

@@ -5,6 +5,7 @@ import { connection } from "next/server";
 import { Suspense } from "react";
 
 import { recheckProvidersAction, removeProjectAction } from "@/app/setup/actions";
+import { AppVersionLabel } from "@/components/settings/app-version-label";
 import { CompanionSettings } from "@/components/settings/companion-settings";
 import { ConnectorAddForm } from "@/components/settings/connector-add-form";
 import { HarnessChoice } from "@/components/settings/harness-choice";
@@ -27,7 +28,6 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { APP_VERSION } from "@/lib/app-version";
 import { COMPANIONS, companionImageUrl, currentCompanion } from "@/server/companions";
 import { isSetupComplete, readSettings } from "@/server/config";
 import { listConnectors, type ConnectorStatus } from "@/server/connectors";
@@ -44,7 +44,7 @@ export default function SettingsPage({ searchParams }: PageProps<"/settings">) {
       <header className="flex h-10 shrink-0 items-center border-b pr-2 pl-[var(--title-bar-inset,0.75rem)] [app-region:drag]">
         <span className="text-sm font-medium">Settings</span>
         <div className="ml-auto flex items-center gap-2 [app-region:no-drag]">
-          <p className="text-muted-foreground text-xs">BusyBoy {APP_VERSION}</p>
+          <AppVersionLabel />
           <TooltipProvider>
             <UpdateButton />
           </TooltipProvider>
