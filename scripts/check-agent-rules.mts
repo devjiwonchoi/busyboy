@@ -140,7 +140,7 @@ function presetInvocation(): { code: string; base: string } {
     menuColor: config.menuColor ?? "default",
     menuAccent: config.menuAccent ?? "subtle",
     radius: "default",
-    font: "geist",
+    font: "inter",
     iconLibrary: config.iconLibrary ?? "lucide",
     theme: color,
     baseColor: color,
