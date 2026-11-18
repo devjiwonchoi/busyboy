@@ -3,9 +3,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { web } from "@e2e-dev/web";
+import { gateway } from "ai";
 import type { E2EConfig } from "e2e";
 
 export default {
+  agents: {
+    default: { model: gateway(process.env.E2E_MODEL || "openai/gpt-6-luna-fast") },
+  },
   targets: [
     {
       engine: web(),
