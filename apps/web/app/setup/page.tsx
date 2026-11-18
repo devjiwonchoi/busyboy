@@ -38,7 +38,7 @@ export default function SetupPage() {
         }
       >
         <span className="text-sm font-medium">BusyBoy</span>
-        <Suspense>
+        <Suspense fallback={<Skeleton className="ml-auto h-8 w-24" />}>
           <BackToChat />
         </Suspense>
       </header>
