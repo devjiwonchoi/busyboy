@@ -12,7 +12,6 @@ type ComposerProps = {
 };
 
 export function Composer({ answering, error, onError }: ComposerProps) {
-  // React resets the uncontrolled textarea once this action finishes.
   const send = async (formData: FormData) => {
     const message = formData.get("text");
     if (typeof message !== "string" || !message.trim() || answering) return;
