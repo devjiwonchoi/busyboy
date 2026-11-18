@@ -1,4 +1,3 @@
-// why: Field types follow codex-cli 0.167.0 and the MCP 2025-11-25 form schema. The contract's questions only offer choices.
 import type { AgentAnswer, Question } from "./contract";
 
 type Choice = { const: string; title: string };
@@ -97,7 +96,6 @@ function selectedLabels(answer: string, choices: Choice[]) {
   return current === undefined ? selected : undefined;
 }
 
-// why: Skipping an answer that matches no choice would send the form's defaults, which nobody saw.
 export function elicitationContent(
   message: string,
   schema: ElicitationSchema,

@@ -1,4 +1,3 @@
-// why: output: 'standalone' omits static assets, and tracing misses native binaries. Windows gets pnpm siblings copied inside each package.
 import { cpSync, existsSync, rmSync } from "node:fs";
 import { join } from "node:path";
 

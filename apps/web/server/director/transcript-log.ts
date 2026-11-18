@@ -3,7 +3,6 @@ import { join } from "node:path";
 
 export const TRANSCRIPT_FILE = "transcript.jsonl";
 
-// why: Each file stays near 20MB. One entry larger than the limit is written whole.
 export const MAX_TRANSCRIPT_BYTES = 20 * 1024 * 1024;
 
 const SEGMENT_NAME = /^transcript\.(\d+)\.jsonl$/;

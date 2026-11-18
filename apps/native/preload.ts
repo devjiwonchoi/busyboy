@@ -9,7 +9,6 @@ import {
   type DesktopBridge,
 } from "../web/lib/desktop-bridge";
 
-// why: Sandboxed, with context isolation, so the page gets these functions and nothing else from Electron.
 const bridge: DesktopBridge = {
   readyUpdate: () => ipcRenderer.invoke(UPDATE_STATE_CHANNEL),
   appVersion: () => ipcRenderer.invoke(APP_VERSION_CHANNEL),

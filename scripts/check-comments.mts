@@ -3,6 +3,7 @@ import { join } from "node:path";
 
 const roots = ["apps/web", "apps/native", "scripts"];
 const extra = ["apps/web/next.config.ts", "apps/web/proxy.ts"];
+const link = /https?:\/\/\S+/;
 
 function filesUnder(directory: string): string[] {
   const found: string[] = [];
@@ -13,7 +14,6 @@ function filesUnder(directory: string): string[] {
       found.push(...filesUnder(path));
       continue;
     }
-    // why: next typegen writes next-env.d.ts, and that file is not product code.
     if (entry === "next-env.d.ts") continue;
     if (/\.(?:tsx?|mts)$/.test(path)) found.push(path);
   }
@@ -29,7 +29,7 @@ function commentBody(trimmed: string): string | null {
   return null;
 }
 
-function isAllowed(line: string): boolean {
+export function commentIsAllowed(line: string, lineIndex: number): boolean {
   const trimmed = line.trim();
   if (trimmed.startsWith("#!")) return true;
   const body = commentBody(trimmed);
@@ -39,40 +39,49 @@ function isAllowed(line: string): boolean {
     .replace(/\*\/\}?$/, "")
     .trim();
   if (text === "" || text === "/") return true;
-  if (text.startsWith("why:")) return true;
-  if (/^@ts-(?:expect-error|ignore|nocheck|check)\b/.test(text)) return true;
+  if (lineIndex < 8 && /\b(?:copyright|spdx-license-identifier|@license)\b/i.test(text))
+    return true;
   if (trimmed.startsWith("///") && text.startsWith("<reference")) return true;
+  if (/^@ts-(?:nocheck|check)\b/.test(text)) return true;
+  if (/^@ts-(?:expect-error|ignore)\b/.test(text)) return link.test(text);
   if (/^(?:eslint|oxlint)-(?:disable|enable)(?:-next-line|-line)?\b/.test(text)) return true;
-  return false;
+  if (/^(?:prettier|oxfmt)-ignore\b/.test(text)) return true;
+  if (/^turbopackIgnore\b/.test(text)) return true;
+  return link.test(text);
 }
 
-const failures: string[] = [];
-const paths = [
-  ...roots.flatMap((root) => filesUnder(root)),
-  ...extra.filter((path) => {
-    try {
-      return statSync(path).isFile();
-    } catch {
-      return false;
-    }
-  }),
-];
+const failureMessage =
+  "Delete the comment and make the code self-explanatory: rename, extract, or type the surprise. A constraint from Electron, the operating system, Next.js, or a harness CLI stays only with the issue or vendor doc link. A formatter ignore, shebang, triple-slash reference, or oxlint disable for a pedantic rule can stay.";
 
-for (const path of paths) {
-  const lines = readFileSync(path, "utf8").split("\n");
-  lines.forEach((line, index) => {
-    if (isAllowed(line)) return;
-    failures.push(`${path}:${index + 1}: ${line.trim()}`);
-  });
+function main() {
+  const failures: string[] = [];
+  const paths = [
+    ...roots.flatMap((root) => filesUnder(root)),
+    ...extra.filter((path) => {
+      try {
+        return statSync(path).isFile();
+      } catch {
+        return false;
+      }
+    }),
+  ];
+
+  for (const path of paths) {
+    const lines = readFileSync(path, "utf8").split("\n");
+    lines.forEach((line, index) => {
+      if (commentIsAllowed(line, index)) return;
+      failures.push(`${path}:${index + 1}: ${line.trim()}`);
+    });
+  }
+
+  if (failures.length === 0) {
+    console.log(`Comments follow the no-comments policy (${paths.length} files).`);
+    process.exit(0);
+  }
+
+  console.error(failureMessage);
+  for (const failure of failures) console.error(failure);
+  process.exit(1);
 }
 
-if (failures.length === 0) {
-  console.log(`Comments are either \`// why:\` notes or tool directives (${paths.length} files).`);
-  process.exit(0);
-}
-
-console.error(
-  "Delete the comment, or mark a non-obvious reason with `// why:`. A tool directive (`// @ts-expect-error`, `/// <reference`, an eslint/oxlint disable line, or a shebang) can stay.",
-);
-for (const failure of failures) console.error(failure);
-process.exit(1);
+if (process.argv[1]?.endsWith("check-comments.mts")) main();

@@ -9,7 +9,6 @@ type ParentPort = {
 
 type State = { handlers: Set<Handler>; listening: boolean };
 
-// why: On globalThis so instrumentation and route bundles share one set of handlers.
 const stateKey = Symbol.for("busyboy.shutdown");
 const state: State = ((globalThis as Record<symbol, unknown>)[stateKey] as State | undefined) ?? {
   handlers: new Set(),
@@ -17,13 +16,11 @@ const state: State = ((globalThis as Record<symbol, unknown>)[stateKey] as State
 };
 (globalThis as Record<symbol, unknown>)[stateKey] = state;
 
-// why: On Windows the app terminates the server outright, so signal and exit hooks never run.
 export function onServerShutdown(handler: Handler) {
   state.handlers.add(handler);
   return () => state.handlers.delete(handler);
 }
 
-// why: Only an Electron utility process has process.parentPort.
 export function listenForShutdown() {
   const port = (process as { parentPort?: ParentPort }).parentPort;
   if (!port || state.listening) return;

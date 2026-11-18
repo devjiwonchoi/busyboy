@@ -21,7 +21,14 @@
   },
   "rules": {
     "react/refs": "off",
-    "react/set-state-in-effect": "off"
+    "react/set-state-in-effect": "off",
+    "no-warning-comments": "error",
+    "no-inline-comments": [
+      "error",
+      {
+        "ignorePattern": "turbopackIgnore|prettier-ignore|oxfmt-ignore|oxlint-disable|eslint-disable|@ts-|https?://"
+      }
+    ]
   },
   "overrides": [
     {

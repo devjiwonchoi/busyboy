@@ -17,8 +17,6 @@ import type { AgentEvent, ProviderId } from "../runner/contract";
 import { DIRECTOR_INSTRUCTIONS } from "./context";
 import { appendTranscriptLine, readTranscript, type TranscriptCursor } from "./transcript-log";
 
-// why: The display transcript is our own file, so a reply is still there after the provider drops it.
-
 export const DIRECTOR_FOLDER = "director";
 const STATE_FILE = "state.json";
 
@@ -56,7 +54,6 @@ type Director = {
   listeners: Set<(update: DirectorUpdate) => void>;
 };
 
-// why: Kept on globalThis so `next dev` reloads keep the running director.
 const DIRECTORS_KEY = Symbol.for("busyboy.directors");
 const globalStore = globalThis as typeof globalThis & { [DIRECTORS_KEY]?: Map<string, Director> };
 const directors = (globalStore[DIRECTORS_KEY] ??= new Map());
@@ -100,9 +97,7 @@ async function load(director: Director) {
     try {
       const value = JSON.parse(line) as unknown;
       if (isEntry(value)) byId.set(value.id, value);
-    } catch {
-      // why: A line cut short by a crash is not a message.
-    }
+    } catch {}
   }
   director.entries = [...byId.values()];
   try {
@@ -254,7 +249,6 @@ async function ensureAgent(director: Director) {
   } else director.state.provider = provider;
   const snapshot = startAgent({
     provider,
-    // why: The harness needs a directory, and v1 does not ask the user to pick one.
     cwd: homedir(),
     instructions: DIRECTOR_INSTRUCTIONS,
     permissionMode: "auto",

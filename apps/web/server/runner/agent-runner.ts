@@ -39,19 +39,15 @@ type Registry = {
   stoppingAll?: boolean;
 };
 
-// why: Kept on globalThis: a module-level Map is re-created when `next dev` reloads
-// why: this module, which would orphan running agent processes.
 const REGISTRY_KEY = Symbol.for("busyboy.agent-runner");
 const globalStore = globalThis as typeof globalThis & { [REGISTRY_KEY]?: Registry };
 const registry: Registry = (globalStore[REGISTRY_KEY] ??= { agents: new Map() });
 
-// why: Claude's process-group watcher does not end commands the CLI detached, so quitting has to stop each agent while the server still runs.
 export async function stopAllAgents() {
   registry.stoppingAll = true;
   await Promise.allSettled([...registry.agents.values()].map((agent) => agent.session?.stop()));
 }
 
-// why: Codex and Grok report lost-session. Claude only says so in its message.
 export function isLostSessionError(event: Extract<AgentEvent, { type: "error" }>) {
   return (
     event.code === "lost-session" || /No conversation found with session ID/i.test(event.message)
@@ -65,7 +61,6 @@ export function isStoppingAllAgents() {
 function hookShutdown() {
   if (registry.shutdownHooked) return;
   registry.shutdownHooked = true;
-  // why: Next exits on Ctrl+C once its connections close, without waiting for other signal handlers.
   onServerShutdown(stopAllAgents);
   process.once("SIGTERM", () => void stopAllAgents());
   process.once("SIGINT", () => void stopAllAgents());
@@ -300,7 +295,6 @@ export function lastAgentReply(agentId: string): string | null {
     const { event } = agent.events[index];
     if (event.type !== "text" && event.type !== "text-delta") continue;
     if (itemId === undefined) itemId = event.itemId;
-    // why: An item's events are contiguous, so an earlier item ends the reply.
     else if (event.itemId !== itemId) break;
     if (event.type === "text") {
       text = event.text;
