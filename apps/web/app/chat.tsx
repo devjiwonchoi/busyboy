@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useReducer } from "react";
 
 import type { ChatEntry, DirectorStatus, DirectorUpdate } from "@/server/director/chat";
 
@@ -24,7 +24,9 @@ const initialView: DirectorView = {
   revision: 0,
 };
 
-function apply(current: DirectorView, update: DirectorUpdate): DirectorView {
+type ChatAction = DirectorUpdate | { type: "disconnected" } | { type: "error"; error: string };
+
+function apply(current: DirectorView, update: ChatAction): DirectorView {
   switch (update.type) {
     case "reset":
       return {
@@ -45,31 +47,32 @@ function apply(current: DirectorView, update: DirectorUpdate): DirectorView {
       return { ...current, draft: update.text, revision: current.revision + 1 };
     case "status":
       return { ...current, status: update.status };
+    case "disconnected":
+      return { ...current, connected: false };
+    case "error":
+      return { ...current, error: update.error };
   }
 }
 
 export function Chat() {
-  const [view, setView] = useState(initialView);
+  const [view, dispatch] = useReducer(apply, initialView);
 
-  const openStreamWhileMounted = (node: HTMLDivElement | null) => {
-    if (!node) return;
+  // oxlint-disable-next-line busyboy/no-unreasoned-effect -- keeps the director event stream open while the chat is mounted.
+  useEffect(() => {
     const source = new EventSource("/api/director/events");
-    source.onmessage = (message) => {
-      const update = JSON.parse(message.data) as DirectorUpdate;
-      setView((current) => apply(current, update));
-    };
-    source.onerror = () => setView((current) => ({ ...current, connected: false }));
+    source.onmessage = (message) => dispatch(JSON.parse(message.data) as DirectorUpdate);
+    source.onerror = () => dispatch({ type: "disconnected" });
     return () => source.close();
-  };
+  }, []);
 
   return (
-    <div ref={openStreamWhileMounted} className="contents">
+    <>
       <Transcript view={view} />
       <Composer
         answering={view.status === "answering"}
         error={view.error}
-        onError={(error) => setView((current) => ({ ...current, error }))}
+        onError={(error) => dispatch({ type: "error", error })}
       />
-    </div>
+    </>
   );
 }
