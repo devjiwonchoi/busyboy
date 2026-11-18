@@ -174,6 +174,121 @@ const noUnreasonedEffect = {
   },
 };
 
+function isEmptyValue(node: Node | null | undefined): boolean {
+  if (!node) return true;
+  if (node.type === "Literal") return node.value === null;
+  if (node.type === "Identifier") return node.name === "undefined";
+  return false;
+}
+
+function isSuspenseName(name: Node): boolean {
+  if (name.type === "JSXIdentifier") return name.name === "Suspense";
+  if (name.type === "JSXMemberExpression") return (name.property as Node).name === "Suspense";
+  return false;
+}
+
+const noEmptySuspenseFallback = {
+  meta: { type: "problem" },
+  create(context: Context) {
+    return {
+      JSXOpeningElement(element: Node) {
+        if (!isSuspenseName(element.name as Node)) return;
+        const attributes = element.attributes as Node[];
+        if (attributes.some((attribute) => attribute.type === "JSXSpreadAttribute")) return;
+        const fallback = attributes.find(
+          (attribute) => (attribute.name as Node).name === "fallback",
+        );
+        const value = fallback?.value as Node | null | undefined;
+        if (
+          fallback &&
+          !(value?.type === "JSXExpressionContainer" && isEmptyValue(value.expression as Node))
+        )
+          return;
+        context.report({
+          node: fallback ?? element,
+          message:
+            "Give <Suspense> a fallback that holds the space of what it waits for, such as a <Skeleton />. A missing or null fallback renders nothing.",
+        });
+      },
+    };
+  },
+};
+
+const LOADING_FILE = /[\\/]app[\\/](?:.*[\\/])?loading\.[jt]sx?$/;
+
+function defaultExportedFunction(program: Node): Node | undefined {
+  const body = program.body as Node[];
+  const statement = body.find((node) => node.type === "ExportDefaultDeclaration");
+  const declaration = statement?.declaration as Node | undefined;
+  if (!declaration) return undefined;
+  if (
+    declaration.type === "FunctionDeclaration" ||
+    declaration.type === "FunctionExpression" ||
+    declaration.type === "ArrowFunctionExpression"
+  )
+    return declaration;
+  if (declaration.type !== "Identifier") return undefined;
+  for (const node of body) {
+    const fn = functionOf(node);
+    if (!fn) continue;
+    const id =
+      node.type === "FunctionDeclaration"
+        ? (node.id as Node)
+        : ((node.declarations as Node[])[0].id as Node);
+    if (id?.name === declaration.name) return fn;
+  }
+  return undefined;
+}
+
+function emptyReturns(node: Node, found: Node[]): Node[] {
+  if (node.type === "ReturnStatement") {
+    if (isEmptyValue(node.argument as Node | null)) found.push(node);
+    return found;
+  }
+  for (const [key, child] of Object.entries(node)) {
+    if (key === "parent") continue;
+    for (const item of Array.isArray(child) ? child : [child]) {
+      if (!item || typeof item !== "object" || typeof (item as Node).type !== "string") continue;
+      const type = (item as Node).type;
+      if (
+        type === "FunctionDeclaration" ||
+        type === "FunctionExpression" ||
+        type === "ArrowFunctionExpression"
+      )
+        continue;
+      emptyReturns(item as Node, found);
+    }
+  }
+  return found;
+}
+
+const noEmptyLoading = {
+  meta: { type: "problem" },
+  create(context: Context) {
+    if (!LOADING_FILE.test(context.filename)) return {};
+    return {
+      Program(program: Node) {
+        const fn = defaultExportedFunction(program);
+        if (!fn) return;
+        const body = fn.body as Node;
+        const offenders =
+          body.type === "BlockStatement"
+            ? emptyReturns(body, [])
+            : isEmptyValue(body)
+              ? [body]
+              : [];
+        for (const node of offenders) {
+          context.report({
+            node,
+            message:
+              "loading.tsx must render a placeholder that holds the space of the segment, such as a <Skeleton />. Returning null renders nothing.",
+          });
+        }
+      },
+    };
+  },
+};
+
 const busyboyPlugin = {
   meta: { name: "busyboy" },
   rules: {
@@ -181,6 +296,8 @@ const busyboyPlugin = {
     "no-proxy": noProxy,
     "trusted-entry": trustedEntry,
     "no-unreasoned-effect": noUnreasonedEffect,
+    "no-empty-suspense-fallback": noEmptySuspenseFallback,
+    "no-empty-loading": noEmptyLoading,
   },
 };
 

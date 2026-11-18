@@ -23,6 +23,8 @@
     "busyboy/no-proxy": "error",
     "busyboy/trusted-entry": "error",
     "busyboy/no-unreasoned-effect": "error",
+    "busyboy/no-empty-suspense-fallback": "error",
+    "busyboy/no-empty-loading": "error",
     "no-restricted-imports": [
       "error",
       {
