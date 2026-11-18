@@ -1,6 +1,5 @@
 import { ArrowUp, FileText, Play, Plus, Square, X } from "lucide-react";
 import { useEffect, useImperativeHandle, useRef, useState, type Ref } from "react";
-import { useFormStatus } from "react-dom";
 
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -24,7 +23,9 @@ export function Composer({ answering, canResume, error, onError, ref }: Composer
   const [attachments, setAttachments] = useState<DraftAttachment[]>([]);
   const [dragging, setDragging] = useState(false);
   const [hasText, setHasText] = useState(false);
+  const [sending, setSending] = useState(false);
   const picker = useRef<HTMLInputElement>(null);
+  const input = useRef<HTMLTextAreaElement>(null);
 
   async function addFiles(incoming: FileList | File[]) {
     const next: DraftAttachment[] = [];
@@ -73,22 +74,59 @@ export function Composer({ answering, canResume, error, onError, ref }: Composer
 
   useImperativeHandle(ref, () => ({ addFiles: (files) => void addFiles(files) }));
 
-  const send = async (formData: FormData) => {
-    const message = formData.get("text");
-    const text = typeof message === "string" ? message : "";
-    if ((!text.trim() && attachments.length === 0) || answering) return;
-    const sending = attachments;
-    for (const attachment of sending) formData.append("files", attachment.file);
-    const result = await sendToDirectorAction(formData);
+  async function send(text: string, files: DraftAttachment[]) {
+    const formData = new FormData();
+    formData.set("text", text);
+    for (const attachment of files) formData.append("files", attachment.file);
+    setSending(true);
+    const result = await sendToDirectorAction(formData).catch(() => ({
+      error: "The message could not be sent. Try again.",
+    }));
+    setSending(false);
+    return result;
+  }
+
+  async function submit(form: HTMLFormElement) {
+    const field = input.current;
+    const text = field?.value ?? "";
+    if ((!text.trim() && attachments.length === 0) || answering || sending) return;
+    const files = attachments;
+    form.reset();
     setHasText(false);
+    setAttachments([]);
+    const result = await send(text, files);
+    if (result.error) {
+      onError(result.error);
+      if (field && !field.value) {
+        field.value = text;
+        setHasText(text.trim() !== "");
+      }
+      setAttachments((current) => [...files, ...current]);
+      return;
+    }
+    for (const attachment of files) {
+      if (attachment.previewUrl) URL.revokeObjectURL(attachment.previewUrl);
+    }
+  }
+
+  async function resume() {
+    const result = await send(RESUME_PROMPT, []);
     if (result.error) onError(result.error);
-    else removeAttachments(new Set(sending.map(({ id }) => id)));
-  };
+  }
 
   return (
     <div className="mx-auto w-full max-w-3xl shrink-0 px-6 pb-6">
       <form
-        action={send}
+        onSubmit={(event) => {
+          event.preventDefault();
+          void submit(event.currentTarget);
+        }}
+        onMouseDown={(event) => {
+          const target = event.target as HTMLElement;
+          if (target.closest("button, a, input, textarea, li")) return;
+          event.preventDefault();
+          input.current?.focus();
+        }}
         data-dragging={dragging ? "" : undefined}
         onDragOver={(event) => {
           if (![...event.dataTransfer.types].includes("Files")) return;
@@ -103,10 +141,10 @@ export function Composer({ answering, canResume, error, onError, ref }: Composer
           event.stopPropagation();
           void addFiles(event.dataTransfer.files);
         }}
-        className="bg-card text-card-foreground focus-within:ring-ring/30 data-dragging:ring-ring/50 flex w-full flex-col rounded-3xl border focus-within:ring-2 data-dragging:ring-2"
+        className="bg-card text-card-foreground focus-within:ring-ring/30 data-dragging:ring-ring/50 flex w-full cursor-text flex-col rounded-3xl border focus-within:ring-2 data-dragging:ring-2"
       >
         {attachments.length > 0 ? (
-          <ul aria-label="Attachments" className="flex flex-wrap gap-1.5 px-2 pt-2">
+          <ul aria-label="Attachments" className="flex cursor-default flex-wrap gap-1.5 px-2 pt-2">
             {attachments.map((attachment) => (
               <li key={attachment.id} className="bg-muted flex items-center gap-1 rounded-xl p-1">
                 {attachment.previewUrl ? (
@@ -136,28 +174,7 @@ export function Composer({ answering, canResume, error, onError, ref }: Composer
             ))}
           </ul>
         ) : null}
-        <Textarea
-          name="text"
-          aria-label="Message"
-          placeholder="Message"
-          rows={1}
-          required={attachments.length === 0}
-          onChange={(event) => setHasText(event.currentTarget.value.trim() !== "")}
-          onPaste={(event) => {
-            const pasted = [...event.clipboardData.files];
-            if (pasted.length === 0) return;
-            event.preventDefault();
-            void addFiles(pasted);
-          }}
-          onKeyDown={(event) => {
-            if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
-              event.preventDefault();
-              event.currentTarget.form?.requestSubmit();
-            }
-          }}
-          className="max-h-60 min-h-0 rounded-none border-0 bg-transparent px-3 pt-3 pb-1 text-sm shadow-none focus-visible:ring-0 md:text-sm dark:bg-transparent"
-        />
-        <div className="flex items-center justify-between gap-2 p-2">
+        <div className="flex items-end gap-1 p-2">
           <input
             ref={picker}
             type="file"
@@ -172,7 +189,7 @@ export function Composer({ answering, canResume, error, onError, ref }: Composer
           />
           <Button
             type="button"
-            size="icon"
+            size="icon-lg"
             variant="ghost"
             className="rounded-full"
             aria-label="Add files"
@@ -180,11 +197,33 @@ export function Composer({ answering, canResume, error, onError, ref }: Composer
           >
             <Plus />
           </Button>
+          <Textarea
+            ref={input}
+            name="text"
+            aria-label="Message"
+            placeholder="Message"
+            rows={1}
+            required={attachments.length === 0}
+            onInput={(event) => setHasText(event.currentTarget.value.trim() !== "")}
+            onPaste={(event) => {
+              const pasted = [...event.clipboardData.files];
+              if (pasted.length === 0) return;
+              event.preventDefault();
+              void addFiles(pasted);
+            }}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
+                event.preventDefault();
+                event.currentTarget.form?.requestSubmit();
+              }
+            }}
+            className="max-h-60 min-h-0 flex-1 self-center rounded-none border-0 bg-transparent px-1 py-1.5 text-sm shadow-none focus-visible:ring-0 md:text-sm dark:bg-transparent"
+          />
           <PrimaryAction
-            answering={answering}
+            answering={answering || sending}
             empty={!hasText && attachments.length === 0}
             canResume={canResume}
-            onError={onError}
+            onResume={() => void resume()}
           />
         </div>
       </form>
@@ -204,14 +243,13 @@ function PrimaryAction({
   answering,
   empty,
   canResume,
-  onError,
+  onResume,
 }: {
   answering: boolean;
   empty: boolean;
   canResume: boolean;
-  onError: (error: string) => void;
+  onResume: () => void;
 }) {
-  const { pending } = useFormStatus();
   const [escapeArmed, setEscapeArmed] = useState(false);
   const armedAt = useRef(0);
 
@@ -250,7 +288,7 @@ function PrimaryAction({
     return (
       <Button
         type="button"
-        size="icon"
+        size="icon-lg"
         aria-label={escapeArmed ? "Press Escape again to stop" : "Stop"}
         title="Stop (Esc Esc)"
         onClick={() => void stopDirectorAction()}
@@ -269,16 +307,10 @@ function PrimaryAction({
     return (
       <Button
         type="button"
-        size="icon"
+        size="icon-lg"
         aria-label="Resume"
         title="Continue where it stopped"
-        disabled={pending}
-        onClick={async () => {
-          const formData = new FormData();
-          formData.set("text", RESUME_PROMPT);
-          const result = await sendToDirectorAction(formData);
-          if (result.error) onError(result.error);
-        }}
+        onClick={onResume}
         className="rounded-full"
       >
         <Play className="fill-current" />
@@ -289,9 +321,9 @@ function PrimaryAction({
   return (
     <Button
       type="submit"
-      size="icon"
+      size="icon-lg"
       aria-label="Send"
-      disabled={pending || empty}
+      disabled={empty}
       className="disabled:bg-muted disabled:text-muted-foreground rounded-full disabled:opacity-100"
     >
       <ArrowUp />
