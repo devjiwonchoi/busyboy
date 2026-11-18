@@ -56,9 +56,12 @@ jobs:
           node scripts/check-agent-rules.mts "origin/${{ github.base_ref }}"
 
   e2e:
-    name: End-to-end tests
+    name: E2E tests
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
@@ -68,10 +71,56 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @busyboy/web exec e2e-web install chromium --with-deps
-      - run: pnpm --filter @busyboy/web exec e2e run --reporter list,junit
+      - name: Get GitHub OIDC token
+        id: github-oidc
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const token = await core.getIDToken('https://api.anthropic.com')
+            core.setSecret(token)
+            core.setOutput('token', token)
+      - name: Exchange Anthropic workload identity token
         env:
-          AI_GATEWAY_API_KEY: ${{ secrets.AI_GATEWAY_API_KEY }}
-          E2E_MODEL: ${{ vars.E2E_MODEL }}
+          OIDC_TOKEN: ${{ steps.github-oidc.outputs.token }}
+        run: |
+          set -euo pipefail
+          body=$(mktemp)
+          headers=$(mktemp)
+          trap 'rm -f "$body" "$headers"' EXIT
+          http_code=$(curl -sS -D "$headers" -o "$body" -w '%{http_code}' \
+            https://api.anthropic.com/v1/oauth/token \
+            -H 'content-type: application/json' \
+            --data "$(jq -n \
+              --arg assertion "$OIDC_TOKEN" \
+              '{
+                grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
+                assertion: $assertion,
+                federation_rule_id: "fdrl_01RpBZAJcfCPcbvgVNuSATun",
+                organization_id: "8b53169f-99fd-4d6b-8a8d-ea928055ca0c",
+                service_account_id: "svac_01EvP5ozG183YaQK1KjwJc3a",
+                workspace_id: "wrkspc_01CqHcXQKDFQUn2aCrqVF6dt"
+              }')")
+          access_token=$(jq -r '.access_token // empty' "$body")
+          if [ -z "$access_token" ]; then
+            node -e 'const p=(process.env.OIDC_TOKEN||"").split(".")[1]||""; const j=JSON.parse(Buffer.from(p,"base64url").toString()); console.error(JSON.stringify({iss:j.iss,aud:j.aud,sub:j.sub,repository:j.repository,event_name:j.event_name,ref:j.ref,workflow:j.workflow}))' >&2 || true
+            detail=$(jq -r '
+              if (.error | type) == "string" then
+                [.error, .error_description] | map(select(type == "string" and length > 0)) | join(": ")
+              elif (.error | type) == "object" then
+                [.error.type, .error.message] | map(select(type == "string" and length > 0)) | join(": ")
+              elif (.type | type) == "string" then
+                [.type, (.error.message // .message // empty)] | map(select(type == "string" and length > 0)) | join(": ")
+              else
+                "unrecognized response"
+              end
+            ' "$body" 2>/dev/null || printf '%s' 'unreadable response')
+            request_id=$(awk 'tolower($1) == "request-id:" { print $2 }' "$headers" | tr -d '\r')
+            echo "Anthropic workload identity exchange returned no access token (HTTP ${http_code}: ${detail:-unrecognized response}${request_id:+, request-id ${request_id}})" >&2
+            exit 1
+          fi
+          echo "::add-mask::$access_token"
+          printf 'ANTHROPIC_AUTH_TOKEN=%s\n' "$access_token" >> "$GITHUB_ENV"
+      - run: pnpm --filter @busyboy/web exec e2e run --reporter list,junit --strict-cache
       - if: ${{ !cancelled() }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:

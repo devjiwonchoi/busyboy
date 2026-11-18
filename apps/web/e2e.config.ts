@@ -2,13 +2,17 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { createAnthropic } from "@ai-sdk/anthropic";
 import { web } from "@e2e-dev/web";
-import { gateway } from "ai";
 import type { E2EConfig } from "e2e";
+
+const anthropic = createAnthropic({
+  authToken: process.env.ANTHROPIC_AUTH_TOKEN,
+});
 
 export default {
   agents: {
-    default: { model: gateway(process.env.E2E_MODEL || "openai/gpt-6-luna-fast") },
+    default: { model: anthropic("claude-sonnet-5-5") },
   },
   targets: [
     {
