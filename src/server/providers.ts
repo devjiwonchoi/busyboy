@@ -1,7 +1,4 @@
-import { cookies } from "next/headers";
-import { unstable_rethrow } from "next/navigation";
-
-import { isTestMode, readSettings, updateSettings } from "./config";
+import { readSettings, updateSettings } from "./config";
 import { providerSignInStatus } from "./runner/agent-runner";
 import type { ProviderId, SignInStatus } from "./runner/contract";
 
@@ -11,54 +8,12 @@ export const PROVIDERS: { id: ProviderId; name: string }[] = [
   { id: "grok", name: "Grok" },
 ];
 
-export const TEST_SIGN_IN_COOKIE = "busyboy-test-sign-in";
-
-const LOGIN_COMMANDS: Record<ProviderId, string> = {
-  claude: "claude /login",
-  codex: "codex login",
-  grok: "grok login",
-};
-const UPDATE_COMMANDS: Record<ProviderId, string> = {
-  claude: "claude update",
-  codex: "codex update",
-  grok: "grok update",
-};
 const CACHE_MS = 30_000;
 
 type CacheEntry = { at: number; state: Promise<SignInStatus> };
 const CACHE_KEY = Symbol.for("busyboy.provider-states");
 const globalStore = globalThis as typeof globalThis & { [CACHE_KEY]?: Map<ProviderId, CacheEntry> };
 const cache = (globalStore[CACHE_KEY] ??= new Map());
-
-async function testOverride(provider: ProviderId): Promise<SignInStatus | undefined> {
-  if (!isTestMode()) return undefined;
-  let value: string | undefined;
-  try {
-    value = (await cookies()).get(TEST_SIGN_IN_COOKIE)?.value;
-  } catch (error) {
-    unstable_rethrow(error);
-    return undefined;
-  }
-  const pair = value
-    ?.split(",")
-    .map((entry) => entry.split("="))
-    .find(([id]) => id === provider);
-  switch (pair?.[1]) {
-    case "signed-in":
-      return { state: "signed-in", account: "test" };
-    case "signed-out":
-      return { state: "signed-out", loginCommand: LOGIN_COMMANDS[provider] };
-    case "not-installed":
-      return { state: "not-installed", detail: "Not installed (test)." };
-    case "outdated":
-      return {
-        state: "outdated",
-        detail: "Too old (test).",
-        updateCommand: UPDATE_COMMANDS[provider],
-      };
-  }
-  return undefined;
-}
 
 async function probe(provider: ProviderId): Promise<SignInStatus> {
   try {
@@ -72,8 +27,6 @@ export async function providerState(
   provider: ProviderId,
   { fresh = false } = {},
 ): Promise<SignInStatus> {
-  const override = await testOverride(provider);
-  if (override) return override;
   const cached = cache.get(provider);
   if (!fresh && cached && Date.now() - cached.at < CACHE_MS) return cached.state;
   const state = probe(provider);

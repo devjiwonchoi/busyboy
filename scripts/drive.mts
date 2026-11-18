@@ -11,7 +11,6 @@ import {
   readlinkSync,
   renameSync,
   rmSync,
-  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { writeFile } from "node:fs/promises";
@@ -48,7 +47,6 @@ const electronFiles = [
 ];
 
 const directorQuestion = "What does git worktree do? Answer in one sentence.";
-const directorReply = "check out more than one branch";
 
 type Surface = "next" | "electron";
 
@@ -285,25 +283,13 @@ function seedData(dataDir: string) {
     defaultProvider: "claude",
   };
   writeFileSync(join(dataDir, "app-settings.json"), `${JSON.stringify(settings, null, 2)}\n`);
-  const scripts = join(dataDir, "provider-scripts");
-  mkdirSync(scripts, { recursive: true });
-  const source = join(root, "tests", "provider-scripts");
-  for (const entry of readdirSync(source, { withFileTypes: true })) {
-    if (!entry.isFile() || !entry.name.endsWith(".json")) continue;
-    symlinkSync(join(source, entry.name), join(scripts, entry.name));
-  }
-  return scripts;
 }
 
-function serverEnv(dataDir: string, scriptsDir: string, port: number | undefined) {
+function serverEnv(dataDir: string, port: number | undefined) {
   const env: NodeJS.ProcessEnv = { ...process.env };
   delete env.BUSYBOY_TOKEN;
   env.BUSYBOY_HOME = dataDir;
   env.BUSYBOY_TEST_MODE = "1";
-  env.BUSYBOY_PROVIDER_SCRIPTS = scriptsDir;
-  env.BUSYBOY_CODEX_PATH = join(root, "scripts", "drive-providers", "missing-codex");
-  env.BUSYBOY_GROK_PATH = join(root, "scripts", "drive-providers", "missing-grok");
-  env.BUSYBOY_TEST_SHELL = "/bin/sh";
   env.CLAUDE_CONFIG_DIR = join(dataDir, "claude-config");
   env.CODEX_HOME = join(dataDir, "codex-home");
   env.NEXT_TELEMETRY_DISABLED = "1";
@@ -363,17 +349,13 @@ async function directorSend(drive: Drive) {
     .getByLabel("Your message")
     .filter({ hasText: directorQuestion })
     .waitFor({ timeout: actionMs });
-  await log
-    .getByLabel("Reply", { exact: true })
-    .filter({ hasText: directorReply })
-    .waitFor({ timeout: actionMs });
   const file = join(drive.dataDir, "director", "transcript.jsonl");
   const deadline = Date.now() + actionMs;
   while (Date.now() < deadline) {
-    if (exists(file) && readFileSync(file, "utf8").includes(directorReply)) return file;
+    if (exists(file) && readFileSync(file, "utf8").includes(directorQuestion)) return file;
     await delay(150);
   }
-  throw new Error(`The reply is on screen, and ${file} does not contain it.`);
+  throw new Error(`The message is on screen, and ${file} does not contain it.`);
 }
 
 async function runStep(drive: Drive, command: Command): Promise<Result> {
@@ -402,7 +384,7 @@ async function runJourney(drive: Drive, name: string | undefined): Promise<Resul
   }
   if (name === "director-send") {
     const file = await directorSend(drive);
-    return result(true, `The Director answered in the chat. ${file} contains "${directorReply}".`);
+    return result(true, `The message is in the chat. ${file} contains "${directorQuestion}".`);
   }
   if (name === "first-run") {
     await firstRun(drive);
@@ -644,7 +626,7 @@ function stringEnv(env: NodeJS.ProcessEnv) {
   return Object.fromEntries(entries);
 }
 
-async function launchNext(dataDir: string, scriptsDir: string) {
+async function launchNext(dataDir: string) {
   const port = await freePort();
   const url = `http://${host}:${port}`;
   const log = createWriteStream(serverLogPath, { flags: "a" });
@@ -653,7 +635,7 @@ async function launchNext(dataDir: string, scriptsDir: string) {
     ["exec", "next", "dev", "--hostname", host, "--port", String(port)],
     {
       cwd: root,
-      env: serverEnv(dataDir, scriptsDir, port),
+      env: serverEnv(dataDir, port),
       stdio: ["ignore", "pipe", "pipe"],
     },
   );
@@ -694,7 +676,7 @@ async function launchElectron(dataDir: string) {
     executablePath,
     args: [root],
     cwd: root,
-    env: stringEnv(serverEnv(dataDir, join(root, "tests", "provider-scripts"), undefined)),
+    env: stringEnv(serverEnv(dataDir, undefined)),
     timeout: readyMs,
   });
   const page = await app.firstWindow({ timeout: readyMs });
@@ -755,8 +737,8 @@ async function keeper(surface: Surface) {
       state.cdp = drive.cdp;
       state.serverPid = launched.app.process().pid ?? null;
     } else {
-      const scriptsDir = seedData(dataDir);
-      const launched = await launchNext(dataDir, scriptsDir);
+      seedData(dataDir);
+      const launched = await launchNext(dataDir);
       const browserDrive: Drive = {
         surface,
         page: undefined as unknown as Page,
@@ -1008,19 +990,12 @@ async function doctor() {
   }
   const serverTree = state.serverPid ? descendants(state.serverPid) : [];
   const tokenPid = serverTree.find((pid) => envValue(pid, "BUSYBOY_TOKEN"));
-  const scriptsPid = serverTree.find((pid) => envValue(pid, "BUSYBOY_PROVIDER_SCRIPTS"));
   if (state.surface === "next") {
-    if (!scriptsPid) problems.push("BUSYBOY_PROVIDER_SCRIPTS is not set on the server.");
-    if (tokenPid) problems.push("A launch token is set, so provider scripts are ignored.");
-    else if (scriptsPid)
-      lines.push(
-        `scripted providers: active (${envValue(scriptsPid, "BUSYBOY_PROVIDER_SCRIPTS")})`,
-      );
+    if (tokenPid) problems.push("A launch token is set on the Next server.");
     const home = server ? envValue(server, "BUSYBOY_HOME") : undefined;
     if (home !== state.dataDir)
       problems.push("The server data folder is not this run's temporary folder.");
-  } else if (tokenPid)
-    lines.push("scripted providers: inactive (the desktop server set a launch token)");
+  } else if (tokenPid) lines.push("desktop server: launch token is set");
   else
     problems.push(
       "The desktop server has no launch token, so this is not the Electron app this command starts.",

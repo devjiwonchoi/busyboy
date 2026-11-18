@@ -15,7 +15,6 @@
     "lint": "oxlint",
     "format": "oxfmt",
     "format:check": "oxfmt --check",
-    "test:e2e": "playwright test --pass-with-no-tests",
     "drive": "node --experimental-strip-types scripts/drive.mts"
   },
   "dependencies": {

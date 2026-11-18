@@ -1,17 +1,16 @@
 # Director chat send
 
-Director chat send lets a person type a message and read the harness reply in the transcript.
+Director chat send lets a person type a message. The signed-in harness writes the reply. BusyBoy does not replay a script.
 
 ## Sub-features
 
 - `director-open` shows the greeting, the message field, Send, and Stop.
-- `director-send` puts the person's message in the transcript and sends it.
-- `director-reply` shows the Director's answer.
-- `director-persist` writes that answer into the Director transcript file.
+- `director-send` puts the person's message in the transcript and sends it to the harness.
+- `director-persist` writes that message into the Director transcript file.
 
 ## How to get to it (user POV)
 
-- Open BusyBoy. The main window is the Director chat.
+- Open BusyBoy after a harness is signed in. The main window is the Director chat.
 - Use the message field. Its accessible name is `Message`.
 
 ## Driving it with the drive CLI
@@ -19,17 +18,15 @@ Director chat send lets a person type a message and read the harness reply in th
 Preconditions:
 
 - `pnpm drive doctor` exits 0 on the Next surface and reports `transcript: connected`.
-- The data directory is the one launch just created.
+- A harness CLI is signed in on this machine. There is no scripted reply.
 
-- **Open the chat.** The launch already waited for the greeting. Run `pnpm drive step open-chat`. The log `Transcript` is connected, and the textbox `Message` is visible.
-- **Send the question.** Type the question and choose Send. Run `pnpm drive journey director-send`. The article `Your message` reads `What does git worktree do? Answer in one sentence.` The article `Reply` contains `check out more than one branch`.
-- **Confirm the side effect.** The journey checks `director/transcript.jsonl` inside the data directory. The command's output names that file and says it contains `check out more than one branch`.
-- **Proof.** Capture the reply on screen. Run `pnpm drive dump --name director-send` and `pnpm drive screenshot --name director-send`.
+- **Open the chat.** Run `pnpm drive step open-chat`. The log `Transcript` is connected, and the textbox `Message` is visible.
+- **Send the question.** Run `pnpm drive journey director-send`. The article `Your message` reads `What does git worktree do? Answer in one sentence.` The file `director/transcript.jsonl` contains that sentence.
+- **Proof.** Run `pnpm drive dump --name director-send` and `pnpm drive screenshot --name director-send`.
 
 ## Gotchas
 
 - Fill `Message`, not the placeholder.
 - Send stays disabled until the field has text.
-- The reply is scripted. The prompt must be exactly `What does git worktree do? Answer in one sentence.`
-- The greeting `BusyBoy is ready. What should we work on?` is the fresh-launch greeting.
-- This journey refuses the Electron surface. The desktop server sets a launch token and ignores provider scripts.
+- The reply text comes from the real harness. This journey does not wait for a particular sentence.
+- This journey refuses the Electron surface.

@@ -20,9 +20,8 @@ pnpm drive launch
 That starts the Next dev server and a headless Chromium window at 1280×820. Launch creates an empty temporary directory named `busyboy-verify-*` under the system temp directory and uses it as `BUSYBOY_HOME`. Before the server starts, launch writes the seed that makes that empty folder usable:
 
 - `app-settings.json` with setup already finished and `defaultProvider` `claude`
-- `provider-scripts/`, a directory of symlinks to `tests/provider-scripts/*.json`
 
-The server runs with `BUSYBOY_TEST_MODE=1` and without `BUSYBOY_TOKEN`, so those scripts are the Claude provider. `BUSYBOY_CODEX_PATH` and `BUSYBOY_GROK_PATH` point at missing files, so only Claude is signed in. `CLAUDE_CONFIG_DIR` and `CODEX_HOME` sit inside the temporary directory, so the run does not read `~/.claude`, `~/.codex`, or `~/.busyboy`.
+The server runs with `BUSYBOY_TEST_MODE=1` and without `BUSYBOY_TOKEN`. `CLAUDE_CONFIG_DIR` and `CODEX_HOME` sit inside the temporary directory, so the run does not read `~/.claude`, `~/.codex`, or `~/.busyboy`. The signed-in harness is the real CLI on the machine.
 
 Launch is finished only when the app is usable. Usable means the page title contains BusyBoy, the log named `Transcript` has `data-connected="true"`, the text says `BusyBoy is ready. What should we work on?`, and the buttons `Send` and `Stop` are visible. A process that merely accepts HTTP is not ready.
 
@@ -34,7 +33,7 @@ The desktop window:
 pnpm drive launch --surface electron
 ```
 
-This needs `dist-electron/main.cjs`, `dist-electron/preload.cjs`, and `.next/standalone/server.js`. Without them the command exits and names the missing files. `pnpm build` then `pnpm build:electron` produces them. Playwright launches Electron and attaches over the Chrome DevTools Protocol. The data directory is empty: no settings file and no provider-script seed. Ready means the heading `Sign in to an agent` is visible. The desktop server sets `BUSYBOY_TOKEN`, and BusyBoy ignores `BUSYBOY_PROVIDER_SCRIPTS` when that token is set, so the chat journeys below refuse this surface.
+This needs `dist-electron/main.cjs`, `dist-electron/preload.cjs`, and `.next/standalone/server.js`. Without them the command exits and names the missing files. `pnpm build` then `pnpm build:electron` produces them. Playwright launches Electron and attaches over the Chrome DevTools Protocol. The data directory is empty: no settings file. Ready means the heading `Sign in to an agent` is visible. The desktop server sets `BUSYBOY_TOKEN`. Chat journeys still refuse this surface.
 
 ## Doctor
 
@@ -42,7 +41,7 @@ This needs `dist-electron/main.cjs`, `dist-electron/preload.cjs`, and `.next/sta
 pnpm drive doctor
 ```
 
-Doctor is read-only. It checks that the keeper is the process this run started, that the server process has this run's `BUSYBOY_HOME`, that the listening port is owned by a process in that tree, and that the page still identifies BusyBoy. On the Next surface it requires `BUSYBOY_PROVIDER_SCRIPTS` on the server, no `BUSYBOY_TOKEN`, and `data-connected="true"` on `Transcript`. On the Electron surface it requires the launch token and the heading `Sign in to an agent`. It also reports whether the desktop bundle is present. Any line that starts with `problem:` means the instance is not worth driving. Exit code 0 means it is. Doctor does not click, type, or send.
+Doctor is read-only. It checks that the keeper is the process this run started, that the server process has this run's `BUSYBOY_HOME`, that the listening port is owned by a process in that tree, and that the page still identifies BusyBoy. On the Next surface it requires no `BUSYBOY_TOKEN` and `data-connected="true"` on `Transcript`. On the Electron surface it requires the launch token and the heading `Sign in to an agent`. It also reports whether the desktop bundle is present. Any line that starts with `problem:` means the instance is not worth driving. Exit code 0 means it is. Doctor does not click, type, or send.
 
 ## Drive
 
@@ -85,7 +84,7 @@ Chat journeys exit with an error on the Electron surface. The person path is the
 
 ## Evidence
 
-Proof is a screenshot and an ARIA dump of the action and the resulting state, plus the side effect the feature file names. One final screen is not enough. Mocks stay on the boundary the app already has: `BUSYBOY_PROVIDER_SCRIPTS` for Claude, Codex, and Grok.
+Proof is a screenshot and an ARIA dump of the action and the resulting state, plus the side effect the feature file names. One final screen is not enough. The signed-in harness is the real CLI.
 
 ```sh
 pnpm drive record start --name director-send

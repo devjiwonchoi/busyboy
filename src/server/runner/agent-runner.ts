@@ -1,7 +1,5 @@
 import { randomUUID } from "node:crypto";
 
-import { SERVER_TOKEN_ENV } from "@/lib/server-token";
-
 import { onServerShutdown } from "../shutdown";
 import { claudeAdapter } from "./claude-adapter";
 import { codexAdapter } from "./codex-adapter";
@@ -18,7 +16,6 @@ import type {
   StartAgentInput,
 } from "./contract";
 import { grokAdapter } from "./grok-adapter";
-import { createScriptedAdapter, hasScripts, SCRIPTS_ENV } from "./scripted-provider";
 import { asTurn, displayText, type UserTurn } from "./user-turn";
 
 const MAX_RETAINED_EVENTS = 5_000;
@@ -74,11 +71,7 @@ function hookShutdown() {
   process.once("SIGINT", () => void stopAllAgents());
 }
 
-// why: A launch token means a real install, so BUSYBOY_PROVIDER_SCRIPTS is ignored there.
 function adapterFor(provider: ProviderId): ProviderAdapter {
-  const scripts = process.env[SCRIPTS_ENV];
-  if (scripts && !process.env[SERVER_TOKEN_ENV] && hasScripts(scripts, provider))
-    return createScriptedAdapter(scripts);
   if (provider === "codex") return codexAdapter;
   if (provider === "grok") return grokAdapter;
   return claudeAdapter;
