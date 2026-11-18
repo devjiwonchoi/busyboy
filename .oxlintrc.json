@@ -15,6 +15,9 @@
     }
   },
   "ignorePatterns": [".next/**", "out/**", "build/**", "next-env.d.ts"],
+  "options": {
+    "maxWarnings": 0
+  },
   "rules": {
     "nextjs/google-font-display": "warn",
     "nextjs/google-font-preconnect": "warn",
