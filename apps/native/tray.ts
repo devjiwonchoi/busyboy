@@ -1,7 +1,5 @@
 import { app, Menu, nativeImage, Tray, type MenuItemConstructorOptions } from "electron";
 
-import { APP_LABEL } from "./app-label";
-
 export type TrayState = {
   directorReplied: boolean;
   updateVersion?: string | null;
@@ -72,9 +70,9 @@ function trayMenuTemplate(state: TrayState, actions: TrayActions): MenuItemConst
       click: () => actions.installUpdate(),
     });
   items.push(
-    { label: `Open ${APP_LABEL}`, click: () => actions.open() },
+    { label: "Open BusyBoy", click: () => actions.open() },
     { type: "separator" },
-    { label: `Quit ${APP_LABEL}`, click: () => actions.quit() },
+    { label: "Quit BusyBoy", click: () => actions.quit() },
   );
   return items;
 }
@@ -88,9 +86,7 @@ export function createTray(actions: TrayActions) {
   const render = () => {
     const count = attentionCount(state);
     tray.setImage(count > 0 ? icons.attention : icons.idle);
-    tray.setToolTip(
-      count > 0 ? `${APP_LABEL}: ${count} need${count === 1 ? "s" : ""} you` : APP_LABEL,
-    );
+    tray.setToolTip(count > 0 ? `BusyBoy: ${count} need${count === 1 ? "s" : ""} you` : "BusyBoy");
     if (process.platform === "darwin") tray.setTitle(count > 0 ? String(count) : "");
     const template = trayMenuTemplate(state, actions);
     labels = template.flatMap((item) => (item.label ? [item.label] : []));

@@ -3,7 +3,6 @@ import { contextBridge, ipcRenderer } from "electron";
 import {
   APP_VERSION_CHANNEL,
   DESKTOP_BRIDGE_KEY,
-  DEV_RUN_ARGUMENT,
   INSTALL_UPDATE_CHANNEL,
   UPDATE_READY_CHANNEL,
   UPDATE_STATE_CHANNEL,
@@ -11,7 +10,6 @@ import {
 } from "../web/lib/desktop-bridge";
 
 const bridge: DesktopBridge = {
-  isDevRun: process.argv.includes(DEV_RUN_ARGUMENT),
   readyUpdate: () => ipcRenderer.invoke(UPDATE_STATE_CHANNEL),
   appVersion: () => ipcRenderer.invoke(APP_VERSION_CHANNEL),
   onUpdateReady: (listener) => {

@@ -6,12 +6,9 @@ export const APP_VERSION_CHANNEL = "busyboy:app-version";
 
 export const INSTALL_UPDATE_CHANNEL = "busyboy:install-update";
 
-export const DEV_RUN_ARGUMENT = "--busyboy-dev";
-
 export const DESKTOP_BRIDGE_KEY = "busyboyDesktop";
 
 export type DesktopBridge = {
-  isDevRun: boolean;
   readyUpdate(): Promise<string | null>;
   onUpdateReady(listener: (version: string) => void): () => void;
   appVersion(): Promise<string>;

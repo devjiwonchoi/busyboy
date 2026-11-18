@@ -5,13 +5,11 @@ import { app, BrowserWindow, dialog, ipcMain, session, shell } from "electron";
 
 import {
   APP_VERSION_CHANNEL,
-  DEV_RUN_ARGUMENT,
   INSTALL_UPDATE_CHANNEL,
   UPDATE_READY_CHANNEL,
   UPDATE_STATE_CHANNEL,
 } from "../web/lib/desktop-bridge";
 import { SERVER_TOKEN_COOKIE } from "../web/lib/server-token";
-import { APP_LABEL, isDevRun } from "./app-label";
 import { startBackground, type Background } from "./background";
 import {
   createSelfCheck,
@@ -26,6 +24,7 @@ import { startUpdates, type Updates } from "./updates";
 
 const selfCheckPath = selfCheckOutputPath(process.argv);
 if (selfCheckPath) isolateSelfCheckProfile();
+else if (!app.isPackaged) nameDevRun();
 let server: ServerHandle | null = null;
 let mainWindow: BrowserWindow | null = null;
 let background: Background | null = null;
@@ -33,6 +32,12 @@ let updates: Updates | null = null;
 let quitting = false;
 
 const ALLOWED_PERMISSIONS = new Set(["clipboard-sanitized-write"]);
+
+function nameDevRun() {
+  const userData = app.getPath("userData");
+  app.setName("BusyBoy (dev)");
+  app.setPath("userData", userData);
+}
 
 function isAppOrigin(url: string | undefined) {
   if (!server || !url) return false;
@@ -62,7 +67,7 @@ function createWindow(url: string, show: boolean) {
     minWidth: 800,
     minHeight: 480,
     show: false,
-    title: APP_LABEL,
+    title: "BusyBoy",
     titleBarStyle: process.platform === "darwin" ? "hiddenInset" : "default",
     ...(devIcon && process.platform !== "darwin" ? { icon: devIcon } : {}),
     webPreferences: {
@@ -70,16 +75,8 @@ function createWindow(url: string, show: boolean) {
       nodeIntegration: false,
       sandbox: true,
       preload: join(__dirname, "preload.cjs"),
-      ...(isDevRun ? { additionalArguments: [DEV_RUN_ARGUMENT] } : {}),
     },
   });
-
-  if (isDevRun) {
-    window.on("page-title-updated", (event, title) => {
-      event.preventDefault();
-      window.setTitle(title.replace("BusyBoy", APP_LABEL));
-    });
-  }
 
   if (process.platform === "darwin") {
     window.webContents.on("dom-ready", () => {
@@ -291,7 +288,7 @@ function registerAppEvents() {
     } catch (error) {
       console.error(error);
       dialog.showErrorBox(
-        `${APP_LABEL} could not start`,
+        "BusyBoy could not start",
         error instanceof Error ? error.message : String(error),
       );
       await server?.stop();
