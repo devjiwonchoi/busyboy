@@ -24,6 +24,7 @@ export function Transcript({ view }: { view: DirectorView }) {
           <MessageView key={entry.id} entry={entry} />
         ))}
         {view.draft ? <ReplyBubble text={view.draft} /> : null}
+        {view.status === "answering" && !view.draft ? <Thinking /> : null}
         <div key={view.revision} ref={scrollLogToEnd} />
       </div>
     </div>
@@ -33,6 +34,23 @@ export function Transcript({ view }: { view: DirectorView }) {
 function scrollLogToEnd(node: HTMLDivElement | null) {
   const log = node?.closest<HTMLElement>("[role=log]");
   if (log) log.scrollTop = log.scrollHeight;
+}
+
+function Thinking() {
+  return (
+    <p
+      role="status"
+      aria-label="Thinking"
+      className="text-muted-foreground flex items-center gap-1.5 text-sm"
+    >
+      <span className="flex gap-0.5" aria-hidden>
+        <span className="bg-muted-foreground size-1 animate-pulse rounded-full" />
+        <span className="bg-muted-foreground size-1 animate-pulse rounded-full [animation-delay:150ms]" />
+        <span className="bg-muted-foreground size-1 animate-pulse rounded-full [animation-delay:300ms]" />
+      </span>
+      Thinking…
+    </p>
+  );
 }
 
 function MessageView({ entry }: { entry: ChatEntry }) {
