@@ -8,25 +8,19 @@ import {
 } from "./claude-process";
 import {
   CODEX_ANSWERABLE_REQUESTS,
-  CODEX_MESSAGE_QUESTION_PREFIX,
-  codexAnswerToResult,
+  codexAcceptForSession,
   codexAutoReply,
   CodexEventMapper,
-  codexQuestionAnswerText,
   type CodexRawMessage,
 } from "./codex-events";
 import type {
-  AgentAnswer,
   AgentEvent,
-  McpServer,
-  PermissionMode,
   ProviderAdapter,
   ProviderSession,
   ProviderStartOptions,
   SignInStatus,
 } from "./contract";
 import { agentEnvironment, findExecutable } from "./find-executable";
-import { codexInput, modelText, textTurn, type UserTurn } from "./user-turn";
 
 export const CODEX_PATH_ENV = "BUSYBOY_CODEX_PATH";
 const SIGN_IN_TIMEOUT_MS = 20_000;
@@ -38,75 +32,11 @@ function resolveCodex() {
   return process.env[CODEX_PATH_ENV] || findExecutable("codex");
 }
 
-export function codexThreadSettings(mode: PermissionMode, noTools = false) {
-  // why: Codex has no switch for no tools over app-server.
-  if (noTools) return { approvalPolicy: "never", approvalsReviewer: "user", sandbox: "read-only" };
-  return mode === "full-access"
-    ? { approvalPolicy: "never", approvalsReviewer: "user", sandbox: "danger-full-access" }
-    : {
-        approvalPolicy: "on-request",
-        approvalsReviewer: "auto_review",
-        sandbox: "workspace-write",
-      };
-}
-
-// why: codex-cli 0.167.0 warns about unknown config keys, and every key here is one it recognizes.
-async function noToolsConfig(connection: AppServerConnection, cwd: string) {
-  let servers: Record<string, unknown>;
-  try {
-    const response = await connection.request<{
-      config?: { mcp_servers?: Record<string, unknown> };
-    }>("config/read", { cwd });
-    servers = response.config?.mcp_servers ?? {};
-  } catch (error) {
-    throw new Error(
-      `Codex could not list its MCP servers to turn them off: ${error instanceof Error ? error.message : String(error)}`,
-    );
-  }
-  return {
-    "features.shell_tool": false,
-    "features.unified_exec": false,
-    "features.apps": false,
-    "features.plugins": false,
-    "features.multi_agent": false,
-    "features.tool_suggest": false,
-    web_search: "disabled",
-    ...Object.fromEntries(
-      Object.keys(servers).map((name) => [`mcp_servers.${name}.enabled`, false]),
-    ),
-  };
-}
-
-const MCP_NAME = /^[A-Za-z0-9_-]+$/;
-
-// why: MCP config travels in thread/start over JSON-RPC, so tokens stay out of the command line and child processes.
-export function codexMcpConfig(servers: Record<string, McpServer> = {}) {
-  const config: Record<string, unknown> = {};
-  const skipped: string[] = [];
-  for (const [name, server] of Object.entries(servers)) {
-    const approval = server.trusted ? { default_tools_approval_mode: "approve" } : {};
-    if (!MCP_NAME.test(name))
-      skipped.push(`The MCP server name ${name} can only use letters, digits, - and _ for Codex.`);
-    else if (server.type === "stdio")
-      config[`mcp_servers.${name}`] = {
-        command: server.command,
-        args: server.args ?? [],
-        env: server.env ?? {},
-        ...approval,
-      };
-    else if (server.type === "http")
-      config[`mcp_servers.${name}`] = {
-        url: server.url,
-        http_headers: server.headers ?? {},
-        ...approval,
-      };
-    else
-      skipped.push(
-        `Codex cannot use the MCP server ${name}: it only connects to stdio and HTTP servers, not SSE.`,
-      );
-  }
-  return { config, skipped };
-}
+const THREAD_SETTINGS = {
+  approvalPolicy: "on-request",
+  approvalsReviewer: "auto_review",
+  sandbox: "workspace-write",
+};
 
 type Pending = { resolve: (result: unknown) => void; reject: (error: Error) => void };
 
@@ -231,9 +161,7 @@ function spawnAppServer(
 
 function startCodex(options: ProviderStartOptions): ProviderSession {
   const { emit } = options;
-  const mcp = codexMcpConfig(options.mcpServers);
-  const queue: UserTurn[] = [];
-  const requests = new Map<string, CodexRawMessage>();
+  const queue: string[] = [];
   let connection: AppServerConnection | undefined;
   let threadId: string | undefined;
   let turnId: string | undefined;
@@ -242,18 +170,8 @@ function startCodex(options: ProviderStartOptions): ProviderSession {
   let pendingStart: object | undefined;
   let stopRequested = false;
   let failed = false;
-  let ready: Promise<void> | undefined;
-  const asks = new Map<string, (answer: AgentAnswer | null) => void>();
 
-  const dropAsks = () => {
-    for (const [requestId, resolve] of asks.entries()) {
-      asks.delete(requestId);
-      resolve(null);
-      emit({ type: "answered", requestId });
-    }
-  };
-
-  const fail = (message: string, code: "provider" | "signed-out" | "lost-session" = "provider") => {
+  const fail = (message: string, code: "provider" | "lost-session" = "provider") => {
     if (failed || stopRequested) return;
     failed = true;
     emit({ type: "error", code, message });
@@ -272,11 +190,10 @@ function startCodex(options: ProviderStartOptions): ProviderSession {
     inTurn = true;
     const request = {};
     pendingStart = request;
-    const text = modelText(turn);
     connection
       .request<{ turn: { id: string } }>("turn/start", {
         threadId,
-        input: codexInput(text ? turn : { ...turn, text: " " }),
+        input: [{ type: "text", text: turn, text_elements: [] }],
       })
       .then(({ turn }) => {
         if (pendingStart !== request) return;
@@ -331,10 +248,7 @@ function startCodex(options: ProviderStartOptions): ProviderSession {
       }
       // why: Codex's own auto review still asks the client. Accept it here so BusyBoy does not show an approval.
       if (CODEX_ANSWERABLE_REQUESTS.has(message.method)) {
-        connection?.respond(
-          message.id,
-          codexAnswerToResult(message, { kind: "approval", allow: true, forSession: true }),
-        );
+        connection?.respond(message.id, codexAcceptForSession(message));
         return;
       }
       connection?.respondError(message.id, `BusyBoy does not handle ${message.method}.`);
@@ -358,34 +272,24 @@ function startCodex(options: ProviderStartOptions): ProviderSession {
     if (!executable) {
       emit({
         type: "error",
-        code: "not-installed",
         message: "The `codex` command was not found on PATH.",
       });
       return false;
     }
-    for (const notice of mcp.skipped) emit({ type: "error", code: "provider", message: notice });
     connection = spawnAppServer(executable, options.cwd, onMessage);
     const current = connection;
     if (stopRequested) void current.kill();
-    ready = (async () => {
+    const ready = (async () => {
       await current.initialize();
       const settings = {
         cwd: options.cwd,
-        ...codexThreadSettings(options.permissionMode, options.noTools),
+        ...THREAD_SETTINGS,
         developerInstructions: options.instructions ?? null,
-        config: options.noTools ? await noToolsConfig(current, options.cwd) : mcp.config,
+        config: {},
       };
-      const [method, params] = options.forkSessionId
-        ? [
-            "thread/fork",
-            { threadId: options.forkSessionId, ephemeral: true, excludeTurns: true, ...settings },
-          ]
-        : options.resumeSessionId
-          ? [
-              "thread/resume",
-              { threadId: options.resumeSessionId, excludeTurns: true, ...settings },
-            ]
-          : ["thread/start", settings];
+      const [method, params] = options.resumeSessionId
+        ? ["thread/resume", { threadId: options.resumeSessionId, excludeTurns: true, ...settings }]
+        : ["thread/start", settings];
       const response = await current.request<{ thread: { id: string } }>(method, params);
       threadId = response.thread.id;
       emit({ type: "session", sessionId: threadId });
@@ -401,19 +305,14 @@ function startCodex(options: ProviderStartOptions): ProviderSession {
         ),
       ]);
       clearTimeout(timer);
-      if (status?.state === "signed-out")
-        fail("Codex is not signed in. Run `codex login`.", "signed-out");
-      // why: codex-cli 0.167.0's answer to resuming or branching from a thread it does not have.
-      else if (
-        (options.resumeSessionId || options.forkSessionId) &&
-        /no rollout found for thread id/i.test(error.message)
-      ) {
+      if (status?.state === "signed-out") fail("Codex is not signed in. Run `codex login`.");
+      // why: codex-cli 0.167.0's answer to resuming a thread it does not have.
+      else if (options.resumeSessionId && /no rollout found for thread id/i.test(error.message)) {
         fail(error.message, "lost-session");
       } else fail(error.message);
       void current.kill();
     });
     const { code, stderr } = await current.exited;
-    dropAsks();
     mapper.flush();
     mapper.dispose();
     fail(stderr.trim() || `The Codex app server exited with code ${code}.`);
@@ -427,24 +326,12 @@ function startCodex(options: ProviderStartOptions): ProviderSession {
     })
     .then((finished) => emit({ type: "stopped", finished }));
 
-  const send = (turn: UserTurn | string) => {
-    queue.push(typeof turn === "string" ? textTurn(turn) : turn);
-    startNextTurn();
-  };
-
   return {
-    send,
+    send(text) {
+      queue.push(text);
+      startNextTurn();
+    },
     async interrupt() {
-      dropAsks();
-      for (const [requestId, request] of requests) {
-        if (request.id !== undefined)
-          connection?.respond(
-            request.id,
-            codexAnswerToResult(request, { kind: "approval", allow: false }),
-          );
-        requests.delete(requestId);
-        emit({ type: "answered", requestId });
-      }
       if (turnId) interruptTurn();
       // why: The turn was requested but Codex has not named it yet: interrupt once it does.
       else if (inTurn) interruptPending = true;
@@ -452,43 +339,6 @@ function startCodex(options: ProviderStartOptions): ProviderSession {
         queue.length = 0;
         emit({ type: "turn-done" });
       }
-    },
-    async compact() {
-      await ready?.catch(() => {});
-      if (!connection || !threadId) return;
-      if (inTurn) throw new Error("Codex is running a turn. Compact once it ends.");
-      inTurn = true;
-      try {
-        await connection.request("thread/compact/start", { threadId });
-      } catch (error) {
-        inTurn = false;
-        interruptPending = false;
-        emit(queue.length > 0 ? { type: "turn-done", more: true } : { type: "turn-done" });
-        startNextTurn();
-        throw error;
-      }
-    },
-    answer(requestId, answer: AgentAnswer) {
-      const ask = asks.get(requestId);
-      if (ask) {
-        ask(answer);
-        return;
-      }
-      if (requestId.startsWith(CODEX_MESSAGE_QUESTION_PREFIX)) {
-        const text = codexQuestionAnswerText(answer);
-        if (!connection || !threadId || !turnId) return send(text);
-        const input = [{ type: "text", text, text_elements: [] }];
-        connection
-          .request("turn/steer", { threadId, input, expectedTurnId: turnId })
-          .catch(() => send(text));
-        return;
-      }
-      const request = requests.get(requestId);
-      if (!request || request.id === undefined) return;
-      requests.delete(requestId);
-      const result = codexAnswerToResult(request, answer);
-      if ((result as { decision?: unknown }).decision === "cancel") mapper.deniedWithCancel();
-      connection?.respond(request.id, result);
     },
     async stop() {
       stopRequested = true;

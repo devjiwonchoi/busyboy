@@ -1,7 +1,5 @@
 import { app, Menu, nativeImage, Tray, type MenuItemConstructorOptions } from "electron";
 
-const LABEL_LIMIT = 48;
-
 export type TrayState = {
   directorReplied: boolean;
   updateVersion?: string | null;
@@ -12,11 +10,6 @@ export type TrayActions = {
   quit: () => void;
   installUpdate: () => void;
 };
-
-export function shorten(text: string, limit = LABEL_LIMIT) {
-  const flat = text.replace(/\s+/g, " ").trim();
-  return flat.length > limit ? `${flat.slice(0, limit - 1).trimEnd()}…` : flat;
-}
 
 export const attentionCount = (state: TrayState) => (state.directorReplied ? 1 : 0);
 

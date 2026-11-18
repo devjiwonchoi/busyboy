@@ -257,14 +257,12 @@ async function ensureAgent(director: Director) {
     // why: The harness needs a directory, and v1 does not ask the user to pick one.
     cwd: homedir(),
     instructions: DIRECTOR_INSTRUCTIONS,
-    permissionMode: "auto",
     resumeSessionId: director.state.sessionId,
   });
   director.agentId = snapshot.id;
   director.unsubscribe?.();
   director.unsubscribe =
-    subscribeToAgent(snapshot.id, 0, (envelope) => onAgentEvent(director, envelope.event)) ??
-    undefined;
+    subscribeToAgent(snapshot.id, (event) => onAgentEvent(director, event)) ?? undefined;
   return snapshot;
 }
 
