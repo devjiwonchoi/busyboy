@@ -61,7 +61,6 @@ const release = args.has("--release");
 const mac = process.platform === "darwin";
 
 const APP_ID = "dev.jiwon.busyboy";
-const PRODUCT_NAME = "BusyBoy";
 const DEVELOPER_TEAM = "5PA4R2B5FF";
 const SIGNATURE_REQUIREMENT = `anchor apple generic and identifier "${APP_ID}" and certificate leaf[subject.OU] = "${DEVELOPER_TEAM}"`;
 
@@ -107,7 +106,7 @@ try {
     publish: "never",
     config: {
       appId: APP_ID,
-      productName: PRODUCT_NAME,
+      productName: manifest.productName,
       ...(release
         ? {
             artifactName: "${productName}-${version}-${arch}.${ext}",
@@ -125,7 +124,7 @@ try {
               differentialPackage: true,
             },
             dmg: {
-              title: `${PRODUCT_NAME} ${version}`,
+              title: `${manifest.productName} ${version}`,
               contents: [
                 { x: 166, y: 214, type: "file" as const },
                 { x: 474, y: 214, type: "link" as const, path: "/Applications" },
@@ -133,7 +132,7 @@ try {
             },
           }
         : {}),
-      extraMetadata: { version, productName: PRODUCT_NAME },
+      extraMetadata: { version },
       directories: { output: outputDir },
       files: ["dist-electron/**/*", "package.json", "!node_modules/**/*"],
       asar: true,
@@ -212,7 +211,7 @@ if (release && mac) {
   }
   const zip = join(
     outputDir,
-    `${PRODUCT_NAME}-${version}-${builder.Arch[builder.archFromString(process.arch)]}.zip`,
+    `${manifest.productName}-${version}-${builder.Arch[builder.archFromString(process.arch)]}.zip`,
   );
   const unpacked = mkdtempSync(join(tmpdir(), "busyboy-update-check-"));
   try {
@@ -236,7 +235,7 @@ if (release && mac) {
 }
 writeFileSync(
   join(outputDir, "desktop-build.json"),
-  `${JSON.stringify({ productName: PRODUCT_NAME, version, executable, server: packagedServer }, null, 2)}\n`,
+  `${JSON.stringify({ productName: manifest.productName, version, executable, server: packagedServer }, null, 2)}\n`,
 );
 
 console.log(`[build-desktop] Packaged into ${outputDir}`);

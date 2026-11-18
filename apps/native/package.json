@@ -20,5 +20,5 @@
     "esbuild": "0.28.2",
     "typescript": "6.0.3"
   },
-  "productName": "BusyBoy (dev)"
+  "productName": "BusyBoy"
 }
