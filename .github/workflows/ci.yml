@@ -48,7 +48,6 @@ jobs:
       - run: pnpm lint
       - run: pnpm format:check
       - run: node scripts/check-comments.mts
-      - run: node scripts/check-no-use-effect.mts
       - name: Pull request rules
         if: github.event_name == 'pull_request'
         run: |

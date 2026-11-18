@@ -4,6 +4,7 @@ import { join } from "node:path";
 const roots = ["apps/web", "apps/native", "scripts"];
 const extra = ["apps/web/next.config.ts"];
 const link = /https?:\/\/\S+/;
+const reasonRequiredRule = "busyboy/no-unreasoned-effect";
 
 function filesUnder(directory: string): string[] {
   const found: string[] = [];
@@ -44,14 +45,16 @@ export function commentIsAllowed(line: string, lineIndex: number): boolean {
   if (trimmed.startsWith("///") && text.startsWith("<reference")) return true;
   if (/^@ts-(?:nocheck|check)\b/.test(text)) return true;
   if (/^@ts-(?:expect-error|ignore)\b/.test(text)) return link.test(text);
-  if (/^(?:eslint|oxlint)-(?:disable|enable)(?:-next-line|-line)?\b/.test(text)) return true;
+  if (/^(?:eslint|oxlint)-(?:disable|enable)(?:-next-line|-line)?\b/.test(text)) {
+    return !text.includes(reasonRequiredRule) || /\s--\s+\S/.test(text);
+  }
   if (/^(?:prettier|oxfmt)-ignore\b/.test(text)) return true;
   if (/^turbopackIgnore\b/.test(text)) return true;
   return link.test(text);
 }
 
 const failureMessage =
-  "Delete the comment and make the code self-explanatory: rename, extract, or type the surprise. A constraint from Electron, the operating system, Next.js, or a harness CLI stays only with the issue or vendor doc link. A formatter ignore, shebang, triple-slash reference, or oxlint disable for a pedantic rule can stay.";
+  "Delete the comment and make the code self-explanatory: rename, extract, or type the surprise. A constraint from Electron, the operating system, Next.js, or a harness CLI stays only with the issue or vendor doc link. A formatter ignore, shebang, triple-slash reference, or oxlint disable for a pedantic rule can stay. A busyboy/no-unreasoned-effect disable says what the effect keeps in step after `--`.";
 
 function main() {
   const failures: string[] = [];

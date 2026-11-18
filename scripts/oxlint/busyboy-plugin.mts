@@ -139,12 +139,48 @@ const noUseClientSegment = {
   },
 };
 
+const effectHooks = new Set(["useEffect", "useLayoutEffect", "useInsertionEffect"]);
+
+function calledHookName(callee: Node): string | undefined {
+  if (callee.type === "Identifier") return callee.name as string;
+  if (callee.type === "MemberExpression" && !callee.computed) {
+    return ((callee.property as Node).name as string | undefined) ?? undefined;
+  }
+  return undefined;
+}
+
+const noUnreasonedEffect = {
+  meta: { type: "suggestion" },
+  create(context: Context) {
+    return {
+      CallExpression(call: Node) {
+        const name = calledHookName(call.callee as Node);
+        if (!name || !effectHooks.has(name)) return;
+        context.report({
+          node: call,
+          message:
+            "Reconsider this effect (https://react.dev/learn/you-might-not-need-an-effect). " +
+            "Computable from props or state? Compute it during render. " +
+            "Caused by a user action? Do it in that handler. " +
+            "Resets state when a prop changes? Key the component on that prop. " +
+            "Reads a value a non-React store already holds? Use useSyncExternalStore. " +
+            "An effect is right only when it keeps something outside React in step while the component is mounted, " +
+            "such as a connection, subscription, timer, or DOM integration. Then say what on the line above: " +
+            "`// oxlint-disable-next-line busyboy/no-unreasoned-effect -- <what it keeps in step>`. " +
+            "Moving the same logic into a ref callback or store to avoid this rule is not a fix.",
+        });
+      },
+    };
+  },
+};
+
 const busyboyPlugin = {
   meta: { name: "busyboy" },
   rules: {
     "no-use-client-segment": noUseClientSegment,
     "no-proxy": noProxy,
     "trusted-entry": trustedEntry,
+    "no-unreasoned-effect": noUnreasonedEffect,
   },
 };
 

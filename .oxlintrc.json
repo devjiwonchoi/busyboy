@@ -22,6 +22,7 @@
   "rules": {
     "busyboy/no-proxy": "error",
     "busyboy/trusted-entry": "error",
+    "busyboy/no-unreasoned-effect": "error",
     "no-restricted-imports": [
       "error",
       {
