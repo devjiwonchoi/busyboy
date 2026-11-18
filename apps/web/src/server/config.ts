@@ -1,12 +1,7 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { access, mkdir, open, readFile, rename } from "node:fs/promises";
 import { homedir } from "node:os";
-import { isAbsolute, join } from "node:path";
-
-import { cookies } from "next/headers";
-import { unstable_rethrow } from "next/navigation";
-
-import { SERVER_TOKEN_ENV, TEST_MODE_ENV } from "@/lib/server-token";
+import { join } from "node:path";
 
 import { pathKey } from "./paths";
 import type { ProviderId } from "./runner/contract";
@@ -14,10 +9,6 @@ import type { ProviderId } from "./runner/contract";
 // why: The data folder is shared with the legacy app, which keeps its own files there.
 
 export const HOME_ENV = "BUSYBOY_HOME";
-
-export { TEST_MODE_ENV };
-
-export const TEST_HOME_COOKIE = "busyboy-test-home";
 
 /*why: * Named so it never collides with the legacy app's `settings.json`. */
 export const SETTINGS_FILE = "app-settings.json";
@@ -35,22 +26,8 @@ const EMPTY_SETTINGS: Settings = {
   defaultProvider: null,
 };
 
-export function isTestMode() {
-  return process.env[TEST_MODE_ENV] === "1" && !process.env[SERVER_TOKEN_ENV];
-}
-
-function testHome(cookie: string | undefined) {
-  if (!cookie || !isTestMode()) return undefined;
-  try {
-    const folder = decodeURIComponent(cookie);
-    return isAbsolute(folder) ? folder : undefined;
-  } catch {
-    return undefined;
-  }
-}
-
-export function resolveDataFolder(testHomeCookie?: string) {
-  return testHome(testHomeCookie) ?? (process.env[HOME_ENV] || join(homedir(), ".busyboy"));
+export function resolveDataFolder() {
+  return process.env[HOME_ENV] || join(homedir(), ".busyboy");
 }
 
 const BOUND_FOLDER_KEY = Symbol.for("busyboy.data-folder");
@@ -59,21 +36,13 @@ const boundStore = globalThis as typeof globalThis & {
 };
 const boundFolder = (boundStore[BOUND_FOLDER_KEY] ??= new AsyncLocalStorage<string>());
 
-// why: Work that outlives a request has to capture the data folder, because the proxy has no cookies() later.
+// why: Work that outlives a request has to capture the data folder before the request ends.
 export function runWithDataFolder<T>(folder: string, work: () => T): T {
   return boundFolder.run(folder, work);
 }
 
 export async function dataFolder() {
-  const bound = boundFolder.getStore();
-  if (bound) return bound;
-  if (!isTestMode()) return resolveDataFolder();
-  try {
-    return resolveDataFolder((await cookies()).get(TEST_HOME_COOKIE)?.value);
-  } catch (error) {
-    unstable_rethrow(error);
-    return resolveDataFolder();
-  }
+  return boundFolder.getStore() ?? resolveDataFolder();
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

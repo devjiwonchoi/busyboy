@@ -13,8 +13,7 @@
     "typecheck": "pnpm --filter @busyboy/web --filter @busyboy/native typecheck",
     "lint": "oxlint",
     "format": "oxfmt",
-    "format:check": "oxfmt --check",
-    "drive": "pnpm --filter @busyboy/web drive"
+    "format:check": "oxfmt --check"
   },
   "devDependencies": {
     "oxfmt": "0.79.0",

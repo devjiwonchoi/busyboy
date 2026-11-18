@@ -31,8 +31,6 @@ const nextConfig: NextConfig = {
     "*": [
       ".git",
       ".git/**",
-      "tests/**",
-      "test-results/**",
       "release/**",
       "dist-electron/**",
       "electron/**",
