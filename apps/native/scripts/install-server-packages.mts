@@ -20,7 +20,7 @@ import { tmpdir } from "node:os";
 import { basename, dirname, join, relative, sep } from "node:path";
 
 import { lockfileForImporter } from "../../../scripts/trim-lockfile.mts";
-import { serverExternalPackages } from "../../web/src/lib/server-external-packages.ts";
+import { serverExternalPackages } from "../../web/lib/server-external-packages.ts";
 import { standaloneAppDir, standaloneServerPath } from "../standalone-server.ts";
 
 const repoRoot = join(import.meta.dirname, "..", "..", "..");
@@ -350,7 +350,7 @@ export function installServerPackages(serverDir: string, platform: string, arch:
   for (const name of serverExternalPackages) {
     if (!manifest.dependencies?.[name]) {
       throw new Error(
-        `${name} is in apps/web/src/lib/server-external-packages.ts but not in apps/web/package.json dependencies.`,
+        `${name} is in apps/web/lib/server-external-packages.ts but not in apps/web/package.json dependencies.`,
       );
     }
   }

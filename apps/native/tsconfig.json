@@ -13,7 +13,7 @@
     "esModuleInterop": true,
     "types": ["node"],
     "paths": {
-      "@/*": ["../web/src/*"]
+      "@/*": ["../web/*"]
     }
   },
   "include": ["**/*.ts", "**/*.mts"],

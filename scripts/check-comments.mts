@@ -1,8 +1,8 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 
-const roots = ["apps/web/src", "apps/web/scripts", "apps/native", "scripts"];
-const extra = ["apps/web/next.config.ts", "apps/web/src/proxy.ts"];
+const roots = ["apps/web", "apps/native", "scripts"];
+const extra = ["apps/web/next.config.ts", "apps/web/proxy.ts"];
 
 function filesUnder(directory: string): string[] {
   const found: string[] = [];
@@ -13,6 +13,8 @@ function filesUnder(directory: string): string[] {
       found.push(...filesUnder(path));
       continue;
     }
+    // why: next typegen writes next-env.d.ts, and that file is not product code.
+    if (entry === "next-env.d.ts") continue;
     if (/\.(?:tsx?|mts)$/.test(path)) found.push(path);
   }
   return found;

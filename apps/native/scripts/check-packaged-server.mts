@@ -7,8 +7,8 @@ import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { serverExternalPackages } from "../../web/src/lib/server-external-packages.ts";
-import { SERVER_TOKEN_ENV, SERVER_TOKEN_HEADER } from "../../web/src/lib/server-token.ts";
+import { serverExternalPackages } from "../../web/lib/server-external-packages.ts";
+import { SERVER_TOKEN_ENV, SERVER_TOKEN_HEADER } from "../../web/lib/server-token.ts";
 import { standaloneAppDir, standaloneServerPath } from "../standalone-server.ts";
 import { assertServerResolves } from "./check-server-resolution.mts";
 
