@@ -6,6 +6,7 @@ import { basename, dirname, join } from "node:path";
 
 import { containsPath } from "../paths";
 import { alwaysAskApproval, createAllowedCalls, matchAlwaysAsk } from "./always-ask";
+import { matchAskRule } from "./always-ask-translator";
 import {
   ClaudeEventMapper,
   claudePermissionToEvent,
@@ -328,15 +329,25 @@ function startScripted(folder: string, options: ProviderStartOptions): ProviderS
             }
           }
         }
-        const rule = matchAlwaysAsk({
+        const listed = matchAskRule({
           rules: options.alwaysAsk ?? [],
           toolName: name,
           input,
-          folder: options.cwd,
-          recordFolder: options.recordFolder,
+          cwd: options.cwd,
           privateFolder: options.privateFolder,
-          noFileEdits: options.noFileEdits,
         });
+        // why: A subagent's "do not edit the checkout" check is still the old read of the command until the harness is the one in default mode.
+        const subagent =
+          !listed && options.noFileEdits
+            ? matchAlwaysAsk({
+                rules: [],
+                toolName: name,
+                input,
+                folder: options.cwd,
+                noFileEdits: true,
+              })
+            : null;
+        const rule = listed?.rule ?? subagent;
         const call = { toolName: name, input, rule: rule ?? "", cwd: options.cwd };
         if (rule && !allowedCalls.has(call)) {
           const answer = await pause(

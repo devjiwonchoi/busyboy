@@ -34,6 +34,12 @@ export function resolveRulesFolder(given: string | undefined) {
   return join(homedir(), ".jwn");
 }
 
+export async function loadUserRules(rulesFolder: string | undefined) {
+  const folder = resolveRulesFolder(rulesFolder);
+  if (!folder) return [];
+  return loadRules(folder);
+}
+
 /*why: * Whether the hook must be installed so a rules check cannot be skipped. A folder that cannot be read still needs the hook: the check then fails closed. */
 export function userRulesHookNeeded(rulesFolder: string | undefined) {
   const folder = resolveRulesFolder(rulesFolder);
@@ -53,6 +59,12 @@ export function failedRuleCheck(error: unknown): UserRuleCheck {
     remember: false,
     detail: `BusyBoy could not check the rules in ~/.jwn, so this action is blocked. ${oneLine(message)}`,
   };
+}
+
+export function userRuleDetail(rule: UserRule) {
+  const name = rule.name ? `${rule.name} (${rule.block})` : rule.block;
+  const reason = rule.reason ? ` ${rule.reason}` : "";
+  return `Blocked by a rule in ~/.jwn: ${name}.${reason}`;
 }
 
 export function userRuleApproval({
@@ -113,13 +125,11 @@ export async function checkUserRules({
       reason: "",
       file: "",
     };
-    const name = rule.name ? `${rule.name} (${rule.block})` : rule.block;
-    const reason = rule.reason ? ` ${rule.reason}` : "";
     return {
       ask: true,
       ruleKey: `user-rule:${rule.file}:${rule.block}`,
       remember: true,
-      detail: `Blocked by a rule in ~/.jwn: ${name}.${reason}`,
+      detail: userRuleDetail(rule),
     };
   } catch (error) {
     return failedRuleCheck(error);

@@ -4,7 +4,6 @@ import { realpathSync } from "node:fs";
 import {
   query,
   type CanUseTool,
-  type HookCallback,
   type McpServerConfig,
   type Options,
   type PermissionResult,
@@ -13,7 +12,8 @@ import {
   type SDKUserMessage,
 } from "@anthropic-ai/claude-agent-sdk";
 
-import { alwaysAskApproval, createAllowedCalls, matchAlwaysAsk } from "./always-ask";
+import { alwaysAskApproval, createAllowedCalls } from "./always-ask";
+import { matchAskRule, translateAskRules } from "./always-ask-translator";
 import { ClaudeEventMapper, claudePermissionToEvent, type ClaudeRawMessage } from "./claude-events";
 import { spawnClaudeProcess, type ClaudeProcess } from "./claude-process";
 import type {
@@ -26,13 +26,11 @@ import type {
   SignInStatus,
 } from "./contract";
 import { agentEnvironment, findExecutable } from "./find-executable";
-import { checkUserRules, userRuleApproval, userRulesHookNeeded } from "./user-rules";
+import { loadUserRules, userRuleApproval, userRuleDetail, type UserRule } from "./user-rules";
 import { claudeContent, modelText, type UserTurn } from "./user-turn";
 
 export const CLAUDE_PATH_ENV = "BUSYBOY_CLAUDE_PATH";
 const SIGN_IN_TIMEOUT_MS = 20_000;
-const ALWAYS_ASK_TIMEOUT_S = 24 * 60 * 60;
-
 class MessageQueue implements AsyncIterable<SDKUserMessage> {
   private items: SDKUserMessage[] = [];
   private waiting: ((result: IteratorResult<SDKUserMessage>) => void) | undefined;
@@ -152,6 +150,8 @@ function startClaude(options: ProviderStartOptions): ProviderSession {
   let stopRequested = false;
   const asks = new Map<string, (answer: AgentAnswer | null) => void>();
   const allowedCalls = createAllowedCalls();
+  let userRules: UserRule[] = [];
+  let askRules = options.alwaysAsk ?? [];
 
   // why: Auto mode calls canUseTool only for calls it would ask about itself.
   const waitForApproval = (
@@ -175,97 +175,57 @@ function startClaude(options: ProviderStartOptions): ProviderSession {
       emit(event);
     });
 
-  const deny = (reason: string) => ({
-    hookSpecificOutput: {
-      hookEventName: "PreToolUse" as const,
-      permissionDecision: "deny" as const,
-      permissionDecisionReason: reason,
-    },
-  });
-
-  const alwaysAsk: HookCallback = async (hookInput, toolUseID, { signal }) => {
-    if (hookInput.hook_event_name !== "PreToolUse") {
-      return {};
-    }
-    const { tool_name: toolName, tool_input: toolInput } = hookInput;
-    const cwd = hookInput.cwd || options.cwd;
-    const userRule = await checkUserRules({
-      rulesFolder: options.rulesFolder,
+  const canUseTool: CanUseTool = async (
+    toolName,
+    toolInput,
+    { signal, toolUseID, title, description, suggestions, suppressAlwaysAllowRule, matchedAskRule },
+  ) => {
+    const cwd = options.cwd;
+    const local = matchAskRule({
+      rules: askRules,
       toolName,
       input: toolInput,
       cwd,
-      recordFolder: options.recordFolder,
-    });
-    if (userRule.ask) {
-      const call = { toolName, input: toolInput, rule: userRule.ruleKey, cwd };
-      if (!(userRule.remember && allowedCalls.has(call))) {
-        const requestId = `user-rule-${toolUseID ?? randomUUID()}`;
-        const answer = await waitForApproval(
-          requestId,
-          userRuleApproval({
-            requestId,
-            toolName,
-            input: toolInput,
-            detail: userRule.detail,
-            remember: userRule.remember,
-          }),
-          signal,
-        );
-        const allowed = answer?.kind === "approval" && answer.allow;
-        if (allowed && answer.forSession && userRule.remember) allowedCalls.add(call);
-        if (!allowed)
-          return deny(
-            (answer?.kind === "approval" && answer.message) || "The user declined this action.",
-          );
-      }
-    }
-    const rule = matchAlwaysAsk({
-      rules: options.alwaysAsk ?? [],
-      toolName,
-      input: toolInput,
-      folder: options.cwd,
-      recordFolder: options.recordFolder,
       privateFolder: options.privateFolder,
-      noFileEdits: options.noFileEdits,
     });
-    if (!rule) {
-      return {};
-    }
-    const call = { toolName, input: toolInput, rule, cwd };
-    if (allowedCalls.has(call)) {
-      return {
-        hookSpecificOutput: {
-          hookEventName: "PreToolUse",
-          permissionDecision: "allow",
-          permissionDecisionReason: "The user approved this exact action before.",
-        },
+    const rule = local?.rule ?? matchedAskRule?.ruleContent;
+    if (rule) {
+      const user = userRules.find((entry) => entry.block === rule);
+      const call = {
+        toolName,
+        input: toolInput,
+        rule: user ? `user-rule:${user.file}:${user.block}` : rule,
+        cwd,
       };
+      const remember = (local?.remember ?? true) && !options.noFileEdits;
+      if (remember && allowedCalls.has(call)) {
+        return { behavior: "allow" as const, updatedInput: toolInput };
+      }
+      const requestId = `always-ask-${toolUseID || randomUUID()}`;
+      const answer = await waitForApproval(
+        requestId,
+        user
+          ? userRuleApproval({
+              requestId,
+              toolName,
+              input: toolInput,
+              detail: userRuleDetail(user),
+              remember,
+            })
+          : alwaysAskApproval({ requestId, toolName, input: toolInput, rule }),
+        signal,
+      );
+      const allowed = answer?.kind === "approval" && answer.allow;
+      if (allowed && answer.forSession && remember) allowedCalls.add(call);
+      if (!allowed) {
+        return {
+          behavior: "deny" as const,
+          message:
+            (answer?.kind === "approval" && answer.message) || "The user declined this action.",
+        };
+      }
+      return { behavior: "allow" as const, updatedInput: toolInput };
     }
-
-    const requestId = `always-ask-${toolUseID ?? randomUUID()}`;
-    const answer = await waitForApproval(
-      requestId,
-      alwaysAskApproval({ requestId, toolName, input: toolInput, rule }),
-      signal,
-    );
-    const allowed = answer?.kind === "approval" && answer.allow;
-    if (allowed && answer.forSession) allowedCalls.add(call);
-    const declined =
-      (answer?.kind === "approval" && answer.message) || "The user declined this action.";
-    return {
-      hookSpecificOutput: {
-        hookEventName: "PreToolUse",
-        permissionDecision: allowed ? "allow" : "deny",
-        permissionDecisionReason: allowed ? "The user approved this action." : declined,
-      },
-    };
-  };
-
-  const canUseTool: CanUseTool = (
-    toolName,
-    toolInput,
-    { signal, toolUseID, title, description, suggestions, suppressAlwaysAllowRule },
-  ) => {
     const requestId = toolUseID || randomUUID();
     return new Promise<PermissionResult>((resolve) => {
       const onAbort = () => {
@@ -274,14 +234,15 @@ function startClaude(options: ProviderStartOptions): ProviderSession {
         emit({ type: "answered", requestId });
       };
       signal.addEventListener("abort", onAbort, { once: true });
-      const sessionPermissions = suppressAlwaysAllowRule
-        ? []
-        : (suggestions ?? [])
-            .filter(
-              (suggestion) =>
-                suggestion.type === "addRules" || suggestion.type === "addDirectories",
-            )
-            .map((suggestion) => ({ ...suggestion, destination: "session" as const }));
+      const sessionPermissions =
+        options.noFileEdits || suppressAlwaysAllowRule
+          ? []
+          : (suggestions ?? [])
+              .filter(
+                (suggestion) =>
+                  suggestion.type === "addRules" || suggestion.type === "addDirectories",
+              )
+              .map((suggestion) => ({ ...suggestion, destination: "session" as const }));
       requests.set(requestId, {
         input: toolInput,
         sessionPermissions,
@@ -346,6 +307,23 @@ function startClaude(options: ProviderStartOptions): ProviderSession {
       });
       return false;
     }
+    try {
+      userRules = await loadUserRules(options.rulesFolder);
+    } catch (error) {
+      emit({
+        type: "error",
+        code: "provider",
+        message: error instanceof Error ? error.message : String(error),
+      });
+      return false;
+    }
+    askRules = [...(options.alwaysAsk ?? []), ...userRules.map((rule) => rule.block)];
+    const ask = translateAskRules({
+      rules: askRules,
+      privateFolder: options.privateFolder,
+    }).claude;
+    const fullAccess =
+      !options.noTools && !options.noFileEdits && options.permissionMode === "full-access";
     current = query({
       prompt: input,
       options: {
@@ -358,24 +336,15 @@ function startClaude(options: ProviderStartOptions): ProviderSession {
         ...(options.noTools ? NO_TOOLS : {}),
         permissionMode: options.noTools
           ? "dontAsk"
-          : options.permissionMode === "full-access"
-            ? "bypassPermissions"
-            : "auto",
-        allowDangerouslySkipPermissions: options.permissionMode === "full-access",
+          : options.noFileEdits
+            ? "default"
+            : fullAccess
+              ? "bypassPermissions"
+              : "auto",
+        allowDangerouslySkipPermissions: fullAccess,
+        ...(ask.length > 0 ? { settings: { permissions: { ask } } } : {}),
         systemPrompt: { type: "preset", preset: "claude_code", append: options.instructions },
         canUseTool,
-        hooks:
-          (options.alwaysAsk?.length ||
-            options.privateFolder ||
-            options.noFileEdits ||
-            userRulesHookNeeded(options.rulesFolder)) &&
-          !options.noTools
-            ? {
-                PreToolUse: [
-                  { hooks: [alwaysAsk], timeout: ALWAYS_ASK_TIMEOUT_S, onFailure: "block" },
-                ],
-              }
-            : undefined,
         allowedTools: Object.entries(options.mcpServers ?? {})
           .filter(([, server]) => server.trusted)
           .map(([name]) => `mcp__${name}`),

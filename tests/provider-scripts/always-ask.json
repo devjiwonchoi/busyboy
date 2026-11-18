@@ -121,6 +121,15 @@
             }
           },
           "then": {
+            "allow": [
+              {
+                "event": {
+                  "type": "text",
+                  "itemId": "patch-delete-allow",
+                  "text": "Deleted the notes."
+                }
+              }
+            ],
             "deny": [
               {
                 "event": {
@@ -408,6 +417,15 @@
             }
           },
           "then": {
+            "allow": [
+              {
+                "event": {
+                  "type": "text",
+                  "itemId": "outside-allow",
+                  "text": "Deleted the folder."
+                }
+              }
+            ],
             "deny": [
               {
                 "event": {
@@ -432,6 +450,15 @@
             }
           },
           "then": {
+            "allow": [
+              {
+                "event": {
+                  "type": "text",
+                  "itemId": "outside-var-allow",
+                  "text": "Deleted the folder."
+                }
+              }
+            ],
             "deny": [
               {
                 "event": {

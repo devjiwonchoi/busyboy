@@ -109,7 +109,7 @@ test.describe("Claude task agents", () => {
     await expect(openCards(page)).toHaveCount(0);
   });
 
-  test("the Director changing BusyBoy's task list or reading its settings with a command should be refused", async ({
+  test("the Director writing BusyBoy's task list should be refused, and a shell read that does not name that folder should run", async ({
     page,
   }) => {
     await openChat(page);
@@ -122,7 +122,7 @@ test.describe("Claude task agents", () => {
       .getByRole("textbox", { name: "Message" })
       .fill("Show the settings file with a command.");
     await page.getByRole("button", { name: "Send" }).click();
-    await expect(reply.last()).toHaveText("BusyBoy kept me out of its settings.");
+    await expect(reply.last()).toHaveText("Here are the settings.");
     await expect(openCards(page)).toHaveCount(0);
   });
 
@@ -135,7 +135,7 @@ test.describe("Claude task agents", () => {
     );
   });
 
-  test("deleting a file outside the task with an apply_patch heredoc should ask", async ({
+  test("deleting a file outside the task with an apply_patch heredoc should not ask", async ({
     page,
     context,
   }) => {
@@ -146,13 +146,8 @@ test.describe("Claude task agents", () => {
       "Delete the notes file outside this task with a patch.",
     );
 
-    const card = openCard(page, "Approval from web · Delete notes");
-    await expect(card).toContainText("On your always-ask list: Delete outside the task folder");
-    await card.getByRole("button", { name: "C. Deny" }).click();
-    await expect(
-      transcript(page).getByRole("group", { name: "Card from web · Delete notes" }),
-    ).toContainText("C · Deny");
     await expect(taskRow(page, "Delete notes")).toContainText("Idle");
+    await expect(openCards(page)).toHaveCount(0);
   });
 
   test("updating a file whose diff mentions a force push should not ask", async ({
@@ -216,31 +211,23 @@ test.describe("Claude task agents", () => {
     await expect(openCards(page)).toHaveCount(0);
   });
 
-  test("deleting outside the worktree and the record folder should ask", async ({
-    page,
-    context,
-  }) => {
+  test("deleting outside the worktree should not ask", async ({ page, context }) => {
     await openChat(page);
     await createTask(context.request, "Delete outside", OUTSIDE_REQUEST);
 
-    const card = openCard(page, "Approval from web · Delete outside");
-    await expect(card).toContainText("On your always-ask list: Delete outside the task folder");
-    await card.getByRole("button", { name: "C. Deny" }).click();
     await expect(taskRow(page, "Delete outside")).toContainText("Idle");
+    await expect(openCards(page)).toHaveCount(0);
   });
 
-  test("a variable that resolves outside the task folders should ask", async ({
+  test("a variable that names a folder outside the task should not ask", async ({
     page,
     context,
   }) => {
     await openChat(page);
     await createTask(context.request, "Delete variable", OUTSIDE_VARIABLE_REQUEST);
 
-    const card = openCard(page, "Approval from web · Delete variable");
-    await expect(card).toContainText("Bash: A=/tmp/busyboy-outside-task; rm -rf $A");
-    await expect(card).toContainText("On your always-ask list: Delete outside the task folder");
-    await card.getByRole("button", { name: "C. Deny" }).click();
     await expect(taskRow(page, "Delete variable")).toContainText("Idle");
+    await expect(openCards(page)).toHaveCount(0);
   });
 
   test("writing and deleting in the scratch folder should run without a card", async ({
