@@ -24,7 +24,6 @@ import { startUpdates, type Updates } from "./updates";
 
 const selfCheckPath = selfCheckOutputPath(process.argv);
 if (selfCheckPath) isolateSelfCheckProfile();
-if (!app.isPackaged) app.setName("BusyBoy (dev)");
 let server: ServerHandle | null = null;
 let mainWindow: BrowserWindow | null = null;
 let background: Background | null = null;
