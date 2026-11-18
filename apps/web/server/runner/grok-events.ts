@@ -1,5 +1,4 @@
 import { TEXT_DELTA_FLUSH_MS, toolLabel } from "./claude-events";
-// why: The always-ask list is written for Claude and Codex tool names. Grok names tools differently.
 import type { AgentEvent } from "./contract";
 
 export type GrokPermissionOption = { optionId: string; name?: string; kind?: string };
@@ -28,7 +27,6 @@ function toolMeta(toolCall: Record<string, unknown>) {
   return record(record(toolCall._meta)["x.ai/tool"]);
 }
 
-// why: Shell calls become Bash and file calls become Write or Edit, which is what the list reads.
 export function grokToolSubject(toolCall: Record<string, unknown>) {
   const meta = toolMeta(toolCall);
   const raw = record(toolCall.rawInput ?? toolCall.raw_input ?? meta.input);

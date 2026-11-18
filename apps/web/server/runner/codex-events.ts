@@ -1,5 +1,4 @@
 import { parseAskedQuestions } from "./asked-questions";
-// why: Types follow codex-cli 0.167.0 (codex app-server generate-ts), reduced to the fields read here.
 import { TEXT_DELTA_FLUSH_MS } from "./claude-events";
 import {
   elicitationContent,
@@ -30,7 +29,6 @@ type ThreadItem = {
   questions?: AsyncQuestion[] | null;
 };
 
-// why: request_user_input is unavailable in Default mode, and the model also sends the other tool's shape here.
 type AsyncQuestion = { title?: string; question?: string; options?: unknown };
 
 export const CODEX_MESSAGE_QUESTION_PREFIX = "codex-ask-";
@@ -102,7 +100,6 @@ export const CODEX_ANSWERABLE_REQUESTS = new Set([
 
 const LABEL_LIMIT = 80;
 
-// why: Codex wraps commands in the login shell and reports the parsed commands separately.
 function displayCommand(command: unknown, actions: unknown) {
   const parsed = Array.isArray(actions)
     ? actions.map((action: { command?: unknown }) => action.command)
@@ -206,7 +203,6 @@ export class CodexEventMapper {
 
   constructor(private readonly emit: (event: AgentEvent) => void) {}
 
-  // why: A denial with cancel ends the Codex turn. Claude continues. That gap cannot be closed from here.
   deniedWithCancel() {
     this.endedByDenial = true;
   }
@@ -365,7 +361,6 @@ export function codexAutoReply(
   };
 }
 
-// why: Matching decision strings with includes misses Codex's externally tagged objects.
 type ListedDecision = { name: string; value: unknown };
 
 const COMMAND_DECISIONS = new Set([
@@ -454,7 +449,6 @@ function sessionChoice(params: Record<string, unknown>): { offered: boolean; lab
   return { offered: false };
 }
 
-// why: cancel is the only refusal on some requests, and cancel also ends the turn.
 function commandApprovalDecision(
   params: Record<string, unknown>,
   allow: boolean,

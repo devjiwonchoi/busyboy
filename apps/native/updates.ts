@@ -4,23 +4,17 @@ import { join } from "node:path";
 import { app } from "electron";
 import { autoUpdater } from "electron-updater";
 
-// why: An update is never installed mid-work. A downloaded update is also installed when the user quits.
-
 const FIRST_CHECK_MS = 10_000;
-// why: Often enough that a release shows up while the user is still at the desk, as it did in
-// why: 0.0.22 and earlier. Each check is one small request to GitHub's release feed.
 const CHECK_EVERY_MS = 5 * 60_000;
 
 const INSTALL_TIMEOUT_MS = 60_000;
 
 export type UpdateOptions = {
   onReady: (version: string) => void;
-  // why: The Windows installer ends processes in the app folder about a second after it starts.
   beforeInstall: () => Promise<void>;
   installFailed: () => void;
 };
 
-// why: electron-builder writes app-update.yml only into a release build, so dev and CI builds have no feed.
 export function startUpdates(options: UpdateOptions) {
   let ready: string | null = null;
   let installing = false;

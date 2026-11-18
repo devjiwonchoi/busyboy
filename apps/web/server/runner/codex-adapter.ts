@@ -1,7 +1,6 @@
 import type { ChildProcess } from "node:child_process";
 import { createInterface } from "node:readline";
 
-// why: Not Claude-specific: it spawns any CLI as the leader of its own process group.
 import {
   spawnClaudeProcess as spawnProcessGroup,
   type ClaudeProcess as GroupProcess,
@@ -39,7 +38,6 @@ function resolveCodex() {
 }
 
 export function codexThreadSettings(mode: PermissionMode, noTools = false) {
-  // why: Codex has no switch for no tools over app-server.
   if (noTools) return { approvalPolicy: "never", approvalsReviewer: "user", sandbox: "read-only" };
   return mode === "full-access"
     ? { approvalPolicy: "never", approvalsReviewer: "user", sandbox: "danger-full-access" }
@@ -50,7 +48,6 @@ export function codexThreadSettings(mode: PermissionMode, noTools = false) {
       };
 }
 
-// why: codex-cli 0.167.0 warns about unknown config keys, and every key here is one it recognizes.
 async function noToolsConfig(connection: AppServerConnection, cwd: string) {
   let servers: Record<string, unknown>;
   try {
@@ -79,7 +76,6 @@ async function noToolsConfig(connection: AppServerConnection, cwd: string) {
 
 const MCP_NAME = /^[A-Za-z0-9_-]+$/;
 
-// why: MCP config travels in thread/start over JSON-RPC, so tokens stay out of the command line and child processes.
 export function codexMcpConfig(servers: Record<string, McpServer> = {}) {
   const config: Record<string, unknown> = {};
   const skipped: string[] = [];
@@ -190,8 +186,6 @@ class AppServerConnection {
   async initialize() {
     await this.request("initialize", {
       clientInfo: CLIENT_INFO,
-      // why: `requiredHumanApproval` is what makes Codex deliver a `humanCommand` checkpoint.
-      // why: Without it the command is rejected and the user is never asked.
       capabilities: {
         experimentalApi: true,
         requestAttestation: false,
@@ -201,7 +195,6 @@ class AppServerConnection {
     this.notify("initialized");
   }
 
-  // why: The groups are found while Codex still runs. Closing its input also ends a Codex that exits on its own.
   async kill() {
     await this.child.stop();
     this.child.stdin.end();
@@ -217,8 +210,6 @@ function spawnAppServer(
   const script = /\.[cm]?js$/i.test(executable);
   const command = script ? (findExecutable("node") ?? "node") : executable;
   const args = script ? [executable, "app-server"] : ["app-server"];
-  // why: Never aborted: `kill()` ends the process group instead. Windows has no process groups: there
-  // why: only the process itself is killed, and an npm shim's native app server ends when its input closes.
   const child = spawnProcessGroup({
     command,
     args,
@@ -329,7 +320,6 @@ function startCodex(options: ProviderStartOptions): ProviderSession {
         emit({ type: "error", code: "provider", message: auto.notice });
         return;
       }
-      // why: Codex's own auto review still asks the client. Accept it here so BusyBoy does not show an approval.
       if (CODEX_ANSWERABLE_REQUESTS.has(message.method)) {
         connection?.respond(
           message.id,
@@ -403,7 +393,6 @@ function startCodex(options: ProviderStartOptions): ProviderSession {
       clearTimeout(timer);
       if (status?.state === "signed-out")
         fail("Codex is not signed in. Run `codex login`.", "signed-out");
-      // why: codex-cli 0.167.0's answer to resuming or branching from a thread it does not have.
       else if (
         (options.resumeSessionId || options.forkSessionId) &&
         /no rollout found for thread id/i.test(error.message)
@@ -446,7 +435,6 @@ function startCodex(options: ProviderStartOptions): ProviderSession {
         emit({ type: "answered", requestId });
       }
       if (turnId) interruptTurn();
-      // why: The turn was requested but Codex has not named it yet: interrupt once it does.
       else if (inTurn) interruptPending = true;
       else if (!threadId && queue.length > 0) {
         queue.length = 0;

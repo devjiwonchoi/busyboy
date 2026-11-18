@@ -23,7 +23,6 @@ import {
 } from "./grok-events";
 import { modelText, type UserTurn } from "./user-turn";
 
-// why: Grok's hooks are fail-open, so always-ask is decided on session/request_permission instead.
 export const GROK_PATH_ENV = "BUSYBOY_GROK_PATH";
 const SIGN_IN_TIMEOUT_MS = 20_000;
 const CLOSE_WAIT_MS = 500;
@@ -33,7 +32,6 @@ function resolveGrok() {
   return process.env[GROK_PATH_ENV] || findExecutable("grok");
 }
 
-// why: default asks BusyBoy for every tool. auto is Grok's own auto mode, used only when nothing on our side has to see every call.
 export function grokPermissionMode(options: ProviderStartOptions, enforce: boolean) {
   if (options.noTools) return "dontAsk";
   if (enforce) return "default";
@@ -181,7 +179,6 @@ class AcpConnection {
     return this.request<InitResult>("initialize", {
       protocolVersion: 1,
       clientInfo: CLIENT_INFO,
-      // why: Advertising file tools makes Grok run writes through the client instead of session/request_permission.
       clientCapabilities: { fs: { readTextFile: false, writeTextFile: false }, terminal: false },
     });
   }
@@ -212,7 +209,6 @@ function spawnGrok(
   return new AcpConnection(child, onMessage);
 }
 
-// why: Permission mode belongs before agent. There is no ACP instruction field Grok honors for the system prompt.
 function launchArgs(mode: string) {
   return ["--no-auto-update", "--permission-mode", mode, "agent", "--no-leader", "stdio"];
 }
@@ -354,7 +350,6 @@ function startGrok(options: ProviderStartOptions): ProviderSession {
       respond(options.noTools ? "deny" : "cancel");
       return;
     }
-    // why: Grok's own auto mode asks the client for some calls. Allow them so BusyBoy shows no approval.
     respond("allow");
   };
 

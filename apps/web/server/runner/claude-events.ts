@@ -23,7 +23,6 @@ export type ClaudeRawMessage = {
   mcp_servers?: { name?: string; status?: string }[];
 };
 
-/*why: * A `canUseTool` call, as the adapter receives it and as recordings store it. */
 export type ClaudePermissionRequest = {
   toolName: string;
   input: Record<string, unknown>;

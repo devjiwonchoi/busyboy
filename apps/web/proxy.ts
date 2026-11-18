@@ -17,7 +17,6 @@ function forbidden(reason: string) {
   return new NextResponse(`Forbidden: ${reason}`, { status: 403 });
 }
 
-// why: Only loopback hosts are accepted, which blocks DNS rebinding.
 function isAllowedHost(host: string | null) {
   if (!host) return false;
   let url: URL;
@@ -31,7 +30,6 @@ function isAllowedHost(host: string | null) {
   return !port || url.port === port;
 }
 
-// why: Without a launch token, only next dev is allowed. Anything else fails closed.
 export async function proxy(request: NextRequest) {
   const host = request.headers.get("host");
   if (!isAllowedHost(host)) return forbidden("host");
@@ -41,7 +39,6 @@ export async function proxy(request: NextRequest) {
 
   const expected = process.env[SERVER_TOKEN_ENV];
   if (!expected) {
-    // why: NODE_ENV is inlined at build time, so a production build cannot take the dev path.
     if (process.env.NODE_ENV !== "development") return forbidden("token");
   } else {
     const provided =

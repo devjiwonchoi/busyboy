@@ -1,9 +1,7 @@
 import { existsSync, readdirSync, readFileSync, realpathSync } from "node:fs";
-// why: tar -h drops pnpm's sibling packages, and Node then cannot load them from the standalone tree alone.
 import { createRequire } from "node:module";
 import { isAbsolute, join, relative } from "node:path";
 
-// why: Turbopack's external import, including `shiki-<hash>/engine/javascript`.
 const HASHED_SPECIFIER =
   /["']((?:@[A-Za-z0-9._-]+\/)?[A-Za-z0-9._-]+-[0-9a-f]{8,}(?:\/[A-Za-z0-9._@+/-]+)?)["']/g;
 const SWC_REQUIRE = /require\(["'](@swc\/helpers\/[^"']+)["']\)/g;

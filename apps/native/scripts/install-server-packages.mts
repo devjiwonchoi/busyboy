@@ -1,5 +1,3 @@
-// why: These packages load native files by computed paths, which Next's file tracing misses.
-// why: node-pty loads build/Release ahead of the host prebuild, and codesign rejects the other platforms' binaries.
 import { execFileSync } from "node:child_process";
 import {
   chmodSync,
@@ -115,7 +113,6 @@ function pruneForeignPrebuilds(packageDir: string, platform: string, arch: strin
   }
 }
 
-// why: node-pty loads build/Release ahead of the host prebuild, and codesign will not sign the Windows conpty binaries.
 function pruneNodePtyLayout(packageDir: string, platform: string, arch: string) {
   pruneForeignPrebuilds(packageDir, platform, arch);
   rmSync(join(packageDir, "third_party"), { recursive: true, force: true });
@@ -161,8 +158,6 @@ function pruneNodePtyPackages(serverDir: string, platform: string, arch: string)
   }
 }
 
-// why: node-pty 1.1.0 publishes spawn-helper without the executable bit, and it
-// why: runs that helper for every terminal on macOS and Linux.
 function makeSpawnHelperExecutable(packageDir: string, platform: string, arch: string) {
   if (platform === "win32") return;
   for (const dir of [join("prebuilds", `${platform}-${arch}`), join("build", "Release")]) {
@@ -196,7 +191,6 @@ function addLockfileDependency(lockText: string, name: string, specifier: string
   return lockText.slice(0, at + header.length) + entry + lockText.slice(at + header.length);
 }
 
-// why: A standalone output built on another machine contains that machine's sharp binary, and loading it crashes the server.
 function removeForeignSharpPackages(serverDir: string, platform: string, arch: string) {
   const keep = new Set([`sharp-${platform}-${arch}`, `sharp-libvips-${platform}-${arch}`]);
   const stack = [serverDir];
@@ -223,8 +217,6 @@ function removeForeignSharpPackages(serverDir: string, platform: string, arch: s
   }
 }
 
-// why: Package names that encode the platform they were built for. `arm` must not
-// why: match inside `arm64`, so the arch is a whole token.
 const PLATFORM_TOKEN =
   /(?:^|[^A-Za-z0-9])((?:aix|android|darwin|freebsd|linux|netbsd|openbsd|openharmony|sunos|win32)-(?:arm64|arm|ia32|loong64|mips64el|ppc64le|ppc64|riscv64|s390x|x64))(?=$|[^A-Za-z0-9])/g;
 
@@ -241,12 +233,10 @@ function packageNameAt(dir: string): string {
   return parent.startsWith("@") ? `${parent}/${name}` : name;
 }
 
-/*why: * True when the name contains a `platform-arch` token such as `darwin-arm64`. */
 function mentionsPlatform(name: string): boolean {
   return name.match(PLATFORM_TOKEN) !== null;
 }
 
-// why: Turbopack's hashed Claude SDK alias is not the bundled claude executable and has to stay.
 function removeForeignNativePackages(serverDir: string, platform: string, arch: string) {
   const stack = [serverDir];
   while (stack.length > 0) {
@@ -315,7 +305,6 @@ const BINARY_KIND_LABEL: Record<BinaryKind, string> = {
   pe: "Windows",
 };
 
-/*why: * Fails the build while the foreign file is still a path, rather than a codesign error. */
 function assertHostBinaries(serverDir: string, platform: string) {
   const host = hostBinaryKind(platform);
   const foreign: string[] = [];
@@ -362,8 +351,6 @@ export function installServerPackages(serverDir: string, platform: string, arch:
 
   const staging = mkdtempSync(join(tmpdir(), "busyboy-server-packages-"));
   try {
-    // why: A separate project outside the repository, so the install cannot change
-    // why: the repository's own node_modules or install state.
     const staged: {
       name: string;
       private: true;
@@ -384,7 +371,6 @@ export function installServerPackages(serverDir: string, platform: string, arch:
       stagedLock = addLockfileDependency(stagedLock, "sharp", sharp.specifier, sharp.version);
     }
     writeFileSync(join(staging, "pnpm-lock.yaml"), stagedLock);
-    // why: The staging install is one package. The repo workspace points at apps/*, which are not in the temp directory.
     const workspaceText = readFileSync(join(repoRoot, "pnpm-workspace.yaml"), "utf8").replace(
       /^packages:\n(?:[ \t]+- .*\n)*/m,
       "packages:\n  - .\n",
@@ -418,8 +404,6 @@ export function installServerPackages(serverDir: string, platform: string, arch:
       const to = join(target, name);
       if (name === "node-pty") pruneNodePtyLayout(from, platform, arch);
       else pruneForeignPrebuilds(from, platform, arch);
-      // why: Tracing leaves a partial copy, and a shared build leaves another platform's
-      // why: sharp. Replace those with the package installed for this machine.
       const replace =
         name === "sharp" ||
         name.startsWith("@img/") ||
@@ -440,7 +424,6 @@ export function installServerPackages(serverDir: string, platform: string, arch:
   }
   removeForeignSharpPackages(serverDir, platform, arch);
   removeForeignNativePackages(serverDir, platform, arch);
-  // why: Traced copies and the `.pnpm` store still carry the build machine's node-pty.
   pruneNodePtyPackages(serverDir, platform, arch);
   const aliasesIn = existsSync(standaloneServerPath(serverDir))
     ? standaloneAppDir(serverDir)
@@ -449,7 +432,6 @@ export function installServerPackages(serverDir: string, platform: string, arch:
   assertHostBinaries(serverDir, platform);
 }
 
-// why: Next loads .next/node_modules/<name>-<hash>, which lacks the native binaries. Windows has no symlinks there.
 function pointAliasesAtInstalledPackages(serverDir: string, platform: string) {
   const aliases = join(serverDir, ".next", "node_modules");
   if (!existsSync(aliases)) return;
