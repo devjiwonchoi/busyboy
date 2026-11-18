@@ -1,14 +1,8 @@
-"use client";
-
-import type { ReactNode } from "react";
-
 import type { ChatEntry } from "@/server/director/chat";
 
-import { useDirector } from "./director-provider";
+import type { DirectorView } from "./chat";
 
-export function Transcript({ empty }: { empty: ReactNode }) {
-  const view = useDirector();
-
+export function Transcript({ view }: { view: DirectorView }) {
   return (
     <div
       role="log"
@@ -16,7 +10,9 @@ export function Transcript({ empty }: { empty: ReactNode }) {
       data-connected={view.connected ? "true" : "false"}
       className="min-h-0 flex-1 overflow-auto px-4 py-4"
     >
-      {view.entries.length === 0 && !view.draft ? empty : null}
+      {view.entries.length === 0 && !view.draft ? (
+        <p className="text-muted-foreground text-sm">BusyBoy is ready. What should we work on?</p>
+      ) : null}
       <div className="mx-auto flex max-w-3xl flex-col gap-4">
         {view.entries.map((entry) => (
           <MessageView key={entry.id} entry={entry} />
