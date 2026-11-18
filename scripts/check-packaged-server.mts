@@ -15,14 +15,7 @@ const READY_TIMEOUT_MS = 30_000;
 const LOADER_TIMEOUT_MS = 60_000;
 const EXIT_TIMEOUT_MS = 10_000;
 
-// why: node-pty loads its native binding lazily and runs spawn-helper only when it spawns.
-const smokeTests: Record<string, string> = {
-  "node-pty": `const shell = process.platform === 'win32' ? 'cmd.exe' : '/bin/sh'
-const args = process.platform === 'win32' ? ['/c', 'exit 0'] : ['-c', 'exit 0']
-const child = mod.spawn(shell, args, {})
-const code = await new Promise((resolve) => child.onExit(({ exitCode }) => resolve(exitCode)))
-if (code !== 0) throw new Error(\`a shell spawned through node-pty exited with \${code}\`)`,
-};
+const smokeTests: Record<string, string> = {};
 
 const electronBinary = createRequire(import.meta.url)("electron") as string;
 

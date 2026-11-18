@@ -1,20 +1,14 @@
-import { spawn } from "node:child_process";
-import { existsSync, statSync } from "node:fs";
-import { isAbsolute, dirname, join, normalize } from "node:path";
+import { dirname, join } from "node:path";
 
 import { app, BrowserWindow, dialog, ipcMain, session, shell } from "electron";
 
 import {
-  INSTALL_UPDATE_CHANNEL,
-  OPEN_IN_EDITOR_CHANNEL,
-  PICK_FOLDERS_CHANNEL,
-  REVEAL_IN_FOLDER_CHANNEL,
   APP_VERSION_CHANNEL,
+  INSTALL_UPDATE_CHANNEL,
   UPDATE_READY_CHANNEL,
   UPDATE_STATE_CHANNEL,
 } from "../src/lib/desktop-bridge";
 import { SERVER_TOKEN_COOKIE } from "../src/lib/server-token";
-import { findExecutable } from "../src/server/runner/find-executable";
 import { startBackground, type Background } from "./background";
 import {
   createSelfCheck,
@@ -227,71 +221,6 @@ async function launch() {
   app.on("activate", () => openWindow());
 }
 
-function registerFolderPicker() {
-  ipcMain.handle(PICK_FOLDERS_CHANNEL, async (event) => {
-    if (!isAppOrigin(event.senderFrame?.url)) return [];
-    const window = BrowserWindow.fromWebContents(event.sender);
-    const options: Electron.OpenDialogOptions = {
-      title: "Add projects",
-      buttonLabel: "Add",
-      properties: ["openDirectory", "multiSelections", "createDirectory"],
-    };
-    const result = window
-      ? await dialog.showOpenDialog(window, options)
-      : await dialog.showOpenDialog(options);
-    return result.canceled ? [] : result.filePaths;
-  });
-}
-
-function localFolder(value: unknown) {
-  if (typeof value !== "string" || !isAbsolute(value) || value.includes("\0")) return null;
-  const folder = normalize(value);
-  try {
-    if (!existsSync(folder) || !statSync(folder).isDirectory()) return null;
-  } catch {
-    return null;
-  }
-  return folder;
-}
-
-function editorCommand() {
-  const configured = process.env.BUSYBOY_EDITOR;
-  if (configured && !configured.includes("\0")) {
-    return isAbsolute(configured) ? configured : (findExecutable(configured) ?? configured);
-  }
-  return (
-    findExecutable("cursor") ||
-    findExecutable("code") ||
-    findExecutable("codium") ||
-    findExecutable("subl")
-  );
-}
-
-function registerWorktreeActions() {
-  ipcMain.handle(OPEN_IN_EDITOR_CHANNEL, (event, folder: unknown) => {
-    if (!isAppOrigin(event.senderFrame?.url)) return;
-    const path = localFolder(folder);
-    if (!path) return;
-    const command = editorCommand();
-    if (!command) {
-      void shell.openPath(path);
-      return;
-    }
-    try {
-      const child = spawn(command, [path], { detached: true, stdio: "ignore" });
-      child.on("error", () => void shell.openPath(path));
-      child.unref();
-    } catch {
-      void shell.openPath(path);
-    }
-  });
-  ipcMain.handle(REVEAL_IN_FOLDER_CHANNEL, (event, folder: unknown) => {
-    if (!isAppOrigin(event.senderFrame?.url)) return;
-    const path = localFolder(folder);
-    if (path) shell.showItemInFolder(path);
-  });
-}
-
 function registerUpdateActions() {
   // why: The shared Next bundle is built with package.json still at 0.0.0. The packaged app version is this one.
   ipcMain.handle(APP_VERSION_CHANNEL, (event) =>
@@ -337,9 +266,7 @@ function registerAppEvents() {
   for (const signal of ["SIGINT", "SIGTERM"] as const) process.on(signal, () => app.quit());
 
   void app.whenReady().then(async () => {
-    registerFolderPicker();
     registerUpdateActions();
-    registerWorktreeActions();
     if (selfCheckPath) {
       await runSelfCheck(selfCheckPath);
       return;

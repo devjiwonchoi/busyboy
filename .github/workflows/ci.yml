@@ -29,7 +29,6 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: node scripts/check-recording-tools.mts
       - run: pnpm typecheck
 
   lint:

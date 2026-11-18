@@ -1,18 +1,10 @@
 import { diffFromMergeBase } from "./git-text.mts";
 
 const kebab = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
-const recordFiles = new Set([
-  "ALIGN.md",
-  "ALIGN.approved.md",
-  "STATUS.md",
-  "VERIFY.md",
-  "REVIEW.md",
-  "REMEMBER.md",
-]);
 const toolFiles = new Set(["README.md", "AGENTS.md"]);
 
 export function segmentIsKebab(segment: string): boolean {
-  if (recordFiles.has(segment) || toolFiles.has(segment)) return true;
+  if (toolFiles.has(segment)) return true;
   if (/^\([a-z0-9]+(?:-[a-z0-9]+)*\)$/.test(segment)) return true;
   if (/^@[a-z0-9]+(?:-[a-z0-9]+)*$/.test(segment)) return true;
   if (/^\[(?:\.\.\.)?[a-z0-9]+(?:-[a-z0-9]+)*\]$/.test(segment)) return true;
@@ -125,7 +117,7 @@ function main() {
     if (!file) continue;
     if (!pathIsKebab(file)) {
       failures.push(
-        `Rename "${file}" to kebab-case, for example "${suggestedName(file)}". Keep a tool-fixed name such as page.tsx, next.config.ts, or a record file (ALIGN.md, STATUS.md, VERIFY.md, REVIEW.md, REMEMBER.md).`,
+        `Rename "${file}" to kebab-case, for example "${suggestedName(file)}". Keep a tool-fixed name such as page.tsx, next.config.ts, README.md, or AGENTS.md.`,
       );
     }
     if (
