@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { connection } from "next/server";
 import { Suspense, type CSSProperties } from "react";
 
 import { CopyCommand } from "@/components/setup/copy-command";
@@ -52,6 +53,8 @@ export default function SetupPage() {
 }
 
 async function BackToChat() {
+  // why: Setup completion lives in this machine's settings file, so it is read per request, never at build time.
+  await connection();
   if (!isSetupComplete(await readSettings())) return null;
   return (
     <Link
@@ -75,6 +78,8 @@ const STATUS_TEXT: Record<SignInStatus["state"], string> = {
 const HARNESS_FORM = "harness-form";
 
 async function HarnessStep() {
+  // why: Sign-in state belongs to the machine running the app; prerendering would bake in the build machine's CLIs.
+  await connection();
   const [states, current] = await Promise.all([
     Promise.all(
       PROVIDERS.map(async (provider) => ({ ...provider, state: await providerState(provider.id) })),

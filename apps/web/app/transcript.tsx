@@ -1,70 +1,31 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useRef, type ReactNode } from "react";
 
 import { useExternalSync } from "@/hooks/use-external-sync";
-import type { ChatEntry, DirectorStatus, DirectorUpdate } from "@/server/director/chat";
+import type { ChatEntry } from "@/server/director/chat";
 
-type View = {
-  entries: ChatEntry[];
-  status: DirectorStatus;
-  draft: string;
-  connected: boolean;
-};
-
-const initialView: View = {
-  entries: [],
-  status: "idle",
-  draft: "",
-  connected: false,
-};
-
-function apply(view: View, update: DirectorUpdate): View {
-  switch (update.type) {
-    case "reset":
-      return {
-        entries: update.entries,
-        status: update.status,
-        draft: update.draft,
-        connected: true,
-      };
-    case "entry": {
-      const index = view.entries.findIndex(({ id }) => id === update.entry.id);
-      const entries = [...view.entries];
-      if (index === -1) entries.push(update.entry);
-      else entries[index] = update.entry;
-      return { ...view, entries };
-    }
-    case "draft":
-      return { ...view, draft: update.text };
-    case "status":
-      return { ...view, status: update.status };
-  }
-}
+import { useDirector } from "./director-provider";
 
 export function Transcript({ empty }: { empty: ReactNode }) {
-  const [view, setView] = useState(initialView);
+  const view = useDirector();
+  const scroller = useRef<HTMLDivElement>(null);
 
   useExternalSync(() => {
-    const source = new EventSource("/api/director/events");
-    source.onmessage = (message) => {
-      const update = JSON.parse(message.data) as DirectorUpdate;
-      setView((current) => apply(current, update));
-    };
-    source.onerror = () => setView((current) => ({ ...current, connected: false }));
-    return () => source.close();
-  }, []);
+    const node = scroller.current;
+    if (node) node.scrollTop = node.scrollHeight;
+  }, [view.entries, view.draft]);
 
   return (
-    // why: column-reverse keeps the scroll pinned to the newest message without measuring it.
     <div
+      ref={scroller}
       role="log"
       aria-label="Transcript"
       data-connected={view.connected ? "true" : "false"}
-      className="flex min-h-0 flex-1 flex-col-reverse overflow-auto px-4 py-4"
+      className="min-h-0 flex-1 overflow-auto px-4 py-4"
     >
-      <div className="mx-auto flex w-full max-w-3xl flex-col gap-4">
-        {view.entries.length === 0 && !view.draft ? empty : null}
+      {view.entries.length === 0 && !view.draft ? empty : null}
+      <div className="mx-auto flex max-w-3xl flex-col gap-4">
         {view.entries.map((entry) => (
           <MessageView key={entry.id} entry={entry} />
         ))}

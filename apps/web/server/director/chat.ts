@@ -61,7 +61,7 @@ const DIRECTORS_KEY = Symbol.for("busyboy.directors");
 const globalStore = globalThis as typeof globalThis & { [DIRECTORS_KEY]?: Map<string, Director> };
 const directors = (globalStore[DIRECTORS_KEY] ??= new Map());
 
-export const MAX_MESSAGE_LENGTH = 100_000;
+const MAX_MESSAGE_LENGTH = 100_000;
 
 function directorFolder(director: Director) {
   return join(director.folder, DIRECTOR_FOLDER);
@@ -279,9 +279,7 @@ export async function sendToDirector(input: {
   const director = getDirector(input.folder);
   await director.ready;
   if (director.status === "answering") {
-    const error = "Wait for the reply to finish, or stop it.";
-    saveEntry(director, newEntry("note", error, "error"));
-    return { error };
+    return { error: "Wait for the reply to finish, or stop it." };
   }
   saveEntry(director, newEntry("user", text));
   try {

@@ -1,9 +1,13 @@
+import { connection } from "next/server";
+
 import { dataFolder } from "@/server/config";
 import { subscribeToDirector, type DirectorUpdate } from "@/server/director/chat";
 
 const HEARTBEAT_MS = 15_000;
 
 export async function GET(request: Request) {
+  // why: This is a live event stream; without this, Next would prerender the handler once the folder lookup stops doing I/O.
+  await connection();
   const folder = await dataFolder();
   const encoder = new TextEncoder();
   let cleanup = () => {};
