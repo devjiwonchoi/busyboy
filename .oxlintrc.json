@@ -1,6 +1,7 @@
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
   "plugins": ["eslint", "typescript", "unicorn", "oxc", "react", "nextjs", "import"],
+  "jsPlugins": ["./scripts/oxlint/busyboy-plugin.mts"],
   "categories": {
     "correctness": "error"
   },
@@ -21,7 +22,8 @@
   },
   "rules": {
     "react/refs": "off",
-    "react/set-state-in-effect": "off"
+    "react/set-state-in-effect": "off",
+    "busyboy/no-use-client-segment": "error"
   },
   "overrides": [
     {
