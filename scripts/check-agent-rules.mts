@@ -18,7 +18,7 @@ const repoRoot = join(import.meta.dirname, "..");
 const webRoot = join(repoRoot, "apps", "web");
 
 const kebab = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
-const toolFiles = new Set(["README.md", "AGENTS.md", "SKILL.md"]);
+const toolFiles = new Set(["README.md", "AGENTS.md", "SKILL.md", "pull_request_template.md"]);
 
 export function segmentIsKebab(segment: string): boolean {
   if (toolFiles.has(segment)) return true;
