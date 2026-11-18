@@ -16,10 +16,18 @@ export default {
       app: {
         url: "http://127.0.0.1:0",
         command: {
-          executable: "pnpm",
-          args: ["exec", "next", "dev", "--hostname", "127.0.0.1", "--port", "{port}"],
+          executable: "node",
+          args: [
+            "node_modules/next/dist/bin/next",
+            "dev",
+            "--hostname",
+            "127.0.0.1",
+            "--port",
+            "{port}",
+          ],
           env: { BUSYBOY_HOME: mkdtempSync(join(tmpdir(), "busyboy-e2e-")) },
           startupTimeout: 120_000,
+          log: ".e2e/logs/app.log",
         },
       },
     },
