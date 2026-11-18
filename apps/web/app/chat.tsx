@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useState } from "react";
 
 import type { ChatEntry, DirectorStatus, DirectorUpdate } from "@/server/director/chat";
 
@@ -51,7 +51,7 @@ function apply(current: DirectorView, update: DirectorUpdate): DirectorView {
 export function Chat() {
   const [view, setView] = useState(initialView);
 
-  const openStreamWhileMounted = useCallback((node: HTMLDivElement | null) => {
+  const openStreamWhileMounted = (node: HTMLDivElement | null) => {
     if (!node) return;
     const source = new EventSource("/api/director/events");
     source.onmessage = (message) => {
@@ -60,7 +60,7 @@ export function Chat() {
     };
     source.onerror = () => setView((current) => ({ ...current, connected: false }));
     return () => source.close();
-  }, []);
+  };
 
   return (
     <div ref={openStreamWhileMounted} className="contents">

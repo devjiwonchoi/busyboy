@@ -20,7 +20,11 @@ const contentSecurityPolicy = [
 
 const nextConfig: NextConfig = {
   cacheComponents: true,
-  experimental: { authInterrupts: true },
+  reactCompiler: true,
+  experimental: {
+    authInterrupts: true,
+    turbopackRustReactCompiler: true,
+  },
   partialPrefetching: true,
   output: "standalone",
   outputFileTracingExcludes: {
