@@ -29,7 +29,7 @@ function toolMeta(toolCall: Record<string, unknown>) {
 }
 
 // why: Shell calls become Bash and file calls become Write or Edit, which is what the list reads.
-export function grokToolSubject(toolCall: Record<string, unknown>) {
+function grokToolSubject(toolCall: Record<string, unknown>) {
   const meta = toolMeta(toolCall);
   const raw = record(toolCall.rawInput ?? toolCall.raw_input ?? meta.input);
   const variant = text(raw.variant) ?? "";
@@ -55,17 +55,6 @@ export function grokToolSubject(toolCall: Record<string, unknown>) {
   return { toolName, input: raw, title };
 }
 
-export function grokTrustedTool(toolCall: Record<string, unknown>, trusted: ReadonlySet<string>) {
-  const namespace = text(toolMeta(toolCall).namespace);
-  if (namespace && trusted.has(namespace)) return true;
-  const name = text(toolCall.name) ?? "";
-  for (const server of trusted) {
-    if (name === server || name.startsWith(`mcp__${server}__`) || name.startsWith(`${server}__`))
-      return true;
-  }
-  return false;
-}
-
 export function grokPermissionOutcome(
   options: readonly GrokPermissionOption[],
   decision: "allow" | "allow-session" | "deny" | "cancel",
@@ -86,10 +75,6 @@ export function grokPermissionOutcome(
     );
   if (!option) return { outcome: { outcome: "cancelled" as const } };
   return { outcome: { outcome: "selected" as const, optionId: option.optionId } };
-}
-
-export function grokCanAllowForSession(options: readonly GrokPermissionOption[]) {
-  return options.some((entry) => entry.kind === "allow_always");
 }
 
 function toolUpdate(update: Record<string, unknown>) {

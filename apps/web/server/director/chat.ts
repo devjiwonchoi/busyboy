@@ -19,7 +19,7 @@ import { appendTranscriptLine, readTranscript, type TranscriptCursor } from "./t
 
 // why: The display transcript is our own file, so a reply is still there after the provider drops it.
 
-export const DIRECTOR_FOLDER = "director";
+const DIRECTOR_FOLDER = "director";
 const STATE_FILE = "state.json";
 
 export type ChatEntry =

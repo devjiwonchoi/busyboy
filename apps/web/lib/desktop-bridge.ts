@@ -15,8 +15,3 @@ export type DesktopBridge = {
   appVersion(): Promise<string>;
   installUpdate(): Promise<void>;
 };
-
-export function desktopBridge(): DesktopBridge | undefined {
-  if (typeof window === "undefined") return undefined;
-  return (window as unknown as Record<string, DesktopBridge | undefined>)[DESKTOP_BRIDGE_KEY];
-}

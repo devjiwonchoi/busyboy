@@ -85,12 +85,7 @@ export type AgentEvent =
   | { type: "error"; message: string; code?: AgentErrorCode };
 
 /*why: * `lost-session`: the session to resume no longer exists, so only a new conversation can continue. */
-export type AgentErrorCode =
-  | "signed-out"
-  | "not-installed"
-  | "no-script"
-  | "provider"
-  | "lost-session";
+type AgentErrorCode = "signed-out" | "not-installed" | "no-script" | "provider" | "lost-session";
 
 export type AgentEventEnvelope = {
   seq: number;

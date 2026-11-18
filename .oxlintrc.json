@@ -77,8 +77,8 @@
     "jsx-a11y/role-supports-aria-props": "warn",
 
     "no-array-constructor": "error",
-    "no-unused-expressions": "warn",
-    "no-unused-vars": "warn",
+    "no-unused-expressions": "error",
+    "no-unused-vars": "error",
     "no-var": "error",
     "prefer-const": "error",
     "prefer-rest-params": "error",

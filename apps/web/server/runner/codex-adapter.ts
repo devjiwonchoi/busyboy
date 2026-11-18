@@ -28,7 +28,7 @@ import type {
 import { agentEnvironment, findExecutable } from "./find-executable";
 import { codexInput, modelText, textTurn, type UserTurn } from "./user-turn";
 
-export const CODEX_PATH_ENV = "BUSYBOY_CODEX_PATH";
+const CODEX_PATH_ENV = "BUSYBOY_CODEX_PATH";
 const SIGN_IN_TIMEOUT_MS = 20_000;
 const ACCOUNT_CHECK_TIMEOUT_MS = 5_000;
 const CLIENT_INFO = { name: "busyboy", title: "BusyBoy", version: "0.0.0" };
@@ -38,7 +38,7 @@ function resolveCodex() {
   return process.env[CODEX_PATH_ENV] || findExecutable("codex");
 }
 
-export function codexThreadSettings(mode: PermissionMode, noTools = false) {
+function codexThreadSettings(mode: PermissionMode, noTools = false) {
   // why: Codex has no switch for no tools over app-server.
   if (noTools) return { approvalPolicy: "never", approvalsReviewer: "user", sandbox: "read-only" };
   return mode === "full-access"
@@ -80,7 +80,7 @@ async function noToolsConfig(connection: AppServerConnection, cwd: string) {
 const MCP_NAME = /^[A-Za-z0-9_-]+$/;
 
 // why: MCP config travels in thread/start over JSON-RPC, so tokens stay out of the command line and child processes.
-export function codexMcpConfig(servers: Record<string, McpServer> = {}) {
+function codexMcpConfig(servers: Record<string, McpServer> = {}) {
   const config: Record<string, unknown> = {};
   const skipped: string[] = [];
   for (const [name, server] of Object.entries(servers)) {
