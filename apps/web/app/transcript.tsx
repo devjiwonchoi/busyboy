@@ -6,6 +6,7 @@ import { attachmentUrl, type MessageAttachment } from "@/lib/chat-attachments";
 import type { ChatEntry } from "@/server/director/chat";
 
 import type { DirectorView } from "./chat";
+import { MessageActions } from "./message-actions";
 
 export function Transcript({ view }: { view: DirectorView }) {
   return (
@@ -50,19 +51,22 @@ function MessageView({ entry }: { entry: ChatEntry }) {
   if (entry.kind === "user") {
     return <UserBubble text={entry.text} attachments={entry.attachments} />;
   }
-  return <ReplyBubble text={entry.text} />;
+  return <ReplyBubble text={entry.text} copyable />;
 }
 
 function UserBubble({ text, attachments }: { text: string; attachments?: MessageAttachment[] }) {
   return (
-    <article aria-label="Your message">
+    <article aria-label="Your message" className="group/message">
       <Message align="end">
         <MessageContent>
           {attachments?.length ? <SentAttachments attachments={attachments} /> : null}
           {text ? (
-            <Bubble>
-              <BubbleContent className="whitespace-pre-wrap">{text}</BubbleContent>
-            </Bubble>
+            <div className="flex w-full min-w-0 flex-col items-end gap-1">
+              <Bubble>
+                <BubbleContent className="whitespace-pre-wrap">{text}</BubbleContent>
+              </Bubble>
+              <MessageActions text={text} />
+            </div>
           ) : null}
         </MessageContent>
       </Message>
@@ -70,14 +74,17 @@ function UserBubble({ text, attachments }: { text: string; attachments?: Message
   );
 }
 
-function ReplyBubble({ text }: { text: string }) {
+function ReplyBubble({ text, copyable = false }: { text: string; copyable?: boolean }) {
   return (
-    <article aria-label="Reply">
+    <article aria-label="Reply" className="group/message">
       <Message>
         <MessageContent>
-          <Bubble variant="muted">
-            <BubbleContent className="whitespace-pre-wrap">{text}</BubbleContent>
-          </Bubble>
+          <div className="flex w-full min-w-0 flex-col items-start gap-1">
+            <Bubble variant="muted">
+              <BubbleContent className="whitespace-pre-wrap">{text}</BubbleContent>
+            </Bubble>
+            {copyable ? <MessageActions text={text} /> : null}
+          </div>
         </MessageContent>
       </Message>
     </article>
