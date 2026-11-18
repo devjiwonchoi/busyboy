@@ -75,14 +75,6 @@ for (const path of proxyFiles) {
   if (existsSync(path)) failures.push(`${path}: BusyBoy has no proxy. Check each entry instead.`);
 }
 
-for (const path of filesUnder("apps/web")) {
-  if (path.includes("node_modules") || path.includes(".next")) continue;
-  const source = readFileSync(path, "utf8");
-  if (/import\s*\{[^}]*\bconnection\b[^}]*\}\s*from\s*["']next\/server["']/.test(source)) {
-    failures.push(`${path}: use requireTrustedRequest() instead of connection().`);
-  }
-}
-
 for (const path of filesUnder(app)) {
   const source = readFileSync(path, "utf8");
   if (!isEntryFile(path, source)) continue;

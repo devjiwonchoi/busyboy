@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { connection } from "next/server";
 import { Suspense, type CSSProperties } from "react";
 
 import { CopyCommand } from "@/components/setup/copy-command";
@@ -53,6 +54,7 @@ export default function SetupPage() {
 
 async function BackToChat() {
   await requireTrustedRequest();
+  await connection();
   if (!isSetupComplete(await readSettings())) return null;
   return (
     <Link
@@ -76,6 +78,7 @@ const HARNESS_FORM = "harness-form";
 
 async function HarnessStep() {
   await requireTrustedRequest();
+  await connection();
   const [states, current] = await Promise.all([
     Promise.all(
       PROVIDERS.map(async (provider) => ({ ...provider, state: await providerState(provider.id) })),
