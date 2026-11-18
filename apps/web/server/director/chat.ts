@@ -3,6 +3,8 @@ import { readFile, rename, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
+import type { MessageAttachment } from "@/lib/chat-attachments";
+
 import { pathKey } from "../paths";
 import { defaultProvider, PROVIDERS } from "../providers";
 import {
@@ -14,6 +16,7 @@ import {
   subscribeToAgent,
 } from "../runner/agent-runner";
 import type { AgentEvent, ProviderId } from "../runner/contract";
+import { AttachmentError, saveAttachments } from "./attachments";
 import { DIRECTOR_INSTRUCTIONS } from "./context";
 import { appendTranscriptLine, readTranscript, type TranscriptCursor } from "./transcript-log";
 
@@ -21,7 +24,7 @@ const DIRECTOR_FOLDER = "director";
 const STATE_FILE = "state.json";
 
 export type ChatEntry =
-  | { id: string; at: string; kind: "user"; text: string }
+  | { id: string; at: string; kind: "user"; text: string; attachments?: MessageAttachment[] }
   | { id: string; at: string; kind: "director"; text: string; interrupted?: boolean }
   | { id: string; at: string; kind: "note"; text: string; tone: "info" | "error" };
 
@@ -62,6 +65,10 @@ const MAX_MESSAGE_LENGTH = 100_000;
 
 function directorFolder(director: Director) {
   return join(director.folder, DIRECTOR_FOLDER);
+}
+
+export function directorDataFolder(folder: string) {
+  return join(folder, DIRECTOR_FOLDER);
 }
 
 function getDirector(folder: string): Director {
@@ -119,25 +126,41 @@ function isEntry(value: unknown): value is ChatEntry {
   if (!value || typeof value !== "object") return false;
   const entry = value as Record<string, unknown>;
   if (typeof entry.id !== "string" || typeof entry.at !== "string") return false;
-  if (entry.kind === "user" || entry.kind === "director") return typeof entry.text === "string";
+  if (entry.kind === "user")
+    return (
+      typeof entry.text === "string" &&
+      (entry.attachments === undefined || isAttachments(entry.attachments))
+    );
+  if (entry.kind === "director") return typeof entry.text === "string";
   if (entry.kind === "note")
     return typeof entry.text === "string" && (entry.tone === "info" || entry.tone === "error");
   return false;
 }
 
-function newEntry(kind: "user", text: string): ChatEntry;
+function isAttachments(value: unknown): value is MessageAttachment[] {
+  return (
+    Array.isArray(value) &&
+    value.every(
+      (item: Record<string, unknown> | null) =>
+        item !== null &&
+        typeof item === "object" &&
+        typeof item.name === "string" &&
+        typeof item.file === "string" &&
+        typeof item.image === "boolean",
+    )
+  );
+}
+
 function newEntry(kind: "director", text: string, interrupted?: boolean): ChatEntry;
 function newEntry(kind: "note", text: string, tone: "info" | "error"): ChatEntry;
 function newEntry(
-  kind: ChatEntry["kind"],
+  kind: "director" | "note",
   text: string,
   extra?: boolean | "info" | "error",
 ): ChatEntry {
   const base = { id: randomUUID(), at: new Date().toISOString(), text };
   if (kind === "note") return { ...base, kind, tone: extra === "error" ? "error" : "info" };
-  if (kind === "director")
-    return { ...base, kind, ...(extra === true ? { interrupted: true } : {}) };
-  return { ...base, kind: "user" };
+  return { ...base, kind, ...(extra === true ? { interrupted: true } : {}) };
 }
 
 function saveEntry(director: Director, entry: ChatEntry) {
@@ -263,9 +286,10 @@ async function ensureAgent(director: Director) {
 export async function sendToDirector(input: {
   folder: string;
   text: string;
+  files: File[];
 }): Promise<{ error?: string }> {
   const text = input.text.trim();
-  if (!text || input.text.length > MAX_MESSAGE_LENGTH) {
+  if ((!text && input.files.length === 0) || input.text.length > MAX_MESSAGE_LENGTH) {
     return { error: "A message must be non-empty text of at most 100,000 characters." };
   }
   const director = getDirector(input.folder);
@@ -273,14 +297,27 @@ export async function sendToDirector(input: {
   if (director.status === "answering") {
     return { error: "Wait for the reply to finish, or stop it." };
   }
-  saveEntry(director, newEntry("user", text));
+  let prepared: Awaited<ReturnType<typeof saveAttachments>>;
+  try {
+    prepared = await saveAttachments(directorFolder(director), text, input.files);
+  } catch (error) {
+    if (error instanceof AttachmentError) return { error: error.message };
+    throw error;
+  }
+  saveEntry(director, {
+    id: randomUUID(),
+    at: new Date().toISOString(),
+    kind: "user",
+    text,
+    ...(prepared.saved.length > 0 ? { attachments: prepared.saved } : {}),
+  });
   try {
     const agent = await ensureAgent(director);
     if (!agent || getAgent(agent.id)?.status === "stopped") {
       throw new Error("The agent stopped before the message was sent.");
     }
     setStatus(director, "answering");
-    sendMessage(agent.id, text);
+    sendMessage(agent.id, prepared.turn);
     return {};
   } catch (error) {
     setStatus(director, "idle");

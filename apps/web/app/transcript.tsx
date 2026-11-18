@@ -1,5 +1,8 @@
+import { FileText } from "lucide-react";
+
 import { Bubble, BubbleContent } from "@/components/ui/bubble";
 import { Message, MessageContent } from "@/components/ui/message";
+import { attachmentUrl, type MessageAttachment } from "@/lib/chat-attachments";
 import type { ChatEntry } from "@/server/director/chat";
 
 import type { DirectorView } from "./chat";
@@ -45,19 +48,22 @@ function MessageView({ entry }: { entry: ChatEntry }) {
     );
   }
   if (entry.kind === "user") {
-    return <UserBubble text={entry.text} />;
+    return <UserBubble text={entry.text} attachments={entry.attachments} />;
   }
   return <ReplyBubble text={entry.text} />;
 }
 
-function UserBubble({ text }: { text: string }) {
+function UserBubble({ text, attachments }: { text: string; attachments?: MessageAttachment[] }) {
   return (
     <article aria-label="Your message">
       <Message align="end">
         <MessageContent>
-          <Bubble>
-            <BubbleContent className="whitespace-pre-wrap">{text}</BubbleContent>
-          </Bubble>
+          {attachments?.length ? <SentAttachments attachments={attachments} /> : null}
+          {text ? (
+            <Bubble>
+              <BubbleContent className="whitespace-pre-wrap">{text}</BubbleContent>
+            </Bubble>
+          ) : null}
         </MessageContent>
       </Message>
     </article>
@@ -75,5 +81,29 @@ function ReplyBubble({ text }: { text: string }) {
         </MessageContent>
       </Message>
     </article>
+  );
+}
+
+function SentAttachments({ attachments }: { attachments: MessageAttachment[] }) {
+  return (
+    <ul aria-label="Attachments" className="flex flex-wrap justify-end gap-1.5">
+      {attachments.map((attachment) => (
+        <li key={attachment.file}>
+          {attachment.image ? (
+            // oxlint-disable-next-line nextjs/no-img-element -- a saved attachment is served by a trusted route, not next/image
+            <img
+              src={attachmentUrl(attachment)}
+              alt={attachment.name}
+              className="max-h-48 max-w-64 rounded-xl border object-cover"
+            />
+          ) : (
+            <span className="bg-muted flex max-w-56 items-center gap-1.5 rounded-xl px-2.5 py-1.5 text-xs">
+              <FileText className="size-3.5 shrink-0" />
+              <span className="truncate">{attachment.name}</span>
+            </span>
+          )}
+        </li>
+      ))}
+    </ul>
   );
 }
