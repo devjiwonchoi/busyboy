@@ -131,6 +131,6 @@ export async function updateSettings<T>(
   });
 }
 
-export function isSetupComplete(settings: Settings) {
-  return Boolean(settings.setupCompletedAt);
+export async function isSetupComplete() {
+  return Boolean((await readSettings()).setupCompletedAt);
 }
