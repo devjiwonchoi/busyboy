@@ -20,6 +20,7 @@
     "react-dom": "19.3.1"
   },
   "devDependencies": {
+    "@ai-sdk/anthropic": "4.0.106",
     "@e2e-dev/web": "0.16.0",
     "@tailwindcss/postcss": "4.3.5",
     "@types/node": "24.19.2",
