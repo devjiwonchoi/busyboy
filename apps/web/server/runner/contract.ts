@@ -1,3 +1,5 @@
+import type { UserTurn } from "./user-turn";
+
 export type ProviderId = "claude" | "codex" | "grok";
 
 export type StartAgentInput = {
@@ -34,7 +36,7 @@ export type ProviderStartOptions = StartAgentInput & {
 };
 
 export interface ProviderSession {
-  send(text: string): void;
+  send(turn: UserTurn): void;
   interrupt(): Promise<void>;
   stop(): Promise<void>;
 }

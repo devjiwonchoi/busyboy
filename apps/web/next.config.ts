@@ -12,6 +12,7 @@ const contentSecurityPolicy = [
   "font-src 'self' data:",
   "connect-src 'self'",
   "media-src 'self'",
+  "worker-src 'self' blob:",
   "object-src 'none'",
   "base-uri 'self'",
   "form-action 'self'",
@@ -23,6 +24,7 @@ const nextConfig: NextConfig = {
   reactCompiler: true,
   experimental: {
     authInterrupts: true,
+    serverActions: { bodySizeLimit: "12mb" },
     turbopackRustReactCompiler: true,
   },
   partialPrefetching: true,

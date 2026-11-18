@@ -20,6 +20,7 @@ import type {
   SignInStatus,
 } from "./contract";
 import { agentEnvironment, findExecutable } from "./find-executable";
+import { codexInput, type UserTurn } from "./user-turn";
 
 const CODEX_PATH_ENV = "BUSYBOY_CODEX_PATH";
 const SIGN_IN_TIMEOUT_MS = 20_000;
@@ -155,7 +156,7 @@ function spawnAppServer(
 
 function startCodex(options: ProviderStartOptions): ProviderSession {
   const { emit } = options;
-  const queue: string[] = [];
+  const queue: UserTurn[] = [];
   let connection: AppServerConnection | undefined;
   let threadId: string | undefined;
   let turnId: string | undefined;
@@ -187,7 +188,7 @@ function startCodex(options: ProviderStartOptions): ProviderSession {
     connection
       .request<{ turn: { id: string } }>("turn/start", {
         threadId,
-        input: [{ type: "text", text: turn, text_elements: [] }],
+        input: codexInput(turn),
       })
       .then(({ turn }) => {
         if (pendingStart !== request) return;
@@ -319,8 +320,8 @@ function startCodex(options: ProviderStartOptions): ProviderSession {
     .then((finished) => emit({ type: "stopped", finished }));
 
   return {
-    send(text) {
-      queue.push(text);
+    send(turn) {
+      queue.push(turn);
       startNextTurn();
     },
     async interrupt() {

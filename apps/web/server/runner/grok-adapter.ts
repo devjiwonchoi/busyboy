@@ -19,6 +19,7 @@ import {
   grokStopMessage,
   type GrokPermissionOption,
 } from "./grok-events";
+import { grokPrompt, type UserTurn } from "./user-turn";
 
 const GROK_PATH_ENV = "BUSYBOY_GROK_PATH";
 const SIGN_IN_TIMEOUT_MS = 20_000;
@@ -39,6 +40,7 @@ type RpcMessage = {
 
 type InitResult = {
   authMethods?: { id?: string }[];
+  agentCapabilities?: { promptCapabilities?: { image?: boolean } };
 };
 
 class GrokExited extends Error {
@@ -210,7 +212,8 @@ function permissionOptions(value: unknown): GrokPermissionOption[] {
 
 function startGrok(options: ProviderStartOptions): ProviderSession {
   const { emit } = options;
-  const queue: string[] = [];
+  const queue: UserTurn[] = [];
+  let allowImages = false;
   const mapper = new GrokEventMapper(emit);
   let connection: AcpConnection | undefined;
   let sessionId: string | undefined;
@@ -249,7 +252,7 @@ function startGrok(options: ProviderStartOptions): ProviderSession {
     current
       .request<{ stopReason?: string }>("session/prompt", {
         sessionId,
-        prompt: [{ type: "text", text: turn }],
+        prompt: grokPrompt(turn, allowImages),
       })
       .then((result) => {
         if (token !== turnToken || stopRequested) return;
@@ -323,6 +326,7 @@ function startGrok(options: ProviderStartOptions): ProviderSession {
     if (stopRequested) void current.kill();
     const ready = (async () => {
       const init = await current.initialize();
+      allowImages = init.agentCapabilities?.promptCapabilities?.image === true;
       await authenticate(current, init);
       const body = { cwd: options.cwd, mcpServers: [], ...rulesMeta(options.instructions) };
       if (options.resumeSessionId) {

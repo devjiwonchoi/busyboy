@@ -15,6 +15,7 @@ import type {
   SignInStatus,
 } from "./contract";
 import { agentEnvironment, findExecutable } from "./find-executable";
+import { claudeContent, type UserTurn } from "./user-turn";
 
 const CLAUDE_PATH_ENV = "BUSYBOY_CLAUDE_PATH";
 const SIGN_IN_TIMEOUT_MS = 20_000;
@@ -24,11 +25,11 @@ class MessageQueue implements AsyncIterable<SDKUserMessage> {
   private waiting: ((result: IteratorResult<SDKUserMessage>) => void) | undefined;
   private closed = false;
 
-  push(text: string) {
+  push(turn: UserTurn) {
     if (this.closed) return;
     const message: SDKUserMessage = {
       type: "user",
-      message: { role: "user", content: text },
+      message: { role: "user", content: claudeContent(turn) },
       parent_tool_use_id: null,
       origin: { kind: "human" },
     };
@@ -125,9 +126,9 @@ function startClaude(options: ProviderStartOptions): ProviderSession {
     });
 
   return {
-    send(text) {
+    send(turn) {
       inTurn = true;
-      input.push(text);
+      input.push(turn);
     },
     async interrupt() {
       await current?.interrupt();

@@ -14,6 +14,7 @@ import type {
   StartAgentInput,
 } from "./contract";
 import { grokAdapter } from "./grok-adapter";
+import type { UserTurn } from "./user-turn";
 
 const MAX_RETAINED_EVENTS = 5_000;
 
@@ -125,11 +126,11 @@ export function startAgent(input: StartAgentInput): AgentSnapshot {
   return snapshot(agent);
 }
 
-export function sendMessage(agentId: string, text: string) {
+export function sendMessage(agentId: string, turn: UserTurn) {
   const agent = getRecord(agentId);
   if (!agent.session) throw new Error("The agent is stopped. Resume it first.");
   if (agent.status === "idle" || agent.status === "starting") agent.status = "running";
-  agent.session.send(text);
+  agent.session.send(turn);
 }
 
 export async function interruptAgent(agentId: string) {
