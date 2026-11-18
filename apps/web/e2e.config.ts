@@ -12,7 +12,7 @@ const anthropic = createAnthropic({
 
 export default {
   agents: {
-    default: { model: anthropic("claude-sonnet-5-5") },
+    default: { model: anthropic("claude-haiku-5-5") },
   },
   targets: [
     {
