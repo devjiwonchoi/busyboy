@@ -68,6 +68,16 @@
     "react/purity": "error",
     "react/set-state-in-render": "error",
     "react/unsupported-syntax": "error",
+    "react/capitalized-calls": "error",
+    "react/exhaustive-effect-dependencies": "error",
+    "react/hooks": "error",
+    "react/invariant": "error",
+    "react/memo-dependencies": "error",
+    "react/no-deriving-state-in-effects": "error",
+    "react/rule-suppression": "error",
+    "react/syntax": "error",
+    "react/todo": "error",
+    "react/void-use-memo": "error",
     "import/no-anonymous-default-export": "error",
     "jsx-a11y/alt-text": [
       "error",
@@ -112,6 +122,24 @@
         "ignorePattern": "turbopackIgnore|prettier-ignore|oxfmt-ignore|oxlint-disable|eslint-disable|@ts-|https?://"
       }
     ],
-    "busyboy/no-use-client-segment": "error"
-  }
+    "busyboy/no-use-client-segment": "error",
+    "no-restricted-imports": [
+      "error",
+      {
+        "paths": [
+          {
+            "name": "react",
+            "importNames": ["useMemo", "useCallback", "memo"],
+            "message": "The React Compiler memoizes automatically; write the plain value, function, or component."
+          }
+        ]
+      }
+    ]
+  },
+  "overrides": [
+    {
+      "files": ["apps/web/components/ui/**"],
+      "rules": { "no-restricted-imports": "off" }
+    }
+  ]
 }
