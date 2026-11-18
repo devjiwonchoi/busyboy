@@ -18,7 +18,8 @@ const repoRoot = join(import.meta.dirname, "..");
 const webRoot = join(repoRoot, "apps", "web");
 
 const kebab = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
-const toolFiles = new Set(["README.md", "AGENTS.md"]);
+const toolFiles = new Set(["README.md", "AGENTS.md", "pull_request_template.md"]);
+const allowedMarkdown = new Set(["AGENTS.md", ".github/pull_request_template.md"]);
 
 export function segmentIsKebab(segment: string): boolean {
   if (toolFiles.has(segment)) return true;
@@ -265,7 +266,7 @@ function main() {
         `Rename "${file}" to kebab-case, for example "${suggestedName(file)}". Keep a tool-fixed name such as page.tsx, next.config.ts, README.md, or AGENTS.md.`,
       );
     }
-    if (/\.(?:md|mdx|rst)$/.test(file) && file !== "AGENTS.md") {
+    if (/\.(?:md|mdx|rst)$/.test(file) && !allowedMarkdown.has(file)) {
       failures.push(`Do not add "${file}". Put the note in the pull request description.`);
     }
   }
