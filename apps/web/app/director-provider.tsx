@@ -49,12 +49,10 @@ type DirectorContextValue = DirectorView & { showError: (error: string) => void 
 
 const DirectorContext = createContext<DirectorContextValue | null>(null);
 
-// why: The transcript and the composer are separate client components that both need the stream, so they share one connection.
 export function DirectorProvider({ children }: { children: ReactNode }) {
   const [view, setView] = useState(initialView);
 
-  // why: A ref callback's cleanup runs on unmount, so the stream lives exactly as long as the chat is mounted.
-  const connect = useCallback((node: HTMLDivElement | null) => {
+  const openStreamWhileMounted = useCallback((node: HTMLDivElement | null) => {
     if (!node) return;
     const source = new EventSource("/api/director/events");
     source.onmessage = (message) => {
@@ -69,7 +67,7 @@ export function DirectorProvider({ children }: { children: ReactNode }) {
 
   return (
     <DirectorContext value={{ ...view, showError }}>
-      <div ref={connect} className="contents">
+      <div ref={openStreamWhileMounted} className="contents">
         {children}
       </div>
     </DirectorContext>

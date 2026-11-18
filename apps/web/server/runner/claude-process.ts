@@ -4,11 +4,9 @@ import type { SpawnedProcess, SpawnOptions } from "@anthropic-ai/claude-agent-sd
 
 import { onServerShutdown } from "../shutdown";
 
-/*why: * Seconds the group has to exit after SIGTERM before it is killed. */
 const GRACE_SECONDS = 5;
 const STDERR_TAIL = 2000;
 
-// why: A sign-in check is not an agent, so it is not in the agent registry. Shutdown still has to end it.
 type TrackedProcess = { stop: () => Promise<void> };
 type LiveProcesses = { processes: Set<TrackedProcess>; hooked: boolean };
 const LIVE_KEY = Symbol.for("busyboy.claude-processes");
@@ -30,14 +28,12 @@ function hookProcessShutdown() {
   process.once("SIGINT", () => void stopTrackedProcesses());
 }
 
-// why: When the server exits, even by a crash, the pipe closes and the watcher ends the CLI's process group.
 const WATCH_SCRIPT = [
   `{ trap '' TERM; read -r _ <&3; kill -TERM 0; sleep ${GRACE_SECONDS}; kill -KILL 0; } </dev/null >/dev/null 2>&1 &`,
   'exec "$@" 3<&-',
 ].join("\n");
 
 export type ClaudeProcess = SpawnedProcess & {
-  // why: Call this before closing the CLI's input: once the CLI exits, detached commands are no longer its descendants.
   stop(): Promise<void>;
   stderrTail(): string;
 };
@@ -45,12 +41,9 @@ export type ClaudeProcess = SpawnedProcess & {
 function signal(target: number, name: NodeJS.Signals) {
   try {
     process.kill(target, name);
-  } catch {
-    // why: Already gone.
-  }
+  } catch {}
 }
 
-// why: Claude Code starts Bash commands detached, in a session of their own, so the CLI's group does not include them.
 function detachedDescendants(root: number): Promise<number[]> {
   return new Promise((resolve) => {
     execFile("ps", ["-A", "-o", "pid=,ppid=,pgid="], { timeout: 2000 }, (error, stdout) => {
@@ -74,7 +67,6 @@ function detachedDescendants(root: number): Promise<number[]> {
   });
 }
 
-// why: Windows has no process groups. A killed CLI can leave the commands it detached.
 export function spawnClaudeProcess(options: SpawnOptions): ClaudeProcess {
   const env = options.env as NodeJS.ProcessEnv;
   let tail = "";

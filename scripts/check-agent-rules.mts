@@ -18,7 +18,7 @@ const repoRoot = join(import.meta.dirname, "..");
 const webRoot = join(repoRoot, "apps", "web");
 
 const kebab = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
-const toolFiles = new Set(["README.md", "AGENTS.md", "DOMAIN.md"]);
+const toolFiles = new Set(["README.md", "AGENTS.md"]);
 
 export function segmentIsKebab(segment: string): boolean {
   if (toolFiles.has(segment)) return true;
@@ -262,10 +262,10 @@ function main() {
     if (!file) continue;
     if (!pathIsKebab(file)) {
       failures.push(
-        `Rename "${file}" to kebab-case, for example "${suggestedName(file)}". Keep a tool-fixed name such as page.tsx, next.config.ts, README.md, AGENTS.md, or DOMAIN.md.`,
+        `Rename "${file}" to kebab-case, for example "${suggestedName(file)}". Keep a tool-fixed name such as page.tsx, next.config.ts, README.md, or AGENTS.md.`,
       );
     }
-    if (/\.(?:md|mdx|rst)$/.test(file) && file !== "AGENTS.md" && file !== "DOMAIN.md") {
+    if (/\.(?:md|mdx|rst)$/.test(file) && file !== "AGENTS.md") {
       failures.push(`Do not add "${file}". Put the note in the pull request description.`);
     }
   }

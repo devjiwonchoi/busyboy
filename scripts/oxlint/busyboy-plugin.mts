@@ -1,4 +1,4 @@
-// why: error.tsx and global-error.tsx are left out because Next requires them to be Client Components.
+// https://nextjs.org/docs/app/api-reference/file-conventions/error
 const SERVER_SEGMENT_FILE =
   /[\\/]app[\\/](?:.*[\\/])?(?:page|layout|template|default|loading|not-found|forbidden|unauthorized)\.[jt]sx?$/;
 
@@ -28,7 +28,9 @@ const noUseClientSegment = {
   },
 };
 
-export default {
+const busyboyPlugin = {
   meta: { name: "busyboy" },
   rules: { "no-use-client-segment": noUseClientSegment },
 };
+
+export default busyboyPlugin;

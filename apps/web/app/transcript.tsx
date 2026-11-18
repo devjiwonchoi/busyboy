@@ -27,7 +27,6 @@ export function Transcript({ empty }: { empty: ReactNode }) {
             <p className="whitespace-pre-wrap text-sm">{view.draft}</p>
           </article>
         ) : null}
-        {/* why: A new key remounts the marker on every update, and its ref scrolls the log to the end. */}
         <div key={view.revision} ref={scrollLogToEnd} />
       </div>
     </div>

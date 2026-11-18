@@ -11,11 +11,12 @@
     "dev:desktop": "pnpm --filter @busyboy/native dev",
     "build:desktop": "pnpm --filter @busyboy/native build:desktop",
     "typecheck": "pnpm --filter @busyboy/web --filter @busyboy/native typecheck",
-    "lint": "oxlint",
+    "lint": "oxlint && knip",
     "format": "oxfmt",
     "format:check": "oxfmt --check"
   },
   "devDependencies": {
+    "knip": "6.45.1",
     "oxfmt": "0.79.0",
     "oxlint": "1.94.0"
   },

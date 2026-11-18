@@ -4,7 +4,6 @@ import { serverExternalPackages } from "./lib/server-external-packages";
 
 const isDev = process.env.NODE_ENV === "development";
 
-// why: Cache Components prerenders the shell, and Next cannot put a per-request nonce on those inline scripts.
 const contentSecurityPolicy = [
   "default-src 'self'",
   `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ""}`,
@@ -21,12 +20,9 @@ const contentSecurityPolicy = [
 
 const nextConfig: NextConfig = {
   cacheComponents: true,
-  // why: Four megabytes of image bytes is about five and a half of base64, past the default 1 MB action body.
   experimental: { serverActions: { bodySizeLimit: "12mb" } },
-  // why: Next warns when Cache Components is on without this; new apps should enable both.
   partialPrefetching: true,
   output: "standalone",
-  // why: File tracing copies a checkout's .git into the standalone server, and codesign cannot sign it.
   outputFileTracingExcludes: {
     "*": [
       ".git",
@@ -40,7 +36,6 @@ const nextConfig: NextConfig = {
     ],
   },
   serverExternalPackages,
-  // why: The file cache writes under .next, inside the signed app bundle.
   cacheHandler: require.resolve("./lib/memory-cache-handler.mjs"),
   images: { customCacheHandler: true },
   async headers() {

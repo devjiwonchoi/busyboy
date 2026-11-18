@@ -28,7 +28,6 @@ export const metadata: Metadata = { title: "Setup · BusyBoy" };
 export default function SetupPage() {
   return (
     <div className="flex min-h-dvh flex-col">
-      {/* why: macOS traffic lights sit in the title bar, and the drag region is not a token class. */}
       <header
         className="flex h-10 shrink-0 items-center border-b pr-2"
         style={
@@ -53,7 +52,6 @@ export default function SetupPage() {
 }
 
 async function BackToChat() {
-  // why: Setup completion lives in this machine's settings file, so it is read per request, never at build time.
   await connection();
   if (!isSetupComplete(await readSettings())) return null;
   return (
@@ -71,14 +69,12 @@ const STATUS_TEXT: Record<SignInStatus["state"], string> = {
   "signed-in": "Signed in",
   "signed-out": "Signed out",
   "not-installed": "Not installed",
-  outdated: "Update needed",
   unknown: "Could not check",
 };
 
 const HARNESS_FORM = "harness-form";
 
 async function HarnessStep() {
-  // why: Sign-in state belongs to the machine running the app; prerendering would bake in the build machine's CLIs.
   await connection();
   const [states, current] = await Promise.all([
     Promise.all(
@@ -107,19 +103,10 @@ async function HarnessStep() {
             </ItemActions>
             {state.state === "signed-out" && (
               <>
-                {/* why: Setup is its own screen outside the app shell, so the terminal panel isn't here; the user copies the command. */}
                 <ItemDescription className="basis-full">
                   Run this in a terminal, then choose Check again.
                 </ItemDescription>
                 <CopyCommand label={`${name} login command`} command={state.loginCommand} />
-              </>
-            )}
-            {state.state === "outdated" && (
-              <>
-                <ItemDescription className="basis-full line-clamp-none">
-                  {state.detail}
-                </ItemDescription>
-                <CopyCommand label={`${name} update command`} command={state.updateCommand} />
               </>
             )}
             {(state.state === "not-installed" || state.state === "unknown") && (
@@ -135,7 +122,6 @@ async function HarnessStep() {
           Check again
         </Button>
       </form>
-      {/* why: One form for the choice and Continue, so Continue saves the default agent. */}
       <form id={HARNESS_FORM} action={finishSetupAction} className="space-y-2">
         {signedIn.length > 1 && (
           <RadioGroup

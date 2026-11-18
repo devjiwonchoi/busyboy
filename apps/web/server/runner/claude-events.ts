@@ -1,4 +1,3 @@
-import { parseAskedQuestions } from "./asked-questions";
 import type { AgentEvent } from "./contract";
 
 export type ClaudeRawMessage = {
@@ -23,19 +22,9 @@ export type ClaudeRawMessage = {
   mcp_servers?: { name?: string; status?: string }[];
 };
 
-/*why: * A `canUseTool` call, as the adapter receives it and as recordings store it. */
-export type ClaudePermissionRequest = {
-  toolName: string;
-  input: Record<string, unknown>;
-  title?: string;
-  description?: string;
-  suggestions?: unknown[];
-};
-
 export const TEXT_DELTA_FLUSH_MS = 50;
 
 const SIGNED_OUT_ERRORS = new Set(["authentication_failed", "oauth_org_not_allowed"]);
-const LABEL_LIMIT = 80;
 const CONTEXT_FULL =
   "Claude stopped: the conversation is longer than the model can read. Run /compact or start a new agent.";
 
@@ -57,12 +46,7 @@ const TERMINAL_REASONS: Record<string, string> = {
 
 const INTERRUPTED_REASONS = new Set(["aborted_streaming", "aborted_tools"]);
 
-function shorten(value: string) {
-  const line = value.replace(/\s+/g, " ").trim();
-  return line.length > LABEL_LIMIT ? `${line.slice(0, LABEL_LIMIT - 1)}…` : line;
-}
-
-export function claudeMcpStartupNotice(server: { name?: string; status?: string }) {
+function claudeMcpStartupNotice(server: { name?: string; status?: string }) {
   const name = server.name?.trim();
   if (!name || !/^[A-Za-z0-9_-]+$/.test(name)) return undefined;
   if (server.status === "failed") return `The MCP server ${name} failed to start.`;
@@ -71,19 +55,7 @@ export function claudeMcpStartupNotice(server: { name?: string; status?: string 
   return undefined;
 }
 
-export function toolLabel(name: string, input: Record<string, unknown>) {
-  const detail =
-    input.command ??
-    input.file_path ??
-    input.path ??
-    input.pattern ??
-    input.url ??
-    input.query ??
-    input.description;
-  return typeof detail === "string" && detail ? `${name}: ${shorten(detail)}` : name;
-}
-
-export function claudeResultError(message: ClaudeRawMessage): string | undefined {
+function claudeResultError(message: ClaudeRawMessage): string | undefined {
   const reason = message.terminal_reason;
   if (reason && INTERRUPTED_REASONS.has(reason)) return undefined;
   const known = reason ? TERMINAL_REASONS[reason] : undefined;
@@ -103,12 +75,7 @@ export function claudeResultError(message: ClaudeRawMessage): string | undefined
   return message.result?.trim() || "Claude ended the turn with an error.";
 }
 
-type ContentBlock = {
-  type?: string;
-  text?: string;
-  name?: string;
-  input?: Record<string, unknown>;
-};
+type ContentBlock = { type?: string; text?: string };
 
 export class ClaudeEventMapper {
   private streamingMessageId: string | undefined;
@@ -217,7 +184,6 @@ export class ClaudeEventMapper {
     if (message.error && SIGNED_OUT_ERRORS.has(message.error)) {
       this.send({
         type: "error",
-        code: "signed-out",
         message: "Claude is not signed in. Run `claude` and use /login.",
       });
     }
@@ -231,32 +197,7 @@ export class ClaudeEventMapper {
         this.streamedText.delete(itemId);
         if (message.error || !block.text || block.text === streamed) continue;
         this.send({ type: "text", itemId, text: block.text });
-      } else if (block.type === "tool_use" && block.name && block.name !== "AskUserQuestion") {
-        this.send({ type: "tool", label: toolLabel(block.name, block.input ?? {}) });
       }
     }
   }
-}
-
-export function claudePermissionToEvent(
-  requestId: string,
-  request: ClaudePermissionRequest,
-): Extract<AgentEvent, { type: "approval" | "question" }> {
-  if (request.toolName === "AskUserQuestion") {
-    const questions = parseAskedQuestions(request.input) ?? [
-      {
-        question: "Claude asked a question BusyBoy could not read. Reply with the answer.",
-        multiSelect: false,
-        options: [],
-      },
-    ];
-    return { type: "question", requestId, questions };
-  }
-  return {
-    type: "approval",
-    requestId,
-    title: request.title ?? `Allow ${toolLabel(request.toolName, request.input)}?`,
-    detail: request.description,
-    canAllowForSession: (request.suggestions?.length ?? 0) > 0,
-  };
 }

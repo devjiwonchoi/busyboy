@@ -6,9 +6,9 @@ import { subscribeToDirector, type DirectorUpdate } from "@/server/director/chat
 const HEARTBEAT_MS = 15_000;
 
 export async function GET(request: Request) {
-  // why: This is a live event stream; without this, Next would prerender the handler once the folder lookup stops doing I/O.
+  // https://nextjs.org/docs/app/getting-started/route-handlers#with-cache-components
   await connection();
-  const folder = await dataFolder();
+  const folder = dataFolder();
   const encoder = new TextEncoder();
   let cleanup = () => {};
 

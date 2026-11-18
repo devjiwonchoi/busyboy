@@ -1,4 +1,3 @@
-import { AsyncLocalStorage } from "node:async_hooks";
 import { access, mkdir, open, readFile, rename } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -6,12 +5,9 @@ import { join } from "node:path";
 import { pathKey } from "./paths";
 import type { ProviderId } from "./runner/contract";
 
-// why: The data folder is shared with the legacy app, which keeps its own files there.
+const HOME_ENV = "BUSYBOY_HOME";
 
-export const HOME_ENV = "BUSYBOY_HOME";
-
-/*why: * Named so it never collides with the legacy app's `settings.json`. */
-export const SETTINGS_FILE = "app-settings.json";
+const SETTINGS_FILE = "app-settings.json";
 
 export type Settings = {
   version: number;
@@ -26,23 +22,8 @@ const EMPTY_SETTINGS: Settings = {
   defaultProvider: null,
 };
 
-export function resolveDataFolder() {
+export function dataFolder() {
   return process.env[HOME_ENV] || join(homedir(), ".busyboy");
-}
-
-const BOUND_FOLDER_KEY = Symbol.for("busyboy.data-folder");
-const boundStore = globalThis as typeof globalThis & {
-  [BOUND_FOLDER_KEY]?: AsyncLocalStorage<string>;
-};
-const boundFolder = (boundStore[BOUND_FOLDER_KEY] ??= new AsyncLocalStorage<string>());
-
-// why: Work that outlives a request has to capture the data folder before the request ends.
-export function runWithDataFolder<T>(folder: string, work: () => T): T {
-  return boundFolder.run(folder, work);
-}
-
-export async function dataFolder() {
-  return boundFolder.getStore() ?? resolveDataFolder();
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -110,7 +91,7 @@ async function moveAsideIfCorrupt(folder: string) {
   await rename(file, aside);
 }
 
-export async function readSettingsAt(folder: string): Promise<Settings> {
+async function readSettingsAt(folder: string): Promise<Settings> {
   const text = await readSettingsFile(join(folder, SETTINGS_FILE));
   const settings = text === undefined ? undefined : parseSettings(text);
   if (settings) return settings;
@@ -122,13 +103,13 @@ export async function readSettingsAt(folder: string): Promise<Settings> {
 }
 
 export async function readSettings() {
-  return readSettingsAt(await dataFolder());
+  return readSettingsAt(dataFolder());
 }
 
 export async function updateSettings<T>(
   change: (settings: Settings) => T | Promise<T>,
 ): Promise<T> {
-  const folder = await dataFolder();
+  const folder = dataFolder();
   const file = join(folder, SETTINGS_FILE);
   return queued(file, async () => {
     await moveAsideIfCorrupt(folder);

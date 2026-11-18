@@ -10,7 +10,6 @@ export type ShellPathResult = {
   error?: string;
 };
 
-// why: A grandchild can hold the login shell's stdout open after the shell exits.
 function readLoginShellPath(shell: string): Promise<string> {
   return new Promise((resolve, reject) => {
     const child = spawn(shell, ["-ilc", `printf '%s%s%s' '${MARKER}' "$PATH" '${MARKER}'`], {
@@ -24,9 +23,7 @@ function readLoginShellPath(shell: string): Promise<string> {
     const killGroup = () => {
       try {
         if (child.pid) process.kill(-child.pid, "SIGKILL");
-      } catch {
-        // why: Already gone.
-      }
+      } catch {}
     };
     const settle = (error: Error | null) => {
       if (settled) return;
@@ -64,7 +61,6 @@ function mergePaths(...values: Array<string | undefined>) {
   return [...seen].join(delimiter);
 }
 
-// why: Finder and the Dock launch with launchd's minimal PATH.
 export async function installLoginShellPath(): Promise<ShellPathResult> {
   if (process.platform === "win32") {
     return {

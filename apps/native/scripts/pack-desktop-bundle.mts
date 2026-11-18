@@ -1,4 +1,3 @@
-// why: Windows cannot create pnpm's symlinks, so it gets real directories with siblings nested inside.
 import { execFileSync, spawnSync } from "node:child_process";
 import {
   cpSync,
@@ -36,8 +35,6 @@ function inside(candidate: string, containers: readonly string[]): boolean {
   });
 }
 
-// why: A link into the build machine's node_modules works on that runner and
-// why: nowhere else. tar -h would also copy the target into the Windows archive.
 const realRoots = roots.map((dir) => realpathSync(dir));
 const leaks: string[] = [];
 for (const dir of roots) {
@@ -71,7 +68,6 @@ if (leaks.length > 0) {
 }
 
 function listSymlinks(archive: string): string[] {
-  // why: The standalone tree's file list is larger than execFileSync's default buffer.
   const listing = spawnSync("tar", ["-tvf", archive], {
     cwd: repoRoot,
     encoding: "utf8",
