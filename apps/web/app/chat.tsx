@@ -54,6 +54,13 @@ function apply(current: DirectorView, update: ChatAction): DirectorView {
   }
 }
 
+function stoppedMidReply(entries: ChatEntry[]) {
+  const last = entries.at(-1);
+  if (!last) return false;
+  if (last.kind === "director") return last.interrupted === true;
+  return last.kind === "note" && last.text === "Stopped.";
+}
+
 export function Chat() {
   const [view, dispatch] = useReducer(apply, initialView);
   const composer = useRef<ComposerHandle>(null);
@@ -82,6 +89,7 @@ export function Chat() {
       <Composer
         ref={composer}
         answering={view.status === "answering"}
+        canResume={stoppedMidReply(view.entries)}
         error={view.error}
         onError={(error) => dispatch({ type: "error", error })}
       />

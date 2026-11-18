@@ -1,5 +1,5 @@
-import { ArrowUp, FileText, Plus, Square, X } from "lucide-react";
-import { useImperativeHandle, useRef, useState, type Ref } from "react";
+import { ArrowUp, FileText, Play, Plus, Square, X } from "lucide-react";
+import { useEffect, useImperativeHandle, useRef, useState, type Ref } from "react";
 import { useFormStatus } from "react-dom";
 
 import { Button } from "@/components/ui/button";
@@ -14,12 +14,13 @@ export type ComposerHandle = { addFiles: (files: FileList | File[]) => void };
 
 type ComposerProps = {
   answering: boolean;
+  canResume: boolean;
   error?: string;
   onError: (error: string) => void;
   ref?: Ref<ComposerHandle>;
 };
 
-export function Composer({ answering, error, onError, ref }: ComposerProps) {
+export function Composer({ answering, canResume, error, onError, ref }: ComposerProps) {
   const [attachments, setAttachments] = useState<DraftAttachment[]>([]);
   const [dragging, setDragging] = useState(false);
   const [hasText, setHasText] = useState(false);
@@ -179,21 +180,12 @@ export function Composer({ answering, error, onError, ref }: ComposerProps) {
           >
             <Plus />
           </Button>
-          <div className="flex items-center gap-2">
-            {answering ? (
-              <Button
-                type="button"
-                variant="outline"
-                size="icon"
-                className="rounded-full"
-                aria-label="Stop"
-                onClick={() => void stopDirectorAction()}
-              >
-                <Square />
-              </Button>
-            ) : null}
-            <SendButton disabled={answering || (!hasText && attachments.length === 0)} />
-          </div>
+          <PrimaryAction
+            answering={answering}
+            empty={!hasText && attachments.length === 0}
+            canResume={canResume}
+            onError={onError}
+          />
         </div>
       </form>
       {error ? (
@@ -205,14 +197,101 @@ export function Composer({ answering, error, onError, ref }: ComposerProps) {
   );
 }
 
-function SendButton({ disabled }: { disabled: boolean }) {
+const ESCAPE_WINDOW_MS = 1500;
+const RESUME_PROMPT = "Continue where you left off.";
+
+function PrimaryAction({
+  answering,
+  empty,
+  canResume,
+  onError,
+}: {
+  answering: boolean;
+  empty: boolean;
+  canResume: boolean;
+  onError: (error: string) => void;
+}) {
   const { pending } = useFormStatus();
+  const [escapeArmed, setEscapeArmed] = useState(false);
+  const armedAt = useRef(0);
+
+  // oxlint-disable-next-line busyboy/no-unreasoned-effect -- listens for Escape twice to stop the reply while one is running.
+  useEffect(() => {
+    if (!answering) return;
+    let lapse: ReturnType<typeof setTimeout> | undefined;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || event.repeat || event.defaultPrevented || event.isComposing)
+        return;
+      event.preventDefault();
+      clearTimeout(lapse);
+      if (Date.now() - armedAt.current > ESCAPE_WINDOW_MS) {
+        armedAt.current = Date.now();
+        setEscapeArmed(true);
+        lapse = setTimeout(() => {
+          armedAt.current = 0;
+          setEscapeArmed(false);
+        }, ESCAPE_WINDOW_MS);
+        return;
+      }
+      armedAt.current = 0;
+      setEscapeArmed(false);
+      void stopDirectorAction();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      clearTimeout(lapse);
+      armedAt.current = 0;
+      setEscapeArmed(false);
+    };
+  }, [answering]);
+
+  if (answering) {
+    return (
+      <Button
+        type="button"
+        size="icon"
+        aria-label={escapeArmed ? "Press Escape again to stop" : "Stop"}
+        title="Stop (Esc Esc)"
+        onClick={() => void stopDirectorAction()}
+        className="rounded-full"
+      >
+        {escapeArmed ? (
+          <span className="text-xs leading-none font-semibold tracking-tighter">Esc</span>
+        ) : (
+          <Square className="fill-current" />
+        )}
+      </Button>
+    );
+  }
+
+  if (canResume && empty) {
+    return (
+      <Button
+        type="button"
+        size="icon"
+        aria-label="Resume"
+        title="Continue where it stopped"
+        disabled={pending}
+        onClick={async () => {
+          const formData = new FormData();
+          formData.set("text", RESUME_PROMPT);
+          const result = await sendToDirectorAction(formData);
+          if (result.error) onError(result.error);
+        }}
+        className="rounded-full"
+      >
+        <Play className="fill-current" />
+      </Button>
+    );
+  }
+
   return (
     <Button
       type="submit"
       size="icon"
       aria-label="Send"
-      disabled={disabled || pending}
+      disabled={pending || empty}
       className="disabled:bg-muted disabled:text-muted-foreground rounded-full disabled:opacity-100"
     >
       <ArrowUp />
