@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Suspense, type CSSProperties } from "react";
+import { Suspense } from "react";
 
 import { CopyCommand } from "@/components/setup/copy-command";
+import { TitleBar } from "@/components/title-bar";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Field, FieldContent, FieldLabel, FieldTitle } from "@/components/ui/field";
@@ -28,20 +29,11 @@ export const metadata: Metadata = { title: "Setup · BusyBoy" };
 export default function SetupPage() {
   return (
     <div className="flex min-h-dvh flex-col">
-      <header
-        className="flex h-10 shrink-0 items-center border-b pr-2"
-        style={
-          {
-            paddingLeft: "var(--title-bar-inset, 0.75rem)",
-            WebkitAppRegion: "drag",
-          } as CSSProperties
-        }
-      >
-        <span className="text-sm font-medium">BusyBoy</span>
-        <Suspense fallback={<Skeleton className="ml-auto h-8 w-24" />}>
+      <TitleBar>
+        <Suspense fallback={<Skeleton className="h-8 w-24" />}>
           <BackToChat />
         </Suspense>
-      </header>
+      </TitleBar>
       <main aria-label="Setup" className="mx-auto w-full max-w-2xl flex-1 space-y-6 px-6 py-6">
         <Suspense fallback={<Skeleton className="h-96 w-full" />}>
           <HarnessStep />
@@ -55,11 +47,7 @@ async function BackToChat() {
   await requireTrustedRequest();
   if (await isSetupIncomplete()) return null;
   return (
-    <Link
-      href="/"
-      className={buttonVariants({ variant: "ghost", size: "sm", className: "ml-auto" })}
-      style={{ WebkitAppRegion: "no-drag" } as CSSProperties}
-    >
+    <Link href="/" className={buttonVariants({ variant: "ghost", size: "sm" })}>
       Back to chat
     </Link>
   );

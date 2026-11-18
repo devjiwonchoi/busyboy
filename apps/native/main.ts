@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 
 import { app, BrowserWindow, dialog, ipcMain, session, shell } from "electron";
@@ -44,7 +45,15 @@ function openExternally(target: string) {
   if (/^https?:/.test(target)) void shell.openExternal(target);
 }
 
+function devIconPath() {
+  if (app.isPackaged) return undefined;
+  const icon = join(__dirname, "..", "icons", "icon.png");
+  return existsSync(icon) ? icon : undefined;
+}
+
 function createWindow(url: string, show: boolean) {
+  const devIcon = devIconPath();
+  if (devIcon && process.platform === "darwin") app.dock?.setIcon(devIcon);
   const window = new BrowserWindow({
     width: 1280,
     height: 820,
@@ -53,6 +62,7 @@ function createWindow(url: string, show: boolean) {
     show: false,
     title: "BusyBoy",
     titleBarStyle: process.platform === "darwin" ? "hiddenInset" : "default",
+    ...(devIcon && process.platform !== "darwin" ? { icon: devIcon } : {}),
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
