@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { connection } from "next/server";
 import { Suspense, type CSSProperties } from "react";
 
 import { CopyCommand } from "@/components/setup/copy-command";
@@ -20,6 +19,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { isSetupComplete, readSettings } from "@/server/config";
 import { defaultProvider, PROVIDERS, providerState } from "@/server/providers";
 import type { SignInStatus } from "@/server/runner/contract";
+import { requireTrustedRequest } from "@/server/trusted-request";
 
 import { finishSetupAction, recheckProvidersAction } from "./actions";
 
@@ -52,7 +52,7 @@ export default function SetupPage() {
 }
 
 async function BackToChat() {
-  await connection();
+  await requireTrustedRequest();
   if (!isSetupComplete(await readSettings())) return null;
   return (
     <Link
@@ -75,7 +75,7 @@ const STATUS_TEXT: Record<SignInStatus["state"], string> = {
 const HARNESS_FORM = "harness-form";
 
 async function HarnessStep() {
-  await connection();
+  await requireTrustedRequest();
   const [states, current] = await Promise.all([
     Promise.all(
       PROVIDERS.map(async (provider) => ({ ...provider, state: await providerState(provider.id) })),

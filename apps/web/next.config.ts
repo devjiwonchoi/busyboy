@@ -20,7 +20,7 @@ const contentSecurityPolicy = [
 
 const nextConfig: NextConfig = {
   cacheComponents: true,
-  experimental: { serverActions: { bodySizeLimit: "12mb" } },
+  experimental: { authInterrupts: true },
   partialPrefetching: true,
   output: "standalone",
   outputFileTracingExcludes: {
