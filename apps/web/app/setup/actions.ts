@@ -11,8 +11,10 @@ import {
   signedInProviders,
 } from "@/server/providers";
 import type { ProviderId } from "@/server/runner/contract";
+import { requireTrustedRequest } from "@/server/trusted-request";
 
 export async function finishSetupAction(form: FormData) {
+  await requireTrustedRequest();
   const signedIn = await signedInProviders();
   if (signedIn.length === 0) redirect("/setup");
   const provider = form.get("defaultProvider");
@@ -28,6 +30,7 @@ export async function finishSetupAction(form: FormData) {
 }
 
 export async function recheckProvidersAction() {
+  await requireTrustedRequest();
   await Promise.all(PROVIDERS.map(({ id }) => providerState(id, { fresh: true })));
   refresh();
 }

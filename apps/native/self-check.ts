@@ -220,7 +220,9 @@ export function createSelfCheck() {
     async recordServer(server: ServerHandle) {
       result.checks.serverStarted = server.isRunning();
       result.details.serverUrl = server.url;
-      const response = await fetch(server.url, { signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
+      const response = await fetch(`${server.url}/api/director/events`, {
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      });
       await response.body?.cancel();
       result.checks.serverRejectsMissingToken = response.status === 403;
     },

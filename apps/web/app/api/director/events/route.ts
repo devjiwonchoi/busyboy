@@ -1,13 +1,11 @@
-import { connection } from "next/server";
-
 import { dataFolder } from "@/server/config";
 import { subscribeToDirector, type DirectorUpdate } from "@/server/director/chat";
+import { requireTrustedRequest } from "@/server/trusted-request";
 
 const HEARTBEAT_MS = 15_000;
 
 export async function GET(request: Request) {
-  // https://nextjs.org/docs/app/getting-started/route-handlers#with-cache-components
-  await connection();
+  await requireTrustedRequest();
   const folder = dataFolder();
   const encoder = new TextEncoder();
   let cleanup = () => {};

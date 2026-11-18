@@ -22,7 +22,7 @@ const nextConfig: NextConfig = {
   cacheComponents: true,
   reactCompiler: true,
   experimental: {
-    serverActions: { bodySizeLimit: "12mb" },
+    authInterrupts: true,
     turbopackRustReactCompiler: true,
   },
   partialPrefetching: true,
