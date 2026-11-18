@@ -1,5 +1,4 @@
 import { redirect } from "next/navigation";
-import { connection } from "next/server";
 import { Suspense } from "react";
 
 import { DirectorChat } from "@/components/chat/director-chat";
@@ -18,7 +17,6 @@ export default function ChatPage() {
 
 async function Chat() {
   await requireTrustedRequest();
-  await connection();
   if (!isSetupComplete(await readSettings())) redirect("/setup");
   return <DirectorChat greeting="BusyBoy is ready. What should we work on?" />;
 }

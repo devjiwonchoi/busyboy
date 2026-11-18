@@ -1,6 +1,7 @@
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
   "plugins": ["nextjs", "react", "import", "jsx-a11y", "typescript"],
+  "jsPlugins": ["./scripts/oxlint-plugin.mts"],
   "categories": {
     "correctness": "off"
   },
@@ -19,6 +20,20 @@
     "maxWarnings": 0
   },
   "rules": {
+    "busyboy/no-proxy": "error",
+    "busyboy/trusted-entry": "error",
+    "no-restricted-imports": [
+      "error",
+      {
+        "paths": [
+          {
+            "name": "next/server",
+            "importNames": ["connection"],
+            "message": "BusyBoy does not use connection()."
+          }
+        ]
+      }
+    ],
     "nextjs/google-font-display": "error",
     "nextjs/google-font-preconnect": "error",
     "nextjs/next-script-for-ga": "error",
