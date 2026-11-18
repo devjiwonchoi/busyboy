@@ -52,22 +52,22 @@ async function startTerminal(server: ServerHandle): Promise<StartedTerminal> {
   return body as StartedTerminal;
 }
 
-function isRunning(pid: number) {
+function hasExited(pid: number) {
   try {
     process.kill(pid, 0);
-    return true;
+    return false;
   } catch (error) {
-    return (error as NodeJS.ErrnoException).code === "EPERM";
+    return (error as NodeJS.ErrnoException).code !== "EPERM";
   }
 }
 
 async function waitForExit(pid: number) {
   const deadline = Date.now() + PROCESS_EXIT_TIMEOUT_MS;
   while (Date.now() < deadline) {
-    if (!isRunning(pid)) return true;
+    if (hasExited(pid)) return true;
     await new Promise((resolve) => setTimeout(resolve, 100));
   }
-  return !isRunning(pid);
+  return hasExited(pid);
 }
 
 async function runTerminalEcho(server: ServerHandle) {

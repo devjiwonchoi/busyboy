@@ -88,6 +88,23 @@ const noProxy = {
   },
 };
 
+function reportUnguardedEntries(context: Context, program: Node, component: boolean) {
+  const { found, loose } = entries(program, component);
+  for (const statement of loose) {
+    context.report({
+      node: statement,
+      message: "Export an entry where it is declared, so the request check can be verified.",
+    });
+  }
+  for (const fn of found) {
+    if (startsWithGuard(fn)) continue;
+    context.report({
+      node: fn,
+      message: "Start this entry with `await requireTrustedRequest();`.",
+    });
+  }
+}
+
 const trustedEntry = {
   meta: { type: "problem" },
   create(context: Context) {
@@ -99,21 +116,8 @@ const trustedEntry = {
         const name = basename(path);
         const component = inApp && componentFile.test(name);
         const route = inApp && routeFile.test(name);
-        if (!component && !route && !isUseServer(program)) return;
-        const { found, loose } = entries(program, component);
-        for (const statement of loose) {
-          context.report({
-            node: statement,
-            message: "Export an entry where it is declared, so the request check can be verified.",
-          });
-        }
-        for (const fn of found) {
-          if (startsWithGuard(fn)) continue;
-          context.report({
-            node: fn,
-            message: "Start this entry with `await requireTrustedRequest();`.",
-          });
-        }
+        if (component || route || isUseServer(program))
+          reportUnguardedEntries(context, program, component);
       },
     };
   },
@@ -174,6 +178,44 @@ const noUnreasonedEffect = {
   },
 };
 
+const predicateName = /^(?:is|has|can|should|needs|was|did)[A-Z]/;
+
+function negatedPredicates(expression: Node | undefined): Node[] {
+  if (!expression) return [];
+  if (expression.type === "LogicalExpression") {
+    return [
+      ...negatedPredicates(expression.left as Node),
+      ...negatedPredicates(expression.right as Node),
+    ];
+  }
+  if (expression.type !== "UnaryExpression" || expression.operator !== "!") return [];
+  let argument = expression.argument as Node;
+  if (argument.type === "AwaitExpression") argument = argument.argument as Node;
+  if (argument.type !== "CallExpression") return [];
+  const callee = argument.callee as Node;
+  if (callee.type === "Identifier" && predicateName.test(callee.name as string))
+    return [expression];
+  return [];
+}
+
+const noNegatedPredicate = {
+  meta: { type: "suggestion" },
+  create(context: Context) {
+    return {
+      IfStatement(statement: Node) {
+        for (const node of negatedPredicates(statement.test as Node)) {
+          context.report({
+            node,
+            message:
+              "Branch on a positive predicate instead of negating one: name the case the branch handles " +
+              "(`isSetupIncomplete()` rather than `!isSetupComplete()`), or flip the branches so the if tests the predicate as is.",
+          });
+        }
+      },
+    };
+  },
+};
+
 function isEmptyValue(node: Node | null | undefined): boolean {
   if (!node) return true;
   if (node.type === "Literal") return node.value === null;
@@ -187,28 +229,29 @@ function isSuspenseName(name: Node): boolean {
   return false;
 }
 
+function reportEmptyFallback(context: Context, element: Node) {
+  const attributes = element.attributes as Node[];
+  if (attributes.some((attribute) => attribute.type === "JSXSpreadAttribute")) return;
+  const fallback = attributes.find((attribute) => (attribute.name as Node).name === "fallback");
+  const value = fallback?.value as Node | null | undefined;
+  if (
+    fallback &&
+    !(value?.type === "JSXExpressionContainer" && isEmptyValue(value.expression as Node))
+  )
+    return;
+  context.report({
+    node: fallback ?? element,
+    message:
+      "Give <Suspense> a fallback that holds the space of what it waits for, such as a <Skeleton />. A missing or null fallback renders nothing.",
+  });
+}
+
 const noEmptySuspenseFallback = {
   meta: { type: "problem" },
   create(context: Context) {
     return {
       JSXOpeningElement(element: Node) {
-        if (!isSuspenseName(element.name as Node)) return;
-        const attributes = element.attributes as Node[];
-        if (attributes.some((attribute) => attribute.type === "JSXSpreadAttribute")) return;
-        const fallback = attributes.find(
-          (attribute) => (attribute.name as Node).name === "fallback",
-        );
-        const value = fallback?.value as Node | null | undefined;
-        if (
-          fallback &&
-          !(value?.type === "JSXExpressionContainer" && isEmptyValue(value.expression as Node))
-        )
-          return;
-        context.report({
-          node: fallback ?? element,
-          message:
-            "Give <Suspense> a fallback that holds the space of what it waits for, such as a <Skeleton />. A missing or null fallback renders nothing.",
-        });
+        if (isSuspenseName(element.name as Node)) reportEmptyFallback(context, element);
       },
     };
   },
@@ -298,6 +341,7 @@ const busyboyPlugin = {
     "no-unreasoned-effect": noUnreasonedEffect,
     "no-empty-suspense-fallback": noEmptySuspenseFallback,
     "no-empty-loading": noEmptyLoading,
+    "no-negated-predicate": noNegatedPredicate,
   },
 };
 

@@ -24,8 +24,7 @@ function isBinary(buffer: Buffer): boolean {
   return buffer.includes(0);
 }
 
-for (const file of trackedFiles()) {
-  if (!isRegularFile(file)) continue;
+for (const file of trackedFiles().filter(isRegularFile)) {
   const buffer = readFileSync(file);
   if (isBinary(buffer)) continue;
   scan(file, buffer.toString("utf8"));

@@ -25,6 +25,7 @@
     "busyboy/no-unreasoned-effect": "error",
     "busyboy/no-empty-suspense-fallback": "error",
     "busyboy/no-empty-loading": "error",
+    "busyboy/no-negated-predicate": "error",
     "no-restricted-imports": [
       "error",
       {
