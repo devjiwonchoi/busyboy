@@ -1,6 +1,6 @@
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { web } from "@e2e-dev/web";
@@ -29,7 +29,11 @@ export default {
             "--port",
             "{port}",
           ],
-          env: { BUSYBOY_HOME: mkdtempSync(join(tmpdir(), "busyboy-e2e-")) },
+          env: {
+            BUSYBOY_HOME: mkdtempSync(join(tmpdir(), "busyboy-e2e-")),
+            // A scripted `claude` that streams a fixed reply word by word.
+            BUSYBOY_CLAUDE_PATH: resolve("tests/fixtures/fake-claude"),
+          },
           startupTimeout: 120_000,
           log: ".e2e/logs/app.log",
         },
