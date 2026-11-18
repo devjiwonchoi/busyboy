@@ -5,7 +5,14 @@ import { join } from "node:path";
 import { assert, constantFrom, property, string } from "fast-check";
 
 import {
+  bashToCodexPrefix,
+  matchAskRule,
+  translateAskRules,
+} from "../src/server/runner/always-ask-translator.ts";
+import {
+  BUSYBOY_FILES_RULE,
   DEFAULT_ALWAYS_ASK,
+  DEFAULT_BRANCH_RULE,
   DELETE_OUTSIDE_RULE,
   DEPLOY_RULE,
   FORCE_PUSH_RULE,
@@ -274,6 +281,104 @@ check(
       }),
       { seed: SEED, numRuns: RUNS },
     );
+  },
+);
+
+const translatorFix = [
+  "Fix translateAskRules in src/server/runner/always-ask-translator.ts.",
+  "Force push and a push to the default branch become Bash(git push …) rules, and Codex keeps a single git push prefix.",
+  "Delete outside and a connector verb scan are not shell patterns.",
+  "A glob in the middle of a Bash rule is not a Codex prefix.",
+].join(" ");
+
+check(
+  "the translator hands each harness a prefix rule and drops what it cannot say.",
+  translatorFix,
+  () => {
+    const translated = translateAskRules({ rules: DEFAULT_ALWAYS_ASK, privateFolder: root });
+    for (const pattern of [
+      "Bash(git push *--force*)",
+      "Bash(git push *)",
+      "Bash(npm publish *)",
+      "Bash(vercel *)",
+      "Bash(gh pr merge*)",
+      "mcp__*linear*__*update*",
+    ]) {
+      if (!translated.claude.includes(pattern)) throw new Error(`Claude rules omit ${pattern}.`);
+    }
+    if (
+      translated.claude.includes(DELETE_OUTSIDE_RULE) ||
+      translated.claude.includes("Bash(rm *)")
+    ) {
+      throw new Error("Delete outside became a shell pattern.");
+    }
+    const gitPush = translated.codex.find((rule) => rule.pattern.join(" ") === "git push");
+    if (!gitPush) throw new Error("Codex has no git push prefix.");
+    if (translated.codex.filter((rule) => rule.pattern.join(" ") === "git push").length !== 1) {
+      throw new Error("Codex has more than one git push prefix.");
+    }
+    if (!gitPush.rule.includes(FORCE_PUSH_RULE) || !gitPush.rule.includes(DEFAULT_BRANCH_RULE)) {
+      throw new Error(`Codex git push rule is ${gitPush.rule}.`);
+    }
+    if (bashToCodexPrefix("Bash(gh * pr merge*)") !== null) {
+      throw new Error("A glob in the middle became a Codex prefix.");
+    }
+    if (bashToCodexPrefix("Bash(gh pr merge*)")?.join(" ") !== "gh pr merge") {
+      throw new Error("Bash(gh pr merge*) did not become the gh pr merge prefix.");
+    }
+    const force = matchAskRule({
+      rules: DEFAULT_ALWAYS_ASK,
+      toolName: "Bash",
+      input: { command: "git push --force origin HEAD" },
+      cwd: worktree,
+    });
+    if (force?.rule !== FORCE_PUSH_RULE)
+      throw new Error(`Force push matched ${String(force?.rule)}.`);
+    const plain = matchAskRule({
+      rules: DEFAULT_ALWAYS_ASK,
+      toolName: "Bash",
+      input: { command: "git push origin feature" },
+      cwd: worktree,
+    });
+    if (plain?.rule !== DEFAULT_BRANCH_RULE)
+      throw new Error(`Plain push matched ${String(plain?.rule)}.`);
+    const removed = matchAskRule({
+      rules: DEFAULT_ALWAYS_ASK,
+      toolName: "Bash",
+      input: { command: "rm -rf /tmp/busyboy-outside-task" },
+      cwd: worktree,
+    });
+    if (removed) throw new Error(`An outside delete matched ${removed.rule}.`);
+    const patch = matchAskRule({
+      rules: DEFAULT_ALWAYS_ASK,
+      toolName: "Bash",
+      input: {
+        command:
+          "apply_patch <<'EOF'\n*** Update File: src/app.ts\n+git push --force origin main\nEOF",
+      },
+      cwd: worktree,
+    });
+    if (patch) throw new Error("A diff that mentions a push matched a push rule.");
+    const own = matchAskRule({
+      rules: [],
+      toolName: "Write",
+      input: { file_path: "notes.md" },
+      cwd: worktree,
+      privateFolder: root,
+    });
+    if (own) throw new Error("A file in the working directory matched the private folder.");
+    const secret = matchAskRule({
+      rules: [],
+      toolName: "Write",
+      input: { file_path: join(root, "task-list.json") },
+      cwd: worktree,
+      privateFolder: root,
+    });
+    if (secret?.rule !== BUSYBOY_FILES_RULE)
+      throw new Error(`Private file matched ${String(secret?.rule)}.`);
+    const grokPath = translated.grok.find((pattern) => pattern.startsWith("Edit("));
+    if (!grokPath?.includes(root.split("\\").join("/")))
+      throw new Error(`Grok private rule is ${grokPath}.`);
   },
 );
 

@@ -18,6 +18,7 @@ import {
   SUBAGENT_EDIT_RULE,
   UNREADABLE,
 } from "@/server/runner/always-ask";
+import { matchAskRule, translateAskRules } from "@/server/runner/always-ask-translator";
 
 let folder: string;
 
@@ -627,4 +628,36 @@ test("a rule written as a bare command or with an open parenthesis should be ref
     '"./release.sh" is not a tool name. Write a command as Bash(./release.sh).',
   );
   expect(DEFAULT_ALWAYS_ASK.map(ruleError).filter(Boolean)).toEqual([]);
+});
+
+test("a harness rule list should ask for a push and not for a delete outside the task", () => {
+  const translated = translateAskRules({ rules: DEFAULT_ALWAYS_ASK });
+  expect(translated.claude).toContain("Bash(git push *)");
+  expect(translated.claude).toContain("Bash(npm publish *)");
+  expect(translated.claude).not.toContain(DELETE_OUTSIDE_RULE);
+  expect(translated.codex.filter((rule) => rule.pattern.join(" ") === "git push")).toHaveLength(1);
+  expect(
+    matchAskRule({
+      rules: DEFAULT_ALWAYS_ASK,
+      toolName: "Bash",
+      input: { command: "git push --force origin HEAD" },
+      cwd: folder,
+    })?.rule,
+  ).toBe(FORCE_PUSH_RULE);
+  expect(
+    matchAskRule({
+      rules: DEFAULT_ALWAYS_ASK,
+      toolName: "Bash",
+      input: { command: "rm -rf /tmp/busyboy-outside-task" },
+      cwd: folder,
+    }),
+  ).toBeNull();
+  expect(
+    matchAskRule({
+      rules: ["Bash(./release.sh*)"],
+      toolName: "Bash",
+      input: { command: "./release.sh --publish" },
+      cwd: folder,
+    })?.rule,
+  ).toBe("Bash(./release.sh*)");
 });
