@@ -122,6 +122,7 @@ jobs:
           done
 
       # electron-builder reads the Developer ID and the App Store Connect API key from the environment.
+      # The packaged self-check and server check run in this step, during the notarization wait.
       - name: Build, sign, and notarize the DMG and ZIP
         env:
           CSC_LINK: ${{ secrets.CSC_LINK }}
@@ -136,23 +137,6 @@ jobs:
           unset APPLE_API_KEY_P8
           APPLE_API_KEY="$key" node scripts/build-desktop.mts --release --skip-next --skip-electron --version "$VERSION"
           rm -f "$key"
-
-      # The signed app, with the hardened runtime on, must still start its server and open its window.
-      - name: Run the packaged app's self-check
-        run: |
-          app="$(node -p 'require("./release/desktop-build.json").executable')"
-          result="$RUNNER_TEMP/self-check.json"
-          status=0
-          "$app" --self-check="$result" || status=$?
-          echo "Exit code: $status"
-          cat "$result"
-          node -e '
-            const result = JSON.parse(require("node:fs").readFileSync(process.argv[1], "utf8"))
-            if (result.ok !== true) {
-              console.error("The self-check did not pass.")
-              process.exit(1)
-            }
-          ' "$result"
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
