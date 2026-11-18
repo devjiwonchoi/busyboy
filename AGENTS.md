@@ -8,13 +8,8 @@ Rules for every agent and contributor working in this repository.
 | Do not call `useEffect` from `apps/web/src/`. Compute the value during render, handle the event, reset with a `key`, or subscribe with `useSyncExternalStore`. External setup uses `useExternalSync`.         | oxlint `no-restricted-imports` on `react`'s `useEffect`, off only in `apps/web/src/hooks/use-external-sync.ts` |
 | A comment in a `.ts`, `.tsx`, or `.mts` file is a `// why:` note or a tool directive (`// @ts-expect-error`, `/// <reference`, an eslint/oxlint disable line, or a shebang).                                  | `scripts/check-comments.mts`                                                                                   |
 | Do not edit `README.md`.                                                                                                                                                                                      | `scripts/check-agent-rules.mts`                                                                                |
-| Do not add a Markdown document outside `tests/` or `.agents/skills/`, except `DOMAIN.md`. A skill and its feature map belong under `.agents/skills/`.                                                         | `scripts/check-agent-rules.mts`                                                                                |
+| Do not add a Markdown document except `DOMAIN.md`.                                                                                                                                                            | `scripts/check-agent-rules.mts`                                                                                |
 | Update `DOMAIN.md` in the same pull request when a flow or code path it names changes.                                                                                                                        | The pull request that changes that flow                                                                        |
-| A change a person can see or operate is proven with verify-busyboy before the pull request opens: follow `.agents/skills/verify-busyboy/SKILL.md`, drive the feature, and attach the screenshot.              | The `verify-busyboy` skill. Evidence goes in `.verify/evidence`, which git ignores.                            |
-| A new test file is a Playwright journey under `tests/` ending in `.spec.ts`.                                                                                                                                  | `scripts/check-agent-rules.mts`                                                                                |
-| Do not add `test.skip`, `it.skip`, `describe.skip`, `test.fixme`, `it.fixme`, `describe.fixme`, `waitForTimeout`, `sleep`, or `retries` other than `retries: 0`.                                              | `scripts/check-agent-rules.mts` fails when a test diff adds more of these than it removes                      |
-| Do not add `/opt/cursor/artifacts` in a test.                                                                                                                                                                 | `scripts/check-agent-rules.mts` fails when a test diff adds more of these paths than it removes                |
-| When a screenshot baseline under `*-snapshots/` changes, say so in the pull request description.                                                                                                              | `scripts/check-agent-rules.mts`                                                                                |
 | `pnpm typecheck` passes.                                                                                                                                                                                      | CI job Type check                                                                                              |
 | `pnpm lint` and `pnpm format:check` pass.                                                                                                                                                                     | CI job Lint                                                                                                    |
 
@@ -29,15 +24,6 @@ The UI library is shadcn on Base UI (`base-mira` style, see `apps/web/components
 - Use a component from, in order: the shadcn base components, then `@coss`, then `@spell`. Add one with `pnpm shadcn add <name>`, `pnpm shadcn add @coss/<name>`, or `pnpm shadcn add @spell/<name>`.
 - Edit an added component only when needed, and say why in the commit message.
 - Write a custom component only when none of them supports the need, and say why in the commit message.
-
-## Journeys
-
-- Replace real providers with scripted replays. Use real files and git in temporary directories.
-- Run only the tests you added or changed.
-
-## Prove UI changes with verify-busyboy
-
-A change to what a person sees or operates in BusyBoy is proven with the `verify-busyboy` skill before the pull request opens. Follow `.agents/skills/verify-busyboy/SKILL.md`: launch, run doctor, drive the feature that changed, and capture a screenshot of that path. Attach the screenshot to the pull request. Evidence is written to `.verify/evidence`, which git ignores, and cleanup leaves that folder in place.
 
 ## Start from nothing
 

@@ -3,5 +3,5 @@
   "singleQuote": false,
   "semi": true,
   "sortImports": true,
-  "ignorePatterns": ["pnpm-lock.yaml", "tests/fixtures/**"]
+  "ignorePatterns": ["pnpm-lock.yaml"]
 }
