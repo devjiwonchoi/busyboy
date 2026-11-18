@@ -11,7 +11,6 @@ import {
 } from "../web/lib/desktop-bridge";
 import { SERVER_TOKEN_COOKIE } from "../web/lib/server-token";
 import { startBackground, type Background } from "./background";
-import { isDevRun } from "./dev-run";
 import {
   createSelfCheck,
   createSelfCheckDataFolder,
@@ -25,7 +24,7 @@ import { startUpdates, type Updates } from "./updates";
 
 const selfCheckPath = selfCheckOutputPath(process.argv);
 if (selfCheckPath) isolateSelfCheckProfile();
-else if (isDevRun(process.env)) nameDevRun();
+if (!app.isPackaged) app.setName("BusyBoy (dev)");
 let server: ServerHandle | null = null;
 let mainWindow: BrowserWindow | null = null;
 let background: Background | null = null;
@@ -33,12 +32,6 @@ let updates: Updates | null = null;
 let quitting = false;
 
 const ALLOWED_PERMISSIONS = new Set(["clipboard-sanitized-write"]);
-
-function nameDevRun() {
-  const userData = app.getPath("userData");
-  app.setName("BusyBoy (dev)");
-  app.setPath("userData", userData);
-}
 
 function isAppOrigin(url: string | undefined) {
   if (!server || !url) return false;

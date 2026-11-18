@@ -6,7 +6,7 @@
   "main": "dist-electron/main.cjs",
   "scripts": {
     "build": "node scripts/build-electron.mts",
-    "dev": "pnpm build && node scripts/dev.mts",
+    "dev": "pnpm build && electron .",
     "build:desktop": "node scripts/build-desktop.mts",
     "typecheck": "tsc --noEmit"
   },
