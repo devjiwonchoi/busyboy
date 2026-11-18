@@ -1,20 +1,11 @@
 import type { ChildProcess } from "node:child_process";
-import { randomUUID } from "node:crypto";
 import { createInterface } from "node:readline";
 
 // why: Not Claude-specific: it spawns any CLI as the leader of its own process group.
-import { alwaysAskApproval, createAllowedCalls, matchAlwaysAsk } from "./always-ask";
 import {
   spawnClaudeProcess as spawnProcessGroup,
   type ClaudeProcess as GroupProcess,
 } from "./claude-process";
-import {
-  folderKey,
-  registerGate,
-  threadKey,
-  trustedHookConfig,
-  type HookDecision,
-} from "./codex-always-ask";
 import {
   CODEX_ANSWERABLE_REQUESTS,
   CODEX_MESSAGE_QUESTION_PREFIX,
@@ -22,7 +13,6 @@ import {
   codexAutoReply,
   CodexEventMapper,
   codexQuestionAnswerText,
-  codexRequestToEvent,
   type CodexRawMessage,
 } from "./codex-events";
 import type {
@@ -36,7 +26,6 @@ import type {
   SignInStatus,
 } from "./contract";
 import { agentEnvironment, findExecutable } from "./find-executable";
-import { checkUserRules, userRuleApproval, userRulesHookNeeded } from "./user-rules";
 import { codexInput, modelText, textTurn, type UserTurn } from "./user-turn";
 
 export const CODEX_PATH_ENV = "BUSYBOY_CODEX_PATH";
@@ -243,7 +232,6 @@ function spawnAppServer(
 function startCodex(options: ProviderStartOptions): ProviderSession {
   const { emit } = options;
   const mcp = codexMcpConfig(options.mcpServers);
-  const requestPrefix = `codex-${randomUUID().slice(0, 8)}-`;
   const queue: UserTurn[] = [];
   const requests = new Map<string, CodexRawMessage>();
   let connection: AppServerConnection | undefined;
@@ -256,110 +244,6 @@ function startCodex(options: ProviderStartOptions): ProviderSession {
   let failed = false;
   let ready: Promise<void> | undefined;
   const asks = new Map<string, (answer: AgentAnswer | null) => void>();
-  const allowedCalls = createAllowedCalls();
-  const unregisterGates: (() => void)[] = [];
-  const alwaysAsk =
-    !options.noTools &&
-    ((options.alwaysAsk?.length ?? 0) > 0 ||
-      Boolean(options.privateFolder) ||
-      Boolean(options.noFileEdits) ||
-      userRulesHookNeeded(options.rulesFolder));
-
-  const ask = (
-    requestId: string,
-    event: Extract<AgentEvent, { type: "approval" }>,
-    signal: AbortSignal,
-  ) =>
-    new Promise<AgentAnswer | null>((resolve) => {
-      signal.addEventListener(
-        "abort",
-        () => {
-          if (asks.delete(requestId)) {
-            resolve(null);
-            emit({ type: "answered", requestId });
-          }
-        },
-        { once: true },
-      );
-      asks.set(requestId, resolve);
-      mapper.flush();
-      emit(event);
-    });
-
-  const gate = async ({
-    toolName,
-    input,
-    cwd,
-    signal,
-  }: {
-    toolName: string;
-    input: unknown;
-    cwd?: string;
-    signal: AbortSignal;
-  }): Promise<HookDecision> => {
-    const folder = cwd || options.cwd;
-    const userRule = await checkUserRules({
-      rulesFolder: options.rulesFolder,
-      toolName,
-      input,
-      cwd: folder,
-      recordFolder: options.recordFolder,
-    });
-    if (userRule.ask) {
-      const call = { toolName, input, rule: userRule.ruleKey, cwd: folder };
-      if (!(userRule.remember && allowedCalls.has(call))) {
-        const requestId = `${requestPrefix}user-rule-${randomUUID()}`;
-        const answer = await ask(
-          requestId,
-          userRuleApproval({
-            requestId,
-            toolName,
-            input,
-            detail: userRule.detail,
-            remember: userRule.remember,
-          }),
-          signal,
-        );
-        asks.delete(requestId);
-        if (!(answer?.kind === "approval" && answer.allow)) {
-          return {
-            allow: false,
-            reason:
-              (answer?.kind === "approval" && answer.message) || "The user declined this action.",
-          };
-        }
-        if (answer.forSession && userRule.remember) allowedCalls.add(call);
-      }
-    }
-    const rule = matchAlwaysAsk({
-      rules: options.alwaysAsk ?? [],
-      toolName,
-      input,
-      folder: options.cwd,
-      recordFolder: options.recordFolder,
-      privateFolder: options.privateFolder,
-      noFileEdits: options.noFileEdits,
-    });
-    const call = { toolName, input, rule: rule ?? "", cwd: folder };
-    if (!rule || allowedCalls.has(call)) {
-      return { allow: true, reason: "" };
-    }
-    const requestId = `${requestPrefix}always-ask-${randomUUID()}`;
-    const answer = await ask(
-      requestId,
-      alwaysAskApproval({ requestId, toolName, input, rule }),
-      signal,
-    );
-    asks.delete(requestId);
-    if (answer?.kind === "approval" && answer.allow) {
-      if (answer.forSession) allowedCalls.add(call);
-      return { allow: true, reason: "" };
-    }
-    return {
-      allow: false,
-      reason: (answer?.kind === "approval" && answer.message) || "The user declined this action.",
-    };
-  };
 
   const dropAsks = () => {
     for (const [requestId, resolve] of asks.entries()) {
@@ -438,7 +322,6 @@ function startCodex(options: ProviderStartOptions): ProviderSession {
 
   const handleMessage = (message: CodexRawMessage) => {
     if (message.id !== undefined) {
-      const requestId = `${requestPrefix}${message.id}`;
       const auto = codexAutoReply(message);
       if (auto) {
         connection?.respond(message.id, auto.result);
@@ -446,26 +329,18 @@ function startCodex(options: ProviderStartOptions): ProviderSession {
         emit({ type: "error", code: "provider", message: auto.notice });
         return;
       }
-      const event = CODEX_ANSWERABLE_REQUESTS.has(message.method)
-        ? codexRequestToEvent(requestId, message)
-        : undefined;
-      if (!event) {
-        connection?.respondError(message.id, `BusyBoy does not handle ${message.method}.`);
+      // why: Codex's own auto review still asks the client. Accept it here so BusyBoy does not show an approval.
+      if (CODEX_ANSWERABLE_REQUESTS.has(message.method)) {
+        connection?.respond(
+          message.id,
+          codexAnswerToResult(message, { kind: "approval", allow: true, forSession: true }),
+        );
         return;
       }
-      requests.set(requestId, message);
-      mapper.flush();
-      emit(event);
+      connection?.respondError(message.id, `BusyBoy does not handle ${message.method}.`);
       return;
     }
-    if (message.method === "serverRequest/resolved") {
-      const requestId = `${requestPrefix}${message.params?.requestId}`;
-      if (requests.delete(requestId)) {
-        mapper.flush();
-        emit({ type: "answered", requestId });
-      }
-      return;
-    }
+    if (message.method === "serverRequest/resolved") return;
     const messageThread = message.params?.threadId;
     if (threadId && typeof messageThread === "string" && messageThread !== threadId) return;
     if (message.method === "turn/started") {
@@ -494,24 +369,11 @@ function startCodex(options: ProviderStartOptions): ProviderSession {
     if (stopRequested) void current.kill();
     ready = (async () => {
       await current.initialize();
-      // why: A subagent's folder is the project checkout, where other agents work, so it is matched by thread only.
-      if (alwaysAsk && !options.noFileEdits) {
-        unregisterGates.push(registerGate({ key: folderKey(options.cwd), gate }));
-      }
-      const hook = alwaysAsk
-        ? await trustedHookConfig({
-            request: (method, params) => current.request(method, params),
-            cwd: options.cwd,
-            executable,
-          })
-        : undefined;
       const settings = {
         cwd: options.cwd,
         ...codexThreadSettings(options.permissionMode, options.noTools),
         developerInstructions: options.instructions ?? null,
-        config: options.noTools
-          ? await noToolsConfig(current, options.cwd)
-          : { ...mcp.config, ...hook?.config },
+        config: options.noTools ? await noToolsConfig(current, options.cwd) : mcp.config,
       };
       const [method, params] = options.forkSessionId
         ? [
@@ -525,11 +387,7 @@ function startCodex(options: ProviderStartOptions): ProviderSession {
             ]
           : ["thread/start", settings];
       const response = await current.request<{ thread: { id: string } }>(method, params);
-      await hook?.verify(response.thread.id);
       threadId = response.thread.id;
-      if (alwaysAsk) {
-        unregisterGates.push(registerGate({ key: threadKey(threadId), gate }));
-      }
       emit({ type: "session", sessionId: threadId });
       startNextTurn();
     })();
@@ -555,9 +413,6 @@ function startCodex(options: ProviderStartOptions): ProviderSession {
       void current.kill();
     });
     const { code, stderr } = await current.exited;
-    for (const unregister of unregisterGates) {
-      unregister();
-    }
     dropAsks();
     mapper.flush();
     mapper.dispose();

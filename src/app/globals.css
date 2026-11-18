@@ -7,56 +7,8 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
-  color-scheme: light;
-  --radius: 0.625rem;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  /* Status colors from the @coss registry's theme (its badge's cssVars), for states the neutral palette has no token for. */
-  --success: var(--color-emerald-500);
-  --success-foreground: var(--color-emerald-700);
-  --warning: var(--color-amber-500);
-  --warning-foreground: var(--color-amber-700);
-  --info: var(--color-blue-500);
-  --info-foreground: var(--color-blue-700);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-
-  --status-waiting: oklch(0.77 0.16 70);
-  --status-running: oklch(0.62 0.19 255);
-  --status-done: oklch(0.65 0.13 175);
-  --status-idle: oklch(0.7 0 0);
-  --status-stopped: oklch(0.6 0.22 25);
-}
-
-.dark {
   color-scheme: dark;
+  --radius: 0.625rem;
   --background: oklch(0.145 0 0);
   --foreground: oklch(0.985 0 0);
   --card: oklch(0.205 0 0);
@@ -72,8 +24,12 @@
   --accent: oklch(0.269 0 0);
   --accent-foreground: oklch(0.985 0 0);
   --destructive: oklch(0.704 0.191 22.216);
+  /* Status colors from the @coss registry's theme (its badge's cssVars), for states the neutral palette has no token for. */
+  --success: var(--color-emerald-500);
   --success-foreground: var(--color-emerald-400);
+  --warning: var(--color-amber-500);
   --warning-foreground: var(--color-amber-400);
+  --info: var(--color-blue-500);
   --info-foreground: var(--color-blue-400);
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 15%);
@@ -166,14 +122,4 @@
   body {
     @apply bg-background text-foreground antialiased;
   }
-}
-
-/* The mention menu is dark even when the page theme is light. The popover token paints over utility classes on the popup itself. */
-.mention-menu {
-  background-color: #18181b !important;
-  color: #f4f4f5 !important;
-}
-.mention-menu [data-slot="composer-item"][data-highlighted] {
-  background-color: #3f3f46 !important;
-  color: #fafafa !important;
 }

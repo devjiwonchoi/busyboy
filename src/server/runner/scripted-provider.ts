@@ -5,13 +5,7 @@ import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 
 import { containsPath } from "../paths";
-import { alwaysAskApproval, createAllowedCalls, matchAlwaysAsk } from "./always-ask";
-import {
-  ClaudeEventMapper,
-  claudePermissionToEvent,
-  type ClaudePermissionRequest,
-  type ClaudeRawMessage,
-} from "./claude-events";
+import { ClaudeEventMapper, type ClaudeRawMessage } from "./claude-events";
 import type {
   AgentAnswer,
   AgentEvent,
@@ -21,7 +15,6 @@ import type {
   ProviderSession,
   ProviderStartOptions,
 } from "./contract";
-import { checkUserRules, userRuleApproval } from "./user-rules";
 import { harnessReceipt, type UserTurn } from "./user-turn";
 
 export const SCRIPTS_ENV = "BUSYBOY_PROVIDER_SCRIPTS";
@@ -32,7 +25,7 @@ export const MISSING_SESSION_PREFIX = "missing-";
 export type ScriptStep =
   | { event: AgentEvent; then?: Record<string, ScriptStep[]> }
   | { raw: unknown }
-  | { canUseTool: ClaudePermissionRequest; then?: Record<string, ScriptStep[]> }
+  | { canUseTool: { toolName: string }; then?: Record<string, ScriptStep[]> }
   | { delayMs: number }
   | { echoInstructions: true }
   | { echoAttachments: true }
@@ -148,11 +141,6 @@ function openHistory({ resumeSessionId, forkSessionId }: ProviderStartOptions) {
   return { sessionId, history };
 }
 
-function answerKey(answer: AgentAnswer) {
-  if (answer.kind === "approval") return answer.allow ? "allow" : "deny";
-  return Object.values(answer.answers)[0] ?? "";
-}
-
 class Cancelled extends Error {}
 
 type McpCall = {
@@ -226,23 +214,12 @@ function startScripted(folder: string, options: ProviderStartOptions): ProviderS
   let inTurn = false;
   let stopped = false;
   let requestCount = 0;
-  const allowedCalls = createAllowedCalls();
 
   const cancellable = <T>(promise: Promise<T>) =>
     new Promise<T>((resolve, reject) => {
       cancelTurn = () => reject(new Cancelled());
       promise.then(resolve, reject);
     });
-
-  const pause = async (event: Extract<AgentEvent, { type: "approval" | "question" }>) => {
-    const answer = new Promise<AgentAnswer>((resolve) => answers.set(event.requestId, resolve));
-    emit(event);
-    try {
-      return await cancellable(answer);
-    } finally {
-      answers.delete(event.requestId);
-    }
-  };
 
   const playSteps = async (steps: ScriptStep[]): Promise<void> => {
     for (const step of steps) {
@@ -291,67 +268,7 @@ function startScripted(folder: string, options: ProviderStartOptions): ProviderS
         continue;
       }
       if ("toolCall" in step) {
-        const { name } = step.toolCall;
-        // why: `<cwd>` and `<record-folder>` stand in for this task's paths, so a script can name them.
-        const input = fillTaskPaths(step.toolCall.input, options.cwd, options.recordFolder);
-        let key = "allow";
-        const userRule = await checkUserRules({
-          rulesFolder: options.rulesFolder,
-          toolName: name,
-          input,
-          cwd: options.cwd,
-          recordFolder: options.recordFolder,
-        });
-        if (userRule.ask) {
-          const remembered = { toolName: name, input, rule: userRule.ruleKey, cwd: options.cwd };
-          if (!(userRule.remember && allowedCalls.has(remembered))) {
-            const answer = await pause(
-              userRuleApproval({
-                requestId: `script-${++requestCount}`,
-                toolName: name,
-                input,
-                detail: userRule.detail,
-                remember: userRule.remember,
-              }),
-            );
-            if (
-              answer.kind === "approval" &&
-              answer.allow &&
-              answer.forSession &&
-              userRule.remember
-            )
-              allowedCalls.add(remembered);
-            if (!(answer.kind === "approval" && answer.allow)) {
-              const branch = step.then?.deny;
-              if (branch) return playSteps(branch);
-              continue;
-            }
-          }
-        }
-        const rule = matchAlwaysAsk({
-          rules: options.alwaysAsk ?? [],
-          toolName: name,
-          input,
-          folder: options.cwd,
-          recordFolder: options.recordFolder,
-          privateFolder: options.privateFolder,
-          noFileEdits: options.noFileEdits,
-        });
-        const call = { toolName: name, input, rule: rule ?? "", cwd: options.cwd };
-        if (rule && !allowedCalls.has(call)) {
-          const answer = await pause(
-            alwaysAskApproval({
-              requestId: `script-${++requestCount}`,
-              toolName: name,
-              input,
-              rule,
-            }),
-          );
-          if (answer.kind === "approval" && answer.allow && answer.forSession)
-            allowedCalls.add(call);
-          key = answerKey(answer);
-        }
-        const branch = step.then?.[key];
+        const branch = step.then?.allow;
         if (branch) return playSteps(branch);
         continue;
       }
@@ -385,24 +302,21 @@ function startScripted(folder: string, options: ProviderStartOptions): ProviderS
         });
         continue;
       }
-      let events: AgentEvent[];
-      let then: Record<string, ScriptStep[]> | undefined;
       if ("canUseTool" in step) {
         if (provider !== "claude")
           throw new Error("Only Claude scripts can use `canUseTool` steps.");
-        events = [claudePermissionToEvent(`script-${++requestCount}`, step.canUseTool)];
-        then = step.then;
-      } else {
-        events = [step.event];
-        then = step.then;
+        const branch = step.then?.allow;
+        if (branch) return playSteps(branch);
+        continue;
       }
-      for (const event of events) {
-        if (event.type === "approval" || event.type === "question") {
-          const key = answerKey(await pause(event));
-          const branch = then?.[key];
-          if (branch) return playSteps(branch);
-        } else emit(event);
+      const event = step.event;
+      const then = step.then;
+      if (event.type === "approval" || event.type === "question") {
+        const branch = then?.allow;
+        if (branch) return playSteps(branch);
+        continue;
       }
+      emit(event);
     }
   };
 
@@ -488,23 +402,6 @@ function startScripted(folder: string, options: ProviderStartOptions): ProviderS
       emit({ type: "stopped", finished });
     },
   };
-}
-
-function fillTaskPaths(
-  input: Record<string, unknown>,
-  cwd: string,
-  recordFolder: string | undefined,
-): Record<string, unknown> {
-  const fill = (value: string) =>
-    value.replaceAll("<cwd>", cwd).replaceAll("<record-folder>", recordFolder ?? "<record-folder>");
-  const next: Record<string, unknown> = { ...input };
-  for (const key of ["command", "cmd", "command_line", "commandLine"]) {
-    const value = next[key];
-    if (typeof value === "string") next[key] = fill(value);
-    else if (Array.isArray(value))
-      next[key] = value.map((part) => (typeof part === "string" ? fill(part) : part));
-  }
-  return next;
 }
 
 function scriptedRecordFile(recordFolder: string | undefined, relative: string): string | null {
