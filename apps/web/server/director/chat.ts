@@ -5,6 +5,7 @@ import { join } from "node:path";
 
 import type { MessageAttachment } from "@/lib/chat-attachments";
 
+import { readSettings } from "../config";
 import { pathKey } from "../paths";
 import { defaultProvider, PROVIDERS } from "../providers";
 import {
@@ -48,6 +49,7 @@ type Director = {
   entries: ChatEntry[];
   state: DirectorState;
   agentId?: string;
+  stopBeforeStart: boolean;
   unsubscribe?: () => void;
   status: DirectorStatus;
   draftItems: Map<string, string>;
@@ -82,6 +84,7 @@ function getDirector(folder: string): Director {
     entries: [],
     state: {},
     status: "idle",
+    stopBeforeStart: false,
     draftItems: new Map(),
     draftOrder: [],
     writes: Promise.resolve(),
@@ -261,9 +264,13 @@ function onAgentEvent(director: Director, event: AgentEvent) {
 }
 
 async function ensureAgent(director: Director) {
+  const running = director.agentId ? getAgent(director.agentId) : undefined;
+  if (running && running.status !== "stopped") {
+    const chosen = (await readSettings()).defaultProvider;
+    if (!chosen || chosen === running.provider) return running;
+  }
   const provider = await defaultProvider();
   if (!provider) throw new Error("No agent is signed in. Open Setup to sign in.");
-  const running = director.agentId ? getAgent(director.agentId) : undefined;
   if (running && running.status !== "stopped" && running.provider === provider) return running;
   if (director.state.provider && director.state.provider !== provider) {
     director.state.sessionId = undefined;
@@ -297,10 +304,13 @@ export async function sendToDirector(input: {
   if (director.status === "answering") {
     return { error: "Wait for the reply to finish, or stop it." };
   }
+  director.stopBeforeStart = false;
+  setStatus(director, "answering");
   let prepared: Awaited<ReturnType<typeof saveAttachments>>;
   try {
     prepared = await saveAttachments(directorFolder(director), text, input.files);
   } catch (error) {
+    setStatus(director, "idle");
     if (error instanceof AttachmentError) return { error: error.message };
     throw error;
   }
@@ -316,7 +326,12 @@ export async function sendToDirector(input: {
     if (!agent || getAgent(agent.id)?.status === "stopped") {
       throw new Error("The agent stopped before the message was sent.");
     }
-    setStatus(director, "answering");
+    if (director.stopBeforeStart) {
+      director.stopBeforeStart = false;
+      saveEntry(director, newEntry("note", "Stopped.", "info"));
+      setStatus(director, "idle");
+      return {};
+    }
     sendMessage(agent.id, prepared.turn);
     return {};
   } catch (error) {
@@ -330,8 +345,10 @@ export async function sendToDirector(input: {
 export async function stopDirector(folder: string) {
   const director = getDirector(folder);
   await director.ready;
-  if (!director.agentId || director.status !== "answering") return;
-  await interruptAgent(director.agentId);
+  if (director.status !== "answering") return;
+  const agent = director.agentId ? getAgent(director.agentId) : undefined;
+  if (agent?.status === "running") await interruptAgent(agent.id);
+  else director.stopBeforeStart = true;
 }
 
 export async function subscribeToDirector(
@@ -339,6 +356,7 @@ export async function subscribeToDirector(
   listener: (update: DirectorUpdate) => void,
 ) {
   const director = getDirector(folder);
+  void defaultProvider();
   await director.ready;
   listener({
     type: "reset",
