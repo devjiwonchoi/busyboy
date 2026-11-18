@@ -1,24 +1,16 @@
 "use client";
 
-import { useRef, type ReactNode } from "react";
+import type { ReactNode } from "react";
 
-import { useExternalSync } from "@/hooks/use-external-sync";
 import type { ChatEntry } from "@/server/director/chat";
 
 import { useDirector } from "./director-provider";
 
 export function Transcript({ empty }: { empty: ReactNode }) {
   const view = useDirector();
-  const scroller = useRef<HTMLDivElement>(null);
-
-  useExternalSync(() => {
-    const node = scroller.current;
-    if (node) node.scrollTop = node.scrollHeight;
-  }, [view.entries, view.draft]);
 
   return (
     <div
-      ref={scroller}
       role="log"
       aria-label="Transcript"
       data-connected={view.connected ? "true" : "false"}
@@ -35,9 +27,16 @@ export function Transcript({ empty }: { empty: ReactNode }) {
             <p className="whitespace-pre-wrap text-sm">{view.draft}</p>
           </article>
         ) : null}
+        {/* why: A new key remounts the marker on every update, and its ref scrolls the log to the end. */}
+        <div key={view.revision} ref={scrollLogToEnd} />
       </div>
     </div>
   );
+}
+
+function scrollLogToEnd(node: HTMLDivElement | null) {
+  const log = node?.closest<HTMLElement>("[role=log]");
+  if (log) log.scrollTop = log.scrollHeight;
 }
 
 function MessageView({ entry }: { entry: ChatEntry }) {

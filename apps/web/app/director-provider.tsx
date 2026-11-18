@@ -1,8 +1,7 @@
 "use client";
 
-import { createContext, use, useState, type ReactNode } from "react";
+import { createContext, use, useCallback, useState, type ReactNode } from "react";
 
-import { useExternalSync } from "@/hooks/use-external-sync";
 import type { ChatEntry, DirectorStatus, DirectorUpdate } from "@/server/director/chat";
 
 export type DirectorView = {
@@ -10,6 +9,7 @@ export type DirectorView = {
   status: DirectorStatus;
   draft: string;
   connected: boolean;
+  revision: number;
   error?: string;
 };
 
@@ -18,6 +18,7 @@ const initialView: DirectorView = {
   status: "idle",
   draft: "",
   connected: false,
+  revision: 0,
 };
 
 function apply(current: DirectorView, update: DirectorUpdate): DirectorView {
@@ -28,16 +29,17 @@ function apply(current: DirectorView, update: DirectorUpdate): DirectorView {
         status: update.status,
         draft: update.draft,
         connected: true,
+        revision: current.revision + 1,
       };
     case "entry": {
       const index = current.entries.findIndex(({ id }) => id === update.entry.id);
       const entries = [...current.entries];
       if (index === -1) entries.push(update.entry);
       else entries[index] = update.entry;
-      return { ...current, entries, error: undefined };
+      return { ...current, entries, error: undefined, revision: current.revision + 1 };
     }
     case "draft":
-      return { ...current, draft: update.text };
+      return { ...current, draft: update.text, revision: current.revision + 1 };
     case "status":
       return { ...current, status: update.status };
   }
@@ -51,7 +53,9 @@ const DirectorContext = createContext<DirectorContextValue | null>(null);
 export function DirectorProvider({ children }: { children: ReactNode }) {
   const [view, setView] = useState(initialView);
 
-  useExternalSync(() => {
+  // why: A ref callback's cleanup runs on unmount, so the stream lives exactly as long as the chat is mounted.
+  const connect = useCallback((node: HTMLDivElement | null) => {
+    if (!node) return;
     const source = new EventSource("/api/director/events");
     source.onmessage = (message) => {
       const update = JSON.parse(message.data) as DirectorUpdate;
@@ -63,7 +67,13 @@ export function DirectorProvider({ children }: { children: ReactNode }) {
 
   const showError = (error: string) => setView((current) => ({ ...current, error }));
 
-  return <DirectorContext value={{ ...view, showError }}>{children}</DirectorContext>;
+  return (
+    <DirectorContext value={{ ...view, showError }}>
+      <div ref={connect} className="contents">
+        {children}
+      </div>
+    </DirectorContext>
+  );
 }
 
 export function useDirector() {

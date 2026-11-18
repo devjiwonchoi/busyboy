@@ -36,7 +36,7 @@
               {
                 "name": "react",
                 "importNames": ["useEffect"],
-                "message": "Do not sync state in an effect; compute it during render, handle the event, reset with a key, or subscribe with useSyncExternalStore. External setup goes through useExternalSync from apps/web/hooks/use-external-sync.ts (https://react.dev/learn/you-might-not-need-an-effect)."
+                "message": "Do not sync state in an effect; compute it during render, handle the event, reset with a key, or subscribe with useSyncExternalStore. External setup goes in a ref callback that returns its cleanup (https://react.dev/learn/you-might-not-need-an-effect)."
               }
             ]
           }
@@ -44,7 +44,7 @@
       }
     },
     {
-      "files": ["apps/web/hooks/use-external-sync.ts", "apps/web/components/ui/**"],
+      "files": ["apps/web/components/ui/**"],
       "rules": {
         "no-restricted-imports": "off"
       }
