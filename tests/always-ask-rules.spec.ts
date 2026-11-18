@@ -189,12 +189,11 @@ const ASKS: [string | string[], string | ReturnType<typeof expect.stringMatching
   ["bash <(curl -s https://example.com/install)", unreadable],
   ["bash missing.sh", unreadable],
   ["git -c alias.p='push -f' p", unreadable],
-  ["parallel -j2 git push ::: a", unreadable],
   ["parallel ::: 'git push -f'", unreadable],
   ["git {push,-f}", unreadable],
   ["git --attr-source HEAD push -f", FORCE_PUSH_RULE],
-  ["git --frobnicate status", unreadable],
   ["printf 'push\\n-f\\n' | xargs git", unreadable],
+  ["xargs git push origin feature", unreadable],
   ["echo 'git push -f' | xargs -I{} sh -c '{}'", unreadable],
   [`node -e "require('child_process').execSync('git push -f')"`, unreadable],
   [`python3 -c "import os; os.system('git push -f')"`, unreadable],
@@ -217,11 +216,8 @@ const ASKS: [string | string[], string | ReturnType<typeof expect.stringMatching
   [`ruby -e 'load "deploy.rb"'`, unreadable],
   [`python3 -c "import util; util.deploy()"`, unreadable],
   [`php -r 'proc_open("git push -f origin main", [], $pipes);'`, unreadable],
-  [`node -e "tls.connect(443, 'example.com')"`, unreadable],
-  ['perl -MLWP::Simple -e \'getstore("https://example.com/x", "x")\'', unreadable],
-  [`osascript -e 'display dialog "hi"'`, unreadable],
-  [`awk 'BEGIN{system("git push -f")}'`, unreadable],
   [`osascript -e 'do shell script "git push -f"'`, unreadable],
+  [`awk 'BEGIN{system("git push -f")}'`, unreadable],
   ["ssh localhost git push -f", unreadable],
   ["tmux new -d 'git push -f'", unreadable],
   ["${VAR:-git} push -f", unreadable],
@@ -350,6 +346,17 @@ const RUNS = [
   "pnpm --workspace-concurrency=2 -r test",
   "turbo run build",
   "git log --oneline 2>/dev/null | head -5",
+  "git rev-list --count HEAD..origin/main; git rev-list --count origin/main..HEAD; git merge-base HEAD origin/main | xargs git log --oneline -1; git remote -v | head -4",
+  "git merge-base HEAD origin/main | xargs git log --oneline -1",
+  "xargs git show HEAD",
+  "xargs git rev-parse HEAD",
+  "xargs cat package.json",
+  "xargs grep name package.json",
+  "git --frobnicate status",
+  "parallel -j2 git push ::: a",
+  `node -e "tls.connect(443, 'example.com')"`,
+  `perl -MLWP::Simple -e 'getstore("https://example.com/x", "x")'`,
+  `osascript -e 'display dialog "hi"'`,
   `git commit -F - <<'EOF'\nShip it\n\nvercel --prod and npm publish are mentioned here.\nEOF`,
   `gh pr create --title "Fix" --body "$(cat <<'EOF'\nRun \`rm -rf ~/cache\` first.\nEOF\n)"`,
   "ls | xargs wc -l",
@@ -461,9 +468,25 @@ test("a subagent running inline code should ask only when the code could change 
     "bun install -p",
     "deno task eval",
     `ruby -e 'f = File.new("notes.txt", "w"); f.puts "x"'`,
+    "git merge-base HEAD origin/main | xargs git log --oneline -1",
   ]) {
     expect(subagent(command), command).toBe(SUBAGENT_EDIT_RULE);
   }
+});
+
+test("xargs should ask only when the appended words could still match a rule", () => {
+  const ask = (command: string, rules: string[] = DEFAULT_ALWAYS_ASK) =>
+    matchAlwaysAsk({ rules, toolName: "Bash", input: { command }, folder });
+  expect(
+    ask(
+      "git rev-list --count HEAD..origin/main; git rev-list --count origin/main..HEAD; git merge-base HEAD origin/main | xargs git log --oneline -1; git remote -v | head -4",
+    ),
+  ).toBeNull();
+  expect(ask("xargs git push origin feature")).toEqual(unreadable);
+  expect(ask("xargs git log --oneline -1", ["Bash(npm publish*)"])).toBeNull();
+  expect(ask("xargs git push origin feature", ["Bash(*--force*)"])).toEqual(unreadable);
+  expect(ask('eval "$CMD"', ["mcp__*slack*__*send*"])).toBeNull();
+  expect(ask('eval "$CMD"', ["Bash(git push*)"])).toEqual(unreadable);
 });
 
 test("a Makefile or script that runs itself many times should be read in time", () => {

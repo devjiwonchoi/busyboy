@@ -591,7 +591,10 @@ type Context = {
   bindings?: ReadonlyMap<string, Word>;
 };
 
-type Analysis = { facts: Fact[]; unknown: string | null };
+// why: hidden means the bytes that will run are not in the command. visible means the text is here but was not reduced to a fact. trailing means xargs appends words onto a command we did read.
+type Uncertainty = { kind: "hidden" | "visible" | "trailing"; text: string };
+
+type Analysis = { facts: Fact[]; unknown: string | null; uncertainties: Uncertainty[] };
 
 function commandName(file: string) {
   const name = fileBasename(file);
@@ -605,8 +608,16 @@ function namesAPath(text: string) {
   );
 }
 const literal = (text: string): Word => ({ text, dynamic: false });
-const unknownOnly = (unknown: string): Analysis => ({ facts: [], unknown });
-const NOTHING: Analysis = { facts: [], unknown: null };
+const unknownOnly = (
+  unknown: string,
+  kind: Uncertainty["kind"] = "hidden",
+  text = "",
+): Analysis => ({
+  facts: [],
+  unknown,
+  uncertainties: [{ kind, text }],
+});
+const NOTHING: Analysis = { facts: [], unknown: null, uncertainties: [] };
 
 // why: A ${…} runs no command itself, but its body can hold $(git push -f).
 function readDollar(
@@ -928,6 +939,28 @@ function unwrap(words: Word[]): { argv: Word[]; viaXargs: boolean } | null {
   }
 }
 
+// why: xargs -I replaces a token with input BusyBoy cannot see. Only options before the command belong to xargs.
+function xargsReplacement(words: Word[]): string | null {
+  let seenXargs = false;
+  for (let index = 0; index < words.length; index++) {
+    const text = words[index].text;
+    if (!seenXargs) {
+      if (commandName(text) === "xargs") seenXargs = true;
+      continue;
+    }
+    if (text === "--") return null;
+    if (text === "-I" || text === "-i" || text === "--replace") {
+      const next = words[index + 1]?.text;
+      return next && !next.startsWith("-") ? next : "{}";
+    }
+    if (text.startsWith("--replace=")) return text.slice("--replace=".length) || "{}";
+    if (/^-I.+/.test(text)) return text.slice(2);
+    if (text.startsWith("-")) continue;
+    return null;
+  }
+  return null;
+}
+
 function readScript(path: string): string | null {
   try {
     if (!statSync(path).isFile() || statSync(path).size > MAX_FILE_BYTES) {
@@ -944,6 +977,7 @@ function merge(analyses: Analysis[]): Analysis {
   return {
     facts: analyses.flatMap(({ facts }) => facts),
     unknown: analyses.find(({ unknown }) => unknown)?.unknown ?? null,
+    uncertainties: analyses.flatMap(({ uncertainties }) => uncertainties),
   };
 }
 
@@ -1607,9 +1641,12 @@ function analyzeCommands(
     recordPersistedAssignments(original, bindings, exported);
     const unwrapped = unwrap(written);
     if (!unwrapped) {
+      const hole = written.some((word) => RISKY_VARIABLE.test(word.text));
       results.push(
         unknownOnly(
           "it sets PATH or a git variable, or passes a wrapper command an option BusyBoy does not know",
+          hole ? "hidden" : "visible",
+          joined(written),
         ),
       );
       continue;
@@ -1619,14 +1656,20 @@ function analyzeCommands(
     if (argv.length === 0) {
       continue;
     }
+    const replacement = viaXargs ? xargsReplacement(written) : null;
+    if (replacement) {
+      argv = argv.map((word) => (word.text === replacement ? { ...word, dynamic: true } : word));
+    }
     if (argv[0].dynamic) {
-      if (unresolvedCommandCouldMatch(argv.slice(1))) {
+      if (viaXargs || unresolvedCommandCouldMatch(argv.slice(1))) {
         results.push(unknownOnly("it runs a command built from a variable or a substitution"));
       }
       continue;
     }
     if (argv[0].text.startsWith(":::")) {
-      results.push(unknownOnly("parallel runs commands given as its arguments"));
+      results.push(
+        unknownOnly("parallel runs commands given as its arguments", "visible", joined(written)),
+      );
       continue;
     }
 
@@ -1635,22 +1678,26 @@ function analyzeCommands(
     const pathOf = (word: Word | undefined) =>
       word && !word.dynamic && cwd !== null ? resolve(cwd, word.text) : null;
 
-    if (viaXargs && !context.scan && !XARGS_SAFE.has(name) && !DELETERS.has(name)) {
-      results.push(unknownOnly("xargs adds arguments BusyBoy cannot see"));
-    }
     const code = inlineCode(name, args);
     if (
       code === null ||
       (code !== undefined && (INLINE_RUNS.test(code) || INLINE_FUNCTION.test(code)))
     ) {
-      results.push(unknownOnly(`${name} runs inline code BusyBoy cannot tell is harmless`));
+      const hole = args.some((word) => word.dynamic);
+      results.push(
+        unknownOnly(
+          `${name} runs inline code BusyBoy cannot tell is harmless`,
+          hole ? "hidden" : "visible",
+          joined(written),
+        ),
+      );
       continue;
     }
     if (
       (name === "awk" || name === "gawk" || name === "nawk") &&
       args.some(({ text }) => /system\s*\(|\|\s*"|"\s*\|/.test(text))
     ) {
-      results.push(unknownOnly("awk runs commands from its program"));
+      results.push(unknownOnly("awk runs commands from its program", "visible", joined(written)));
       continue;
     }
     if (
@@ -1662,7 +1709,9 @@ function analyzeCommands(
           ),
         ))
     ) {
-      results.push(unknownOnly(`${name} runs a command BusyBoy does not read`));
+      results.push(
+        unknownOnly(`${name} runs a command BusyBoy does not read`, "visible", joined(written)),
+      );
       continue;
     }
     if (context.scan && context.file && (name === "include" || name === "sinclude")) {
@@ -1843,16 +1892,17 @@ function analyzeCommands(
     if (argv[0].text === "git") {
       let index = 1;
       let inlineAlias = false;
+      let definesCommand = false;
       while (index < argv.length && argv[index].text.startsWith("-")) {
         const option = argv[index].text;
         if (option === "-C") {
           gitDir = argv[index + 1] ?? null;
         }
-        inlineAlias ||=
+        definesCommand ||=
           ((option === "-c" || option === "--config-env") &&
             /^alias\./i.test(argv[index + 1]?.text ?? "")) ||
-          option.startsWith("--exec-path") ||
-          !GIT_GLOBAL_OPTIONS.test(option.split("=")[0]);
+          option.startsWith("--exec-path");
+        inlineAlias ||= definesCommand || !GIT_GLOBAL_OPTIONS.test(option.split("=")[0]);
         index +=
           /^(-C|-c|--git-dir|--work-tree|--namespace|--exec-path|--config-env|--attr-source|--super-prefix|--list-cmds)$/.test(
             option,
@@ -1891,7 +1941,14 @@ function analyzeCommands(
         );
       }
       if (inlineAlias || sub?.dynamic) {
-        results.push(unknownOnly("it runs a git command defined or named on the spot"));
+        const hole = Boolean(sub?.dynamic) || definesCommand;
+        results.push(
+          unknownOnly(
+            "it runs a git command defined or named on the spot",
+            hole ? "hidden" : "visible",
+            joined(written),
+          ),
+        );
       } else if (sub && !GIT_COMMANDS.has(sub.text) && cwd !== null) {
         const folder = gitDir && !gitDir.dynamic ? resolve(cwd, gitDir.text) : cwd;
         const alias = git({ cwd: folder, args: ["config", "--get", `alias.${sub.text}`] });
@@ -1919,9 +1976,15 @@ function analyzeCommands(
     const patches = patchTool
       ? filesInPatch([...(heredocs[commandIndex] ?? []), ...argv.slice(1).map(({ text }) => text)])
       : [];
+    if (viaXargs && !context.scan && !XARGS_SAFE.has(name) && !DELETERS.has(name)) {
+      results.push(
+        unknownOnly("xargs adds arguments BusyBoy cannot see", "trailing", joined(argv)),
+      );
+    }
     results.push({
       facts: [{ written, argv, cwd, viaXargs, gitDir, scan: context.scan, patches }],
       unknown: null,
+      uncertainties: [],
     });
   }
   return merge(results);
@@ -2022,6 +2085,7 @@ function patchAnalysis(input: unknown, folder: string): Analysis {
       { written: [], argv: [], cwd: folder, viaXargs: false, gitDir: null, scan: false, patches },
     ],
     unknown: null,
+    uncertainties: [],
   };
 }
 
@@ -2533,6 +2597,206 @@ const isShellRule = (rule: string) =>
     isBuiltIn(rule, builtIn),
   );
 
+function runsCode(name: string) {
+  const plain = interpreterOf(name);
+  return (
+    SHELLS.has(name) ||
+    plain === "node" ||
+    plain === "python" ||
+    plain === "perl" ||
+    plain === "ruby" ||
+    plain === "php" ||
+    plain === "lua" ||
+    plain === "deno" ||
+    plain === "osascript" ||
+    plain === "awk" ||
+    plain === "gawk" ||
+    plain === "nawk"
+  );
+}
+
+const EVAL_FLAGS = new Set(["-e", "-c", "-p", "-r", "--eval", "--print", "eval"]);
+
+// why: Once the program text is present, words xargs appends are data for that program, not a different program.
+function programTextIsFixed(name: string, args: Word[]) {
+  if (!runsCode(name)) return false;
+  let expectsText = false;
+  for (const word of args) {
+    if (word.dynamic) return false;
+    if (expectsText) return true;
+    if (word.text.startsWith("--eval=")) return true;
+    if (EVAL_FLAGS.has(word.text)) {
+      expectsText = true;
+      continue;
+    }
+    if (!word.text.startsWith("-")) return true;
+  }
+  return false;
+}
+
+function rulePattern(rule: string) {
+  const [, , pattern] = /^([^()]+?)(?:\((.*)\))?$/.exec(rule) ?? [];
+  return pattern;
+}
+
+function commandCandidates(text: string) {
+  const words = text.split(/\s+/).filter(Boolean);
+  const suffixes = words.map((_, index) => words.slice(index).join(" "));
+  const quoted = [...text.matchAll(/'([^']*)'|"([^"]*)"/g)].map(
+    (match) => match[1] || match[2] || "",
+  );
+  return [...suffixes, ...quoted];
+}
+
+function couldForcePush(text: string) {
+  const lower = text.toLowerCase();
+  if (!/\bpush\b/.test(lower) && !lower.includes("git/refs")) return false;
+  return (
+    /--force-with-lease|--force-if-includes|--force\b|--mirror\b|--delete\b/.test(lower) ||
+    /(^|[\s;'"`])-[a-z]*[fd][a-z]*\b/.test(lower) ||
+    /(^|[\s;'"`])\+[^\s'"`]+/.test(lower) ||
+    lower.includes("git/refs") ||
+    /\{[^}]*push/.test(lower)
+  );
+}
+
+function couldPushDefault(text: string) {
+  if (!/\bgit\b/i.test(text) || !/\bpush\b/i.test(text)) return false;
+  if (/\b(main|master)\b/.test(text) || /--all\b|--branches\b|--mirror\b/.test(text)) return true;
+  return /\bgit\s+push\b(?!\s+\S)/.test(text);
+}
+
+function couldDeploy(text: string) {
+  return (
+    /\bdeploy\b/i.test(text) ||
+    (/\b(npm|pnpm|yarn|bun|cargo|gem|twine|wrangler|vercel|vc|netlify|fly|flyctl|firebase|terraform|tofu|pulumi|kubectl|helm|serverless|sls|railway|heroku|aws|docker|gh)\b/i.test(
+      text,
+    ) &&
+      /\b(publish|deploy|apply|destroy|upload|upgrade|uninstall|delete-stack|workflow|release)\b/i.test(
+        text,
+      ))
+  );
+}
+
+function couldDelete(text: string) {
+  return (
+    /\b(rm|rmdir|unlink|trash-put|trash|shred|srm|rimraf)\b/.test(text) ||
+    /rmtree|file\.delete|os\.remove|fs\.rm|fs\.unlink|unlinksync|rmsync/i.test(text) ||
+    /\bfind\b[\s\S]*-delete/.test(text) ||
+    /\brsync\b[\s\S]*--delete/.test(text) ||
+    /\bgit\s+clean\b/.test(text) ||
+    /\bgit\s+worktree\s+remove\b/.test(text)
+  );
+}
+
+function visibleCouldMatch(rule: string, text: string) {
+  if (!text) return false;
+  if (isBuiltIn(rule, FORCE_PUSH_RULE)) return couldForcePush(text);
+  if (isBuiltIn(rule, DEFAULT_BRANCH_RULE)) return couldPushDefault(text);
+  if (isBuiltIn(rule, DEPLOY_RULE)) return couldDeploy(text);
+  if (isBuiltIn(rule, DELETE_OUTSIDE_RULE)) return couldDelete(text);
+  if (isBuiltIn(rule, CONNECTOR_RULE)) return false;
+  const pattern = rulePattern(rule);
+  if (pattern === undefined) return true;
+  return commandCandidates(text).some((candidate) =>
+    globMatches({ glob: pattern, text: candidate }),
+  );
+}
+
+// why: Appended words sit after the command, so they can finish a pattern or supply a missing verb, not change the start of a fixed one.
+function globAllowsSuffix(pattern: string, text: string) {
+  if (globMatches({ glob: pattern, text })) return true;
+  const star = pattern.indexOf("*");
+  if (star === -1) return false;
+  const head = pattern.slice(0, star).toLowerCase();
+  const body = text.toLowerCase();
+  if (head.length === 0) return true;
+  if (body.startsWith(head)) return true;
+  return head.startsWith(`${body} `);
+}
+
+function trailingCouldForcePush(argv: Word[]) {
+  const name = argv[0]?.text ?? "";
+  if (runsCode(name) && !programTextIsFixed(name, argv.slice(1))) return true;
+  if (name === "gh") {
+    const sub = argv[1];
+    return !sub || sub.dynamic || sub.text === "api";
+  }
+  if (name !== "git" && name !== "hub") return false;
+  const sub = argv[1];
+  return !sub || sub.dynamic || sub.text === "push" || sub.text === "send-pack";
+}
+
+function trailingCouldPushDefault(argv: Word[]) {
+  const name = argv[0]?.text;
+  if (name !== "git" && name !== "hub") return false;
+  const sub = argv[1];
+  return !sub || sub.dynamic || sub.text === "push";
+}
+
+function trailingCouldDeploy(argv: Word[]) {
+  const name = argv[0]?.text ?? "";
+  if (runsCode(name) && !programTextIsFixed(name, argv.slice(1))) return true;
+  if (!PUBLISHERS.has(name)) return false;
+  const sub = argv[1];
+  if (!sub || sub.dynamic) return true;
+  const third = argv[2];
+  if (third && !third.dynamic) return false;
+  return (
+    (name === "gh" && (sub.text === "release" || sub.text === "workflow")) ||
+    (name === "wrangler" && (sub.text === "pages" || sub.text === "versions")) ||
+    (name === "yarn" && sub.text === "npm") ||
+    (name === "aws" && (sub.text === "s3" || sub.text === "cloudformation"))
+  );
+}
+
+function trailingCouldDelete(argv: Word[]) {
+  const name = argv[0]?.text ?? "";
+  if (DELETERS.has(name) || name === "find" || name === "rsync" || name === "mv") return true;
+  if (runsCode(name) && !programTextIsFixed(name, argv.slice(1))) return true;
+  if (name !== "git" && name !== "hub") return false;
+  const sub = argv[1];
+  if (!sub || sub.dynamic) return true;
+  if (sub.text !== "worktree") return false;
+  const action = argv[2];
+  return !action || action.dynamic || action.text === "remove";
+}
+
+function trailingCouldHide(fact: Fact, rules: string[]) {
+  if (!fact.viaXargs || fact.scan || fact.argv.length === 0) return false;
+  const text = joined(fact.argv);
+  return rules.some((rule) => {
+    if (isBuiltIn(rule, FORCE_PUSH_RULE)) return trailingCouldForcePush(fact.argv);
+    if (isBuiltIn(rule, DEFAULT_BRANCH_RULE)) return trailingCouldPushDefault(fact.argv);
+    if (isBuiltIn(rule, DEPLOY_RULE)) return trailingCouldDeploy(fact.argv);
+    if (isBuiltIn(rule, DELETE_OUTSIDE_RULE)) return trailingCouldDelete(fact.argv);
+    if (isBuiltIn(rule, CONNECTOR_RULE)) return false;
+    const pattern = rulePattern(rule);
+    if (pattern === undefined) return true;
+    return globAllowsSuffix(pattern, text);
+  });
+}
+
+// why: Auto mode leaves a command the harness can judge. BusyBoy asks only when the unseen part could still be one of these rules.
+function unreadableHidesRule({
+  rules,
+  facts,
+  uncertainties,
+}: {
+  rules: string[];
+  facts: Fact[];
+  uncertainties: Uncertainty[];
+}) {
+  const shellRules = rules.filter(isShellRule);
+  if (shellRules.length === 0 || uncertainties.length === 0) return false;
+  return uncertainties.some((item) => {
+    if (item.kind === "hidden") return true;
+    if (item.kind === "visible")
+      return shellRules.some((rule) => visibleCouldMatch(rule, item.text));
+    return facts.some((fact) => trailingCouldHide(fact, shellRules));
+  });
+}
+
 export function matchAlwaysAsk({
   rules,
   toolName,
@@ -2555,13 +2819,13 @@ export function matchAlwaysAsk({
     .filter((rule) => rule && !rule.startsWith("#") && !ruleError(rule));
   const script = shellCommand(toolName, input);
   run = { steps: 0, files: new Map(), git: new Map() };
-  // why: A shell tool whose input has no command BusyBoy can read is treated as unreadable, not as a
-  // why: tool call that runs nothing: matching fails closed.
+  // why: A shell tool whose input has no command BusyBoy can read is hidden, so a shell rule still asks.
   const unreadableShell: Analysis = {
     facts: [],
     unknown: "the shell tool call has no command BusyBoy can read",
+    uncertainties: [{ kind: "hidden", text: "" }],
   };
-  const { facts, unknown } = merge([
+  const { facts, unknown, uncertainties } = merge([
     script !== null
       ? analyze(script, { cwd: folder, depth: 0, scan: false })
       : isShellTool(toolName)
@@ -2617,7 +2881,7 @@ export function matchAlwaysAsk({
       return rule;
     }
   }
-  if (unknown && (privateFolder || valid.some(isShellRule))) {
+  if (unknown && unreadableHidesRule({ rules: valid, facts, uncertainties })) {
     return `${UNREADABLE}: ${unknown}`;
   }
   return null;
