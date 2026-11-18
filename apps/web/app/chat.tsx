@@ -1,8 +1,11 @@
 "use client";
 
-import { createContext, use, useCallback, useState, type ReactNode } from "react";
+import { useCallback, useState } from "react";
 
 import type { ChatEntry, DirectorStatus, DirectorUpdate } from "@/server/director/chat";
+
+import { Composer } from "./composer";
+import { Transcript } from "./transcript";
 
 export type DirectorView = {
   entries: ChatEntry[];
@@ -45,11 +48,7 @@ function apply(current: DirectorView, update: DirectorUpdate): DirectorView {
   }
 }
 
-type DirectorContextValue = DirectorView & { showError: (error: string) => void };
-
-const DirectorContext = createContext<DirectorContextValue | null>(null);
-
-export function DirectorProvider({ children }: { children: ReactNode }) {
+export function Chat() {
   const [view, setView] = useState(initialView);
 
   const openStreamWhileMounted = useCallback((node: HTMLDivElement | null) => {
@@ -63,19 +62,14 @@ export function DirectorProvider({ children }: { children: ReactNode }) {
     return () => source.close();
   }, []);
 
-  const showError = (error: string) => setView((current) => ({ ...current, error }));
-
   return (
-    <DirectorContext value={{ ...view, showError }}>
-      <div ref={openStreamWhileMounted} className="contents">
-        {children}
-      </div>
-    </DirectorContext>
+    <div ref={openStreamWhileMounted} className="contents">
+      <Transcript view={view} />
+      <Composer
+        answering={view.status === "answering"}
+        error={view.error}
+        onError={(error) => setView((current) => ({ ...current, error }))}
+      />
+    </div>
   );
-}
-
-export function useDirector() {
-  const value = use(DirectorContext);
-  if (!value) throw new Error("useDirector must be used inside DirectorProvider.");
-  return value;
 }
