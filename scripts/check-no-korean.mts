@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { gitText } from "./git-text.mts";
 
 // Hangul syllables, Jamo, and compatibility Jamo.
-const KOREAN = /[ᄀ-ᇿ㄰-㆏가-힣]/;
+const KOREAN = /[\u1100-\u11ff\u3130-\u318f\uac00-\ud7a3]/;
 
 const problems: string[] = [];
 
