@@ -1,7 +1,3 @@
-## Write everything in English
-
-All text committed to this repository is English: code, identifiers, UI copy, error and log messages, test names, commit messages, and pull request descriptions.
-
 <!-- BEGIN:nextjs-agent-rules -->
 
 ## This is NOT the Next.js you know
