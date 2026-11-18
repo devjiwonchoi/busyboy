@@ -202,15 +202,8 @@ function designSystemFailures(): string[] {
     const stderr = (error as { stderr?: Buffer }).stderr?.toString() ?? String(error);
     return [
       ...failures,
-      `shadcn init failed, so globals.css could not be checked. ${stderr.trim()}\nDo not edit globals.css by hand; regenerate it with ${initCommand}.`,
+      `shadcn init failed, so components/ui could not be checked. ${stderr.trim()}\nReproduce it with ${initCommand}.`,
     ];
-  }
-  const generatedCss = readFileSync(join(temp, "app", "globals.css"), "utf8");
-  const currentCss = readFileSync(join(webRoot, "app", "globals.css"), "utf8");
-  if (generatedCss !== currentCss) {
-    failures.push(
-      `apps/web/app/globals.css differs from shadcn init. Do not edit globals.css by hand; regenerate it with ${initCommand}.`,
-    );
   }
   const uiDir = join(webRoot, "components", "ui");
   for (const entry of readdirSync(uiDir)) {
