@@ -13,7 +13,8 @@
     "typecheck": "pnpm --filter @busyboy/web --filter @busyboy/native typecheck",
     "lint": "oxlint && knip",
     "format": "oxfmt",
-    "format:check": "oxfmt --check"
+    "format:check": "oxfmt --check",
+    "test:e2e": "pnpm --filter @busyboy/web test:e2e"
   },
   "devDependencies": {
     "knip": "6.45.1",
