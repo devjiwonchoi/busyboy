@@ -1,28 +1,33 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, statSync } from "node:fs";
 
 import { gitText } from "./git-text.mts";
 
-// Hangul syllables, Jamo, and compatibility Jamo.
-const KOREAN = /[\u1100-\u11ff\u3130-\u318f\uac00-\ud7a3]/;
+const HANGUL = /\p{Script=Hangul}/u;
 
 const problems: string[] = [];
 
 function scan(label: string, text: string): void {
   text.split("\n").forEach((line, index) => {
-    if (KOREAN.test(line)) problems.push(`${label}:${index + 1}: ${line.trim()}`);
+    if (HANGUL.test(line)) problems.push(`${label}:${index + 1}: ${line.trim()}`);
   });
 }
 
-// Every tracked file, not only what oxlint reads, so Markdown, JSON, YAML, and CSS are covered too.
-for (const file of gitText(["ls-files", "-z"]).split("\0").filter(Boolean)) {
-  let buffer: Buffer;
-  try {
-    buffer = readFileSync(file);
-  } catch {
-    // A file deleted in the working tree but still in the index has nothing to check.
-    continue;
-  }
-  if (buffer.includes(0)) continue;
+function trackedFiles(): string[] {
+  return gitText(["ls-files", "-z"]).split("\0").filter(Boolean);
+}
+
+function isRegularFile(path: string): boolean {
+  return statSync(path, { throwIfNoEntry: false })?.isFile() ?? false;
+}
+
+function isBinary(buffer: Buffer): boolean {
+  return buffer.includes(0);
+}
+
+for (const file of trackedFiles()) {
+  if (!isRegularFile(file)) continue;
+  const buffer = readFileSync(file);
+  if (isBinary(buffer)) continue;
   scan(file, buffer.toString("utf8"));
 }
 
