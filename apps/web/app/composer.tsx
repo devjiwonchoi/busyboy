@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useFormStatus } from "react-dom";
 
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -12,42 +12,34 @@ type ComposerProps = {
 };
 
 export function Composer({ answering, error, onError }: ComposerProps) {
-  const [text, setText] = useState("");
-
-  const send = () => {
-    const message = text;
-    if (!message.trim() || answering) return;
-    setText("");
-    void sendToDirectorAction(message).then((result) => {
-      if (result.error) onError(result.error);
-    });
+  // React resets the uncontrolled textarea once this action finishes.
+  const send = async (formData: FormData) => {
+    const message = formData.get("text");
+    if (typeof message !== "string" || !message.trim() || answering) return;
+    const result = await sendToDirectorAction(message);
+    if (result.error) onError(result.error);
   };
 
   return (
     <>
       <form
+        action={send}
         className="mx-auto flex w-full max-w-3xl shrink-0 items-end gap-2 border-t px-4 py-3"
-        onSubmit={(event) => {
-          event.preventDefault();
-          send();
-        }}
       >
         <Textarea
+          name="text"
           aria-label="Message"
-          value={text}
           placeholder="Message"
           rows={2}
-          onChange={(event) => setText(event.target.value)}
+          required
           onKeyDown={(event) => {
-            if (event.key === "Enter" && !event.shiftKey) {
+            if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
               event.preventDefault();
-              send();
+              event.currentTarget.form?.requestSubmit();
             }
           }}
         />
-        <Button type="submit" disabled={answering || text.trim().length === 0}>
-          Send
-        </Button>
+        <SendButton answering={answering} />
         <Button
           type="button"
           variant="outline"
@@ -63,5 +55,14 @@ export function Composer({ answering, error, onError }: ComposerProps) {
         </p>
       ) : null}
     </>
+  );
+}
+
+function SendButton({ answering }: { answering: boolean }) {
+  const { pending } = useFormStatus();
+  return (
+    <Button type="submit" disabled={answering || pending}>
+      Send
+    </Button>
   );
 }
