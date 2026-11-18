@@ -84,7 +84,11 @@ jobs:
           OIDC_TOKEN: ${{ steps.github-oidc.outputs.token }}
         run: |
           set -euo pipefail
-          response=$(curl -sS https://api.anthropic.com/v1/oauth/token \
+          body=$(mktemp)
+          headers=$(mktemp)
+          trap 'rm -f "$body" "$headers"' EXIT
+          http_code=$(curl -sS -D "$headers" -o "$body" -w '%{http_code}' \
+            https://api.anthropic.com/v1/oauth/token \
             -H 'content-type: application/json' \
             --data "$(jq -n \
               --arg assertion "$OIDC_TOKEN" \
@@ -96,9 +100,22 @@ jobs:
                 service_account_id: "svac_01EvP5ozG183YaQK1KjwJc3a",
                 workspace_id: "wrkspc_01CqHcXQKDFQUn2aCrqVF6dt"
               }')")
-          access_token=$(printf '%s' "$response" | jq -r '.access_token // empty')
+          access_token=$(jq -r '.access_token // empty' "$body")
           if [ -z "$access_token" ]; then
-            echo "Anthropic workload identity exchange returned no access token" >&2
+            node -e 'const p=(process.env.OIDC_TOKEN||"").split(".")[1]||""; const j=JSON.parse(Buffer.from(p,"base64url").toString()); console.error(JSON.stringify({iss:j.iss,aud:j.aud,sub:j.sub,repository:j.repository,event_name:j.event_name,ref:j.ref,workflow:j.workflow}))' >&2 || true
+            detail=$(jq -r '
+              if (.error | type) == "string" then
+                [.error, .error_description] | map(select(type == "string" and length > 0)) | join(": ")
+              elif (.error | type) == "object" then
+                [.error.type, .error.message] | map(select(type == "string" and length > 0)) | join(": ")
+              elif (.type | type) == "string" then
+                [.type, (.error.message // .message // empty)] | map(select(type == "string" and length > 0)) | join(": ")
+              else
+                "unrecognized response"
+              end
+            ' "$body" 2>/dev/null || printf '%s' 'unreadable response')
+            request_id=$(awk 'tolower($1) == "request-id:" { print $2 }' "$headers" | tr -d '\r')
+            echo "Anthropic workload identity exchange returned no access token (HTTP ${http_code}: ${detail:-unrecognized response}${request_id:+, request-id ${request_id}})" >&2
             exit 1
           fi
           echo "::add-mask::$access_token"
