@@ -26,7 +26,7 @@ const EMPTY_SETTINGS: Settings = {
   defaultProvider: null,
 };
 
-export function resolveDataFolder() {
+function resolveDataFolder() {
   return process.env[HOME_ENV] || join(homedir(), ".busyboy");
 }
 
@@ -110,7 +110,7 @@ async function moveAsideIfCorrupt(folder: string) {
   await rename(file, aside);
 }
 
-export async function readSettingsAt(folder: string): Promise<Settings> {
+async function readSettingsAt(folder: string): Promise<Settings> {
   const text = await readSettingsFile(join(folder, SETTINGS_FILE));
   const settings = text === undefined ? undefined : parseSettings(text);
   if (settings) return settings;
