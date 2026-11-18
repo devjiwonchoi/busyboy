@@ -11,9 +11,10 @@ export async function requireTrustedRequest() {
   const origin = requestHeaders.get("origin");
   const token =
     requestCookies.get(SERVER_TOKEN_COOKIE)?.value ?? requestHeaders.get(SERVER_TOKEN_HEADER);
-  if (!isLoopbackHost(host) || (origin && origin !== `http://${host}`) || !isLaunchToken(token)) {
-    forbidden();
+  if (isLoopbackHost(host) && (!origin || origin === `http://${host}`) && isLaunchToken(token)) {
+    return;
   }
+  forbidden();
 }
 
 function isLoopbackHost(host: string | null) {
