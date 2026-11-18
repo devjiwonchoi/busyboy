@@ -1,0 +1,3 @@
+[mcp_servers.e2e]
+args = ["--filter", "@busyboy/web", "exec", "e2e", "mcp"]
+command = "pnpm"
