@@ -2,9 +2,7 @@
 
 import { refresh } from "next/cache";
 
-import type { AlwaysAskResult } from "@/components/setup/always-ask-form";
 import { isThemeName } from "@/lib/theme";
-import { alwaysAskError, saveAlwaysAsk } from "@/server/always-ask-list";
 import { chooseCompanion, findCompanion } from "@/server/companions";
 import { updateSettings } from "@/server/config";
 import { addConnector } from "@/server/connectors";
@@ -49,17 +47,4 @@ export async function addConnectorAction(
   }
   refresh();
   return { added: true };
-}
-
-export async function saveAlwaysAskAction(
-  _previous: AlwaysAskResult,
-  form: FormData,
-): Promise<AlwaysAskResult> {
-  const text = form.get("rules");
-  const error = alwaysAskError(text);
-  if (error) {
-    return { error };
-  }
-  await saveAlwaysAsk(text as string);
-  return { saved: true };
 }

@@ -35,7 +35,7 @@ The desktop window:
 pnpm drive launch --surface electron
 ```
 
-This needs `dist-electron/main.cjs`, `dist-electron/preload.cjs`, and `.next/standalone/server.js`. Without them the command exits and names the missing files. `pnpm build` then `pnpm build:electron` produces them. Playwright launches Electron and attaches over the Chrome DevTools Protocol. The data directory is empty: no settings file and no provider-script seed. Ready means the heading `Pick a Director` is visible. The desktop server sets `BUSYBOY_TOKEN`, and BusyBoy ignores `BUSYBOY_PROVIDER_SCRIPTS` when that token is set, so the chat journeys below refuse this surface.
+This needs `dist-electron/main.cjs`, `dist-electron/preload.cjs`, and `.next/standalone/server.js`. Without them the command exits and names the missing files. `pnpm build` then `pnpm build:electron` produces them. Playwright launches Electron and attaches over the Chrome DevTools Protocol. The data directory is empty: no settings file and no provider-script seed. Ready means the heading `Sign in to an agent` is visible. The desktop server sets `BUSYBOY_TOKEN`, and BusyBoy ignores `BUSYBOY_PROVIDER_SCRIPTS` when that token is set, so the chat journeys below refuse this surface.
 
 ## Doctor
 
@@ -43,7 +43,7 @@ This needs `dist-electron/main.cjs`, `dist-electron/preload.cjs`, and `.next/sta
 pnpm drive doctor
 ```
 
-Doctor is read-only. It checks that the keeper is the process this run started, that the server process has this run's `BUSYBOY_HOME`, that the listening port is owned by a process in that tree, and that the page still identifies BusyBoy. On the Next surface it requires `BUSYBOY_PROVIDER_SCRIPTS` on the server, no `BUSYBOY_TOKEN`, and `data-connected="true"` on `Transcript`. On the Electron surface it requires the launch token and the heading `Pick a Director`. It also reports whether the desktop bundle is present and whether `tests/fake-gh/gh` is executable. Any line that starts with `problem:` means the instance is not worth driving. Exit code 0 means it is. Doctor does not click, type, or send.
+Doctor is read-only. It checks that the keeper is the process this run started, that the server process has this run's `BUSYBOY_HOME`, that the listening port is owned by a process in that tree, and that the page still identifies BusyBoy. On the Next surface it requires `BUSYBOY_PROVIDER_SCRIPTS` on the server, no `BUSYBOY_TOKEN`, and `data-connected="true"` on `Transcript`. On the Electron surface it requires the launch token and the heading `Sign in to an agent`. It also reports whether the desktop bundle is present and whether `tests/fake-gh/gh` is executable. Any line that starts with `problem:` means the instance is not worth driving. Exit code 0 means it is. Doctor does not click, type, or send.
 
 ## Drive
 
@@ -94,6 +94,7 @@ pnpm drive journey approve-plan
 pnpm drive journey progress-and-done
 pnpm drive journey pr-card
 pnpm drive journey settings
+pnpm drive journey first-run
 ```
 
 Smaller actions, when a feature file calls for them:

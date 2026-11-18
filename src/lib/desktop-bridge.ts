@@ -8,6 +8,8 @@ export const UPDATE_READY_CHANNEL = "busyboy:update-ready";
 
 export const UPDATE_STATE_CHANNEL = "busyboy:update-state";
 
+export const APP_VERSION_CHANNEL = "busyboy:app-version";
+
 export const INSTALL_UPDATE_CHANNEL = "busyboy:install-update";
 
 export const OPEN_IN_EDITOR_CHANNEL = "busyboy:open-in-editor";
@@ -24,6 +26,8 @@ export type DesktopBridge = {
   onFocus(listener: (target: string) => void): () => void;
   readyUpdate(): Promise<string | null>;
   onUpdateReady(listener: (version: string) => void): () => void;
+  // why: release.yml builds the Next bundle before the release version exists. Electron stamps it later.
+  appVersion(): Promise<string>;
   installUpdate(): Promise<void>;
   openInEditor(path: string): Promise<void>;
   revealInFolder(path: string): Promise<void>;

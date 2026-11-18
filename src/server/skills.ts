@@ -1,4 +1,5 @@
-import { readdir, readFile } from "node:fs/promises";
+import type { Dirent } from "node:fs";
+import { readdir, readFile, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
@@ -64,11 +65,22 @@ function frontmatter(text: string) {
   return result;
 }
 
+async function isSkillDirectory(root: string, name: string, kind: Dirent) {
+  if (name.startsWith(".")) return false;
+  if (kind.isDirectory()) return true;
+  // why: A linked checkout is a symlink, and Dirent.isDirectory does not follow it.
+  if (!kind.isSymbolicLink()) return false;
+  return stat(join(root, name)).then(
+    (info) => info.isDirectory(),
+    () => false,
+  );
+}
+
 async function skillsIn(root: string) {
   const entries = await readdir(root, { withFileTypes: true }).catch(() => []);
   const found: { name: string; description: string }[] = [];
   for (const entry of entries) {
-    if (!entry.isDirectory() || entry.name.startsWith(".")) continue;
+    if (!(await isSkillDirectory(root, entry.name, entry))) continue;
     const text = await readFile(join(root, entry.name, SKILL_FILE), "utf8").catch(() => "");
     if (!text) continue;
     const meta = frontmatter(text);

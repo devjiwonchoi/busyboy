@@ -92,7 +92,8 @@ export const MCP_TOOLS: McpTool[] = [
     inputSchema: { type: "object", properties: {}, required: [] },
     async run() {
       const projects = await listProjects();
-      if (projects.length === 0) return "There are no projects yet. The user adds them in Setup.";
+      if (projects.length === 0)
+        return "There are no projects yet. Ask the user for a git repository folder. They add it from the Director with New manager.";
       return JSON.stringify(projects.map(({ name, path }) => ({ name, path })));
     },
   },

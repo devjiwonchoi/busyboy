@@ -2,9 +2,33 @@ import { execFile, spawn, type ChildProcess } from "node:child_process";
 
 import type { SpawnedProcess, SpawnOptions } from "@anthropic-ai/claude-agent-sdk";
 
+import { onServerShutdown } from "../shutdown";
+
 /*why: * Seconds the group has to exit after SIGTERM before it is killed. */
 const GRACE_SECONDS = 5;
 const STDERR_TAIL = 2000;
+
+// why: A sign-in check is not an agent, so it is not in the agent registry. Shutdown still has to end it.
+type TrackedProcess = { stop: () => Promise<void> };
+type LiveProcesses = { processes: Set<TrackedProcess>; hooked: boolean };
+const LIVE_KEY = Symbol.for("busyboy.claude-processes");
+const liveProcesses: LiveProcesses = ((
+  globalThis as typeof globalThis & { [LIVE_KEY]?: LiveProcesses }
+)[LIVE_KEY] ??= { processes: new Set(), hooked: false });
+
+function stopTrackedProcesses() {
+  return Promise.allSettled([...liveProcesses.processes].map((process) => process.stop())).then(
+    () => undefined,
+  );
+}
+
+function hookProcessShutdown() {
+  if (liveProcesses.hooked) return;
+  liveProcesses.hooked = true;
+  onServerShutdown(stopTrackedProcesses);
+  process.once("SIGTERM", () => void stopTrackedProcesses());
+  process.once("SIGINT", () => void stopTrackedProcesses());
+}
 
 // why: When the server exits, even by a crash, the pipe closes and the watcher ends the CLI's process group.
 const WATCH_SCRIPT = [
@@ -69,7 +93,11 @@ export function spawnClaudeProcess(options: SpawnOptions): ClaudeProcess {
       stdio: ["pipe", "pipe", "pipe"],
     });
     readStderr(child);
-    return Object.assign(child, { stop: async () => void child.kill(), stderrTail });
+    const tracked = { stop: async () => void child.kill() };
+    hookProcessShutdown();
+    liveProcesses.processes.add(tracked);
+    child.once("exit", () => liveProcesses.processes.delete(tracked));
+    return Object.assign(child, { stop: tracked.stop, stderrTail });
   }
 
   const child: ChildProcess = spawn(
@@ -86,11 +114,9 @@ export function spawnClaudeProcess(options: SpawnOptions): ClaudeProcess {
   readStderr(child);
   let exited = false;
   let stopping: Promise<void> | undefined;
-  child.once("exit", () => {
-    exited = true;
-    if (child.pid) signal(-child.pid, "SIGKILL");
-  });
-  const stop = () => (stopping ??= sweep());
+  const tracked = {
+    stop: () => (stopping ??= sweep()),
+  };
   const sweep = async () => {
     if (exited || !child.pid) return;
     const pid = child.pid;
@@ -102,5 +128,12 @@ export function spawnClaudeProcess(options: SpawnOptions): ClaudeProcess {
       if (!exited) signal(-pid, "SIGKILL");
     }, GRACE_SECONDS * 1000).unref();
   };
-  return Object.assign(child as ChildProcess & SpawnedProcess, { stop, stderrTail });
+  hookProcessShutdown();
+  liveProcesses.processes.add(tracked);
+  child.once("exit", () => {
+    exited = true;
+    liveProcesses.processes.delete(tracked);
+    if (child.pid) signal(-child.pid, "SIGKILL");
+  });
+  return Object.assign(child as ChildProcess & SpawnedProcess, { stop: tracked.stop, stderrTail });
 }

@@ -472,6 +472,7 @@ async function claudeSignInStatus(): Promise<SignInStatus> {
   if (!executable)
     return { state: "not-installed", detail: "The `claude` command was not found on PATH." };
   const abort = new AbortController();
+  let cli: ClaudeProcess | undefined;
   const idle: AsyncIterable<SDKUserMessage> = {
     [Symbol.asyncIterator]: () => ({
       next: () =>
@@ -490,6 +491,7 @@ async function claudeSignInStatus(): Promise<SignInStatus> {
         pathToClaudeCodeExecutable: executable,
         env: agentEnvironment(),
         abortController: abort,
+        spawnClaudeCodeProcess: (spawnOptions) => (cli = spawnClaudeProcess(spawnOptions)),
       },
     });
     const { account, hook_on_failure_supported, claude_code_version } =
@@ -516,6 +518,7 @@ async function claudeSignInStatus(): Promise<SignInStatus> {
   } finally {
     clearTimeout(timeout);
     abort.abort();
+    await cli?.stop();
   }
 }
 
