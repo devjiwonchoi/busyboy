@@ -11,6 +11,7 @@ import {
 } from "../web/lib/desktop-bridge";
 import { SERVER_TOKEN_COOKIE } from "../web/lib/server-token";
 import { startBackground, type Background } from "./background";
+import { isDevRun } from "./dev-run";
 import {
   createSelfCheck,
   createSelfCheckDataFolder,
@@ -24,7 +25,7 @@ import { startUpdates, type Updates } from "./updates";
 
 const selfCheckPath = selfCheckOutputPath(process.argv);
 if (selfCheckPath) isolateSelfCheckProfile();
-else if (!app.isPackaged) nameDevRun();
+else if (isDevRun(process.env)) nameDevRun();
 let server: ServerHandle | null = null;
 let mainWindow: BrowserWindow | null = null;
 let background: Background | null = null;
