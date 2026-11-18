@@ -20,7 +20,7 @@ import {
   type GrokPermissionOption,
 } from "./grok-events";
 
-export const GROK_PATH_ENV = "BUSYBOY_GROK_PATH";
+const GROK_PATH_ENV = "BUSYBOY_GROK_PATH";
 const SIGN_IN_TIMEOUT_MS = 20_000;
 const CLOSE_WAIT_MS = 500;
 const CLIENT_INFO = { name: "busyboy", title: "BusyBoy", version: "0.0.0" };
@@ -131,7 +131,6 @@ class AcpConnection {
     return this.request<InitResult>("initialize", {
       protocolVersion: 1,
       clientInfo: CLIENT_INFO,
-      // why: Advertising file tools makes Grok run writes through the client instead of session/request_permission.
       clientCapabilities: { fs: { readTextFile: false, writeTextFile: false }, terminal: false },
     });
   }
@@ -162,7 +161,6 @@ function spawnGrok(
   return new AcpConnection(child, onMessage);
 }
 
-// why: Permission mode belongs before agent. There is no ACP instruction field Grok honors for the system prompt.
 const LAUNCH_ARGS = [
   "--no-auto-update",
   "--permission-mode",
@@ -271,7 +269,6 @@ function startGrok(options: ProviderStartOptions): ProviderSession {
     const current = connection;
     if (!current) return;
     const optionsList = permissionOptions(params.options);
-    // why: Grok's own auto mode asks the client for some calls. Allow them so BusyBoy shows no approval.
     current.respond(rpcId, grokPermissionOutcome(optionsList, stopRequested ? "cancel" : "allow"));
   };
 

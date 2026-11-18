@@ -1,7 +1,6 @@
 import type { ChildProcess } from "node:child_process";
 import { createInterface } from "node:readline";
 
-// why: Not Claude-specific: it spawns any CLI as the leader of its own process group.
 import {
   spawnClaudeProcess as spawnProcessGroup,
   type ClaudeProcess as GroupProcess,
@@ -22,7 +21,7 @@ import type {
 } from "./contract";
 import { agentEnvironment, findExecutable } from "./find-executable";
 
-export const CODEX_PATH_ENV = "BUSYBOY_CODEX_PATH";
+const CODEX_PATH_ENV = "BUSYBOY_CODEX_PATH";
 const SIGN_IN_TIMEOUT_MS = 20_000;
 const ACCOUNT_CHECK_TIMEOUT_MS = 5_000;
 const CLIENT_INFO = { name: "busyboy", title: "BusyBoy", version: "0.0.0" };
@@ -120,8 +119,6 @@ class AppServerConnection {
   async initialize() {
     await this.request("initialize", {
       clientInfo: CLIENT_INFO,
-      // why: `requiredHumanApproval` is what makes Codex deliver a `humanCommand` checkpoint.
-      // why: Without it the command is rejected and the user is never asked.
       capabilities: {
         experimentalApi: true,
         requestAttestation: false,
@@ -131,7 +128,6 @@ class AppServerConnection {
     this.notify("initialized");
   }
 
-  // why: The groups are found while Codex still runs. Closing its input also ends a Codex that exits on its own.
   async kill() {
     await this.child.stop();
     this.child.stdin.end();
@@ -147,8 +143,6 @@ function spawnAppServer(
   const script = /\.[cm]?js$/i.test(executable);
   const command = script ? (findExecutable("node") ?? "node") : executable;
   const args = script ? [executable, "app-server"] : ["app-server"];
-  // why: Never aborted: `kill()` ends the process group instead. Windows has no process groups: there
-  // why: only the process itself is killed, and an npm shim's native app server ends when its input closes.
   const child = spawnProcessGroup({
     command,
     args,
@@ -246,7 +240,6 @@ function startCodex(options: ProviderStartOptions): ProviderSession {
         emit({ type: "error", code: "provider", message: auto.notice });
         return;
       }
-      // why: Codex's own auto review still asks the client. Accept it here so BusyBoy does not show an approval.
       if (CODEX_ANSWERABLE_REQUESTS.has(message.method)) {
         connection?.respond(message.id, codexAcceptForSession(message));
         return;
@@ -306,7 +299,6 @@ function startCodex(options: ProviderStartOptions): ProviderSession {
       ]);
       clearTimeout(timer);
       if (status?.state === "signed-out") fail("Codex is not signed in. Run `codex login`.");
-      // why: codex-cli 0.167.0's answer to resuming a thread it does not have.
       else if (options.resumeSessionId && /no rollout found for thread id/i.test(error.message)) {
         fail(error.message, "lost-session");
       } else fail(error.message);
@@ -333,7 +325,6 @@ function startCodex(options: ProviderStartOptions): ProviderSession {
     },
     async interrupt() {
       if (turnId) interruptTurn();
-      // why: The turn was requested but Codex has not named it yet: interrupt once it does.
       else if (inTurn) interruptPending = true;
       else if (!threadId && queue.length > 0) {
         queue.length = 0;

@@ -1,4 +1,3 @@
-// why: Field types follow codex-cli 0.167.0 and the MCP 2025-11-25 form schema.
 type Choice = { const: string; title: string };
 
 type ElicitationField = {
@@ -30,7 +29,6 @@ export function unfillableFields(schema: ElicitationSchema) {
   });
 }
 
-// why: An accepted form sends only the defaults the server declared, or nothing when a required field has none.
 export function elicitationDefaults(schema: ElicitationSchema): Record<string, unknown> {
   const content: Record<string, unknown> = {};
   for (const [key, field] of Object.entries(schema.properties ?? {})) {

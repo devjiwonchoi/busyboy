@@ -16,7 +16,7 @@ import type {
 } from "./contract";
 import { agentEnvironment, findExecutable } from "./find-executable";
 
-export const CLAUDE_PATH_ENV = "BUSYBOY_CLAUDE_PATH";
+const CLAUDE_PATH_ENV = "BUSYBOY_CLAUDE_PATH";
 const SIGN_IN_TIMEOUT_MS = 20_000;
 
 class MessageQueue implements AsyncIterable<SDKUserMessage> {
@@ -70,7 +70,6 @@ function startClaude(options: ProviderStartOptions): ProviderSession {
   let inTurn = false;
   let stopRequested = false;
 
-  // why: Auto mode still calls canUseTool for a call it would ask about. Allow it so the harness keeps its own auto mode.
   const canUseTool: CanUseTool = (_toolName, toolInput) =>
     Promise.resolve({ behavior: "allow", updatedInput: toolInput });
 
@@ -135,8 +134,6 @@ function startClaude(options: ProviderStartOptions): ProviderSession {
     },
     async stop() {
       stopRequested = true;
-      // why: Ends the commands the CLI detached while they are still its descendants,
-      // why: then the CLI's own process group (see claude-process.ts).
       await cli?.stop();
       input.close();
       abort.abort();

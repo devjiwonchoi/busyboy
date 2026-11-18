@@ -7,7 +7,6 @@ import { isSetupComplete, readSettings } from "@/server/config";
 
 export async function proxy(request: NextRequest) {
   if (!isTrusted(request)) return new NextResponse(null, { status: 403 });
-  // why: A redirect from the page would stream after the Cache Components shell, so it is sent before render.
   if (
     request.method === "GET" &&
     request.nextUrl.pathname === "/" &&
@@ -24,7 +23,6 @@ function isTrusted(request: NextRequest) {
   return isLoopbackHost(host) && (!origin || origin === `http://${host}`) && hasToken(request);
 }
 
-// why: Only loopback hosts are accepted, which blocks DNS rebinding.
 function isLoopbackHost(host: string | null) {
   if (!URL.canParse(`http://${host}`)) return false;
   const url = new URL(`http://${host}`);
@@ -34,7 +32,6 @@ function isLoopbackHost(host: string | null) {
   );
 }
 
-// why: Without a launch token only next dev is allowed. NODE_ENV is inlined at build time, so a production build fails closed.
 function hasToken(request: NextRequest) {
   const expected = process.env[SERVER_TOKEN_ENV];
   if (!expected) return process.env.NODE_ENV === "development";

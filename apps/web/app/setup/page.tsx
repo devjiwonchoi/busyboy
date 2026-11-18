@@ -25,11 +25,9 @@ import { finishSetupAction, recheckProvidersAction } from "./actions";
 
 export const metadata: Metadata = { title: "Setup · BusyBoy" };
 
-// why: The harness check reads local state, which Cache Components would otherwise prerender at build time.
 export default function SetupPage() {
   return (
     <div className="flex min-h-dvh flex-col">
-      {/* why: macOS traffic lights sit in the title bar, and the drag region is not a token class. */}
       <header
         className="flex h-10 shrink-0 items-center border-b pr-2"
         style={
@@ -77,7 +75,6 @@ const STATUS_TEXT: Record<SignInStatus["state"], string> = {
 const HARNESS_FORM = "harness-form";
 
 async function HarnessStep() {
-  // why: Awaiting nothing else still lets Next prerender this part, which rejects the clock reads in providerState.
   await connection();
   const [states, current] = await Promise.all([
     Promise.all(
@@ -106,7 +103,6 @@ async function HarnessStep() {
             </ItemActions>
             {state.state === "signed-out" && (
               <>
-                {/* why: Setup is its own screen outside the app shell, so the terminal panel isn't here; the user copies the command. */}
                 <ItemDescription className="basis-full">
                   Run this in a terminal, then choose Check again.
                 </ItemDescription>
@@ -126,7 +122,6 @@ async function HarnessStep() {
           Check again
         </Button>
       </form>
-      {/* why: One form for the choice and Continue, so Continue saves the default agent. */}
       <form id={HARNESS_FORM} action={finishSetupAction} className="space-y-2">
         {signedIn.length > 1 && (
           <RadioGroup

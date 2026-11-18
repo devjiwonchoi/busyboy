@@ -10,7 +10,6 @@ function isExecutable(candidate: string) {
   }
 }
 
-// why: npm's Windows .cmd shim cannot be spawned without a shell. The real target is a .exe or a .js entry.
 function resolveWindowsShim(shim: string) {
   let text: string;
   try {

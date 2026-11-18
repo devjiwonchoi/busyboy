@@ -13,7 +13,6 @@ function record(value: unknown): Record<string, unknown> {
     : {};
 }
 
-// why: Only an allow or a cancel is ever sent, so Grok's own auto mode decides what to run.
 export function grokPermissionOutcome(
   options: readonly GrokPermissionOption[],
   decision: "allow" | "cancel",

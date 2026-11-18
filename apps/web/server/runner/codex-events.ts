@@ -1,4 +1,3 @@
-// why: Types follow codex-cli 0.167.0 (codex app-server generate-ts), reduced to the fields read here.
 import { TEXT_DELTA_FLUSH_MS } from "./claude-events";
 import { elicitationDefaults, unfillableFields, type ElicitationSchema } from "./codex-elicitation";
 import type { AgentEvent } from "./contract";
@@ -57,7 +56,7 @@ function errorCode(info: unknown): { code?: string; httpStatus?: number } {
   return { code, httpStatus: typeof status === "number" ? status : undefined };
 }
 
-export function codexErrorEvent(
+function codexErrorEvent(
   error: TurnError | null | undefined,
 ): Extract<AgentEvent, { type: "error" }> {
   const { code, httpStatus } = errorCode(error?.codexErrorInfo);
@@ -206,7 +205,6 @@ export function codexAutoReply(
   };
 }
 
-// why: Matching decision strings with includes misses Codex's externally tagged objects.
 type ListedDecision = { name: string; value: unknown };
 
 const COMMAND_DECISIONS = new Set([

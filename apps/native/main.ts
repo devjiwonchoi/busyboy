@@ -61,7 +61,6 @@ function createWindow(url: string, show: boolean) {
     },
   });
 
-  // why: Leave room for the macOS traffic lights in the custom title bar.
   if (process.platform === "darwin") {
     window.webContents.on("dom-ready", () => {
       void window.webContents.insertCSS(":root { --title-bar-inset: 80px; }");
@@ -88,8 +87,6 @@ function createWindow(url: string, show: boolean) {
     event.preventDefault();
     window.hide();
   });
-  // why: Windows ends the session (log off, shut down) without \`before-quit\`, so
-  // why: the hidden-window rule above would keep agents from being stopped.
   window.on("session-end", () => {
     quitting = true;
     app.quit();
@@ -222,7 +219,6 @@ async function launch() {
 }
 
 function registerUpdateActions() {
-  // why: The shared Next bundle is built with package.json still at 0.0.0. The packaged app version is this one.
   ipcMain.handle(APP_VERSION_CHANNEL, (event) =>
     isAppOrigin(event.senderFrame?.url) ? app.getVersion() : null,
   );

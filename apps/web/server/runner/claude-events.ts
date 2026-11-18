@@ -46,7 +46,7 @@ const TERMINAL_REASONS: Record<string, string> = {
 
 const INTERRUPTED_REASONS = new Set(["aborted_streaming", "aborted_tools"]);
 
-export function claudeMcpStartupNotice(server: { name?: string; status?: string }) {
+function claudeMcpStartupNotice(server: { name?: string; status?: string }) {
   const name = server.name?.trim();
   if (!name || !/^[A-Za-z0-9_-]+$/.test(name)) return undefined;
   if (server.status === "failed") return `The MCP server ${name} failed to start.`;
@@ -55,7 +55,7 @@ export function claudeMcpStartupNotice(server: { name?: string; status?: string 
   return undefined;
 }
 
-export function claudeResultError(message: ClaudeRawMessage): string | undefined {
+function claudeResultError(message: ClaudeRawMessage): string | undefined {
   const reason = message.terminal_reason;
   if (reason && INTERRUPTED_REASONS.has(reason)) return undefined;
   const known = reason ? TERMINAL_REASONS[reason] : undefined;
