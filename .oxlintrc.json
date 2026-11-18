@@ -1,7 +1,7 @@
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
   "plugins": ["nextjs", "react", "import", "jsx-a11y", "typescript"],
-  "jsPlugins": ["./scripts/oxlint-plugin.mts"],
+  "jsPlugins": ["./scripts/oxlint/busyboy-plugin.mts"],
   "categories": {
     "correctness": "off"
   },
@@ -125,6 +125,7 @@
       {
         "ignorePattern": "turbopackIgnore|prettier-ignore|oxfmt-ignore|oxlint-disable|eslint-disable|@ts-|https?://"
       }
-    ]
+    ],
+    "busyboy/no-use-client-segment": "error"
   }
 }
