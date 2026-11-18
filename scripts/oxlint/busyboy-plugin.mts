@@ -88,6 +88,23 @@ const noProxy = {
   },
 };
 
+function reportUnguardedEntries(context: Context, program: Node, component: boolean) {
+  const { found, loose } = entries(program, component);
+  for (const statement of loose) {
+    context.report({
+      node: statement,
+      message: "Export an entry where it is declared, so the request check can be verified.",
+    });
+  }
+  for (const fn of found) {
+    if (startsWithGuard(fn)) continue;
+    context.report({
+      node: fn,
+      message: "Start this entry with `await requireTrustedRequest();`.",
+    });
+  }
+}
+
 const trustedEntry = {
   meta: { type: "problem" },
   create(context: Context) {
@@ -99,21 +116,8 @@ const trustedEntry = {
         const name = basename(path);
         const component = inApp && componentFile.test(name);
         const route = inApp && routeFile.test(name);
-        if (!component && !route && !isUseServer(program)) return;
-        const { found, loose } = entries(program, component);
-        for (const statement of loose) {
-          context.report({
-            node: statement,
-            message: "Export an entry where it is declared, so the request check can be verified.",
-          });
-        }
-        for (const fn of found) {
-          if (startsWithGuard(fn)) continue;
-          context.report({
-            node: fn,
-            message: "Start this entry with `await requireTrustedRequest();`.",
-          });
-        }
+        if (component || route || isUseServer(program))
+          reportUnguardedEntries(context, program, component);
       },
     };
   },
@@ -174,6 +178,44 @@ const noUnreasonedEffect = {
   },
 };
 
+const predicateName = /^(?:is|has|can|should|needs|was|did)[A-Z]/;
+
+function negatedPredicates(expression: Node | undefined): Node[] {
+  if (!expression) return [];
+  if (expression.type === "LogicalExpression") {
+    return [
+      ...negatedPredicates(expression.left as Node),
+      ...negatedPredicates(expression.right as Node),
+    ];
+  }
+  if (expression.type !== "UnaryExpression" || expression.operator !== "!") return [];
+  let argument = expression.argument as Node;
+  if (argument.type === "AwaitExpression") argument = argument.argument as Node;
+  if (argument.type !== "CallExpression") return [];
+  const callee = argument.callee as Node;
+  if (callee.type === "Identifier" && predicateName.test(callee.name as string))
+    return [expression];
+  return [];
+}
+
+const noNegatedPredicate = {
+  meta: { type: "suggestion" },
+  create(context: Context) {
+    return {
+      IfStatement(statement: Node) {
+        for (const node of negatedPredicates(statement.test as Node)) {
+          context.report({
+            node,
+            message:
+              "Branch on a positive predicate instead of negating one: name the case the branch handles " +
+              "(`isSetupIncomplete()` rather than `!isSetupComplete()`), or flip the branches so the if tests the predicate as is.",
+          });
+        }
+      },
+    };
+  },
+};
+
 const busyboyPlugin = {
   meta: { name: "busyboy" },
   rules: {
@@ -181,6 +223,7 @@ const busyboyPlugin = {
     "no-proxy": noProxy,
     "trusted-entry": trustedEntry,
     "no-unreasoned-effect": noUnreasonedEffect,
+    "no-negated-predicate": noNegatedPredicate,
   },
 };
 

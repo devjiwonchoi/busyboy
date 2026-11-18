@@ -23,6 +23,7 @@
     "busyboy/no-proxy": "error",
     "busyboy/trusted-entry": "error",
     "busyboy/no-unreasoned-effect": "error",
+    "busyboy/no-negated-predicate": "error",
     "no-restricted-imports": [
       "error",
       {

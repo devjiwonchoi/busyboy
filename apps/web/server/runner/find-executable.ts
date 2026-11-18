@@ -64,7 +64,8 @@ function isServerVariable(name: string) {
 export function agentEnvironment(): Record<string, string> {
   const env: Record<string, string> = {};
   for (const [name, value] of Object.entries(process.env)) {
-    if (value !== undefined && !isServerVariable(name)) env[name] = value;
+    if (value === undefined || isServerVariable(name)) continue;
+    env[name] = value;
   }
   return env;
 }

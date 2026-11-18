@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
 
-import { isSetupComplete, readSettings } from "@/server/config";
+import { isSetupIncomplete } from "@/server/config";
 import { requireTrustedRequest } from "@/server/trusted-request";
 
 import { Chat } from "./chat";
@@ -18,7 +18,7 @@ export default function ChatPage() {
 
 async function TrustedChat() {
   await requireTrustedRequest();
-  if (!isSetupComplete(await readSettings())) redirect("/setup");
+  if (await isSetupIncomplete()) redirect("/setup");
   return (
     <>
       <header className="flex h-10 shrink-0 items-center border-b px-3 text-sm font-medium">

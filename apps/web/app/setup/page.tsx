@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/item";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Skeleton } from "@/components/ui/skeleton";
-import { isSetupComplete, readSettings } from "@/server/config";
+import { isSetupIncomplete } from "@/server/config";
 import { defaultProvider, PROVIDERS, providerState } from "@/server/providers";
 import type { SignInStatus } from "@/server/runner/contract";
 import { requireTrustedRequest } from "@/server/trusted-request";
@@ -53,7 +53,7 @@ export default function SetupPage() {
 
 async function BackToChat() {
   await requireTrustedRequest();
-  if (!isSetupComplete(await readSettings())) return null;
+  if (await isSetupIncomplete()) return null;
   return (
     <Link
       href="/"

@@ -37,18 +37,20 @@ function parseSettings(text: string): Settings | undefined {
   } catch {
     return undefined;
   }
-  if (!isRecord(value)) return undefined;
-  return {
-    ...value,
-    version: typeof value.version === "number" && value.version > 1 ? value.version : 1,
-    setupCompletedAt: typeof value.setupCompletedAt === "string" ? value.setupCompletedAt : null,
-    defaultProvider:
-      value.defaultProvider === "claude" ||
-      value.defaultProvider === "codex" ||
-      value.defaultProvider === "grok"
-        ? value.defaultProvider
-        : null,
-  };
+  if (isRecord(value)) {
+    return {
+      ...value,
+      version: typeof value.version === "number" && value.version > 1 ? value.version : 1,
+      setupCompletedAt: typeof value.setupCompletedAt === "string" ? value.setupCompletedAt : null,
+      defaultProvider:
+        value.defaultProvider === "claude" ||
+        value.defaultProvider === "codex" ||
+        value.defaultProvider === "grok"
+          ? value.defaultProvider
+          : null,
+    };
+  }
+  return undefined;
 }
 
 async function readSettingsFile(file: string) {
@@ -131,6 +133,6 @@ export async function updateSettings<T>(
   });
 }
 
-export function isSetupComplete(settings: Settings) {
-  return Boolean(settings.setupCompletedAt);
+export async function isSetupIncomplete() {
+  return !(await readSettings()).setupCompletedAt;
 }
