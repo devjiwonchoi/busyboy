@@ -1,14 +1,9 @@
-import type { AgentAnswer, Question } from "./contract";
-
 type Choice = { const: string; title: string };
 
 type ElicitationField = {
   type?: string;
-  title?: string;
-  description?: string;
   default?: unknown;
   enum?: string[];
-  enumNames?: string[];
   oneOf?: Choice[];
   items?: { enum?: string[]; anyOf?: Choice[] };
 };
@@ -18,99 +13,27 @@ export type ElicitationSchema = {
   required?: string[];
 };
 
-const DECLINE_LABEL = "Don't send the form";
-const YES = "Yes";
-const NO = "No";
-
-type FormQuestion = { key: string; field: ElicitationField; question: Question; choices: Choice[] };
-
-function choicesOf(field: ElicitationField): Choice[] {
-  if (field.type === "boolean")
-    return [
-      { const: "true", title: YES },
-      { const: "false", title: NO },
-    ];
-  if (field.type === "array" && field.items?.anyOf) return field.items.anyOf;
-  if (field.oneOf) return field.oneOf;
+function hasChoices(field: ElicitationField) {
+  if (field.type === "boolean") return true;
+  if (field.type === "array" && field.items?.anyOf) return field.items.anyOf.length > 0;
+  if (field.oneOf) return field.oneOf.length > 0;
   const values = field.type === "array" ? (field.items?.enum ?? []) : (field.enum ?? []);
-  return values.map((value, index) => ({ const: value, title: field.enumNames?.[index] ?? value }));
-}
-
-function formQuestions(message: string, schema: ElicitationSchema): FormQuestion[] {
-  const questions: FormQuestion[] = [];
-  for (const [key, field] of Object.entries(schema.properties ?? {})) {
-    if (!field) continue;
-    const choices = choicesOf(field);
-    if (choices.length === 0) continue;
-    const name = field.title || key;
-    const text = field.description ? `${name}: ${field.description}` : name;
-    questions.push({
-      key,
-      field,
-      choices,
-      question: {
-        question: questions.length === 0 && message ? `${message} ${text}` : text,
-        multiSelect: field.type === "array",
-        options: [
-          ...choices.map((choice) => ({ label: choice.title })),
-          ...(choices.some((choice) => choice.title === DECLINE_LABEL)
-            ? []
-            : [{ label: DECLINE_LABEL }]),
-        ],
-      },
-    });
-  }
-  return questions;
+  return values.length > 0;
 }
 
 export function unfillableFields(schema: ElicitationSchema) {
   const properties = schema.properties ?? {};
   return (schema.required ?? []).filter((key) => {
     const field = properties[key];
-    return !field || (choicesOf(field).length === 0 && field.default === undefined);
+    return !field || (!hasChoices(field) && field.default === undefined);
   });
 }
 
-function selectedLabels(answer: string, choices: Choice[]) {
-  if (answer === "") return [];
-  const labels = new Set(choices.map((choice) => choice.title));
-  const selected: string[] = [];
-  let current: string | undefined;
-  for (const piece of answer.split(", ")) {
-    current = current === undefined ? piece : `${current}, ${piece}`;
-    if (labels.has(current)) {
-      selected.push(current);
-      current = undefined;
-    }
-  }
-  return current === undefined ? selected : undefined;
-}
-
-export function elicitationContent(
-  message: string,
-  schema: ElicitationSchema,
-  answer: AgentAnswer,
-): Record<string, unknown> | undefined {
-  if (answer.kind !== "question") return undefined;
+export function elicitationDefaults(schema: ElicitationSchema): Record<string, unknown> {
   const content: Record<string, unknown> = {};
   for (const [key, field] of Object.entries(schema.properties ?? {})) {
     if (field?.default !== undefined) content[key] = field.default;
   }
-  for (const { key, field, question, choices } of formQuestions(message, schema)) {
-    const label = answer.answers[question.question];
-    if (label === undefined) continue;
-    const ownDecline = choices.some((choice) => choice.title === DECLINE_LABEL);
-    const labels =
-      field.type === "array"
-        ? selectedLabels(label, [...choices, { const: "", title: DECLINE_LABEL }])
-        : [label];
-    if (!labels || (!ownDecline && labels.includes(DECLINE_LABEL))) return undefined;
-    const values = labels.map((title) => choices.find((choice) => choice.title === title)?.const);
-    if (values.some((value) => value === undefined)) return undefined;
-    if (field.type === "boolean") content[key] = values[0] === "true";
-    else if (field.type === "array") content[key] = values;
-    else content[key] = values[0];
-  }
   const missing = (schema.required ?? []).some((key) => content[key] === undefined);
-  return missing ? undefined : content;
+  return missing ? {} : content;
 }

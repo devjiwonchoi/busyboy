@@ -6,9 +6,7 @@ import {
   type ClaudeProcess as GroupProcess,
 } from "./claude-process";
 import type {
-  AgentAnswer,
   AgentEvent,
-  McpServer,
   ProviderAdapter,
   ProviderSession,
   ProviderStartOptions,
@@ -21,7 +19,6 @@ import {
   grokStopMessage,
   type GrokPermissionOption,
 } from "./grok-events";
-import { modelText, type UserTurn } from "./user-turn";
 
 const GROK_PATH_ENV = "BUSYBOY_GROK_PATH";
 const SIGN_IN_TIMEOUT_MS = 20_000;
@@ -30,46 +27,6 @@ const CLIENT_INFO = { name: "busyboy", title: "BusyBoy", version: "0.0.0" };
 
 function resolveGrok() {
   return process.env[GROK_PATH_ENV] || findExecutable("grok");
-}
-
-function grokPermissionMode(options: ProviderStartOptions, enforce: boolean) {
-  if (options.noTools) return "dontAsk";
-  if (enforce) return "default";
-  return options.permissionMode === "full-access" ? "bypassPermissions" : "auto";
-}
-
-function grokMcpServers(
-  servers: Record<string, McpServer> = {},
-  capabilities?: { http?: boolean; sse?: boolean },
-) {
-  const mcpServers: unknown[] = [];
-  const skipped: string[] = [];
-  for (const [name, server] of Object.entries(servers)) {
-    if (server.type === "stdio") {
-      mcpServers.push({
-        name,
-        command: server.command,
-        args: server.args ?? [],
-        env: Object.entries(server.env ?? {}).map(([key, value]) => ({ name: key, value })),
-      });
-    } else if (server.type === "http" && capabilities?.http === false) {
-      skipped.push(
-        `Grok cannot use the MCP server ${name}: this Grok does not connect to HTTP servers.`,
-      );
-    } else if (server.type === "sse" && capabilities?.sse === false) {
-      skipped.push(
-        `Grok cannot use the MCP server ${name}: this Grok does not connect to SSE servers.`,
-      );
-    } else {
-      mcpServers.push({
-        type: server.type,
-        name,
-        url: server.url,
-        headers: Object.entries(server.headers ?? {}).map(([key, value]) => ({ name: key, value })),
-      });
-    }
-  }
-  return { mcpServers, skipped };
 }
 
 type RpcMessage = {
@@ -82,11 +39,6 @@ type RpcMessage = {
 
 type InitResult = {
   authMethods?: { id?: string }[];
-  agentCapabilities?: {
-    loadSession?: boolean;
-    mcpCapabilities?: { http?: boolean; sse?: boolean };
-    promptCapabilities?: { image?: boolean };
-  };
 };
 
 class GrokExited extends Error {
@@ -209,29 +161,14 @@ function spawnGrok(
   return new AcpConnection(child, onMessage);
 }
 
-function launchArgs(mode: string) {
-  return ["--no-auto-update", "--permission-mode", mode, "agent", "--no-leader", "stdio"];
-}
-
-function promptBlocks(turn: UserTurn, allowImages: boolean) {
-  const paths = allowImages
-    ? ""
-    : turn.images
-        .map((image) => image.path)
-        .filter(Boolean)
-        .join("\n");
-  const text = [modelText(turn), paths].filter(Boolean).join("\n\n") || " ";
-  return [
-    ...(allowImages
-      ? turn.images.map((image) => ({
-          type: "image" as const,
-          data: image.data,
-          mimeType: image.mediaType,
-        }))
-      : []),
-    { type: "text" as const, text },
-  ];
-}
+const LAUNCH_ARGS = [
+  "--no-auto-update",
+  "--permission-mode",
+  "auto",
+  "agent",
+  "--no-leader",
+  "stdio",
+];
 
 function rulesMeta(instructions?: string) {
   const rules = instructions?.trim();
@@ -273,10 +210,7 @@ function permissionOptions(value: unknown): GrokPermissionOption[] {
 
 function startGrok(options: ProviderStartOptions): ProviderSession {
   const { emit } = options;
-  const mode = grokPermissionMode(options, false);
-  const queue: UserTurn[] = [];
-  let allowImages = false;
-  const asks = new Map<string, (answer: AgentAnswer | null) => void>();
+  const queue: string[] = [];
   const mapper = new GrokEventMapper(emit);
   let connection: AcpConnection | undefined;
   let sessionId: string | undefined;
@@ -284,10 +218,9 @@ function startGrok(options: ProviderStartOptions): ProviderSession {
   let accepting = false;
   let stopRequested = false;
   let failed = false;
-  let ready: Promise<void> | undefined;
   let turnToken = 0;
 
-  const fail = (message: string, code: "provider" | "signed-out" | "lost-session" = "provider") => {
+  const fail = (message: string, code: "provider" | "lost-session" = "provider") => {
     if (failed || stopRequested) return;
     failed = true;
     emit({ type: "error", code, message });
@@ -316,7 +249,7 @@ function startGrok(options: ProviderStartOptions): ProviderSession {
     current
       .request<{ stopReason?: string }>("session/prompt", {
         sessionId,
-        prompt: promptBlocks(turn, allowImages),
+        prompt: [{ type: "text", text: turn }],
       })
       .then((result) => {
         if (token !== turnToken || stopRequested) return;
@@ -332,25 +265,11 @@ function startGrok(options: ProviderStartOptions): ProviderSession {
       });
   };
 
-  const dropAsks = () => {
-    for (const [requestId, resolve] of asks) {
-      asks.delete(requestId);
-      resolve(null);
-      emit({ type: "answered", requestId });
-    }
-  };
-
   const decide = async (rpcId: string | number, params: Record<string, unknown>) => {
     const current = connection;
     if (!current) return;
     const optionsList = permissionOptions(params.options);
-    const respond = (decision: "allow" | "allow-session" | "deny" | "cancel") =>
-      current.respond(rpcId, grokPermissionOutcome(optionsList, decision));
-    if (options.noTools || stopRequested) {
-      respond(options.noTools ? "deny" : "cancel");
-      return;
-    }
-    respond("allow");
+    current.respond(rpcId, grokPermissionOutcome(optionsList, stopRequested ? "cancel" : "allow"));
   };
 
   const onQuestion = async (rpcId: string | number) => {
@@ -384,12 +303,11 @@ function startGrok(options: ProviderStartOptions): ProviderSession {
     if (!executable) {
       emit({
         type: "error",
-        code: "not-installed",
         message: "The `grok` command was not found on PATH.",
       });
       return false;
     }
-    connection = spawnGrok(executable, launchArgs(mode), options.cwd, (message) => {
+    connection = spawnGrok(executable, LAUNCH_ARGS, options.cwd, (message) => {
       handle(message).catch((error: unknown) => {
         if (message.id !== undefined && message.id !== null) {
           connection?.respondError(message.id, "BusyBoy could not read that request.");
@@ -403,20 +321,11 @@ function startGrok(options: ProviderStartOptions): ProviderSession {
     });
     const current = connection;
     if (stopRequested) void current.kill();
-    ready = (async () => {
+    const ready = (async () => {
       const init = await current.initialize();
-      allowImages = init.agentCapabilities?.promptCapabilities?.image === true;
       await authenticate(current, init);
-      const mcp = grokMcpServers(options.mcpServers, init.agentCapabilities?.mcpCapabilities);
-      for (const notice of mcp.skipped) emit({ type: "error", code: "provider", message: notice });
-      const body = {
-        cwd: options.cwd,
-        mcpServers: mcp.mcpServers,
-        ...rulesMeta(options.instructions),
-      };
-      if (options.forkSessionId) {
-        sessionId = await forkSession(current, options.forkSessionId, body);
-      } else if (options.resumeSessionId) {
+      const body = { cwd: options.cwd, mcpServers: [], ...rulesMeta(options.instructions) };
+      if (options.resumeSessionId) {
         await current.request("session/load", { sessionId: options.resumeSessionId, ...body });
         sessionId = options.resumeSessionId;
       } else {
@@ -424,21 +333,20 @@ function startGrok(options: ProviderStartOptions): ProviderSession {
         sessionId = created.sessionId;
       }
       if (!sessionId) throw new Error("Grok did not return a session id.");
-      await current.request("session/set_mode", { sessionId, modeId: mode }).catch(() => {});
+      await current.request("session/set_mode", { sessionId, modeId: "auto" }).catch(() => {});
       emit({ type: "session", sessionId });
       startNextTurn();
     })();
     ready.catch((error: Error) => {
       if (error instanceof GrokExited || stopRequested) return;
-      const resuming = Boolean(options.resumeSessionId || options.forkSessionId);
-      if (resuming && LOST_SESSION.test(error.message)) fail(error.message, "lost-session");
+      if (options.resumeSessionId && LOST_SESSION.test(error.message))
+        fail(error.message, "lost-session");
       else if (/not signed in|sign in|run `grok login`/i.test(error.message))
-        fail("Grok is not signed in. Run `grok login`.", "signed-out");
+        fail("Grok is not signed in. Run `grok login`.");
       else fail(error.message);
       void current.kill();
     });
     const { code, stderr } = await current.exited;
-    dropAsks();
     mapper.flush();
     mapper.dispose();
     if (!failed && !stopRequested)
@@ -459,35 +367,11 @@ function startGrok(options: ProviderStartOptions): ProviderSession {
       startNextTurn();
     },
     async interrupt() {
-      dropAsks();
       if (sessionId && inTurn) connection?.notify("session/cancel", { sessionId });
       else if (!sessionId && queue.length > 0) {
         queue.length = 0;
         emit({ type: "turn-done" });
       }
-    },
-    async compact() {
-      await ready?.catch(() => {});
-      if (!connection || !sessionId) return;
-      if (inTurn) throw new Error("Grok is running a turn. Compact once it ends.");
-      inTurn = true;
-      try {
-        await connection.request("_x.ai/compact_conversation", { sessionId });
-        finishTurn({ type: "turn-done" });
-      } catch (error) {
-        emit({
-          type: "error",
-          code: "provider",
-          message: error instanceof Error ? error.message : String(error),
-        });
-        finishTurn({ type: "turn-done" });
-      }
-    },
-    answer(requestId, answer) {
-      const resolve = asks.get(requestId);
-      if (!resolve) return;
-      asks.delete(requestId);
-      resolve(answer);
     },
     async stop() {
       stopRequested = true;
@@ -497,29 +381,11 @@ function startGrok(options: ProviderStartOptions): ProviderSession {
   };
 }
 
-async function forkSession(connection: AcpConnection, sessionId: string, body: object) {
-  const params = { sessionId, ...body };
-  try {
-    const created = await connection.request<{ sessionId?: string }>("session/fork", params);
-    if (!created.sessionId) throw new Error("Grok did not return a session id for the branch.");
-    return created.sessionId;
-  } catch (error) {
-    if (
-      !(error instanceof Error) ||
-      !/method not found|-32601|does not handle session\/fork/i.test(error.message)
-    )
-      throw error;
-    const created = await connection.request<{ sessionId?: string }>("_x.ai/session/fork", params);
-    if (!created.sessionId) throw new Error("Grok did not return a session id for the branch.");
-    return created.sessionId;
-  }
-}
-
 async function grokSignInStatus(): Promise<SignInStatus> {
   const executable = resolveGrok();
   if (!executable)
     return { state: "not-installed", detail: "The `grok` command was not found on PATH." };
-  const connection = spawnGrok(executable, launchArgs("auto"), process.cwd(), (message) => {
+  const connection = spawnGrok(executable, LAUNCH_ARGS, process.cwd(), (message) => {
     if (message.id !== undefined && message.id !== null && message.method) {
       connection.respondError(
         message.id,

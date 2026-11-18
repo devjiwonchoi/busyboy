@@ -251,14 +251,12 @@ async function ensureAgent(director: Director) {
     provider,
     cwd: homedir(),
     instructions: DIRECTOR_INSTRUCTIONS,
-    permissionMode: "auto",
     resumeSessionId: director.state.sessionId,
   });
   director.agentId = snapshot.id;
   director.unsubscribe?.();
   director.unsubscribe =
-    subscribeToAgent(snapshot.id, 0, (envelope) => onAgentEvent(director, envelope.event)) ??
-    undefined;
+    subscribeToAgent(snapshot.id, (event) => onAgentEvent(director, event)) ?? undefined;
   return snapshot;
 }
 

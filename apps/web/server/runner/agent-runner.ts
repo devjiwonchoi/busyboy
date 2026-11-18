@@ -4,9 +4,7 @@ import { onServerShutdown } from "../shutdown";
 import { claudeAdapter } from "./claude-adapter";
 import { codexAdapter } from "./codex-adapter";
 import type {
-  AgentAnswer,
   AgentEvent,
-  AgentEventEnvelope,
   AgentSnapshot,
   AgentStatus,
   ProviderAdapter,
@@ -16,7 +14,6 @@ import type {
   StartAgentInput,
 } from "./contract";
 import { grokAdapter } from "./grok-adapter";
-import { asTurn, displayText, type UserTurn } from "./user-turn";
 
 const MAX_RETAINED_EVENTS = 5_000;
 
@@ -24,12 +21,9 @@ type AgentRecord = {
   id: string;
   input: StartAgentInput;
   status: AgentStatus;
-  sessionId?: string;
-  events: AgentEventEnvelope[];
-  lastSeq: number;
-  listeners: Set<(envelope: AgentEventEnvelope) => void>;
+  events: AgentEvent[];
+  listeners: Set<(event: AgentEvent) => void>;
   session: ProviderSession | null;
-  pending: Map<string, AgentAnswer["kind"]>;
   interrupting: boolean;
 };
 
@@ -75,38 +69,12 @@ function getRecord(agentId: string) {
 }
 
 function snapshot(record: AgentRecord): AgentSnapshot {
-  return {
-    id: record.id,
-    provider: record.input.provider,
-    cwd: record.input.cwd,
-    permissionMode: record.input.permissionMode ?? "auto",
-    status: record.status,
-    sessionId: record.sessionId,
-    lastSeq: record.lastSeq,
-  };
+  return { id: record.id, provider: record.input.provider, status: record.status };
 }
 
 function record(agent: AgentRecord, event: AgentEvent) {
   if (agent.interrupting && event.type === "error" && event.code === "provider") return;
   switch (event.type) {
-    case "started":
-      agent.status = "starting";
-      break;
-    case "session":
-      agent.sessionId = event.sessionId;
-      break;
-    case "approval":
-      agent.pending.set(event.requestId, "approval");
-      agent.status = "waiting";
-      break;
-    case "question":
-      agent.pending.set(event.requestId, "question");
-      agent.status = "waiting";
-      break;
-    case "answered":
-      agent.pending.delete(event.requestId);
-      if (agent.status === "waiting" && agent.pending.size === 0) agent.status = "running";
-      break;
     case "turn-done":
       if (agent.interrupting) {
         event = { ...event, interrupted: true };
@@ -121,49 +89,28 @@ function record(agent: AgentRecord, event: AgentEvent) {
       agent.session = null;
       break;
   }
-  if (event.type === "turn-done" || event.type === "stopped") {
-    for (const requestId of agent.pending.keys()) push(agent, { type: "answered", requestId });
-    agent.pending.clear();
-  }
-  push(agent, event);
-}
-
-function push(agent: AgentRecord, event: AgentEvent) {
-  const envelope: AgentEventEnvelope = {
-    seq: agent.lastSeq + 1,
-    at: Date.now(),
-    agentId: agent.id,
-    event,
-  };
-  agent.lastSeq = envelope.seq;
-  agent.events.push(envelope);
+  agent.events.push(event);
   const extra = agent.events.length - MAX_RETAINED_EVENTS;
   if (extra > 0) agent.events.splice(0, extra);
-  for (const listener of agent.listeners) listener(envelope);
+  for (const listener of agent.listeners) listener(event);
 }
 
-function launch(agent: AgentRecord, resumeSessionId?: string) {
-  agent.status = "starting";
-  agent.interrupting = false;
-  record(agent, {
-    type: "started",
-    resumed: Boolean(resumeSessionId || agent.input.forkSessionId),
-  });
+export function startAgent(input: StartAgentInput): AgentSnapshot {
+  if (registry.stoppingAll) throw new Error("BusyBoy is quitting, so no agent can start.");
+  hookShutdown();
+  const agent: AgentRecord = {
+    id: randomUUID(),
+    input,
+    status: "starting",
+    events: [],
+    listeners: new Set(),
+    session: null,
+    interrupting: false,
+  };
+  registry.agents.set(agent.id, agent);
   try {
-    agent.session = adapterFor(agent.input.provider).start({
-      provider: agent.input.provider,
-      cwd: agent.input.cwd,
-      instructions: agent.input.instructions,
-      permissionMode: agent.input.permissionMode ?? "auto",
-      resumeSessionId,
-      mcpServers: agent.input.mcpServers,
-      forkSessionId: resumeSessionId ? undefined : agent.input.forkSessionId,
-      noTools: agent.input.noTools,
-      alwaysAsk: agent.input.alwaysAsk,
-      privateFolder: agent.input.privateFolder,
-      noFileEdits: agent.input.noFileEdits,
-      rulesFolder: agent.input.rulesFolder,
-      recordFolder: agent.input.recordFolder,
+    agent.session = adapterFor(input.provider).start({
+      ...input,
       emit: (event) => record(agent, event),
     });
     if (agent.status === "starting") agent.status = "idle";
@@ -175,39 +122,19 @@ function launch(agent: AgentRecord, resumeSessionId?: string) {
     });
     record(agent, { type: "stopped", finished: false });
   }
-}
-
-export function startAgent(input: StartAgentInput): AgentSnapshot {
-  if (registry.stoppingAll) throw new Error("BusyBoy is quitting, so no agent can start.");
-  hookShutdown();
-  const agent: AgentRecord = {
-    id: randomUUID(),
-    input: { ...input, permissionMode: input.permissionMode ?? "auto" },
-    status: "starting",
-    events: [],
-    lastSeq: 0,
-    listeners: new Set(),
-    session: null,
-    pending: new Map(),
-    interrupting: false,
-  };
-  registry.agents.set(agent.id, agent);
-  launch(agent, input.resumeSessionId);
   return snapshot(agent);
 }
 
-export function sendMessage(agentId: string, turn: UserTurn | string) {
+export function sendMessage(agentId: string, text: string) {
   const agent = getRecord(agentId);
   if (!agent.session) throw new Error("The agent is stopped. Resume it first.");
-  const message = asTurn(turn);
-  record(agent, { type: "user-message", text: displayText(message) || message.text });
   if (agent.status === "idle" || agent.status === "starting") agent.status = "running";
-  agent.session.send(message);
+  agent.session.send(text);
 }
 
 export async function interruptAgent(agentId: string) {
   const agent = getRecord(agentId);
-  if (!agent.session || (agent.status !== "running" && agent.status !== "waiting")) return;
+  if (!agent.session || agent.status !== "running") return;
   agent.interrupting = true;
   try {
     await agent.session.interrupt();
@@ -224,14 +151,11 @@ export function getAgent(agentId: string): AgentSnapshot | undefined {
 
 export function subscribeToAgent(
   agentId: string,
-  afterSeq: number,
-  listener: (envelope: AgentEventEnvelope) => void,
+  listener: (event: AgentEvent) => void,
 ): (() => void) | null {
   const agent = registry.agents.get(agentId);
   if (!agent) return null;
-  for (const envelope of agent.events) {
-    if (envelope.seq > afterSeq) listener(envelope);
-  }
+  for (const event of agent.events) listener(event);
   agent.listeners.add(listener);
   return () => agent.listeners.delete(listener);
 }

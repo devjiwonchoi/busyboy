@@ -1,17 +1,7 @@
-import { TEXT_DELTA_FLUSH_MS, toolLabel } from "./claude-events";
+import { TEXT_DELTA_FLUSH_MS } from "./claude-events";
 import type { AgentEvent } from "./contract";
 
 export type GrokPermissionOption = { optionId: string; name?: string; kind?: string };
-
-const SHELL_NAMES = new Set([
-  "bash",
-  "shell",
-  "exec_command",
-  "local_shell",
-  "unified_exec",
-  "run_terminal_command",
-  "terminal",
-]);
 
 function text(value: unknown) {
   return typeof value === "string" && value ? value : undefined;
@@ -23,75 +13,23 @@ function record(value: unknown): Record<string, unknown> {
     : {};
 }
 
-function toolMeta(toolCall: Record<string, unknown>) {
-  return record(record(toolCall._meta)["x.ai/tool"]);
-}
-
-function grokToolSubject(toolCall: Record<string, unknown>) {
-  const meta = toolMeta(toolCall);
-  const raw = record(toolCall.rawInput ?? toolCall.raw_input ?? meta.input);
-  const variant = text(raw.variant) ?? "";
-  const name = (text(toolCall.name) ?? text(meta.name) ?? variant) || "tool";
-  const title = text(toolCall.title) ?? name;
-  const command = text(raw.command);
-  const shell =
-    SHELL_NAMES.has(name.toLowerCase()) ||
-    variant.toLowerCase() === "bash" ||
-    (toolCall.kind === "execute" && command !== undefined);
-  if (shell) return { toolName: "Bash", input: { command: command ?? "" }, title };
-  const path = text(raw.path) ?? text(raw.file_path) ?? text(raw.filePath);
-  const edit =
-    toolCall.kind === "edit" || /write|edit|search_replace|apply_patch/i.test(`${name} ${variant}`);
-  if (edit && path) {
-    const toolName = /edit|search_replace|apply_patch/i.test(`${name} ${variant}`)
-      ? "Edit"
-      : "Write";
-    return { toolName, input: { ...raw, file_path: path }, title };
-  }
-  const namespace = text(meta.namespace);
-  const toolName = namespace && namespace !== "grok_build" ? `mcp__${namespace}__${name}` : name;
-  return { toolName, input: raw, title };
-}
-
 export function grokPermissionOutcome(
   options: readonly GrokPermissionOption[],
-  decision: "allow" | "allow-session" | "deny" | "cancel",
+  decision: "allow" | "cancel",
 ) {
-  if (decision === "cancel") return { outcome: { outcome: "cancelled" as const } };
-  const preferred =
-    decision === "deny"
-      ? "reject_once"
-      : decision === "allow-session"
-        ? "allow_always"
-        : "allow_once";
-  const fallback = decision === "deny" ? "reject_always" : "allow_once";
   const option =
-    options.find((entry) => entry.kind === preferred) ??
-    options.find((entry) => entry.kind === fallback) ??
-    options.find((entry) =>
-      decision === "deny" ? entry.kind?.startsWith("reject") : entry.kind?.startsWith("allow"),
-    );
+    decision === "allow"
+      ? (options.find((entry) => entry.kind === "allow_once") ??
+        options.find((entry) => entry.kind?.startsWith("allow")))
+      : undefined;
   if (!option) return { outcome: { outcome: "cancelled" as const } };
   return { outcome: { outcome: "selected" as const, optionId: option.optionId } };
-}
-
-function toolUpdate(update: Record<string, unknown>) {
-  return {
-    ...update,
-    toolCallId: update.toolCallId ?? update.tool_call_id,
-    rawInput: update.rawInput ?? update.raw_input,
-    name: update.name,
-    title: update.title,
-    kind: update.kind,
-    _meta: update._meta,
-  };
 }
 
 export class GrokEventMapper {
   private itemId: string | undefined;
   private pending = "";
   private timer: ReturnType<typeof setTimeout> | undefined;
-  private tools = new Set<string>();
   private turn = 0;
 
   constructor(private readonly emit: (event: AgentEvent) => void) {}
@@ -113,17 +51,6 @@ export class GrokEventMapper {
       this.itemId = id;
       this.pending += chunk;
       this.timer ??= setTimeout(() => this.flush(), TEXT_DELTA_FLUSH_MS);
-      return;
-    }
-    if (kind === "tool_call" || kind === "tool_call_update") {
-      this.flush();
-      const call = toolUpdate(update);
-      const id = text(call.toolCallId);
-      if (!id || this.tools.has(id)) return;
-      const subject = grokToolSubject(call);
-      if (!subject.toolName) return;
-      this.tools.add(id);
-      this.emit({ type: "tool", label: toolLabel(subject.toolName, subject.input) });
     }
   }
 

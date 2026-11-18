@@ -1,7 +1,6 @@
-import { parseAskedQuestions } from "./asked-questions";
 import { TEXT_DELTA_FLUSH_MS } from "./claude-events";
-import { elicitationContent, unfillableFields, type ElicitationSchema } from "./codex-elicitation";
-import type { AgentAnswer, AgentEvent } from "./contract";
+import { elicitationDefaults, unfillableFields, type ElicitationSchema } from "./codex-elicitation";
+import type { AgentEvent } from "./contract";
 
 export type CodexRawMessage = {
   id?: string | number;
@@ -9,23 +8,7 @@ export type CodexRawMessage = {
   params?: Record<string, unknown>;
 };
 
-type ThreadItem = {
-  type: string;
-  id?: string;
-  text?: string;
-  command?: string;
-  commandActions?: { command: string }[];
-  changes?: { path: string }[];
-  server?: string;
-  tool?: string;
-  query?: string;
-  path?: string;
-  questions?: AsyncQuestion[] | null;
-};
-
-type AsyncQuestion = { title?: string; question?: string; options?: unknown };
-
-export const CODEX_MESSAGE_QUESTION_PREFIX = "codex-ask-";
+type ThreadItem = { type: string; id?: string; text?: string };
 
 type Turn = {
   id: string;
@@ -41,46 +24,6 @@ export const CODEX_ANSWERABLE_REQUESTS = new Set([
   "item/tool/requestUserInput",
   "mcpServer/elicitation/request",
 ]);
-
-const LABEL_LIMIT = 80;
-
-function displayCommand(command: unknown, actions: unknown) {
-  const parsed = Array.isArray(actions)
-    ? actions.map((action: { command?: unknown }) => action.command)
-    : [];
-  if (parsed.length && parsed.every((value) => typeof value === "string" && value))
-    return parsed.join(" && ");
-  return typeof command === "string" ? command : undefined;
-}
-
-function shorten(value: string) {
-  const line = value.replace(/\s+/g, " ").trim();
-  return line.length > LABEL_LIMIT ? `${line.slice(0, LABEL_LIMIT - 1)}…` : line;
-}
-
-function itemLabel(item: ThreadItem): string | undefined {
-  switch (item.type) {
-    case "commandExecution": {
-      const command = displayCommand(item.command, item.commandActions);
-      return command ? `Shell: ${shorten(command)}` : "Shell";
-    }
-    case "fileChange": {
-      const paths = item.changes?.map((change) => change.path) ?? [];
-      if (paths.length === 0) return "Edit";
-      return `Edit: ${shorten(paths.length === 1 ? paths[0]! : `${paths[0]} and ${paths.length - 1} more`)}`;
-    }
-    case "mcpToolCall":
-      return `${item.server}: ${item.tool}`;
-    case "dynamicToolCall":
-      return item.tool ?? "Tool";
-    case "webSearch":
-      return item.query ? `Web search: ${shorten(item.query)}` : "Web search";
-    case "imageView":
-      return item.path ? `View image: ${shorten(item.path)}` : "View image";
-    default:
-      return undefined;
-  }
-}
 
 const ERROR_TEXT: Record<string, string> = {
   contextWindowExceeded:
@@ -120,7 +63,6 @@ function codexErrorEvent(
   if (code === "unauthorized" || httpStatus === 401) {
     return {
       type: "error",
-      code: "signed-out",
       message: "Codex is not signed in. Run `codex login`.",
     };
   }
@@ -143,13 +85,8 @@ export class CodexEventMapper {
   private timer: ReturnType<typeof setTimeout> | undefined;
   private turnError: TurnError | undefined;
   private failedServers = new Set<string>();
-  private endedByDenial = false;
 
   constructor(private readonly emit: (event: AgentEvent) => void) {}
-
-  deniedWithCancel() {
-    this.endedByDenial = true;
-  }
 
   push(message: CodexRawMessage) {
     const params = message.params ?? {};
@@ -160,11 +97,6 @@ export class CodexEventMapper {
           typeof params.itemId === "string" ? params.itemId : "agent-message",
           params.delta,
         );
-        return;
-      }
-      case "item/started": {
-        const label = itemLabel(params.item as ThreadItem);
-        if (label) this.send({ type: "tool", label });
         return;
       }
       case "item/completed": {
@@ -197,21 +129,11 @@ export class CodexEventMapper {
         const turn = params.turn as Turn;
         if (turn.status === "failed") this.send(codexErrorEvent(this.turnError ?? turn.error));
         this.turnError = undefined;
-        const endedByDenial = this.endedByDenial;
-        this.endedByDenial = false;
-        if (turn.status === "interrupted" && endedByDenial) {
-          this.send({
-            type: "error",
-            code: "provider",
-            message: "The command was denied, so Codex ended the turn.",
-          });
-          this.send({ type: "turn-done" });
-        } else
-          this.send(
-            turn.status === "interrupted"
-              ? { type: "turn-done", interrupted: true }
-              : { type: "turn-done" },
-          );
+        this.send(
+          turn.status === "interrupted"
+            ? { type: "turn-done", interrupted: true }
+            : { type: "turn-done" },
+        );
         this.streamed.clear();
         return;
       }
@@ -249,29 +171,12 @@ export class CodexEventMapper {
     this.streamed.delete(itemId);
     if (item.text && item.text !== streamed) this.send({ type: "text", itemId, text: item.text });
     else this.flush();
-    if (item.questions?.length) {
-      this.send({
-        type: "question",
-        requestId: `${CODEX_MESSAGE_QUESTION_PREFIX}${itemId}`,
-        questions: parseAskedQuestions(item.questions) ?? [
-          {
-            question: "Codex asked a question BusyBoy could not read. Reply with the answer.",
-            multiSelect: false,
-            options: [],
-          },
-        ],
-      });
-    }
   }
 }
 
 type ElicitationParams = {
   serverName?: string;
   mode?: string;
-  message?: string;
-  title?: string;
-  description?: string;
-  url?: string;
   requestedSchema?: ElicitationSchema;
 };
 
@@ -307,8 +212,6 @@ const COMMAND_DECISIONS = new Set([
   "acceptForSession",
   "acceptWithExecpolicyAmendment",
   "applyNetworkPolicyAmendment",
-  "decline",
-  "cancel",
 ]);
 
 function listedDecisions(offered: unknown): ListedDecision[] | undefined {
@@ -351,111 +254,58 @@ function execpolicyPrefix(value: unknown): string | undefined {
   return prefix;
 }
 
-function networkAmendment(value: unknown): { host?: string; action?: string } | undefined {
+function networkAction(value: unknown): string | undefined {
   const amendment =
     value && typeof value === "object"
       ? (
           value as {
             applyNetworkPolicyAmendment?: {
-              network_policy_amendment?: { host?: unknown; action?: unknown };
+              network_policy_amendment?: { action?: unknown };
             };
           }
         ).applyNetworkPolicyAmendment?.network_policy_amendment
       : undefined;
-  if (!amendment || typeof amendment !== "object") return undefined;
-  return {
-    host: typeof amendment.host === "string" ? amendment.host : undefined,
-    action: typeof amendment.action === "string" ? amendment.action : undefined,
-  };
+  return typeof amendment?.action === "string" ? amendment.action : undefined;
 }
 
-function commandApprovalDecision(
-  params: Record<string, unknown>,
-  allow: boolean,
-  forSession: boolean,
-): unknown {
-  const human = params.kind === "humanCommand";
+function commandAcceptDecision(params: Record<string, unknown>): unknown {
   const decisions = listedDecisions(params.availableDecisions);
-  if (allow && forSession && !human) {
+  if (params.kind !== "humanCommand") {
     const session = listedValue(decisions, "acceptForSession");
     if (!decisions || decisions.some((decision) => decision.name === "acceptForSession"))
       return session;
     const prefix = listedValue(decisions, "acceptWithExecpolicyAmendment");
     if (prefix !== undefined && execpolicyPrefix(prefix)) return prefix;
     const network = listedValue(decisions, "applyNetworkPolicyAmendment");
-    if (network !== undefined && networkAmendment(network)?.action !== "deny") return network;
+    if (network !== undefined && networkAction(network) !== "deny") return network;
   }
-  if (allow) {
-    const once = listedValue(decisions, "accept");
-    if (once !== undefined) return once;
-    return "accept";
-  }
-  const decline = listedValue(decisions, "decline");
-  if (decline !== undefined) return decline;
-  const cancel = listedValue(decisions, "cancel");
-  if (cancel !== undefined) return cancel;
-  return "decline";
+  return listedValue(decisions, "accept") ?? "accept";
 }
 
-export function codexAnswerToResult(message: CodexRawMessage, answer: AgentAnswer): unknown {
+export function codexAcceptForSession(message: CodexRawMessage): unknown {
   const params = message.params ?? {};
-  const allow = answer.kind === "question" || answer.allow;
-  const forSession = answer.kind === "approval" && answer.allow && Boolean(answer.forSession);
   switch (message.method) {
     case "item/commandExecution/requestApproval":
-      return { decision: commandApprovalDecision(params, allow, forSession) };
+      return { decision: commandAcceptDecision(params) };
     case "item/fileChange/requestApproval":
-      return { decision: allow ? (forSession ? "acceptForSession" : "accept") : "decline" };
+      return { decision: "acceptForSession" };
     case "item/permissions/requestApproval": {
       const requested = params.permissions as { network?: unknown; fileSystem?: unknown };
       const granted = Object.fromEntries(
         Object.entries(requested ?? {}).filter(([, value]) => value != null),
       );
-      return { permissions: allow ? granted : {}, scope: forSession ? "session" : "turn" };
+      return { permissions: granted, scope: "session" };
     }
-    case "item/tool/requestUserInput": {
-      const questions = Array.isArray(params.questions) ? params.questions : [];
-      if (answer.kind !== "question") return { answers: {} };
-      const answers = Object.fromEntries(
-        questions.flatMap((item) => {
-          if (!item || typeof item !== "object") return [];
-          const id = (item as { id?: unknown }).id;
-          const key = parseAskedQuestions(item)?.[0]?.question;
-          const value = key === undefined ? undefined : answer.answers[key];
-          if (typeof id !== "string" || value === undefined) return [];
-          return [[id, { answers: [value] }]];
-        }),
-      );
-      return { answers };
-    }
+    case "item/tool/requestUserInput":
+      return { answers: {} };
     case "mcpServer/elicitation/request": {
       const elicitation = params as ElicitationParams;
-      const decline = { action: "decline", content: null, _meta: null };
-      if (answer.kind === "question") {
-        const content = elicitationContent(
-          elicitation.message ?? "",
-          elicitation.requestedSchema ?? {},
-          answer,
-        );
-        return content ? { action: "accept", content, _meta: null } : decline;
-      }
-      if (!answer.allow) return decline;
       const content = isForm(elicitation)
-        ? (elicitationContent("", elicitation.requestedSchema ?? {}, {
-            kind: "question",
-            answers: {},
-          }) ?? {})
+        ? elicitationDefaults(elicitation.requestedSchema ?? {})
         : null;
       return { action: "accept", content, _meta: null };
     }
     default:
       return undefined;
   }
-}
-
-export function codexQuestionAnswerText(answer: AgentAnswer) {
-  if (answer.kind !== "question") return "I would rather not answer that. Continue without it.";
-  return Object.entries(answer.answers)
-    .map(([question, label]) => `${question} ${label}`)
-    .join("\n");
 }
