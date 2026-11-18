@@ -58,10 +58,6 @@ export function isLostSessionError(event: Extract<AgentEvent, { type: "error" }>
   );
 }
 
-export function isStoppingAllAgents() {
-  return Boolean(registry.stoppingAll);
-}
-
 function hookShutdown() {
   if (registry.shutdownHooked) return;
   registry.shutdownHooked = true;
@@ -226,55 +222,9 @@ export async function interruptAgent(agentId: string) {
   }
 }
 
-export async function stopAgent(agentId: string) {
-  const agent = getRecord(agentId);
-  if (!agent.session) return;
-  await agent.session.stop();
-}
-
-export function resumeAgent(agentId: string): AgentSnapshot {
-  const agent = getRecord(agentId);
-  if (agent.session) return snapshot(agent);
-  launch(
-    agent,
-    agent.input.forkSessionId ? undefined : (agent.sessionId ?? agent.input.resumeSessionId),
-  );
-  return snapshot(agent);
-}
-
-export async function compactAgent(agentId: string) {
-  const agent = getRecord(agentId);
-  if (!agent.session) throw new Error("The agent is stopped.");
-  if (agent.status === "idle") agent.status = "running";
-  await agent.session.compact();
-}
-
-export function answerAgent(agentId: string, requestId: string, answer: AgentAnswer) {
-  const agent = getRecord(agentId);
-  const kind = agent.pending.get(requestId);
-  if (!agent.session || !kind) return false;
-  if (kind !== answer.kind)
-    throw new Error(`Request ${requestId} takes an answer of kind ${kind}, not ${answer.kind}.`);
-  agent.session.answer(requestId, answer);
-  record(agent, { type: "answered", requestId });
-  return true;
-}
-
-export function removeAgent(agentId: string) {
-  const agent = registry.agents.get(agentId);
-  if (!agent || agent.session) return false;
-  agent.listeners.clear();
-  registry.agents.delete(agentId);
-  return true;
-}
-
 export function getAgent(agentId: string): AgentSnapshot | undefined {
   const agent = registry.agents.get(agentId);
   return agent && snapshot(agent);
-}
-
-export function listAgents(): AgentSnapshot[] {
-  return [...registry.agents.values()].map(snapshot);
 }
 
 export function subscribeToAgent(
@@ -289,26 +239,6 @@ export function subscribeToAgent(
   }
   agent.listeners.add(listener);
   return () => agent.listeners.delete(listener);
-}
-
-export function lastAgentReply(agentId: string): string | null {
-  const agent = registry.agents.get(agentId);
-  if (!agent) return null;
-  let itemId: string | undefined;
-  let text = "";
-  for (let index = agent.events.length - 1; index >= 0; index -= 1) {
-    const { event } = agent.events[index];
-    if (event.type !== "text" && event.type !== "text-delta") continue;
-    if (itemId === undefined) itemId = event.itemId;
-    // why: An item's events are contiguous, so an earlier item ends the reply.
-    else if (event.itemId !== itemId) break;
-    if (event.type === "text") {
-      text = event.text;
-      break;
-    }
-    text = event.text + text;
-  }
-  return text.trim() ? text : null;
 }
 
 export function providerSignInStatus(provider: ProviderId): Promise<SignInStatus> {

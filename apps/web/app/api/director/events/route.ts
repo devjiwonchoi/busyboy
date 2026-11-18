@@ -7,7 +7,7 @@ const HEARTBEAT_MS = 15_000;
 
 export async function GET(request: Request) {
   await connection();
-  const folder = await dataFolder();
+  const folder = dataFolder();
   const encoder = new TextEncoder();
   let cleanup = () => {};
 

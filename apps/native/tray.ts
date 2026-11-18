@@ -122,8 +122,6 @@ export function createTray(actions: TrayActions) {
   };
 }
 
-export type DesktopTray = ReturnType<typeof createTray>;
-
 export function setBadge(count: number) {
   if (process.platform === "darwin") app.setBadgeCount(count);
 }

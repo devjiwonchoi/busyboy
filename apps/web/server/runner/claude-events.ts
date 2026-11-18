@@ -1,4 +1,3 @@
-import { parseAskedQuestions } from "./asked-questions";
 import type { AgentEvent } from "./contract";
 
 export type ClaudeRawMessage = {
@@ -21,15 +20,6 @@ export type ClaudeRawMessage = {
   message?: { id?: string; content?: unknown };
   parent_tool_use_id?: string | null;
   mcp_servers?: { name?: string; status?: string }[];
-};
-
-/*why: * A `canUseTool` call, as the adapter receives it and as recordings store it. */
-export type ClaudePermissionRequest = {
-  toolName: string;
-  input: Record<string, unknown>;
-  title?: string;
-  description?: string;
-  suggestions?: unknown[];
 };
 
 export const TEXT_DELTA_FLUSH_MS = 50;
@@ -236,27 +226,4 @@ export class ClaudeEventMapper {
       }
     }
   }
-}
-
-export function claudePermissionToEvent(
-  requestId: string,
-  request: ClaudePermissionRequest,
-): Extract<AgentEvent, { type: "approval" | "question" }> {
-  if (request.toolName === "AskUserQuestion") {
-    const questions = parseAskedQuestions(request.input) ?? [
-      {
-        question: "Claude asked a question BusyBoy could not read. Reply with the answer.",
-        multiSelect: false,
-        options: [],
-      },
-    ];
-    return { type: "question", requestId, questions };
-  }
-  return {
-    type: "approval",
-    requestId,
-    title: request.title ?? `Allow ${toolLabel(request.toolName, request.input)}?`,
-    detail: request.description,
-    canAllowForSession: (request.suggestions?.length ?? 0) > 0,
-  };
 }

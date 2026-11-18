@@ -72,16 +72,6 @@ export function unfillableFields(schema: ElicitationSchema) {
   });
 }
 
-export function elicitationDefaults(schema: ElicitationSchema) {
-  return Object.entries(schema.properties ?? {})
-    .filter(([, field]) => field?.default !== undefined)
-    .map(([key, field]) => `${field?.title || key}: ${JSON.stringify(field?.default)}`);
-}
-
-export function elicitationQuestions(message: string, schema: ElicitationSchema): Question[] {
-  return formQuestions(message, schema).map(({ question }) => question);
-}
-
 function selectedLabels(answer: string, choices: Choice[]) {
   if (answer === "") return [];
   const labels = new Set(choices.map((choice) => choice.title));

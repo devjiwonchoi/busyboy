@@ -1,4 +1,3 @@
-import { AsyncLocalStorage } from "node:async_hooks";
 import { access, mkdir, open, readFile, rename } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -26,23 +25,8 @@ const EMPTY_SETTINGS: Settings = {
   defaultProvider: null,
 };
 
-function resolveDataFolder() {
+export function dataFolder() {
   return process.env[HOME_ENV] || join(homedir(), ".busyboy");
-}
-
-const BOUND_FOLDER_KEY = Symbol.for("busyboy.data-folder");
-const boundStore = globalThis as typeof globalThis & {
-  [BOUND_FOLDER_KEY]?: AsyncLocalStorage<string>;
-};
-const boundFolder = (boundStore[BOUND_FOLDER_KEY] ??= new AsyncLocalStorage<string>());
-
-// why: Work that outlives a request has to capture the data folder before the request ends.
-export function runWithDataFolder<T>(folder: string, work: () => T): T {
-  return boundFolder.run(folder, work);
-}
-
-export async function dataFolder() {
-  return boundFolder.getStore() ?? resolveDataFolder();
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -122,13 +106,13 @@ async function readSettingsAt(folder: string): Promise<Settings> {
 }
 
 export async function readSettings() {
-  return readSettingsAt(await dataFolder());
+  return readSettingsAt(dataFolder());
 }
 
 export async function updateSettings<T>(
   change: (settings: Settings) => T | Promise<T>,
 ): Promise<T> {
-  const folder = await dataFolder();
+  const folder = dataFolder();
   const file = join(folder, SETTINGS_FILE);
   return queued(file, async () => {
     await moveAsideIfCorrupt(folder);

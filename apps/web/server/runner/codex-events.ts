@@ -1,13 +1,7 @@
 import { parseAskedQuestions } from "./asked-questions";
 // why: Types follow codex-cli 0.167.0 (codex app-server generate-ts), reduced to the fields read here.
 import { TEXT_DELTA_FLUSH_MS } from "./claude-events";
-import {
-  elicitationContent,
-  elicitationDefaults,
-  elicitationQuestions,
-  unfillableFields,
-  type ElicitationSchema,
-} from "./codex-elicitation";
+import { elicitationContent, unfillableFields, type ElicitationSchema } from "./codex-elicitation";
 import type { AgentAnswer, AgentEvent } from "./contract";
 
 export type CodexRawMessage = {
@@ -41,56 +35,6 @@ type Turn = {
   error?: TurnError | null;
 };
 type TurnError = { message: string; codexErrorInfo?: unknown; additionalDetails?: string | null };
-
-type SandboxPath =
-  | { type: "path"; path: string }
-  | { type: "glob_pattern"; pattern: string }
-  | { type: "special"; value: { kind: string; path?: string; subpath?: string | null } };
-
-const SPECIAL_PATHS: Record<string, string> = {
-  root: "the whole disk",
-  minimal: "system paths",
-  tmpdir: "the temporary folder",
-  slash_tmp: "/tmp",
-  project_roots: "the project folders",
-};
-
-function sandboxPathLabel(path: SandboxPath) {
-  if (path.type === "path") return path.path;
-  if (path.type === "glob_pattern") return path.pattern;
-  const { kind, path: unknownPath, subpath } = path.value;
-  const base = SPECIAL_PATHS[kind] ?? unknownPath ?? kind;
-  return subpath ? `${subpath} in ${base}` : base;
-}
-
-const ACCESS_LABELS: Record<string, string> = { read: "Read", write: "Write", deny: "No access" };
-
-type PermissionProfile = {
-  network?: { enabled: boolean | null } | null;
-  fileSystem?: {
-    read?: string[] | null;
-    write?: string[] | null;
-    entries?: { path: SandboxPath; access: string }[];
-  } | null;
-};
-
-function permissionLines(permissions: PermissionProfile | null | undefined) {
-  const entries = permissions?.fileSystem?.entries;
-  return [
-    permissions?.network?.enabled && "Network access",
-    ...(entries?.length
-      ? entries.map(
-          (entry) =>
-            `${ACCESS_LABELS[entry.access] ?? entry.access}: ${sandboxPathLabel(entry.path)}`,
-        )
-      : [
-          permissions?.fileSystem?.write?.length &&
-            `Write: ${permissions.fileSystem.write.join(", ")}`,
-          permissions?.fileSystem?.read?.length &&
-            `Read: ${permissions.fileSystem.read.join(", ")}`,
-        ]),
-  ];
-}
 
 export const CODEX_ANSWERABLE_REQUESTS = new Set([
   "item/commandExecution/requestApproval",
@@ -325,11 +269,6 @@ export class CodexEventMapper {
   }
 }
 
-function detailLines(...lines: (string | number | null | undefined | false)[]) {
-  const detail = lines.filter(Boolean).join("\n");
-  return detail || undefined;
-}
-
 type ElicitationParams = {
   serverName?: string;
   mode?: string;
@@ -435,25 +374,6 @@ function networkAmendment(value: unknown): { host?: string; action?: string } | 
   };
 }
 
-function sessionChoice(params: Record<string, unknown>): { offered: boolean; label?: string } {
-  if (params.kind === "humanCommand") return { offered: false };
-  const decisions = listedDecisions(params.availableDecisions);
-  if (!decisions) return { offered: true };
-  if (decisions.some((decision) => decision.name === "acceptForSession")) return { offered: true };
-  const prefix = decisions.find((decision) => decision.name === "acceptWithExecpolicyAmendment");
-  const command = prefix ? execpolicyPrefix(prefix.value) : undefined;
-  if (command)
-    return { offered: true, label: `Always allow commands starting with ${shorten(command)}` };
-  const network = decisions.find((decision) => decision.name === "applyNetworkPolicyAmendment");
-  const rule = network ? networkAmendment(network.value) : undefined;
-  if (rule && rule.action !== "deny")
-    return {
-      offered: true,
-      label: rule.host ? `Always allow ${rule.host}` : "Always allow this host",
-    };
-  return { offered: false };
-}
-
 // why: cancel is the only refusal on some requests, and cancel also ends the turn.
 function commandApprovalDecision(
   params: Record<string, unknown>,
@@ -481,103 +401,6 @@ function commandApprovalDecision(
   const cancel = listedValue(decisions, "cancel");
   if (cancel !== undefined) return cancel;
   return "decline";
-}
-
-export function codexRequestToEvent(
-  requestId: string,
-  message: CodexRawMessage,
-): Extract<AgentEvent, { type: "approval" | "question" }> | undefined {
-  const params = message.params ?? {};
-  const reason = typeof params.reason === "string" ? params.reason : undefined;
-  switch (message.method) {
-    case "item/commandExecution/requestApproval": {
-      const command = displayCommand(params.command, params.commandActions);
-      const network = params.networkApprovalContext as
-        | { host?: string; protocol?: string }
-        | null
-        | undefined;
-      const title =
-        params.kind === "writeStdin"
-          ? "Allow input to a running command?"
-          : command
-            ? `Allow Shell: ${shorten(command)}?`
-            : "Allow a shell command?";
-      const session = sessionChoice(params);
-      return {
-        type: "approval",
-        requestId,
-        title,
-        detail: detailLines(
-          reason,
-          typeof params.cwd === "string" && `In ${params.cwd}`,
-          network?.host && `Network: ${network.host}`,
-          ...permissionLines(params.additionalPermissions as PermissionProfile | null | undefined),
-        ),
-        canAllowForSession: session.offered,
-        ...(session.label ? { allowForSessionLabel: session.label } : {}),
-      };
-    }
-    case "item/fileChange/requestApproval":
-      return {
-        type: "approval",
-        requestId,
-        title: "Allow file changes?",
-        detail: detailLines(
-          reason,
-          typeof params.grantRoot === "string" && `Write access under ${params.grantRoot}`,
-        ),
-        canAllowForSession: true,
-      };
-    case "item/permissions/requestApproval": {
-      return {
-        type: "approval",
-        requestId,
-        title: "Allow extra permissions?",
-        detail: detailLines(reason, ...permissionLines(params.permissions as PermissionProfile)),
-        canAllowForSession: true,
-      };
-    }
-    case "item/tool/requestUserInput": {
-      const questions = parseAskedQuestions(params.questions) ??
-        parseAskedQuestions(params) ?? [
-          {
-            question: "Codex asked a question BusyBoy could not read. Reply with the answer.",
-            multiSelect: false,
-            options: [],
-          },
-        ];
-      return { type: "question", requestId, questions };
-    }
-    case "mcpServer/elicitation/request": {
-      const elicitation = params as ElicitationParams;
-      const text = [elicitation.message, elicitation.title, elicitation.description].find(
-        (value) => typeof value === "string",
-      );
-      if (isForm(elicitation)) {
-        const questions = elicitationQuestions(
-          elicitation.message ?? "",
-          elicitation.requestedSchema ?? {},
-        );
-        if (questions.length > 0) return { type: "question", requestId, questions };
-      }
-      const defaults = isForm(elicitation)
-        ? elicitationDefaults(elicitation.requestedSchema ?? {})
-        : [];
-      return {
-        type: "approval",
-        requestId,
-        title: `Allow ${elicitation.serverName}: ${shorten(String(text ?? "request"))}?`,
-        detail: detailLines(
-          typeof elicitation.url === "string" && elicitation.url,
-          defaults.length > 0 && "Sends:",
-          ...defaults,
-        ),
-        canAllowForSession: false,
-      };
-    }
-    default:
-      return undefined;
-  }
 }
 
 export function codexAnswerToResult(message: CodexRawMessage, answer: AgentAnswer): unknown {
