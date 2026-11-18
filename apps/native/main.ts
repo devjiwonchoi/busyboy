@@ -5,11 +5,13 @@ import { app, BrowserWindow, dialog, ipcMain, session, shell } from "electron";
 
 import {
   APP_VERSION_CHANNEL,
+  DEV_RUN_ARGUMENT,
   INSTALL_UPDATE_CHANNEL,
   UPDATE_READY_CHANNEL,
   UPDATE_STATE_CHANNEL,
 } from "../web/lib/desktop-bridge";
 import { SERVER_TOKEN_COOKIE } from "../web/lib/server-token";
+import { APP_LABEL, isDevRun } from "./app-label";
 import { startBackground, type Background } from "./background";
 import {
   createSelfCheck,
@@ -60,7 +62,7 @@ function createWindow(url: string, show: boolean) {
     minWidth: 800,
     minHeight: 480,
     show: false,
-    title: "BusyBoy",
+    title: APP_LABEL,
     titleBarStyle: process.platform === "darwin" ? "hiddenInset" : "default",
     ...(devIcon && process.platform !== "darwin" ? { icon: devIcon } : {}),
     webPreferences: {
@@ -68,8 +70,16 @@ function createWindow(url: string, show: boolean) {
       nodeIntegration: false,
       sandbox: true,
       preload: join(__dirname, "preload.cjs"),
+      ...(isDevRun ? { additionalArguments: [DEV_RUN_ARGUMENT] } : {}),
     },
   });
+
+  if (isDevRun) {
+    window.on("page-title-updated", (event, title) => {
+      event.preventDefault();
+      window.setTitle(title.replace("BusyBoy", APP_LABEL));
+    });
+  }
 
   if (process.platform === "darwin") {
     window.webContents.on("dom-ready", () => {
@@ -281,7 +291,7 @@ function registerAppEvents() {
     } catch (error) {
       console.error(error);
       dialog.showErrorBox(
-        "BusyBoy could not start",
+        `${APP_LABEL} could not start`,
         error instanceof Error ? error.message : String(error),
       );
       await server?.stop();
