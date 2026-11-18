@@ -31,7 +31,6 @@ export default {
           ],
           env: {
             BUSYBOY_HOME: mkdtempSync(join(tmpdir(), "busyboy-e2e-")),
-            // A scripted `claude` that streams a fixed reply word by word.
             BUSYBOY_CLAUDE_PATH: resolve("tests/fixtures/fake-claude"),
           },
           startupTimeout: 120_000,

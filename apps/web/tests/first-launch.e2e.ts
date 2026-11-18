@@ -1,9 +1,7 @@
 import { describe, test } from "@e2e-dev/web";
 import { expect } from "e2e";
 
-// One serial flow: the app under test keeps one data folder for the whole run,
-// so the setup check must run before anything finishes setup.
-describe("first launch", { serial: true }, () => {
+describe("first launch, then the first chat", { serial: true }, () => {
   test("a first launch opens setup", async ({ app, screen }) => {
     await app.open("/");
 
@@ -17,8 +15,6 @@ describe("first launch", { serial: true }, () => {
 
     await screen.getByRole("textbox", "Message").fill("Say something long.");
     await screen.getByRole("button", "Send").tap();
-    // tests/fixtures/fake-claude sends one word every 250 ms. A reply that only
-    // shows up once the turn ends never matches this partial-text locator.
     await screen
       .getByRole("article", "Reply")
       .filter({ hasText: "Streaming reply one", hasNotText: "finished." })
@@ -33,7 +29,6 @@ describe("first launch", { serial: true }, () => {
 
     await screen.getByRole("textbox", "Message").fill("Think first.");
     await screen.getByRole("button", "Send").tap();
-    // tests/fixtures/fake-claude waits 1.5 s before its first word.
     await screen.getByText("Thinking…").waitFor();
     await screen.getByRole("article", "Reply").nth(1).waitFor();
 
