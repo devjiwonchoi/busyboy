@@ -7,6 +7,9 @@ allowBuilds:
   # Comes with electron-builder for Squirrel installers, which are not built.
   electron-winstaller: false
   esbuild: true
+  # Comes with next for image optimization. Its prebuilt binaries install as
+  # @img/sharp-* optional dependencies, so there is nothing to compile.
+  sharp: false
 
 # Electron 45.3.2 was newer than the configured minimum release age when it
 # was pinned for this app; pnpm added the exemption so it could be installed.
