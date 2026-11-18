@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useReducer } from "react";
+import { useEffect, useReducer, useRef } from "react";
 
 import type { ChatEntry, DirectorStatus, DirectorUpdate } from "@/server/director/chat";
 
-import { Composer } from "./composer";
+import { Composer, type ComposerHandle } from "./composer";
 import { Transcript } from "./transcript";
 
 export type DirectorView = {
@@ -56,6 +56,7 @@ function apply(current: DirectorView, update: ChatAction): DirectorView {
 
 export function Chat() {
   const [view, dispatch] = useReducer(apply, initialView);
+  const composer = useRef<ComposerHandle>(null);
 
   // oxlint-disable-next-line busyboy/no-unreasoned-effect -- keeps the director event stream open while the chat is mounted.
   useEffect(() => {
@@ -66,13 +67,24 @@ export function Chat() {
   }, []);
 
   return (
-    <>
+    <div
+      className="flex min-h-0 flex-1 flex-col"
+      onDragOver={(event) => {
+        if ([...event.dataTransfer.types].includes("Files")) event.preventDefault();
+      }}
+      onDrop={(event) => {
+        if (!event.dataTransfer.files.length) return;
+        event.preventDefault();
+        composer.current?.addFiles(event.dataTransfer.files);
+      }}
+    >
       <Transcript view={view} />
       <Composer
+        ref={composer}
         answering={view.status === "answering"}
         error={view.error}
         onError={(error) => dispatch({ type: "error", error })}
       />
-    </>
+    </div>
   );
 }
