@@ -1,5 +1,3 @@
-import { useState } from "react";
-
 import { Bubble, BubbleContent } from "@/components/ui/bubble";
 import { Message, MessageContent } from "@/components/ui/message";
 import type { ChatEntry } from "@/server/director/chat";
@@ -54,19 +52,16 @@ function MessageView({ entry }: { entry: ChatEntry }) {
 }
 
 function UserBubble({ text }: { text: string }) {
-  const [hovered, setHovered] = useState(false);
   return (
-    <article
-      aria-label="Your message"
-      onPointerEnter={() => setHovered(true)}
-      onPointerLeave={() => setHovered(false)}
-    >
+    <article aria-label="Your message" className="group/message">
       <Message align="end">
         <MessageContent>
-          <Bubble>
-            <BubbleContent className="whitespace-pre-wrap">{text}</BubbleContent>
-            <MessageActions text={text} align="end" hovered={hovered} />
-          </Bubble>
+          <div className="flex w-full min-w-0 flex-col items-end gap-1">
+            <Bubble>
+              <BubbleContent className="whitespace-pre-wrap">{text}</BubbleContent>
+            </Bubble>
+            <MessageActions text={text} />
+          </div>
         </MessageContent>
       </Message>
     </article>
@@ -74,19 +69,16 @@ function UserBubble({ text }: { text: string }) {
 }
 
 function ReplyBubble({ text, copyable = false }: { text: string; copyable?: boolean }) {
-  const [hovered, setHovered] = useState(false);
   return (
-    <article
-      aria-label="Reply"
-      onPointerEnter={() => setHovered(true)}
-      onPointerLeave={() => setHovered(false)}
-    >
+    <article aria-label="Reply" className="group/message">
       <Message>
         <MessageContent>
-          <Bubble variant="muted">
-            <BubbleContent className="whitespace-pre-wrap">{text}</BubbleContent>
-            {copyable ? <MessageActions text={text} align="start" hovered={hovered} /> : null}
-          </Bubble>
+          <div className="flex w-full min-w-0 flex-col items-start gap-1">
+            <Bubble variant="muted">
+              <BubbleContent className="whitespace-pre-wrap">{text}</BubbleContent>
+            </Bubble>
+            {copyable ? <MessageActions text={text} /> : null}
+          </div>
         </MessageContent>
       </Message>
     </article>
