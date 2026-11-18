@@ -2,7 +2,7 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 
 const roots = ["apps/web", "apps/native", "scripts"];
-const extra = ["apps/web/next.config.ts", "apps/web/proxy.ts"];
+const extra = ["apps/web/next.config.ts"];
 const link = /https?:\/\/\S+/;
 
 function filesUnder(directory: string): string[] {
