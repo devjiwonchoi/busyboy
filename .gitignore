@@ -8,6 +8,8 @@ dist/
 build/
 release/
 dist-electron/
+desktop-bundle.tar
+desktop-bundle-windows.tar
 *.tsbuildinfo
 
 .jwn/

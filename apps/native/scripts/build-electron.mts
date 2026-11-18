@@ -6,9 +6,9 @@ const root = join(import.meta.dirname, "..");
 
 await build({
   entryPoints: {
-    main: join(root, "electron", "main.ts"),
+    main: join(root, "main.ts"),
     // why: Sandboxed preload scripts cannot require other files, so preload is bundled on its own.
-    preload: join(root, "electron", "preload.ts"),
+    preload: join(root, "preload.ts"),
   },
   outdir: join(root, "dist-electron"),
   outExtension: { ".js": ".cjs" },

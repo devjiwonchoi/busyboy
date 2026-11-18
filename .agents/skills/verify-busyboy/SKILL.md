@@ -33,7 +33,7 @@ The desktop window:
 pnpm drive launch --surface electron
 ```
 
-This needs `dist-electron/main.cjs`, `dist-electron/preload.cjs`, and `.next/standalone/server.js`. Without them the command exits and names the missing files. `pnpm build` then `pnpm build:electron` produces them. Playwright launches Electron and attaches over the Chrome DevTools Protocol. The data directory is empty: no settings file. Ready means the heading `Sign in to an agent` is visible. The desktop server sets `BUSYBOY_TOKEN`. Chat journeys still refuse this surface.
+This needs `apps/native/dist-electron/main.cjs`, `apps/native/dist-electron/preload.cjs`, and `apps/web/.next/standalone/apps/web/server.js`. Without them the command exits and names the missing files. `pnpm build` then `pnpm build:electron` produces them. Playwright launches Electron and attaches over the Chrome DevTools Protocol. The data directory is empty: no settings file. Ready means the heading `Sign in to an agent` is visible. The desktop server sets `BUSYBOY_TOKEN`. Chat journeys still refuse this surface.
 
 ## Doctor
 
@@ -112,7 +112,7 @@ Cleanup stops the keeper, the Next server or Electron process this run started, 
 
 ## Helpers
 
-`pnpm drive` runs `node --experimental-strip-types scripts/drive.mts`. The keeper listens on `.verify/drive.sock` and is the only process that holds the browser. Later commands send one JSON request to that socket.
+`pnpm drive` runs `node --experimental-strip-types apps/web/scripts/drive.mts`. The keeper listens on `.verify/drive.sock` and is the only process that holds the browser. Later commands send one JSON request to that socket.
 
 ```sh
 pnpm drive help

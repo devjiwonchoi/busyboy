@@ -1,0 +1,24 @@
+{
+  "name": "@busyboy/native",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Run coding tasks across projects with your installed agent CLIs.",
+  "main": "dist-electron/main.cjs",
+  "scripts": {
+    "build": "node scripts/build-electron.mts",
+    "dev": "pnpm build && electron .",
+    "build:desktop": "node scripts/build-desktop.mts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "electron-updater": "6.8.9"
+  },
+  "devDependencies": {
+    "@types/node": "24.19.2",
+    "electron": "45.3.2",
+    "electron-builder": "26.18.0",
+    "esbuild": "0.28.2",
+    "typescript": "6.0.3"
+  },
+  "productName": "BusyBoy"
+}

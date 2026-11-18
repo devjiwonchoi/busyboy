@@ -6,14 +6,17 @@ import { basename, join } from "node:path";
 
 import builder from "electron-builder";
 
+import { standaloneServerPath } from "../standalone-server.ts";
 import { checkPackagedServer } from "./check-packaged-server.mts";
 import { installServerPackages } from "./install-server-packages.mts";
 import { materializeWindowsServer } from "./materialize-windows-server.mts";
 
-const root = join(import.meta.dirname, "..");
+const nativeRoot = join(import.meta.dirname, "..");
+const repoRoot = join(nativeRoot, "..", "..");
+const webRoot = join(repoRoot, "apps", "web");
 const argv = process.argv.slice(2);
 const args = new Set(argv);
-const manifest = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
+const manifest = JSON.parse(readFileSync(join(nativeRoot, "package.json"), "utf8"));
 
 function releaseVersion(): string {
   const index = argv.findIndex((arg) => arg === "--version" || arg.startsWith("--version="));
@@ -26,12 +29,12 @@ function releaseVersion(): string {
   }
   return value;
 }
-const standalone = join(root, ".next", "standalone");
-const outputDir = join(root, "release");
+const standalone = join(webRoot, ".next", "standalone");
+const outputDir = join(repoRoot, "release");
 
 function run(command: string, commandArgs: string[]) {
   execFileSync(command, commandArgs, {
-    cwd: root,
+    cwd: repoRoot,
     stdio: "inherit",
     shell: process.platform === "win32",
   });
@@ -75,19 +78,19 @@ if (release && mac) {
 if (release && process.platform === "linux")
   throw new Error("Releases are built for macOS and Windows only.");
 
-if (!args.has("--skip-next")) run("pnpm", ["build"]);
-if (!existsSync(join(standalone, "server.js"))) {
-  throw new Error("No .next/standalone/server.js. Run `pnpm build` first.");
+if (!args.has("--skip-next")) run("pnpm", ["--filter", "@busyboy/web", "build"]);
+if (!existsSync(standaloneServerPath(standalone))) {
+  throw new Error("No apps/web/.next/standalone/apps/web/server.js. Run `pnpm build` first.");
 }
-if (!args.has("--skip-electron")) run("pnpm", ["build:electron"]);
-else if (!existsSync(join(root, "dist-electron", "main.cjs"))) {
-  throw new Error("No dist-electron/main.cjs. Run `pnpm build:electron` first.");
+if (!args.has("--skip-electron")) run("pnpm", ["--filter", "@busyboy/native", "build"]);
+else if (!existsSync(join(nativeRoot, "dist-electron", "main.cjs"))) {
+  throw new Error("No apps/native/dist-electron/main.cjs. Run `pnpm build:electron` first.");
 }
 
 rmSync(outputDir, { recursive: true, force: true });
 
 // why: Release jobs install only electron and electron-builder, but electron-builder still requires every production dependency.
-const packagePath = join(root, "package.json");
+const packagePath = join(nativeRoot, "package.json");
 const packageBackup = args.has("--skip-next") ? readFileSync(packagePath) : null;
 if (packageBackup) {
   const packaged = JSON.parse(packageBackup.toString("utf8")) as Record<string, unknown>;
@@ -99,9 +102,10 @@ if (packageBackup) {
 let packagedServer: string | undefined;
 let executable: string | undefined;
 
-const entitlements = join(root, "electron", "entitlements.mac.plist");
+const entitlements = join(nativeRoot, "entitlements.mac.plist");
 
 try {
+  process.chdir(nativeRoot);
   await builder.build({
     targets: platform.createTarget(release ? (mac ? ["dmg", "zip"] : ["nsis"]) : "dir"),
     publish: "never",
@@ -147,10 +151,10 @@ try {
       npmRebuild: false,
       nodeGypRebuild: false,
       electronLanguages: ["en"],
-      win: { icon: join(root, "electron", "icons", "icon.ico") },
-      linux: { icon: join(root, "electron", "icons", "icon.png") },
+      win: { icon: join(nativeRoot, "icons", "icon.ico") },
+      linux: { icon: join(nativeRoot, "icons", "icon.png") },
       mac: {
-        icon: join(root, "electron", "icons", "icon.png"),
+        icon: join(nativeRoot, "icons", "icon.png"),
         category: "public.app-category.developer-tools",
         ...(release
           ? {

@@ -29,8 +29,10 @@ import {
   type Page,
 } from "@playwright/test";
 
-const root = join(import.meta.dirname, "..");
-const verifyDir = join(root, ".verify");
+const webRoot = join(import.meta.dirname, "..");
+const repoRoot = join(webRoot, "..", "..");
+const nativeRoot = join(repoRoot, "apps", "native");
+const verifyDir = join(repoRoot, ".verify");
 const evidenceDir = join(verifyDir, "evidence");
 const statePath = join(verifyDir, "run.json");
 const socketPath = join(verifyDir, "drive.sock");
@@ -41,9 +43,9 @@ const readyMs = 180_000;
 const actionMs = 45_000;
 const host = "127.0.0.1";
 const electronFiles = [
-  "dist-electron/main.cjs",
-  "dist-electron/preload.cjs",
-  ".next/standalone/server.js",
+  "apps/native/dist-electron/main.cjs",
+  "apps/native/dist-electron/preload.cjs",
+  "apps/web/.next/standalone/apps/web/server.js",
 ];
 
 const directorQuestion = "What does git worktree do? Answer in one sentence.";
@@ -102,8 +104,6 @@ type Drive = {
   recording: Recording | null;
 };
 
-const require = createRequire(import.meta.url);
-
 function delay(ms: number) {
   return new Promise((resolveDelay) => setTimeout(resolveDelay, ms));
 }
@@ -127,7 +127,7 @@ function option(args: string[], name: string) {
 function revision() {
   try {
     return execFileSync("git", ["rev-parse", "--short", "HEAD"], {
-      cwd: root,
+      cwd: repoRoot,
       encoding: "utf8",
     }).trim();
   } catch {
@@ -260,7 +260,7 @@ function freePort() {
 }
 
 function missingElectronFiles() {
-  return electronFiles.filter((file) => !exists(join(root, file)));
+  return electronFiles.filter((file) => !exists(join(repoRoot, file)));
 }
 
 function exists(file: string) {
@@ -634,7 +634,7 @@ async function launchNext(dataDir: string) {
     "pnpm",
     ["exec", "next", "dev", "--hostname", host, "--port", String(port)],
     {
-      cwd: root,
+      cwd: webRoot,
       env: serverEnv(dataDir, port),
       stdio: ["ignore", "pipe", "pipe"],
     },
@@ -671,11 +671,11 @@ async function launchElectron(dataDir: string) {
       `The Electron surface needs ${missing.join(", ")}. Run pnpm build and pnpm build:electron.`,
     );
   }
-  const executablePath = require("electron") as string;
+  const executablePath = createRequire(join(nativeRoot, "package.json"))("electron") as string;
   const app = await electron.launch({
     executablePath,
-    args: [root],
-    cwd: root,
+    args: [nativeRoot],
+    cwd: nativeRoot,
     env: stringEnv(serverEnv(dataDir, undefined)),
     timeout: readyMs,
   });
@@ -867,13 +867,13 @@ async function launchCommand(surface: Surface) {
     process.execPath,
     [
       "--experimental-strip-types",
-      join(root, "scripts", "drive.mts"),
+      join(webRoot, "scripts", "drive.mts"),
       "keeper",
       "--surface",
       surface,
     ],
     {
-      cwd: root,
+      cwd: repoRoot,
       env: keeperEnv,
       detached: true,
       stdio: ["ignore", log, log],

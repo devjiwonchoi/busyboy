@@ -13,7 +13,7 @@
       "version": "19.3.1"
     },
     "next": {
-      "rootDir": "."
+      "rootDir": "apps/web"
     }
   },
   "options": {
@@ -25,7 +25,7 @@
   },
   "overrides": [
     {
-      "files": ["src/**/*.{ts,tsx}"],
+      "files": ["apps/web/src/**/*.{ts,tsx}"],
       "rules": {
         "no-restricted-imports": [
           "error",
@@ -34,7 +34,7 @@
               {
                 "name": "react",
                 "importNames": ["useEffect"],
-                "message": "Do not sync state in an effect; compute it during render, handle the event, reset with a key, or subscribe with useSyncExternalStore. External setup goes through useExternalSync from src/hooks/use-external-sync.ts (https://react.dev/learn/you-might-not-need-an-effect)."
+                "message": "Do not sync state in an effect; compute it during render, handle the event, reset with a key, or subscribe with useSyncExternalStore. External setup goes through useExternalSync from apps/web/src/hooks/use-external-sync.ts (https://react.dev/learn/you-might-not-need-an-effect)."
               }
             ]
           }
@@ -42,7 +42,7 @@
       }
     },
     {
-      "files": ["src/hooks/use-external-sync.ts", "src/components/ui/**"],
+      "files": ["apps/web/src/hooks/use-external-sync.ts", "apps/web/src/components/ui/**"],
       "rules": {
         "no-restricted-imports": "off"
       }

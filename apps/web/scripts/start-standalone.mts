@@ -2,9 +2,9 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
-const server = join(import.meta.dirname, "..", ".next", "standalone", "server.js");
+const server = join(import.meta.dirname, "..", ".next", "standalone", "apps", "web", "server.js");
 if (!existsSync(server)) {
-  throw new Error("No .next/standalone/server.js. Run `pnpm build` first.");
+  throw new Error("No .next/standalone/apps/web/server.js. Run `pnpm build` first.");
 }
 
 // why: server.js binds to HOSTNAME, falling back to 0.0.0.0.

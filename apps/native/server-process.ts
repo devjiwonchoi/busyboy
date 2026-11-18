@@ -5,8 +5,9 @@ import { dirname, join } from "node:path";
 
 import { app, utilityProcess, type UtilityProcess } from "electron";
 
-import { SHUTDOWN_DONE_MESSAGE, SHUTDOWN_MESSAGE } from "../src/lib/server-shutdown";
-import { SERVER_TOKEN_ENV, SERVER_TOKEN_HEADER } from "../src/lib/server-token";
+import { SHUTDOWN_DONE_MESSAGE, SHUTDOWN_MESSAGE } from "../web/src/lib/server-shutdown";
+import { SERVER_TOKEN_ENV, SERVER_TOKEN_HEADER } from "../web/src/lib/server-token";
+import { standaloneServerPath } from "./standalone-server";
 
 const LOOPBACK = "127.0.0.1";
 const READY_TIMEOUT_MS = 30_000;
@@ -24,9 +25,11 @@ export type ServerHandle = {
 
 /*why: * The standalone server sits outside app.asar in packaged builds. */
 export function serverEntry() {
-  const entry = app.isPackaged
-    ? join(process.resourcesPath, "server", "server.js")
-    : join(app.getAppPath(), ".next", "standalone", "server.js");
+  // why: The unpackaged app lives in apps/native, and Next's standalone output lives in apps/web.
+  const standalone = app.isPackaged
+    ? join(process.resourcesPath, "server")
+    : join(app.getAppPath(), "..", "web", ".next", "standalone");
+  const entry = standaloneServerPath(standalone);
   if (!existsSync(entry)) {
     throw new Error(`No Next server at ${entry}. Run \`pnpm build\` first.`);
   }

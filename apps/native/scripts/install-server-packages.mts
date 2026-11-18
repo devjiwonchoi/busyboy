@@ -4,7 +4,6 @@ import { execFileSync } from "node:child_process";
 import {
   chmodSync,
   closeSync,
-  copyFileSync,
   cpSync,
   existsSync,
   lstatSync,
@@ -20,10 +19,12 @@ import {
 import { tmpdir } from "node:os";
 import { basename, dirname, join, relative, sep } from "node:path";
 
-import { serverExternalPackages } from "../src/lib/server-external-packages.ts";
-import { trimLockfile } from "./trim-lockfile.mts";
+import { lockfileForImporter } from "../../../scripts/trim-lockfile.mts";
+import { serverExternalPackages } from "../../web/src/lib/server-external-packages.ts";
+import { standaloneAppDir, standaloneServerPath } from "../standalone-server.ts";
 
-const root = join(import.meta.dirname, "..");
+const repoRoot = join(import.meta.dirname, "..", "..", "..");
+const webRoot = join(repoRoot, "apps", "web");
 
 const bundledExecutables = /^@anthropic-ai\/claude-agent-sdk-/;
 
@@ -344,16 +345,17 @@ function assertHostBinaries(serverDir: string, platform: string) {
 }
 
 export function installServerPackages(serverDir: string, platform: string, arch: string) {
-  const manifest = readManifest(root);
+  const manifest = readManifest(webRoot);
+  const workspace = readManifest(repoRoot);
   for (const name of serverExternalPackages) {
     if (!manifest.dependencies?.[name]) {
       throw new Error(
-        `${name} is in lib/server-external-packages.ts but not in package.json dependencies.`,
+        `${name} is in apps/web/src/lib/server-external-packages.ts but not in apps/web/package.json dependencies.`,
       );
     }
   }
 
-  const lockText = readFileSync(join(root, "pnpm-lock.yaml"), "utf8");
+  const lockText = readFileSync(join(repoRoot, "pnpm-lock.yaml"), "utf8");
   const sharp = lockedSharp(lockText);
   const keep = new Set<string>(serverExternalPackages);
   if (sharp) keep.add("sharp");
@@ -372,17 +374,22 @@ export function installServerPackages(serverDir: string, platform: string, arch:
       private: true,
       dependencies: {},
     };
-    if (manifest.packageManager) staged.packageManager = manifest.packageManager;
+    if (workspace.packageManager) staged.packageManager = workspace.packageManager;
     for (const name of serverExternalPackages)
       staged.dependencies[name] = manifest.dependencies![name];
     if (sharp) staged.dependencies.sharp = sharp.specifier;
     writeFileSync(join(staging, "package.json"), `${JSON.stringify(staged, null, 2)}\n`);
-    let stagedLock = trimLockfile(lockText, keep);
+    let stagedLock = lockfileForImporter(lockText, "apps/web", keep);
     if (sharp && !(serverExternalPackages as readonly string[]).includes("sharp")) {
       stagedLock = addLockfileDependency(stagedLock, "sharp", sharp.specifier, sharp.version);
     }
     writeFileSync(join(staging, "pnpm-lock.yaml"), stagedLock);
-    copyFileSync(join(root, "pnpm-workspace.yaml"), join(staging, "pnpm-workspace.yaml"));
+    // why: The staging install is one package. The repo workspace points at apps/*, which are not in the temp directory.
+    const workspaceText = readFileSync(join(repoRoot, "pnpm-workspace.yaml"), "utf8").replace(
+      /^packages:\n(?:[ \t]+- .*\n)*/m,
+      "packages:\n  - .\n",
+    );
+    writeFileSync(join(staging, "pnpm-workspace.yaml"), workspaceText);
     execFileSync(
       "pnpm",
       [
@@ -401,7 +408,10 @@ export function installServerPackages(serverDir: string, platform: string, arch:
         rmSync(join(installed, name), { recursive: true, force: true });
     }
 
-    const target = join(serverDir, "node_modules");
+    const appDir = existsSync(standaloneServerPath(serverDir))
+      ? standaloneAppDir(serverDir)
+      : serverDir;
+    const target = join(appDir, "node_modules");
     const roots = sharp ? [...serverExternalPackages, "sharp"] : [...serverExternalPackages];
     for (const name of dependencyClosure(installed, roots)) {
       const from = join(installed, name);
@@ -432,7 +442,10 @@ export function installServerPackages(serverDir: string, platform: string, arch:
   removeForeignNativePackages(serverDir, platform, arch);
   // why: Traced copies and the `.pnpm` store still carry the build machine's node-pty.
   pruneNodePtyPackages(serverDir, platform, arch);
-  pointAliasesAtInstalledPackages(serverDir, platform);
+  const aliasesIn = existsSync(standaloneServerPath(serverDir))
+    ? standaloneAppDir(serverDir)
+    : serverDir;
+  pointAliasesAtInstalledPackages(aliasesIn, platform);
   assertHostBinaries(serverDir, platform);
 }
 

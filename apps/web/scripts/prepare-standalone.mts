@@ -2,19 +2,21 @@
 import { cpSync, existsSync, rmSync } from "node:fs";
 import { join } from "node:path";
 
-import { installServerPackages } from "./install-server-packages.mts";
+import { installServerPackages } from "../../native/scripts/install-server-packages.mts";
+import { standaloneAppDir, standaloneServerPath } from "../../native/standalone-server.ts";
 
 const root = join(import.meta.dirname, "..");
 const standalone = join(root, ".next", "standalone");
+const appDir = standaloneAppDir(standalone);
 const assetsOnly = process.argv.includes("--assets-only");
 
-if (!existsSync(join(standalone, "server.js"))) {
-  throw new Error("No .next/standalone/server.js. Run `next build` first.");
+if (!existsSync(standaloneServerPath(standalone))) {
+  throw new Error("No .next/standalone/apps/web/server.js. Run `next build` first.");
 }
 
 const copies = [
-  [join(root, ".next", "static"), join(standalone, ".next", "static")],
-  [join(root, "public"), join(standalone, "public")],
+  [join(root, ".next", "static"), join(appDir, ".next", "static")],
+  [join(root, "public"), join(appDir, "public")],
 ] as const;
 
 for (const [from, to] of copies) {

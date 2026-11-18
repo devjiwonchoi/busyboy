@@ -1,14 +1,15 @@
 // why: The copy is outside the repository, so a missing package cannot be satisfied by the checkout's node_modules.
 import { execFileSync, spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import { cpSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { serverExternalPackages } from "../src/lib/server-external-packages.ts";
-import { SERVER_TOKEN_ENV, SERVER_TOKEN_HEADER } from "../src/lib/server-token.ts";
+import { serverExternalPackages } from "../../web/src/lib/server-external-packages.ts";
+import { SERVER_TOKEN_ENV, SERVER_TOKEN_HEADER } from "../../web/src/lib/server-token.ts";
+import { standaloneAppDir, standaloneServerPath } from "../standalone-server.ts";
 import { assertServerResolves } from "./check-server-resolution.mts";
 
 const READY_TIMEOUT_MS = 30_000;
@@ -94,10 +95,11 @@ export async function checkPackagedServer(serverDir: string) {
   const dir = join(isolated, "server");
   try {
     cpSync(serverDir, dir, { recursive: true, verbatimSymlinks: true });
+    const appDir = existsSync(standaloneServerPath(dir)) ? standaloneAppDir(dir) : dir;
     // why: The server answers requests while a missing Turbopack alias only fails
     // why: inside the render, so the timeout would hide which module is gone.
-    assertServerResolves(dir);
-    const loader = join(dir, "check-server-packages.mjs");
+    assertServerResolves(appDir, dir);
+    const loader = join(appDir, "check-server-packages.mjs");
     writeFileSync(
       loader,
       `import { existsSync, readdirSync } from 'node:fs'
@@ -144,7 +146,7 @@ process.exit(0)
     );
     try {
       execFileSync(electronBinary, [loader], {
-        cwd: dir,
+        cwd: appDir,
         env: isolatedEnv({}),
         stdio: ["ignore", "inherit", "pipe"],
         timeout: LOADER_TIMEOUT_MS,
@@ -160,7 +162,7 @@ process.exit(0)
       );
     }
     rmSync(loader);
-    await startServer(dir);
+    await startServer(appDir);
   } finally {
     try {
       rmSync(isolated, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });

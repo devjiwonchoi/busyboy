@@ -1,8 +1,8 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 
-const roots = ["src", "electron", "scripts"];
-const extra = ["next.config.ts", "src/proxy.ts"];
+const roots = ["apps/web/src", "apps/web/scripts", "apps/native", "scripts"];
+const extra = ["apps/web/next.config.ts", "apps/web/src/proxy.ts"];
 
 function filesUnder(directory: string): string[] {
   const found: string[] = [];
