@@ -4,7 +4,6 @@ import { dirname, join, resolve } from "node:path";
 
 import { app, Notification, type BrowserWindow } from "electron";
 
-import { SERVER_TOKEN_HEADER } from "../web/lib/server-token";
 import type { Background } from "./background";
 import type { ServerHandle } from "./server-process";
 import type { ShellPathResult } from "./shell-env";
@@ -13,115 +12,7 @@ const FLAG = "--self-check";
 const LOAD_TIMEOUT_MS = 30_000;
 const REQUEST_TIMEOUT_MS = 5_000;
 export const SELF_CHECK_TIMEOUT_MS = 90_000;
-const TERMINAL_TIMEOUT_MS = 20_000;
-const TERMINAL_MARKER = "busyboy-terminal-ok";
-
-const terminalCommand =
-  process.platform === "win32" ? "echo busyboy-terminal^-ok\r" : `echo busyboy-"terminal"-ok\r`;
-
-function stripAnsi(text: string) {
-  const escape = String.fromCharCode(0x1b);
-  const bell = String.fromCharCode(0x07);
-  const cursor = new RegExp(`${escape}\\[\\d*(;\\d*)?H`, "g");
-  const sequence = new RegExp(
-    `${escape}\\[[0-?]*[ -/]*[@-~]|${escape}\\][^${bell}${escape}]*(?:${bell}|${escape}\\\\)|${escape}[@-_]`,
-    "g",
-  );
-  return text.replace(cursor, "\n").replace(sequence, "");
-}
-
-const PROCESS_EXIT_TIMEOUT_MS = 6_000;
-const ATTENTION_TIMEOUT_MS = 10_000;
-
-type StartedTerminal = { id: string; cwd: string; shell: string; pid: number };
-
-function serverHeaders(server: ServerHandle) {
-  return { [SERVER_TOKEN_HEADER]: server.token, "Content-Type": "application/json" };
-}
-
-async function startTerminal(server: ServerHandle): Promise<StartedTerminal> {
-  const started = await fetch(`${server.url}/api/terminal`, {
-    method: "POST",
-    headers: serverHeaders(server),
-    body: JSON.stringify({ cols: 120, rows: 30 }),
-  });
-  const body = (await started.json()) as Partial<StartedTerminal> & { error?: string };
-  if (!started.ok || !body.id || !body.pid) {
-    throw new Error(body.error ?? `Starting a terminal failed with HTTP ${started.status}.`);
-  }
-  return body as StartedTerminal;
-}
-
-function hasExited(pid: number) {
-  try {
-    process.kill(pid, 0);
-    return false;
-  } catch (error) {
-    return (error as NodeJS.ErrnoException).code !== "EPERM";
-  }
-}
-
-async function waitForExit(pid: number) {
-  const deadline = Date.now() + PROCESS_EXIT_TIMEOUT_MS;
-  while (Date.now() < deadline) {
-    if (hasExited(pid)) return true;
-    await new Promise((resolve) => setTimeout(resolve, 100));
-  }
-  return hasExited(pid);
-}
-
-async function runTerminalEcho(server: ServerHandle) {
-  const headers = serverHeaders(server);
-  const body = await startTerminal(server);
-  const endpoint = `${server.url}/api/terminal/${body.id}`;
-
-  const abort = new AbortController();
-  const timer = setTimeout(() => abort.abort(), TERMINAL_TIMEOUT_MS);
-  let output = "";
-  try {
-    const stream = await fetch(endpoint, { headers, signal: abort.signal });
-    if (!stream.ok || !stream.body)
-      throw new Error(`Following the terminal failed with HTTP ${stream.status}.`);
-    await fetch(endpoint, {
-      method: "POST",
-      headers,
-      body: JSON.stringify({ input: terminalCommand }),
-    });
-    const reader = stream.body.pipeThrough(new TextDecoderStream()).getReader();
-    let pending = "";
-    while (!stripAnsi(output).includes(TERMINAL_MARKER)) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      pending += value;
-      const lines = pending.split("\n");
-      pending = lines.pop() ?? "";
-      for (const line of lines) {
-        const event = JSON.parse(line) as { type: string; data?: string };
-        if (event.type === "data") output += event.data;
-      }
-    }
-  } catch (error) {
-    if (!abort.signal.aborted) throw error;
-  } finally {
-    clearTimeout(timer);
-    abort.abort();
-    await fetch(endpoint, { method: "DELETE", headers }).catch(() => {});
-  }
-  const text = stripAnsi(output);
-  const tail = text
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .slice(-5);
-  const exitedAfterClose = await waitForExit(body.pid);
-  return {
-    cwd: body.cwd,
-    shell: body.shell,
-    printed: text.includes(TERMINAL_MARKER),
-    exitedAfterClose,
-    tail,
-  };
-}
+const STREAM_TIMEOUT_MS = 10_000;
 
 export function selfCheckOutputPath(argv: string[]): string | null {
   const arg = argv.find((value) => value === FLAG || value.startsWith(`${FLAG}=`));
@@ -207,8 +98,6 @@ export function createSelfCheck() {
   };
 
   let serverFolder: { dir: string; before: FolderSnapshot } | undefined;
-  let openTerminalPid: number | null = null;
-  let openTerminalStream: AbortController | null = null;
 
   return {
     result,
@@ -244,21 +133,25 @@ export function createSelfCheck() {
           });
         });
       }
-      const page = (await contents.executeJavaScript(`({
-        title: document.title,
-        shell: Boolean(document.querySelector('[data-slot="app-shell"]')),
-        chatArea: Boolean(document.querySelector('[data-slot="chat-area"]')),
-        bottomPanel: Boolean(document.querySelector('[data-slot="bottom-panel"]')),
-      })`)) as Record<string, unknown>;
+      const readPage = async () =>
+        (await contents.executeJavaScript(`({
+          title: document.title,
+          transcript: Boolean(document.querySelector('[role="log"][aria-label="Transcript"]')),
+          composer: Boolean(document.querySelector('form textarea[name="text"]')),
+          directorConnected: Boolean(document.querySelector('[role="log"][data-connected="true"]')),
+        })`)) as Record<string, unknown>;
+      const deadline = Date.now() + STREAM_TIMEOUT_MS;
+      let page = await readPage();
+      while (!page.directorConnected && Date.now() < deadline) {
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        page = await readPage();
+      }
       result.details.page = page;
       result.checks.pageLoaded = page.title === app.getName();
-      result.checks.shellRendered = Boolean(page.shell && page.chatArea && page.bottomPanel);
+      result.checks.chatRendered = Boolean(page.transcript && page.composer);
+      result.checks.directorStreamConnected = Boolean(page.directorConnected);
     },
     async recordBackground(background: Background, window: BrowserWindow, server: ServerHandle) {
-      const deadline = Date.now() + ATTENTION_TIMEOUT_MS;
-      while (background.updates() === 0 && Date.now() < deadline)
-        await new Promise((resolve) => setTimeout(resolve, 100));
-      result.checks.attentionStreamConnected = background.updates() > 0;
       const labels = background.tray.menuLabels();
       result.details.trayMenu = labels;
       result.checks.trayMenuShown = ["Nothing needs you", "Open BusyBoy", "Quit BusyBoy"].every(
@@ -279,30 +172,10 @@ export function createSelfCheck() {
       result.checks.serverFolderUnchanged = changed.length === 0;
       if (changed.length > 0) result.details.serverFolderChanges = changed.slice(0, 20);
     },
-    async recordTerminal(server: ServerHandle) {
-      const terminal = await runTerminalEcho(server);
-      result.details.terminal = terminal;
-      result.checks.terminalEchoed = terminal.printed;
-      result.checks.terminalClosed = terminal.exitedAfterClose;
-      const open = await startTerminal(server);
-      openTerminalPid = open.pid;
-      openTerminalStream = new AbortController();
-      const stream = await fetch(`${server.url}/api/terminal/${open.id}`, {
-        headers: serverHeaders(server),
-        signal: openTerminalStream.signal,
-      });
-      if (!stream.ok || !stream.body)
-        throw new Error(`Following a terminal failed with HTTP ${stream.status}.`);
-      void stream.body.pipeTo(new WritableStream()).catch(() => {});
-    },
     async recordServerStop(server: ServerHandle) {
       const stop = await server.stop();
       result.checks.serverStopped = !server.isRunning();
       result.checks.serverAcknowledgedShutdown = stop.acknowledged;
-      if (openTerminalPid !== null) {
-        result.checks.terminalStoppedWithServer = await waitForExit(openTerminalPid);
-      }
-      openTerminalStream?.abort();
     },
     fail(error: unknown) {
       result.error = error instanceof Error ? (error.stack ?? error.message) : String(error);
