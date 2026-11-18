@@ -1,12 +1,13 @@
-import { basename, relative, sep } from "node:path";
+import { basename, dirname, relative, sep } from "node:path";
+import { fileURLToPath } from "node:url";
 
 type Node = { type: string; [key: string]: unknown };
 type Context = {
   filename: string;
-  cwd: string;
   report(descriptor: { node: Node; message: string }): void;
 };
 
+const repositoryRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 const webDirectory = ["apps", "web"].join(sep);
 const appDirectory = [webDirectory, "app"].join(sep);
 const guard = "requireTrustedRequest";
@@ -15,7 +16,7 @@ const routeFile = /^route\.[cm]?[jt]sx?$/;
 const componentFile = /^(?:page|layout|default|template)\.[jt]sx$/;
 
 function repositoryPath(context: Context) {
-  return relative(context.cwd, context.filename);
+  return relative(repositoryRoot, context.filename);
 }
 
 function isUseServer(program: Node) {
