@@ -1,18 +1,14 @@
 import { app, Menu, nativeImage, Tray, type MenuItemConstructorOptions } from "electron";
 
-import type { FocusTarget } from "../src/lib/focus-target";
-import type { AttentionTask } from "../src/server/attention";
-
 const LABEL_LIMIT = 48;
 
 export type TrayState = {
-  tasks: AttentionTask[];
   directorReplied: boolean;
   updateVersion?: string | null;
 };
 
 export type TrayActions = {
-  open: (target?: FocusTarget) => void;
+  open: () => void;
   quit: () => void;
   installUpdate: () => void;
 };
@@ -22,10 +18,7 @@ export function shorten(text: string, limit = LABEL_LIMIT) {
   return flat.length > limit ? `${flat.slice(0, limit - 1).trimEnd()}…` : flat;
 }
 
-export const taskLabel = (task: AttentionTask) => shorten(`${task.project} · ${task.title}`);
-
-export const attentionCount = (state: TrayState) =>
-  state.tasks.length + (state.directorReplied ? 1 : 0);
+export const attentionCount = (state: TrayState) => (state.directorReplied ? 1 : 0);
 
 // why: A macOS template image is drawn in the menu bar's own color, so shape carries the meaning.
 function drawIcon(attention: boolean) {
@@ -80,14 +73,8 @@ export function trayMenuTemplate(
     if (state.directorReplied)
       items.push({
         label: "The Director replied",
-        click: () => actions.open({ kind: "director" }),
+        click: () => actions.open(),
       });
-    for (const task of state.tasks) {
-      items.push({
-        label: taskLabel(task),
-        click: () => actions.open({ kind: "task", project: task.project, taskId: task.taskId }),
-      });
-    }
   }
   items.push({ type: "separator" });
   if (state.updateVersion)
@@ -106,7 +93,7 @@ export function trayMenuTemplate(
 export function createTray(actions: TrayActions) {
   const icons = { idle: drawIcon(false), attention: drawIcon(true) };
   const tray = new Tray(icons.idle);
-  let state: TrayState = { tasks: [], directorReplied: false };
+  let state: TrayState = { directorReplied: false };
   let labels: string[] = [];
 
   const render = () => {

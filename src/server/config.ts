@@ -7,7 +7,6 @@ import { cookies } from "next/headers";
 import { unstable_rethrow } from "next/navigation";
 
 import { SERVER_TOKEN_ENV, TEST_MODE_ENV } from "@/lib/server-token";
-import { isThemeName, type ThemeName } from "@/lib/theme";
 
 import { pathKey } from "./paths";
 import type { ProviderId } from "./runner/contract";
@@ -23,30 +22,10 @@ export const TEST_HOME_COOKIE = "busyboy-test-home";
 /*why: * Named so it never collides with the legacy app's `settings.json`. */
 export const SETTINGS_FILE = "app-settings.json";
 
-export type ProjectEntry = {
-  name: string;
-  path: string;
-  addedAt: string;
-};
-
-export type ManagerEntry = {
-  id: string;
-  name: string;
-  project: string;
-  createdAt: string;
-};
-
 export type Settings = {
   version: number;
   setupCompletedAt: string | null;
   defaultProvider: ProviderId | null;
-  theme: ThemeName;
-  companion: string | null;
-  companionImage: string | null;
-  projects: ProjectEntry[];
-  managers: ManagerEntry[];
-  // why: Null until the user edits the list, so a newer BusyBoy's defaults still apply.
-  alwaysAsk: string[] | null;
   [unknownKey: string]: unknown;
 };
 
@@ -54,12 +33,6 @@ const EMPTY_SETTINGS: Settings = {
   version: 1,
   setupCompletedAt: null,
   defaultProvider: null,
-  theme: "dark",
-  companion: null,
-  companionImage: null,
-  projects: [],
-  managers: [],
-  alwaysAsk: null,
 };
 
 export function isTestMode() {
@@ -124,30 +97,6 @@ function parseSettings(text: string): Settings | undefined {
       value.defaultProvider === "codex" ||
       value.defaultProvider === "grok"
         ? value.defaultProvider
-        : null,
-    theme: isThemeName(value.theme) ? value.theme : "dark",
-    companion: typeof value.companion === "string" ? value.companion : null,
-    companionImage: typeof value.companionImage === "string" ? value.companionImage : null,
-    projects: Array.isArray(value.projects)
-      ? value.projects.filter(
-          (project): project is ProjectEntry =>
-            isRecord(project) &&
-            typeof project.name === "string" &&
-            typeof project.path === "string",
-        )
-      : [],
-    managers: Array.isArray(value.managers)
-      ? value.managers.filter(
-          (manager): manager is ManagerEntry =>
-            isRecord(manager) &&
-            typeof manager.id === "string" &&
-            typeof manager.name === "string" &&
-            typeof manager.project === "string",
-        )
-      : [],
-    alwaysAsk:
-      Array.isArray(value.alwaysAsk) && value.alwaysAsk.every((rule) => typeof rule === "string")
-        ? value.alwaysAsk
         : null,
   };
 }

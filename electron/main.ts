@@ -5,7 +5,6 @@ import { isAbsolute, dirname, join, normalize } from "node:path";
 import { app, BrowserWindow, dialog, ipcMain, session, shell } from "electron";
 
 import {
-  FOCUS_CHANNEL,
   INSTALL_UPDATE_CHANNEL,
   OPEN_IN_EDITOR_CHANNEL,
   PICK_FOLDERS_CHANNEL,
@@ -14,7 +13,6 @@ import {
   UPDATE_READY_CHANNEL,
   UPDATE_STATE_CHANNEL,
 } from "../src/lib/desktop-bridge";
-import { FOCUS_PARAM, formatFocusTarget, type FocusTarget } from "../src/lib/focus-target";
 import { SERVER_TOKEN_COOKIE } from "../src/lib/server-token";
 import { findExecutable } from "../src/server/runner/find-executable";
 import { startBackground, type Background } from "./background";
@@ -108,23 +106,19 @@ function createWindow(url: string, show: boolean) {
   return window;
 }
 
-function screenUrl(base: string, target?: FocusTarget) {
-  if (!target) return base;
-  const url = new URL(base);
-  url.searchParams.set(FOCUS_PARAM, formatFocusTarget(target));
-  return url.toString();
+function screenUrl(base: string) {
+  return base;
 }
 
-function openWindow(target?: FocusTarget) {
+function openWindow() {
   if (!server || quitting) return;
   if (!mainWindow || mainWindow.isDestroyed()) {
-    mainWindow = createWindow(screenUrl(server.url, target), true);
+    mainWindow = createWindow(screenUrl(server.url), true);
     return;
   }
   if (mainWindow.isMinimized()) mainWindow.restore();
   mainWindow.show();
   mainWindow.focus();
-  if (target) mainWindow.webContents.send(FOCUS_CHANNEL, formatFocusTarget(target));
 }
 
 function windowInFront() {

@@ -15,8 +15,6 @@
     "lint": "oxlint",
     "format": "oxfmt",
     "format:check": "oxfmt --check",
-    "check:lifecycle": "node scripts/run-check.mts scripts/check-task-lifecycle.mts",
-    "check:always-ask": "node scripts/run-check.mts scripts/check-always-ask.mts",
     "test:e2e": "playwright test",
     "drive": "node --experimental-strip-types scripts/drive.mts"
   },

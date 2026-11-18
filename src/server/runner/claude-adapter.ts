@@ -1,20 +1,13 @@
-import { randomUUID } from "node:crypto";
-import { realpathSync } from "node:fs";
-
 import {
   query,
   type CanUseTool,
-  type HookCallback,
   type McpServerConfig,
   type Options,
-  type PermissionResult,
-  type PermissionUpdate,
   type Query,
   type SDKUserMessage,
 } from "@anthropic-ai/claude-agent-sdk";
 
-import { alwaysAskApproval, createAllowedCalls, matchAlwaysAsk } from "./always-ask";
-import { ClaudeEventMapper, claudePermissionToEvent, type ClaudeRawMessage } from "./claude-events";
+import { ClaudeEventMapper, type ClaudeRawMessage } from "./claude-events";
 import { spawnClaudeProcess, type ClaudeProcess } from "./claude-process";
 import type {
   AgentAnswer,
@@ -26,12 +19,10 @@ import type {
   SignInStatus,
 } from "./contract";
 import { agentEnvironment, findExecutable } from "./find-executable";
-import { checkUserRules, userRuleApproval, userRulesHookNeeded } from "./user-rules";
 import { claudeContent, modelText, type UserTurn } from "./user-turn";
 
 export const CLAUDE_PATH_ENV = "BUSYBOY_CLAUDE_PATH";
 const SIGN_IN_TIMEOUT_MS = 20_000;
-const ALWAYS_ASK_TIMEOUT_S = 24 * 60 * 60;
 
 class MessageQueue implements AsyncIterable<SDKUserMessage> {
   private items: SDKUserMessage[] = [];
@@ -93,26 +84,6 @@ function resolveClaude() {
   return process.env[CLAUDE_PATH_ENV] || findExecutable("claude");
 }
 
-type OpenRequest = {
-  input: Record<string, unknown>;
-  // why: Remembering a suggestion that grants more than this request would leave the agent in a different permission mode.
-  sessionPermissions: PermissionUpdate[];
-  resolve: (result: PermissionResult) => void;
-};
-
-function permissionResult(answer: AgentAnswer, request: OpenRequest): PermissionResult {
-  if (answer.kind === "question")
-    return { behavior: "allow", updatedInput: { ...request.input, answers: answer.answers } };
-  if (!answer.allow)
-    return { behavior: "deny", message: answer.message || "The user declined this action." };
-  const forSession = answer.forSession && request.sessionPermissions.length > 0;
-  return {
-    behavior: "allow",
-    updatedInput: request.input,
-    ...(forSession ? { updatedPermissions: request.sessionPermissions } : {}),
-  };
-}
-
 function toSdkMcpServers(servers: Record<string, McpServer>): Record<string, McpServerConfig> {
   return Object.fromEntries(
     Object.entries(servers).map(([name, server]) => [
@@ -144,165 +115,15 @@ function startClaude(options: ProviderStartOptions): ProviderSession {
   const { emit } = options;
   const input = new MessageQueue();
   const abort = new AbortController();
-  const requests = new Map<string, OpenRequest>();
   const mapper = new ClaudeEventMapper(emit);
   let current: Query | undefined;
   let cli: ClaudeProcess | undefined;
   let inTurn = false;
   let stopRequested = false;
-  const asks = new Map<string, (answer: AgentAnswer | null) => void>();
-  const allowedCalls = createAllowedCalls();
 
-  // why: Auto mode calls canUseTool only for calls it would ask about itself.
-  const waitForApproval = (
-    requestId: string,
-    event: Extract<AgentEvent, { type: "approval" }>,
-    signal: AbortSignal,
-  ) =>
-    new Promise<AgentAnswer | null>((resolve) => {
-      const onAbort = () => {
-        asks.delete(requestId);
-        resolve(null);
-        emit({ type: "answered", requestId });
-      };
-      signal.addEventListener("abort", onAbort, { once: true });
-      asks.set(requestId, (value) => {
-        signal.removeEventListener("abort", onAbort);
-        asks.delete(requestId);
-        resolve(value);
-      });
-      mapper.flush();
-      emit(event);
-    });
-
-  const deny = (reason: string) => ({
-    hookSpecificOutput: {
-      hookEventName: "PreToolUse" as const,
-      permissionDecision: "deny" as const,
-      permissionDecisionReason: reason,
-    },
-  });
-
-  const alwaysAsk: HookCallback = async (hookInput, toolUseID, { signal }) => {
-    if (hookInput.hook_event_name !== "PreToolUse") {
-      return {};
-    }
-    const { tool_name: toolName, tool_input: toolInput } = hookInput;
-    const cwd = hookInput.cwd || options.cwd;
-    const userRule = await checkUserRules({
-      rulesFolder: options.rulesFolder,
-      toolName,
-      input: toolInput,
-      cwd,
-      recordFolder: options.recordFolder,
-    });
-    if (userRule.ask) {
-      const call = { toolName, input: toolInput, rule: userRule.ruleKey, cwd };
-      if (!(userRule.remember && allowedCalls.has(call))) {
-        const requestId = `user-rule-${toolUseID ?? randomUUID()}`;
-        const answer = await waitForApproval(
-          requestId,
-          userRuleApproval({
-            requestId,
-            toolName,
-            input: toolInput,
-            detail: userRule.detail,
-            remember: userRule.remember,
-          }),
-          signal,
-        );
-        const allowed = answer?.kind === "approval" && answer.allow;
-        if (allowed && answer.forSession && userRule.remember) allowedCalls.add(call);
-        if (!allowed)
-          return deny(
-            (answer?.kind === "approval" && answer.message) || "The user declined this action.",
-          );
-      }
-    }
-    const rule = matchAlwaysAsk({
-      rules: options.alwaysAsk ?? [],
-      toolName,
-      input: toolInput,
-      folder: options.cwd,
-      recordFolder: options.recordFolder,
-      privateFolder: options.privateFolder,
-      noFileEdits: options.noFileEdits,
-    });
-    if (!rule) {
-      return {};
-    }
-    const call = { toolName, input: toolInput, rule, cwd };
-    if (allowedCalls.has(call)) {
-      return {
-        hookSpecificOutput: {
-          hookEventName: "PreToolUse",
-          permissionDecision: "allow",
-          permissionDecisionReason: "The user approved this exact action before.",
-        },
-      };
-    }
-
-    const requestId = `always-ask-${toolUseID ?? randomUUID()}`;
-    const answer = await waitForApproval(
-      requestId,
-      alwaysAskApproval({ requestId, toolName, input: toolInput, rule }),
-      signal,
-    );
-    const allowed = answer?.kind === "approval" && answer.allow;
-    if (allowed && answer.forSession) allowedCalls.add(call);
-    const declined =
-      (answer?.kind === "approval" && answer.message) || "The user declined this action.";
-    return {
-      hookSpecificOutput: {
-        hookEventName: "PreToolUse",
-        permissionDecision: allowed ? "allow" : "deny",
-        permissionDecisionReason: allowed ? "The user approved this action." : declined,
-      },
-    };
-  };
-
-  const canUseTool: CanUseTool = (
-    toolName,
-    toolInput,
-    { signal, toolUseID, title, description, suggestions, suppressAlwaysAllowRule },
-  ) => {
-    const requestId = toolUseID || randomUUID();
-    return new Promise<PermissionResult>((resolve) => {
-      const onAbort = () => {
-        requests.delete(requestId);
-        resolve({ behavior: "deny", message: "The request was cancelled." });
-        emit({ type: "answered", requestId });
-      };
-      signal.addEventListener("abort", onAbort, { once: true });
-      const sessionPermissions = suppressAlwaysAllowRule
-        ? []
-        : (suggestions ?? [])
-            .filter(
-              (suggestion) =>
-                suggestion.type === "addRules" || suggestion.type === "addDirectories",
-            )
-            .map((suggestion) => ({ ...suggestion, destination: "session" as const }));
-      requests.set(requestId, {
-        input: toolInput,
-        sessionPermissions,
-        resolve: (result) => {
-          signal.removeEventListener("abort", onAbort);
-          requests.delete(requestId);
-          resolve(result);
-        },
-      });
-      mapper.flush();
-      emit(
-        claudePermissionToEvent(requestId, {
-          toolName,
-          input: toolInput,
-          title,
-          description,
-          suggestions: sessionPermissions,
-        }),
-      );
-    });
-  };
+  // why: Auto mode still calls canUseTool for a call it would ask about. Allow it so the harness keeps its own auto mode.
+  const canUseTool: CanUseTool = (_toolName, toolInput) =>
+    Promise.resolve({ behavior: "allow", updatedInput: toolInput });
 
   const registerMcpServers = async (run: Query) => {
     try {
@@ -364,18 +185,6 @@ function startClaude(options: ProviderStartOptions): ProviderSession {
         allowDangerouslySkipPermissions: options.permissionMode === "full-access",
         systemPrompt: { type: "preset", preset: "claude_code", append: options.instructions },
         canUseTool,
-        hooks:
-          (options.alwaysAsk?.length ||
-            options.privateFolder ||
-            options.noFileEdits ||
-            userRulesHookNeeded(options.rulesFolder)) &&
-          !options.noTools
-            ? {
-                PreToolUse: [
-                  { hooks: [alwaysAsk], timeout: ALWAYS_ASK_TIMEOUT_S, onFailure: "block" },
-                ],
-              }
-            : undefined,
         allowedTools: Object.entries(options.mcpServers ?? {})
           .filter(([, server]) => server.trusted)
           .map(([name]) => `mcp__${name}`),
@@ -416,16 +225,6 @@ function startClaude(options: ProviderStartOptions): ProviderSession {
       input.push(turn);
     },
     async interrupt() {
-      const open = [...requests.entries()];
-      for (const [requestId, request] of open) {
-        request.resolve({ behavior: "deny", message: "The user interrupted.", interrupt: true });
-        emit({ type: "answered", requestId });
-      }
-      for (const [requestId, resolve] of asks.entries()) {
-        resolve(null);
-        emit({ type: "answered", requestId });
-      }
-      if (open.length > 0) return;
       if (!input.isHeld) {
         await current?.interrupt();
         return;
@@ -440,11 +239,7 @@ function startClaude(options: ProviderStartOptions): ProviderSession {
       inTurn = true;
       input.push({ text: "/compact", note: "", images: [] });
     },
-    answer(requestId, answer) {
-      asks.get(requestId)?.(answer);
-      const request = requests.get(requestId);
-      request?.resolve(permissionResult(answer, request));
-    },
+    answer(_requestId, _answer: AgentAnswer) {},
     async stop() {
       stopRequested = true;
       // why: Ends the commands the CLI detached while they are still its descendants,
@@ -454,17 +249,6 @@ function startClaude(options: ProviderStartOptions): ProviderSession {
       abort.abort();
     },
   };
-}
-
-// why: claude update only updates the native install, and a Homebrew cask can lag the SDK.
-function updateCommandFor(executable: string) {
-  let resolved = executable;
-  try {
-    resolved = realpathSync(executable);
-  } catch {
-    // why: Keep the path as found on PATH.
-  }
-  return resolved.includes("/Caskroom/claude-code/") ? "claude install latest" : "claude update";
 }
 
 async function claudeSignInStatus(): Promise<SignInStatus> {
@@ -494,17 +278,7 @@ async function claudeSignInStatus(): Promise<SignInStatus> {
         spawnClaudeCodeProcess: (spawnOptions) => (cli = spawnClaudeProcess(spawnOptions)),
       },
     });
-    const { account, hook_on_failure_supported, claude_code_version } =
-      await probe.initializationResult();
-    // why: A CLI that predates onFailure: block would let an always-ask failure run the action.
-    if (hook_on_failure_supported !== true) {
-      const version = claude_code_version ? ` ${claude_code_version}` : "";
-      return {
-        state: "outdated",
-        detail: `Claude Code${version} is too old to keep the always-ask list. Update it the way you installed it, then choose Check again.`,
-        updateCommand: updateCommandFor(executable),
-      };
-    }
+    const { account } = await probe.initializationResult();
     if (account.apiProvider && account.apiProvider !== "firstParty")
       return { state: "signed-in", account: account.apiProvider };
     const hasKey = Boolean(account.apiKeySource) && account.apiKeySource !== "none";

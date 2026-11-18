@@ -1,7 +1,6 @@
 import type { ChildProcess } from "node:child_process";
 import { createInterface } from "node:readline";
 
-import { alwaysAskApproval, createAllowedCalls, matchAlwaysAsk } from "./always-ask";
 import {
   spawnClaudeProcess as spawnProcessGroup,
   type ClaudeProcess as GroupProcess,
@@ -13,20 +12,15 @@ import type {
   ProviderAdapter,
   ProviderSession,
   ProviderStartOptions,
-  Question,
   SignInStatus,
 } from "./contract";
 import { agentEnvironment, findExecutable } from "./find-executable";
 import {
   GrokEventMapper,
-  grokCanAllowForSession,
   grokPermissionOutcome,
   grokStopMessage,
-  grokToolSubject,
-  grokTrustedTool,
   type GrokPermissionOption,
 } from "./grok-events";
-import { checkUserRules, userRuleApproval, userRulesHookNeeded } from "./user-rules";
 import { modelText, type UserTurn } from "./user-turn";
 
 // why: Grok's hooks are fail-open, so always-ask is decided on session/request_permission instead.
@@ -281,48 +275,12 @@ function permissionOptions(value: unknown): GrokPermissionOption[] {
   );
 }
 
-function questionList(value: unknown): Question[] {
-  if (!Array.isArray(value)) return [];
-  const questions: Question[] = [];
-  for (const entry of value) {
-    if (!isRecord(entry) || typeof entry.question !== "string") continue;
-    const options = Array.isArray(entry.options)
-      ? entry.options.filter(
-          (option): option is { label: string; description?: string } =>
-            isRecord(option) && typeof option.label === "string",
-        )
-      : [];
-    questions.push({
-      question: entry.question,
-      header: typeof entry.header === "string" ? entry.header : undefined,
-      options: options.map((option) => ({
-        label: option.label,
-        description: typeof option.description === "string" ? option.description : undefined,
-      })),
-      multiSelect: entry.multiSelect === true,
-    });
-  }
-  return questions;
-}
-
 function startGrok(options: ProviderStartOptions): ProviderSession {
   const { emit } = options;
-  const enforce =
-    !options.noTools &&
-    ((options.alwaysAsk?.length ?? 0) > 0 ||
-      Boolean(options.privateFolder) ||
-      Boolean(options.noFileEdits) ||
-      userRulesHookNeeded(options.rulesFolder));
-  const mode = grokPermissionMode(options, enforce);
-  const trusted = new Set(
-    Object.entries(options.mcpServers ?? {})
-      .filter(([, server]) => server.trusted)
-      .map(([name]) => name),
-  );
+  const mode = grokPermissionMode(options, false);
   const queue: UserTurn[] = [];
   let allowImages = false;
   const asks = new Map<string, (answer: AgentAnswer | null) => void>();
-  const allowedCalls = createAllowedCalls();
   const mapper = new GrokEventMapper(emit);
   let connection: AcpConnection | undefined;
   let sessionId: string | undefined;
@@ -390,135 +348,18 @@ function startGrok(options: ProviderStartOptions): ProviderSession {
     const current = connection;
     if (!current) return;
     const optionsList = permissionOptions(params.options);
-    const toolCall = isRecord(params.toolCall) ? params.toolCall : {};
     const respond = (decision: "allow" | "allow-session" | "deny" | "cancel") =>
       current.respond(rpcId, grokPermissionOutcome(optionsList, decision));
     if (options.noTools || stopRequested) {
       respond(options.noTools ? "deny" : "cancel");
       return;
     }
-    const subject = grokToolSubject(toolCall);
-    // why: Grok's own hooks are fail-open, so user rules are decided on this permission request.
-    const userRule = await checkUserRules({
-      rulesFolder: options.rulesFolder,
-      toolName: subject.toolName,
-      input: subject.input,
-      cwd: options.cwd,
-      recordFolder: options.recordFolder,
-    });
-    if (userRule.ask) {
-      const remembered = {
-        toolName: subject.toolName,
-        input: subject.input,
-        rule: userRule.ruleKey,
-        cwd: options.cwd,
-      };
-      if (!(userRule.remember && allowedCalls.has(remembered))) {
-        const requestId = `grok-rule-${rpcId}`;
-        const answer = await waitFor(
-          requestId,
-          userRuleApproval({
-            requestId,
-            toolName: subject.toolName,
-            input: subject.input,
-            detail: userRule.detail,
-            remember: userRule.remember,
-          }),
-        );
-        if (!answer || answer.kind !== "approval" || !answer.allow) {
-          respond("deny");
-          return;
-        }
-        if (answer.forSession && userRule.remember) allowedCalls.add(remembered);
-      }
-    }
-    const rule = matchAlwaysAsk({
-      rules: options.alwaysAsk ?? [],
-      toolName: subject.toolName,
-      input: subject.input,
-      folder: options.cwd,
-      recordFolder: options.recordFolder,
-      privateFolder: options.privateFolder,
-      noFileEdits: options.noFileEdits,
-    });
-    const call = {
-      toolName: subject.toolName,
-      input: subject.input,
-      rule: rule ?? "",
-      cwd: options.cwd,
-    };
-    const remembered = Boolean(rule) && allowedCalls.has(call);
-    const runWithoutAsking =
-      remembered ||
-      (!rule &&
-        (enforce ||
-          options.permissionMode === "full-access" ||
-          grokTrustedTool(toolCall, trusted)));
-    if (runWithoutAsking) {
-      respond("allow");
-      return;
-    }
-    if (!rule) {
-      const requestId = `grok-${rpcId}`;
-      const answer = await waitFor(requestId, {
-        type: "approval",
-        requestId,
-        title: subject.title,
-        detail: typeof subject.input.command === "string" ? subject.input.command : undefined,
-        canAllowForSession: grokCanAllowForSession(optionsList),
-      });
-      if (!answer || answer.kind !== "approval") {
-        respond("cancel");
-        return;
-      }
-      respond(answer.allow ? (answer.forSession ? "allow-session" : "allow") : "deny");
-      return;
-    }
-    const requestId = `grok-${rpcId}`;
-    const answer = await waitFor(
-      requestId,
-      alwaysAskApproval({ requestId, toolName: subject.toolName, input: subject.input, rule }),
-    );
-    if (!answer || answer.kind !== "approval") {
-      respond("cancel");
-      return;
-    }
-    if (answer.allow) {
-      if (answer.forSession) allowedCalls.add(call);
-      respond(answer.forSession ? "allow-session" : "allow");
-      return;
-    }
-    respond("deny");
+    // why: Grok's own auto mode asks the client for some calls. Allow them so BusyBoy shows no approval.
+    respond("allow");
   };
 
-  const waitFor = (requestId: string, event: AgentEvent) =>
-    new Promise<AgentAnswer | null>((resolve) => {
-      asks.set(requestId, resolve);
-      mapper.flush();
-      emit(event);
-    });
-
-  const onQuestion = async (rpcId: string | number, params: Record<string, unknown>) => {
-    const current = connection;
-    if (!current) return;
-    const questions = questionList(params.questions);
-    if (questions.length === 0 || stopRequested) {
-      current.respond(rpcId, { outcome: "skip_interview" });
-      return;
-    }
-    const requestId = `grok-ask-${rpcId}`;
-    const answer = await waitFor(requestId, { type: "question", requestId, questions });
-    if (!answer || answer.kind !== "question") {
-      current.respond(rpcId, { outcome: "skip_interview" });
-      return;
-    }
-    const answers: Record<string, string | string[]> = {};
-    for (const question of questions) {
-      const value = answer.answers[question.question];
-      if (value === undefined) continue;
-      answers[question.question] = question.multiSelect ? value.split(", ").filter(Boolean) : value;
-    }
-    current.respond(rpcId, { outcome: "accepted", answers });
+  const onQuestion = async (rpcId: string | number) => {
+    connection?.respond(rpcId, { outcome: "skip_interview" });
   };
 
   const handle = async (message: RpcMessage) => {
@@ -537,7 +378,7 @@ function startGrok(options: ProviderStartOptions): ProviderSession {
       return;
     }
     if (message.method === "_x.ai/ask_user_question") {
-      await onQuestion(message.id, params);
+      await onQuestion(message.id);
       return;
     }
     connection?.respondError(message.id, `BusyBoy does not handle ${message.method}.`);
