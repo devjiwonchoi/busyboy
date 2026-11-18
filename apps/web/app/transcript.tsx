@@ -1,8 +1,11 @@
+import { useState } from "react";
+
 import { Bubble, BubbleContent } from "@/components/ui/bubble";
 import { Message, MessageContent } from "@/components/ui/message";
 import type { ChatEntry } from "@/server/director/chat";
 
 import type { DirectorView } from "./chat";
+import { MessageActions } from "./message-actions";
 
 export function Transcript({ view }: { view: DirectorView }) {
   return (
@@ -47,16 +50,22 @@ function MessageView({ entry }: { entry: ChatEntry }) {
   if (entry.kind === "user") {
     return <UserBubble text={entry.text} />;
   }
-  return <ReplyBubble text={entry.text} />;
+  return <ReplyBubble text={entry.text} copyable />;
 }
 
 function UserBubble({ text }: { text: string }) {
+  const [hovered, setHovered] = useState(false);
   return (
-    <article aria-label="Your message">
+    <article
+      aria-label="Your message"
+      onPointerEnter={() => setHovered(true)}
+      onPointerLeave={() => setHovered(false)}
+    >
       <Message align="end">
         <MessageContent>
           <Bubble>
             <BubbleContent className="whitespace-pre-wrap">{text}</BubbleContent>
+            <MessageActions text={text} align="end" hovered={hovered} />
           </Bubble>
         </MessageContent>
       </Message>
@@ -64,13 +73,19 @@ function UserBubble({ text }: { text: string }) {
   );
 }
 
-function ReplyBubble({ text }: { text: string }) {
+function ReplyBubble({ text, copyable = false }: { text: string; copyable?: boolean }) {
+  const [hovered, setHovered] = useState(false);
   return (
-    <article aria-label="Reply">
+    <article
+      aria-label="Reply"
+      onPointerEnter={() => setHovered(true)}
+      onPointerLeave={() => setHovered(false)}
+    >
       <Message>
         <MessageContent>
           <Bubble variant="muted">
             <BubbleContent className="whitespace-pre-wrap">{text}</BubbleContent>
+            {copyable ? <MessageActions text={text} align="start" hovered={hovered} /> : null}
           </Bubble>
         </MessageContent>
       </Message>
