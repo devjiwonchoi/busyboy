@@ -13,10 +13,8 @@ export type TrayActions = {
 
 export const attentionCount = (state: TrayState) => (state.directorReplied ? 1 : 0);
 
-// why: A macOS template image is drawn in the menu bar's own color, so shape carries the meaning.
 function drawIcon(attention: boolean) {
   const mac = process.platform === "darwin";
-  // why: macOS menu bar icons are 16 pt; draw at 2x for Retina. Windows tray icons are 16 px at 100% scaling.
   const scale = mac ? 2 : 1;
   const size = 16 * scale;
   const [r, g, b] = mac ? [0, 0, 0] : attention ? [245, 158, 11] : [200, 200, 200];
@@ -39,7 +37,6 @@ function drawIcon(attention: boolean) {
         }
       }
       const offset = (y * size + x) * 4;
-      // why: createFromBitmap takes BGRA.
       pixels[offset] = b;
       pixels[offset + 1] = g;
       pixels[offset + 2] = r;
@@ -90,14 +87,12 @@ export function createTray(actions: TrayActions) {
     const count = attentionCount(state);
     tray.setImage(count > 0 ? icons.attention : icons.idle);
     tray.setToolTip(count > 0 ? `BusyBoy: ${count} need${count === 1 ? "s" : ""} you` : "BusyBoy");
-    // why: The count beside the icon in the macOS menu bar; Windows has no tray title.
     if (process.platform === "darwin") tray.setTitle(count > 0 ? String(count) : "");
     const template = trayMenuTemplate(state, actions);
     labels = template.flatMap((item) => (item.label ? [item.label] : []));
     tray.setContextMenu(Menu.buildFromTemplate(template));
   };
 
-  // why: On Windows a left click on a tray icon is expected to open the app; the right click shows the menu.
   if (process.platform === "win32") tray.on("click", () => actions.open());
   render();
 

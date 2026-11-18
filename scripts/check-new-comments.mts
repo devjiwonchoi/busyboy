@@ -1,3 +1,4 @@
+import { commentIsAllowed } from "./check-comments.mts";
 import { diffFromMergeBase } from "./git-text.mts";
 
 const base = process.argv[2];
@@ -7,26 +8,16 @@ if (!base) {
 }
 
 const diff = diffFromMergeBase(base, ["--unified=0", "--no-color", "--diff-filter=ACMR"]);
-
 const typescript = /\.(?:tsx?|mts)$/;
 
 function isComment(text: string) {
   const trimmed = text.trim();
-  return trimmed.startsWith("//") || trimmed.startsWith("/*") || trimmed.startsWith("*");
-}
-
-function isAllowed(text: string) {
-  const trimmed = text.trim();
-  if (trimmed.startsWith("#!")) return true;
-  if (/^\/\/\s*why:/.test(trimmed) || /^\/\*\s*why:/.test(trimmed) || /^\*\s*why:/.test(trimmed))
-    return true;
-  if (trimmed.startsWith("/// <reference")) return true;
-  if (/^\/\/\s*@ts-(?:expect-error|ignore|nocheck|check)\b/.test(trimmed)) return true;
-  if (/^\/\/\s*(?:eslint|oxlint)-(?:disable|enable)(?:-next-line|-line)?\b/.test(trimmed))
-    return true;
-  if (/^\/\*\s*(?:eslint|oxlint)-(?:disable|enable)(?:-next-line|-line)?\b/.test(trimmed))
-    return true;
-  return false;
+  return (
+    trimmed.startsWith("//") ||
+    trimmed.startsWith("/*") ||
+    trimmed.startsWith("*") ||
+    trimmed.startsWith("{/*")
+  );
 }
 
 type Added = { file: string; line: number; text: string };
@@ -69,13 +60,14 @@ for (const line of diff.split("\n")) {
   if (line.startsWith("\\")) continue;
   if (line.startsWith("+")) {
     const text = line.slice(1);
-    if (isComment(text) && !isAllowed(text)) added.push({ file, line: newLine, text: text.trim() });
+    if (isComment(text) && !commentIsAllowed(text, newLine - 1))
+      added.push({ file, line: newLine, text: text.trim() });
     newLine += 1;
     continue;
   }
   if (line.startsWith("-")) {
     const text = line.slice(1);
-    if (isComment(text) && !isAllowed(text)) {
+    if (isComment(text) && !commentIsAllowed(text, 0)) {
       const counts = removedCount(file);
       const key = text.trim();
       counts.set(key, (counts.get(key) ?? 0) + 1);
@@ -97,7 +89,7 @@ if (fresh.length === 0) {
 }
 
 console.error(
-  "Delete the comment, or mark a non-obvious reason with `// why:`. A tool directive (`// @ts-expect-error`, `/// <reference`, an eslint/oxlint disable line, or a shebang) can stay.",
+  "Delete the comment and make the code self-explanatory: rename, extract, or type the surprise. A constraint from Electron, the operating system, Next.js, or a harness CLI stays only with the issue or vendor doc link.",
 );
 for (const entry of fresh) console.error(`${entry.file}:${entry.line}: ${entry.text}`);
 process.exit(1);

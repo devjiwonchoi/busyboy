@@ -1,4 +1,3 @@
-// why: BusyBoy 0.0.22 installs a macOS update only when busyboy-update.json is signed and the ZIP hash matches.
 import { createHash, createPrivateKey, createPublicKey, sign, verify } from "node:crypto";
 import {
   createReadStream,
@@ -15,7 +14,6 @@ const MANIFEST = "busyboy-update.json";
 const SIGNATURE = "busyboy-update.json.sig";
 const SIGNED_EXTENSIONS = new Set([".zip", ".dmg", ".exe"]);
 
-/*why: * The public half of UPDATE_SIGNING_KEY that BusyBoy 0.0.22 and earlier ship with. */
 const INSTALLED_PUBLIC_KEY = `-----BEGIN PUBLIC KEY-----
 MCowBQYDK2VwAyEANJ4s4kF9EZwmC3l5wcpv0x5l26/Dxmw0ZAgtPH6k9no=
 -----END PUBLIC KEY-----`;
@@ -76,7 +74,6 @@ function serializeFeed(feed: Feed) {
       `    sha512: ${file.sha512}`,
       `    size: ${file.size}`,
     ]),
-    // why: The fields older updaters read when a feed lists one file.
     `path: ${first.url}`,
     `sha512: ${first.sha512}`,
     `releaseDate: ${quote(feed.releaseDate)}`,
@@ -87,7 +84,6 @@ function serializeFeed(feed: Feed) {
 function mergeWindowsFeeds(dir: string, version: string) {
   const parts = readdirSync(dir)
     .filter((name) => /^latest-(x64|arm64)\.yml$/.test(name))
-    // why: x64 first: an updater that reads only the top-level `path` gets the installer that runs everywhere.
     .sort((a, b) => Number(b.includes("x64")) - Number(a.includes("x64")));
   if (parts.length === 0) return false;
   const feeds = parts.map((name) => parseFeed(readFileSync(join(dir, name), "utf8"), name));
@@ -146,7 +142,6 @@ async function signInstallers(dir: string, version: string, privateKeyPem: strin
   return manifest;
 }
 
-// why: The checks BusyBoy 0.0.22 runs before it installs an update.
 async function checkAsInstalledApps(dir: string, version: string, productName: string) {
   const bytes = readFileSync(join(dir, MANIFEST));
   const signature = Buffer.from(readFileSync(join(dir, SIGNATURE), "utf8").trim(), "base64");

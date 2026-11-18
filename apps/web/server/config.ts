@@ -6,11 +6,8 @@ import { join } from "node:path";
 import { pathKey } from "./paths";
 import type { ProviderId } from "./runner/contract";
 
-// why: The data folder is shared with the legacy app, which keeps its own files there.
-
 const HOME_ENV = "BUSYBOY_HOME";
 
-/*why: * Named so it never collides with the legacy app's `settings.json`. */
 const SETTINGS_FILE = "app-settings.json";
 
 export type Settings = {

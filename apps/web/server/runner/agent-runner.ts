@@ -39,19 +39,15 @@ type Registry = {
   stoppingAll?: boolean;
 };
 
-// why: Kept on globalThis: a module-level Map is re-created when `next dev` reloads
-// why: this module, which would orphan running agent processes.
 const REGISTRY_KEY = Symbol.for("busyboy.agent-runner");
 const globalStore = globalThis as typeof globalThis & { [REGISTRY_KEY]?: Registry };
 const registry: Registry = (globalStore[REGISTRY_KEY] ??= { agents: new Map() });
 
-// why: Claude's process-group watcher does not end commands the CLI detached, so quitting has to stop each agent while the server still runs.
 async function stopAllAgents() {
   registry.stoppingAll = true;
   await Promise.allSettled([...registry.agents.values()].map((agent) => agent.session?.stop()));
 }
 
-// why: Codex and Grok report lost-session. Claude only says so in its message.
 export function isLostSessionError(event: Extract<AgentEvent, { type: "error" }>) {
   return (
     event.code === "lost-session" || /No conversation found with session ID/i.test(event.message)
@@ -61,7 +57,6 @@ export function isLostSessionError(event: Extract<AgentEvent, { type: "error" }>
 function hookShutdown() {
   if (registry.shutdownHooked) return;
   registry.shutdownHooked = true;
-  // why: Next exits on Ctrl+C once its connections close, without waiting for other signal handlers.
   onServerShutdown(stopAllAgents);
   process.once("SIGTERM", () => void stopAllAgents());
   process.once("SIGINT", () => void stopAllAgents());

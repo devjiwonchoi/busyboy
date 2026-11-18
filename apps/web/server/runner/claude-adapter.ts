@@ -95,7 +95,6 @@ function toSdkMcpServers(servers: Record<string, McpServer>): Record<string, Mcp
   );
 }
 
-// why: forkSession copies the history and persistSession: false writes no file for the branch.
 function sessionOptions({
   resumeSessionId,
   forkSessionId,
@@ -104,7 +103,6 @@ function sessionOptions({
   return { resume: resumeSessionId };
 }
 
-// why: tools: [] leaves the user's MCP servers loaded. Verified with CLI 2.1.311.
 const NO_TOOLS: Partial<Options> = {
   tools: [],
   strictMcpConfig: true,
@@ -121,7 +119,6 @@ function startClaude(options: ProviderStartOptions): ProviderSession {
   let inTurn = false;
   let stopRequested = false;
 
-  // why: Auto mode still calls canUseTool for a call it would ask about. Allow it so the harness keeps its own auto mode.
   const canUseTool: CanUseTool = (_toolName, toolInput) =>
     Promise.resolve({ behavior: "allow", updatedInput: toolInput });
 
@@ -242,8 +239,6 @@ function startClaude(options: ProviderStartOptions): ProviderSession {
     answer(_requestId, _answer: AgentAnswer) {},
     async stop() {
       stopRequested = true;
-      // why: Ends the commands the CLI detached while they are still its descendants,
-      // why: then the CLI's own process group (see claude-process.ts).
       await cli?.stop();
       input.close();
       abort.abort();
