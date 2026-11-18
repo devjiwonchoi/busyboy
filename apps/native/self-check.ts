@@ -171,7 +171,7 @@ function changedEntries(before: FolderSnapshot, after: FolderSnapshot) {
   return changed;
 }
 
-export type SelfCheckResult = {
+type SelfCheckResult = {
   ok: boolean;
   startedAt: string;
   durationMs: number;

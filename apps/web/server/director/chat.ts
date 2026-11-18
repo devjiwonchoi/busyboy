@@ -17,7 +17,7 @@ import type { AgentEvent, ProviderId } from "../runner/contract";
 import { DIRECTOR_INSTRUCTIONS } from "./context";
 import { appendTranscriptLine, readTranscript, type TranscriptCursor } from "./transcript-log";
 
-export const DIRECTOR_FOLDER = "director";
+const DIRECTOR_FOLDER = "director";
 const STATE_FILE = "state.json";
 
 export type ChatEntry =

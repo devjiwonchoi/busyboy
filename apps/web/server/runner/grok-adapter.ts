@@ -23,7 +23,7 @@ import {
 } from "./grok-events";
 import { modelText, type UserTurn } from "./user-turn";
 
-export const GROK_PATH_ENV = "BUSYBOY_GROK_PATH";
+const GROK_PATH_ENV = "BUSYBOY_GROK_PATH";
 const SIGN_IN_TIMEOUT_MS = 20_000;
 const CLOSE_WAIT_MS = 500;
 const CLIENT_INFO = { name: "busyboy", title: "BusyBoy", version: "0.0.0" };
@@ -32,13 +32,13 @@ function resolveGrok() {
   return process.env[GROK_PATH_ENV] || findExecutable("grok");
 }
 
-export function grokPermissionMode(options: ProviderStartOptions, enforce: boolean) {
+function grokPermissionMode(options: ProviderStartOptions, enforce: boolean) {
   if (options.noTools) return "dontAsk";
   if (enforce) return "default";
   return options.permissionMode === "full-access" ? "bypassPermissions" : "auto";
 }
 
-export function grokMcpServers(
+function grokMcpServers(
   servers: Record<string, McpServer> = {},
   capabilities?: { http?: boolean; sse?: boolean },
 ) {

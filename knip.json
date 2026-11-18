@@ -1,0 +1,16 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "ignoreBinaries": ["ditto", "spctl", "shadcn"],
+  "workspaces": {
+    ".": {
+      "entry": ["scripts/*.mts"]
+    },
+    "apps/web": {
+      "entry": ["scripts/*.mts"],
+      "ignore": ["components/ui/**", "lib/utils.ts"]
+    },
+    "apps/native": {
+      "entry": ["main.ts", "preload.ts", "scripts/*.mts"]
+    }
+  }
+}

@@ -1,4 +1,3 @@
-import { parseAskedQuestions } from "./asked-questions";
 import type { AgentEvent } from "./contract";
 
 export type ClaudeRawMessage = {
@@ -21,14 +20,6 @@ export type ClaudeRawMessage = {
   message?: { id?: string; content?: unknown };
   parent_tool_use_id?: string | null;
   mcp_servers?: { name?: string; status?: string }[];
-};
-
-export type ClaudePermissionRequest = {
-  toolName: string;
-  input: Record<string, unknown>;
-  title?: string;
-  description?: string;
-  suggestions?: unknown[];
 };
 
 export const TEXT_DELTA_FLUSH_MS = 50;
@@ -61,7 +52,7 @@ function shorten(value: string) {
   return line.length > LABEL_LIMIT ? `${line.slice(0, LABEL_LIMIT - 1)}…` : line;
 }
 
-export function claudeMcpStartupNotice(server: { name?: string; status?: string }) {
+function claudeMcpStartupNotice(server: { name?: string; status?: string }) {
   const name = server.name?.trim();
   if (!name || !/^[A-Za-z0-9_-]+$/.test(name)) return undefined;
   if (server.status === "failed") return `The MCP server ${name} failed to start.`;
@@ -82,7 +73,7 @@ export function toolLabel(name: string, input: Record<string, unknown>) {
   return typeof detail === "string" && detail ? `${name}: ${shorten(detail)}` : name;
 }
 
-export function claudeResultError(message: ClaudeRawMessage): string | undefined {
+function claudeResultError(message: ClaudeRawMessage): string | undefined {
   const reason = message.terminal_reason;
   if (reason && INTERRUPTED_REASONS.has(reason)) return undefined;
   const known = reason ? TERMINAL_REASONS[reason] : undefined;
@@ -235,27 +226,4 @@ export class ClaudeEventMapper {
       }
     }
   }
-}
-
-export function claudePermissionToEvent(
-  requestId: string,
-  request: ClaudePermissionRequest,
-): Extract<AgentEvent, { type: "approval" | "question" }> {
-  if (request.toolName === "AskUserQuestion") {
-    const questions = parseAskedQuestions(request.input) ?? [
-      {
-        question: "Claude asked a question BusyBoy could not read. Reply with the answer.",
-        multiSelect: false,
-        options: [],
-      },
-    ];
-    return { type: "question", requestId, questions };
-  }
-  return {
-    type: "approval",
-    requestId,
-    title: request.title ?? `Allow ${toolLabel(request.toolName, request.input)}?`,
-    detail: request.description,
-    canAllowForSession: (request.suggestions?.length ?? 0) > 0,
-  };
 }

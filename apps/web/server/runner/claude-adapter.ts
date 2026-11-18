@@ -21,7 +21,7 @@ import type {
 import { agentEnvironment, findExecutable } from "./find-executable";
 import { claudeContent, modelText, type UserTurn } from "./user-turn";
 
-export const CLAUDE_PATH_ENV = "BUSYBOY_CLAUDE_PATH";
+const CLAUDE_PATH_ENV = "BUSYBOY_CLAUDE_PATH";
 const SIGN_IN_TIMEOUT_MS = 20_000;
 
 class MessageQueue implements AsyncIterable<SDKUserMessage> {

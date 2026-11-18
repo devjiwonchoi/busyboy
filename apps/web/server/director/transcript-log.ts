@@ -1,9 +1,9 @@
 import { appendFile, mkdir, readdir, readFile, rename, stat } from "node:fs/promises";
 import { join } from "node:path";
 
-export const TRANSCRIPT_FILE = "transcript.jsonl";
+const TRANSCRIPT_FILE = "transcript.jsonl";
 
-export const MAX_TRANSCRIPT_BYTES = 20 * 1024 * 1024;
+const MAX_TRANSCRIPT_BYTES = 20 * 1024 * 1024;
 
 const SEGMENT_NAME = /^transcript\.(\d+)\.jsonl$/;
 

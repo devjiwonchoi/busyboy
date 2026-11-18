@@ -6,9 +6,9 @@ import { join } from "node:path";
 import { pathKey } from "./paths";
 import type { ProviderId } from "./runner/contract";
 
-export const HOME_ENV = "BUSYBOY_HOME";
+const HOME_ENV = "BUSYBOY_HOME";
 
-export const SETTINGS_FILE = "app-settings.json";
+const SETTINGS_FILE = "app-settings.json";
 
 export type Settings = {
   version: number;
@@ -32,10 +32,6 @@ const boundStore = globalThis as typeof globalThis & {
   [BOUND_FOLDER_KEY]?: AsyncLocalStorage<string>;
 };
 const boundFolder = (boundStore[BOUND_FOLDER_KEY] ??= new AsyncLocalStorage<string>());
-
-export function runWithDataFolder<T>(folder: string, work: () => T): T {
-  return boundFolder.run(folder, work);
-}
 
 export async function dataFolder() {
   return boundFolder.getStore() ?? resolveDataFolder();

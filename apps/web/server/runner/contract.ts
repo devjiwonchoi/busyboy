@@ -57,12 +57,7 @@ export type AgentEvent =
   | { type: "stopped"; finished: boolean }
   | { type: "error"; message: string; code?: AgentErrorCode };
 
-export type AgentErrorCode =
-  | "signed-out"
-  | "not-installed"
-  | "no-script"
-  | "provider"
-  | "lost-session";
+type AgentErrorCode = "signed-out" | "not-installed" | "no-script" | "provider" | "lost-session";
 
 export type AgentEventEnvelope = {
   seq: number;
