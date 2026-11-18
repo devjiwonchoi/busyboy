@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
 
+import { TitleBar } from "@/components/title-bar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { isSetupIncomplete } from "@/server/config";
 import { requireTrustedRequest } from "@/server/trusted-request";
@@ -20,9 +21,7 @@ export default function ChatPage() {
 function ChatSkeleton() {
   return (
     <>
-      <div className="flex h-10 shrink-0 items-center border-b px-3">
-        <Skeleton className="h-4 w-16" />
-      </div>
+      <TitleBar />
       <Skeleton className="m-3 min-h-0 flex-1" />
     </>
   );
@@ -33,9 +32,7 @@ async function TrustedChat() {
   if (await isSetupIncomplete()) redirect("/setup");
   return (
     <>
-      <header className="flex h-10 shrink-0 items-center border-b px-3 text-sm font-medium">
-        BusyBoy
-      </header>
+      <TitleBar />
       <Chat />
     </>
   );
