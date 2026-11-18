@@ -101,9 +101,7 @@ async function policyDenies(command) {
 async function askCommand(command, reason, remember) {
   const id = nextRequestId++;
   const reply = new Promise((resolve) => waitingReplies.set(id, resolve));
-  const decisions = remember
-    ? ["accept", "acceptForSession", "decline"]
-    : ["accept", "decline"];
+  const decisions = remember ? ["accept", "acceptForSession", "decline"] : ["accept", "decline"];
   send({
     id,
     method: "item/commandExecution/requestApproval",

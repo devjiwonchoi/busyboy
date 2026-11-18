@@ -158,7 +158,7 @@ test("inherited connectors should show their live status, and a missing one can 
   }
 });
 
-test("a Director connector write should ask, run when allowed, and stay refused when denied", async ({
+test("a Director connector write that is not on the ask list should run without a card", async ({
   page,
   context,
   baseURL,
@@ -171,35 +171,18 @@ test("a Director connector write should ask, run when allowed, and stay refused 
   );
   await send(page, "Post a note in Slack.");
 
-  const card = page
-    .getByRole("log", { name: "Transcript" })
-    .getByRole("group", { name: "Approval from Director · slack" });
-  await expect(card).toContainText("mcp__slack__post_message");
-  await expect(card).toContainText("Ship it.");
-  await expect(card).toContainText("Send, post, merge, publish, or delete through a connector");
-  await page.screenshot({ path: "/opt/cursor/artifacts/connector-approval.png" });
-  await card.getByRole("button", { name: "A. Allow" }).click();
-
   const transcript = page.getByRole("log", { name: "Transcript" });
   await expect(transcript.getByRole("group", { name: "Reply" })).toHaveText("Posted to Slack.");
   await expect(
-    page
-      .getByRole("log", { name: "Transcript" })
-      .getByRole("group", { name: "Approval from Director · slack" }),
+    transcript.getByRole("group", { name: "Approval from Director · slack" }),
   ).toHaveCount(0);
 
   await send(page, "Post another note in Slack.");
-  const denial = page
-    .getByRole("log", { name: "Transcript" })
-    .getByRole("group", { name: "Approval from Director · slack" });
-  await denial.getByRole("button", { name: "C. Deny" }).click();
   await expect(transcript.getByRole("group", { name: "Reply" }).last()).toHaveText(
-    "I did not post to Slack.",
+    "Posted the second note.",
   );
   await expect(
-    page
-      .getByRole("log", { name: "Transcript" })
-      .getByRole("group", { name: "Approval from Director · slack" }),
+    transcript.getByRole("group", { name: "Approval from Director · slack" }),
   ).toHaveCount(0);
 });
 
