@@ -1,3 +1,5 @@
+import { Bubble, BubbleContent } from "@/components/ui/bubble";
+import { Message, MessageContent } from "@/components/ui/message";
 import type { ChatEntry } from "@/server/director/chat";
 
 import type { DirectorView } from "./chat";
@@ -17,12 +19,7 @@ export function Transcript({ view }: { view: DirectorView }) {
         {view.entries.map((entry) => (
           <MessageView key={entry.id} entry={entry} />
         ))}
-        {view.draft ? (
-          <article aria-label="Reply">
-            <p className="text-muted-foreground mb-1 text-xs">Director</p>
-            <p className="whitespace-pre-wrap text-sm">{view.draft}</p>
-          </article>
-        ) : null}
+        {view.draft ? <ReplyBubble text={view.draft} /> : null}
         <div key={view.revision} ref={scrollLogToEnd} />
       </div>
     </div>
@@ -47,11 +44,36 @@ function MessageView({ entry }: { entry: ChatEntry }) {
       </p>
     );
   }
-  const label = entry.kind === "user" ? "You" : "Director";
+  if (entry.kind === "user") {
+    return <UserBubble text={entry.text} />;
+  }
+  return <ReplyBubble text={entry.text} />;
+}
+
+function UserBubble({ text }: { text: string }) {
   return (
-    <article aria-label={entry.kind === "user" ? "Your message" : "Reply"}>
-      <p className="text-muted-foreground mb-1 text-xs">{label}</p>
-      <p className="whitespace-pre-wrap text-sm">{entry.text}</p>
+    <article aria-label="Your message">
+      <Message align="end">
+        <MessageContent>
+          <Bubble>
+            <BubbleContent className="whitespace-pre-wrap">{text}</BubbleContent>
+          </Bubble>
+        </MessageContent>
+      </Message>
+    </article>
+  );
+}
+
+function ReplyBubble({ text }: { text: string }) {
+  return (
+    <article aria-label="Reply">
+      <Message>
+        <MessageContent>
+          <Bubble variant="muted">
+            <BubbleContent className="whitespace-pre-wrap">{text}</BubbleContent>
+          </Bubble>
+        </MessageContent>
+      </Message>
     </article>
   );
 }
