@@ -1,13 +1,12 @@
 # pnpm stops at this file instead of walking into a parent workspace, and pnpm 11 reads settings only from here.
 packages:
-  - .
+  - apps/*
 
 allowBuilds:
   electron: true
   # Comes with electron-builder for Squirrel installers, which are not built.
   electron-winstaller: false
   esbuild: true
-  node-pty: true
 
 # Electron 45.3.2 was newer than the configured minimum release age when it
 # was pinned for this app; pnpm added the exemption so it could be installed.

@@ -48,13 +48,14 @@ function swcRequires(nextDist: string): string[] {
   return [...found];
 }
 
-export function assertServerResolves(standaloneDir: string) {
-  const root = realpathSync(standaloneDir);
+export function assertServerResolves(appDir: string, boundary = appDir) {
+  const root = realpathSync(boundary);
+  const app = realpathSync(appDir);
   const failures: string[] = [];
-  const fromServer = join(root, ".next", "server", "chunks", "resolution-check.js");
+  const fromServer = join(app, ".next", "server", "chunks", "resolution-check.js");
   const serverRequire = createRequire(fromServer);
 
-  const nextDist = join(root, "node_modules", "next", "dist");
+  const nextDist = join(app, "node_modules", "next", "dist");
   const constants = join(nextDist, "shared", "lib", "constants.js");
   if (!existsSync(constants)) {
     failures.push("The standalone server has no next/dist/shared/lib/constants.js.");
@@ -76,7 +77,7 @@ export function assertServerResolves(standaloneDir: string) {
     }
   }
 
-  for (const specifier of hashedSpecifiers(root)) {
+  for (const specifier of hashedSpecifiers(app)) {
     try {
       const resolved = realpathSync(serverRequire.resolve(specifier));
       if (!inside(root, resolved)) {

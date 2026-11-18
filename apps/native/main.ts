@@ -7,8 +7,8 @@ import {
   INSTALL_UPDATE_CHANNEL,
   UPDATE_READY_CHANNEL,
   UPDATE_STATE_CHANNEL,
-} from "../src/lib/desktop-bridge";
-import { SERVER_TOKEN_COOKIE } from "../src/lib/server-token";
+} from "../web/src/lib/desktop-bridge";
+import { SERVER_TOKEN_COOKIE } from "../web/src/lib/server-token";
 import { startBackground, type Background } from "./background";
 import {
   createSelfCheck,

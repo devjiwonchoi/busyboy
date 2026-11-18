@@ -7,7 +7,7 @@ import {
   UPDATE_READY_CHANNEL,
   UPDATE_STATE_CHANNEL,
   type DesktopBridge,
-} from "../src/lib/desktop-bridge";
+} from "../web/src/lib/desktop-bridge";
 
 // why: Sandboxed, with context isolation, so the page gets these functions and nothing else from Electron.
 const bridge: DesktopBridge = {

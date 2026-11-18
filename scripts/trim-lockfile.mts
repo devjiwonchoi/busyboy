@@ -1,51 +1,50 @@
-export function trimLockfile(lockText: string, keep: ReadonlySet<string>): string {
+export function lockfileForImporter(
+  lockText: string,
+  importer: string,
+  keep: ReadonlySet<string>,
+): string {
   const newline = lockText.endsWith("\r\n") ? "\r\n" : "\n";
   const lines = lockText.split(/\r?\n/);
-  const out: string[] = [];
-  let index = 0;
+  const importersAt = lines.indexOf("importers:");
+  if (importersAt === -1) throw new Error("pnpm-lock.yaml has no importers section.");
+  const packagesAt = lines.indexOf("packages:");
+  if (packagesAt === -1) throw new Error("pnpm-lock.yaml has no packages section.");
+  const header = `  ${importer}:`;
+  const start = lines.indexOf(header);
+  if (start === -1 || start > packagesAt)
+    throw new Error(`pnpm-lock.yaml has no ${importer} importer.`);
 
-  while (index < lines.length && lines[index] !== "importers:") out.push(lines[index++]!);
-  if (index >= lines.length) throw new Error("pnpm-lock.yaml has no importers section.");
-  out.push(lines[index++]!);
-
-  while (index < lines.length && lines[index] !== "  .:") out.push(lines[index++]!);
-  if (index >= lines.length) throw new Error("pnpm-lock.yaml has no root importer.");
-  out.push(lines[index++]!);
-
-  const sections = new Set([
-    "    dependencies:",
-    "    devDependencies:",
-    "    optionalDependencies:",
-  ]);
-  while (index < lines.length && lines[index] !== "packages:") {
-    const header = lines[index]!;
-    if (!sections.has(header)) {
-      out.push(header);
+  const kept: string[] = [];
+  let index = start + 1;
+  while (index < packagesAt) {
+    const line = lines[index]!;
+    if (line.startsWith("  ") && !line.startsWith("   ") && line.endsWith(":")) break;
+    if (line !== "    dependencies:" && line !== "    optionalDependencies:") {
       index++;
       continue;
     }
     index++;
-    const kept: string[] = [];
-    while (index < lines.length && lines[index]!.startsWith("      ")) {
+    while (index < packagesAt && lines[index]!.startsWith("      ")) {
       const nameLine = lines[index]!;
       if (!nameLine.startsWith("      ") || nameLine.startsWith("        ")) {
         throw new Error(`Unexpected line in pnpm-lock.yaml importers: ${nameLine}`);
       }
       const block = [nameLine];
       index++;
-      while (index < lines.length && lines[index]!.startsWith("        "))
+      while (index < packagesAt && lines[index]!.startsWith("        "))
         block.push(lines[index++]!);
       const name = unquote(nameLine.trim().replace(/:$/, ""));
       if (keep.has(name)) kept.push(...block);
     }
-    if (kept.length > 0) {
-      out.push(header);
-      out.push(...kept);
-    }
   }
 
-  while (index < lines.length) out.push(lines[index++]!);
-  return out.join(newline);
+  const staged = [...lines.slice(0, importersAt + 1), "", "  .:", ""];
+  if (kept.length > 0) {
+    staged.push("    dependencies:");
+    staged.push(...kept);
+  }
+  staged.push(...lines.slice(packagesAt));
+  return staged.join(newline);
 }
 
 function unquote(value: string) {

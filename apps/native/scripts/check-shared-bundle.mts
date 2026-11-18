@@ -2,14 +2,18 @@
 import { existsSync, readdirSync, readFileSync, realpathSync } from "node:fs";
 import { basename, isAbsolute, join, relative } from "node:path";
 
-import { serverExternalPackages } from "../src/lib/server-external-packages.ts";
+import { serverExternalPackages } from "../../web/src/lib/server-external-packages.ts";
+import { standaloneAppDir, standaloneServerPath } from "../standalone-server.ts";
 import { assertServerResolves } from "./check-server-resolution.mts";
 
-const root = join(import.meta.dirname, "..");
+const nativeRoot = join(import.meta.dirname, "..");
+const repoRoot = join(nativeRoot, "..", "..");
 const args = process.argv.slice(2);
 const standaloneFlag = args.indexOf("--standalone");
 const standaloneArg =
-  standaloneFlag === -1 ? join(root, ".next", "standalone") : args[standaloneFlag + 1];
+  standaloneFlag === -1
+    ? join(repoRoot, "apps", "web", ".next", "standalone")
+    : args[standaloneFlag + 1];
 const windows = args.includes("--windows") || process.platform === "win32";
 const packages = ["react", "react-dom", "next", ...serverExternalPackages];
 
@@ -34,10 +38,11 @@ function countSymlinks(dir: string): number {
 if (!standaloneArg) fail("--standalone needs the standalone server directory.");
 const standalone = standaloneArg;
 
-if (!existsSync(join(standalone, "server.js")))
-  fail("The app bundle has no .next/standalone/server.js.");
-if (!existsSync(join(root, "dist-electron", "main.cjs")))
-  fail("The app bundle has no dist-electron/main.cjs.");
+const appDir = standaloneAppDir(standalone);
+if (!existsSync(standaloneServerPath(standalone)))
+  fail("The app bundle has no .next/standalone/apps/web/server.js.");
+if (!existsSync(join(nativeRoot, "dist-electron", "main.cjs")))
+  fail("The app bundle has no apps/native/dist-electron/main.cjs.");
 
 const symlinks = countSymlinks(standalone);
 if (windows && symlinks > 0) fail("The Windows app bundle still contains symlinks.");
@@ -67,18 +72,24 @@ function assertInside(dir: string, name: string) {
 
 // why: Checked by path, not by Node walking parent directories: a checkout next to
 // why: the bundle also has these packages, and that copy is not the one the app ships.
-for (const name of ["react", "react-dom", "next"]) {
-  const dir = join(standalone, "node_modules", name);
+const nextDir = join(appDir, "node_modules", "next");
+if (!existsSync(nextDir)) fail("The app bundle has no next.");
+assertInside(nextDir, "next");
+const nextReal = realpathSync(nextDir);
+for (const name of ["react", "react-dom"]) {
+  const sibling = join(nextReal, "..", name);
+  const nested = join(nextReal, "node_modules", name);
+  const dir = existsSync(sibling) ? sibling : nested;
   if (!existsSync(dir)) fail(`The app bundle has no ${name}.`);
   assertInside(dir, name);
 }
 for (const name of serverExternalPackages) {
   const leaf = basename(name);
   const aliasHash = new RegExp(`^${leaf.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}-[0-9a-f]+$`);
-  const candidates = [join(standalone, "node_modules", name)];
+  const candidates = [join(appDir, "node_modules", name), join(standalone, "node_modules", name)];
   const aliasParent = name.startsWith("@")
-    ? join(standalone, ".next", "node_modules", name.slice(0, name.indexOf("/")))
-    : join(standalone, ".next", "node_modules");
+    ? join(appDir, ".next", "node_modules", name.slice(0, name.indexOf("/")))
+    : join(appDir, ".next", "node_modules");
   if (existsSync(aliasParent)) {
     for (const entry of readdirSync(aliasParent)) {
       if (entry === leaf || aliasHash.test(entry)) candidates.push(join(aliasParent, entry));
@@ -90,7 +101,7 @@ for (const name of serverExternalPackages) {
 }
 
 try {
-  assertServerResolves(standalone);
+  assertServerResolves(appDir, standalone);
 } catch (error) {
   fail(error instanceof Error ? error.message : String(error));
 }

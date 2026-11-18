@@ -176,7 +176,7 @@ if (!privateKeyPem) {
   process.exit(1);
 }
 const { productName } = JSON.parse(
-  readFileSync(join(import.meta.dirname, "..", "package.json"), "utf8"),
+  readFileSync(join(import.meta.dirname, "..", "apps", "native", "package.json"), "utf8"),
 ) as { productName: string };
 
 if (mergeWindowsFeeds(dir, version)) console.log("Merged the Windows feeds into latest.yml.");
