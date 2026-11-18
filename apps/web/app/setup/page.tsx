@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { connection } from "next/server";
 import { Suspense, type CSSProperties } from "react";
 
 import { CopyCommand } from "@/components/setup/copy-command";
@@ -25,7 +24,6 @@ import { finishSetupAction, recheckProvidersAction } from "./actions";
 
 export const metadata: Metadata = { title: "Setup · BusyBoy" };
 
-// why: The harness check reads local state, which Cache Components would otherwise prerender at build time.
 export default function SetupPage() {
   return (
     <div className="flex min-h-dvh flex-col">
@@ -54,7 +52,6 @@ export default function SetupPage() {
 }
 
 async function BackToChat() {
-  await connection();
   if (!isSetupComplete(await readSettings())) return null;
   return (
     <Link
@@ -78,8 +75,6 @@ const STATUS_TEXT: Record<SignInStatus["state"], string> = {
 const HARNESS_FORM = "harness-form";
 
 async function HarnessStep() {
-  // why: Awaiting nothing else still lets Next prerender this part, which rejects the clock reads in providerState.
-  await connection();
   const [states, current] = await Promise.all([
     Promise.all(
       PROVIDERS.map(async (provider) => ({ ...provider, state: await providerState(provider.id) })),
