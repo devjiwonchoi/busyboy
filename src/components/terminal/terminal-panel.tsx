@@ -9,11 +9,8 @@ import { useRef, useState, useSyncExternalStore } from "react";
 
 import { useShellState, useTaskSelection } from "@/components/shell/shell-state";
 import {
-  COMMAND_PALETTE_KEYS,
-  isChatSwitchShortcut,
   isMacPlatform,
   matchesShortcut,
-  NEW_TASK_KEYS,
   TOGGLE_PANEL_KEYS,
   useShortcut,
 } from "@/components/shell/shortcut-registry";
@@ -44,9 +41,6 @@ function subscribeNothing() {
 // why: Off macOS, Ctrl+J is the shell's line feed, so the panel toggle from inside the terminal is Ctrl+`.
 function isAppShortcut(event: KeyboardEvent) {
   const mac = isMacPlatform();
-  if (matchesShortcut(COMMAND_PALETTE_KEYS, event, mac)) return true;
-  if (matchesShortcut(NEW_TASK_KEYS, event, mac)) return true;
-  if (isChatSwitchShortcut(event, mac)) return true;
   const mod = mac ? event.metaKey && !event.ctrlKey : event.ctrlKey && !event.metaKey;
   if (!mod || event.shiftKey) return false;
   if (event.code === "Backquote" && !event.altKey) return true;

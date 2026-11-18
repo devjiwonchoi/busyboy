@@ -15,13 +15,7 @@ import { EscapeShortcut } from "@/components/shell/shortcut-registry";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Bubble, BubbleContent } from "@/components/ui/bubble";
 import { Button } from "@/components/ui/button";
-import {
-  Message,
-  MessageAvatar,
-  MessageContent,
-  MessageFooter,
-  MessageHeader,
-} from "@/components/ui/message";
+import { Message, MessageContent, MessageFooter, MessageHeader } from "@/components/ui/message";
 import { useExternalSync } from "@/hooks/use-external-sync";
 import { textWithImages } from "@/lib/chat-attachments";
 import { cn } from "@/lib/utils";
@@ -36,7 +30,6 @@ import { ChatComposer, type ChatComposerHandle, type ComposerMessage } from "./c
 import { Markdown } from "./markdown";
 import { MessageActions } from "./message-actions";
 import { MessageImages } from "./message-images";
-import { PersonaAvatar, type Persona } from "./persona";
 import { ReplyTarget } from "./reply-target";
 import { TaskGroup } from "./task-group";
 
@@ -136,16 +129,10 @@ function apply(view: View, update: DirectorUpdate): View {
 
 export function DirectorChat({
   projects,
-  persona,
-  chat = null,
-  managedProject = null,
-  header,
+  header = "Director",
   greeting,
 }: {
   projects: string[];
-  persona: Persona;
-  chat?: string | null;
-  managedProject?: string | null;
   header?: string;
   greeting: string;
 }) {
@@ -168,12 +155,10 @@ export function DirectorChat({
   const scroller = useRef<HTMLDivElement>(null);
   const honoredJump = useRef<string | null>(null);
   const [jumpId, setJumpId] = useState<string | null>(null);
-  const name = persona.name;
+  const name = "Director";
 
   useExternalSync(() => {
-    const source = new EventSource(
-      chat ? `/api/director/events?chat=${encodeURIComponent(chat)}` : "/api/director/events",
-    );
+    const source = new EventSource("/api/director/events");
     source.onmessage = (message) => {
       const update = JSON.parse(message.data) as DirectorUpdate;
       setView((current) => apply(current, update));
@@ -191,7 +176,7 @@ export function DirectorChat({
     };
     source.onerror = () => setView((current) => ({ ...current, connected: false }));
     return () => source.close();
-  }, [chat]);
+  }, []);
 
   useExternalSync(() => {
     const read = () =>
@@ -241,7 +226,7 @@ export function DirectorChat({
   }
 
   function stopReply() {
-    void stopDirectorAction(chat).catch(() =>
+    void stopDirectorAction().catch(() =>
       setView((current) => ({
         ...current,
         sendError: "The reply could not be stopped. Try again.",
@@ -250,7 +235,7 @@ export function DirectorChat({
   }
 
   function sendQueuedNow() {
-    void sendDirectorQueueNowAction(chat).catch(() =>
+    void sendDirectorQueueNowAction().catch(() =>
       setView((current) => ({
         ...current,
         sendError: "The message could not be sent. Try again.",
@@ -261,7 +246,7 @@ export function DirectorChat({
   function retry() {
     if (retrying.current || !turn?.retry) return;
     retrying.current = true;
-    void reviseDirectorMessageAction(turn.user.id, turn.user.text, chat, undefined, true)
+    void reviseDirectorMessageAction(turn.user.id, turn.user.text, undefined, true)
       .then(({ error }) => {
         if (error) setView((current) => ({ ...current, sendError: error }));
       })
@@ -327,7 +312,7 @@ export function DirectorChat({
     };
     const sent =
       editingId && !replyCard && !messageTask
-        ? reviseDirectorMessageAction(editingId, message.text, chat, message.attachments).then(
+        ? reviseDirectorMessageAction(editingId, message.text, message.attachments).then(
             ({ error }) => {
               if (error) report(error);
               setEditingId(null);
@@ -348,7 +333,7 @@ export function DirectorChat({
                   setMessageChoice(null);
                 },
               )
-            : sendToDirectorAction(message.text, chat, message.attachments).then(({ error }) => {
+            : sendToDirectorAction(message.text, message.attachments).then(({ error }) => {
                 if (error) report(error);
               });
     return sent.catch((error: unknown) => {
@@ -394,7 +379,7 @@ export function DirectorChat({
           data-status={view.status}
           className="mx-auto flex w-full max-w-3xl flex-col gap-4 px-6 py-6"
         >
-          <DirectorMessage persona={persona} header={header}>
+          <DirectorMessage header={header}>
             <Bubble variant="muted">
               <BubbleContent>{greeting}</BubbleContent>
             </Bubble>
@@ -425,8 +410,6 @@ export function DirectorChat({
                 <EntryView
                   entry={row.entry}
                   tasks={view.tasks}
-                  persona={persona}
-                  chat={chat}
                   messaging={messageTask?.id ?? null}
                   turn={turn}
                   canEdit={canEdit}
@@ -445,7 +428,7 @@ export function DirectorChat({
             ),
           )}
           {view.draft && (
-            <DirectorMessage persona={persona}>
+            <DirectorMessage>
               <Bubble variant="muted" role="group" aria-label="Reply in progress" aria-busy>
                 <BubbleContent>
                   <Markdown text={view.draft} streaming />
@@ -491,7 +474,9 @@ export function DirectorChat({
         <ChatComposer
           ref={composer}
           projects={projects}
-          filesProject={messageTask?.project ?? managedProject}
+          filesProject={
+            messageTask?.project ?? (projects.length === 1 ? (projects[0] ?? null) : null)
+          }
           canStop={view.status === "answering"}
           canArchive={Boolean(messageTask)}
           onCommand={(command) => {
@@ -504,7 +489,7 @@ export function DirectorChat({
               });
             }
           }}
-          draftKey={chat ?? "director"}
+          draftKey="director"
           seed={seed}
           onTextChange={setDraftText}
           onEmptyArrowUp={() => {
@@ -541,23 +526,16 @@ export function DirectorChat({
 }
 
 export function DirectorMessage({
-  persona,
-  header,
+  header = "Director",
   children,
 }: {
-  persona: Persona;
   header?: string;
   children: React.ReactNode;
 }) {
   return (
     <Message>
-      {persona.mark && (
-        <MessageAvatar>
-          <PersonaAvatar persona={persona} />
-        </MessageAvatar>
-      )}
       <MessageContent>
-        <MessageHeader>{header ?? persona.name}</MessageHeader>
+        <MessageHeader>{header}</MessageHeader>
         {children}
       </MessageContent>
     </Message>
@@ -567,8 +545,6 @@ export function DirectorMessage({
 function EntryView({
   entry,
   tasks,
-  persona,
-  chat,
   messaging,
   turn,
   canEdit,
@@ -579,8 +555,6 @@ function EntryView({
 }: {
   entry: ChatEntry;
   tasks: Map<string, TaskView>;
-  persona: Persona;
-  chat: string | null;
   messaging: string | null;
   turn: ReturnType<typeof latestTurn>;
   canEdit: boolean;
@@ -601,7 +575,7 @@ function EntryView({
                 role="group"
                 aria-label={entry.to ? `Your reply to ${entry.to}` : "Your message"}
               >
-                {entry.images && <MessageImages images={entry.images} chat={chat} />}
+                {entry.images && <MessageImages images={entry.images} chat={null} />}
                 {entry.text && (
                   <BubbleContent className="whitespace-pre-wrap">{entry.text}</BubbleContent>
                 )}
@@ -625,7 +599,7 @@ function EntryView({
       );
     case "director":
       return (
-        <DirectorMessage persona={persona}>
+        <DirectorMessage>
           <div className="relative w-fit max-w-[80%]">
             <Bubble
               className="max-w-full"

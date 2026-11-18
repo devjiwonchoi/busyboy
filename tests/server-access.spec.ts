@@ -147,7 +147,7 @@ test("the MCP token should open only the MCP endpoint", async () => {
     expect((await call({ "x-busyboy-mcp-token": mcpToken })).status).toBe(200);
     expect((await get(port, { host, "x-busyboy-mcp-token": mcpToken })).status).toBe(403);
     expect(
-      (await get(port, { host, "x-busyboy-mcp-token": mcpToken }, "/api/companion-image")).status,
+      (await get(port, { host, "x-busyboy-mcp-token": mcpToken }, "/api/chat-attachment")).status,
     ).toBe(403);
   } finally {
     child.kill();

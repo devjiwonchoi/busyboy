@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { expect, test, type Page } from "@playwright/test";
@@ -34,8 +34,8 @@ async function finishMenuAnimation(picker: ReturnType<Page["getByRole"]>) {
   });
 }
 
-async function openChat(page: Page, manager?: string) {
-  await page.goto(manager ? `/?manager=${manager}` : "/");
+async function openChat(page: Page) {
+  await page.goto("/");
   await expect(page.getByRole("log", { name: "Transcript" })).toHaveAttribute(
     "data-connected",
     "true",
@@ -117,15 +117,8 @@ test("mentioning a project file should send it to the harness", async ({
   context,
   baseURL,
 }) => {
-  const { home } = await useProjectsHome(context, baseURL!, ["web"]);
-  const settingsFile = join(home, "app-settings.json");
-  const stored = JSON.parse(readFileSync(settingsFile, "utf8")) as { managers?: unknown[] };
-  stored.managers = [
-    { id: "webby", name: "Webby", project: "web", createdAt: new Date(0).toISOString() },
-  ];
-  writeFileSync(settingsFile, `${JSON.stringify(stored, null, 2)}\n`);
-
-  await openChat(page, "webby");
+  await useProjectsHome(context, baseURL!, ["web"]);
+  await openChat(page);
   const message = page.getByRole("textbox", { name: "Message" });
   await message.click();
   await message.pressSequentially("@");
@@ -135,7 +128,6 @@ test("mentioning a project file should send it to the harness", async ({
   await message.pressSequentially("rm");
   await expect(picker.getByRole("option", { name: /README\.md/ })).toBeVisible();
   await finishMenuAnimation(picker);
-  await page.screenshot({ path: "/opt/cursor/artifacts/file-picker.png" });
   await message.press("Enter");
   await expect(picker).toBeHidden();
   await page.getByRole("button", { name: "Send" }).click();

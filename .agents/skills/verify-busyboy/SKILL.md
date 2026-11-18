@@ -25,7 +25,7 @@ That starts the Next dev server and a headless Chromium window at 1280×820. Lau
 
 The server runs with `BUSYBOY_TEST_MODE=1` and without `BUSYBOY_TOKEN`, so those scripts are the Claude provider. `BUSYBOY_CODEX_PATH` and `BUSYBOY_GROK_PATH` point at missing files, so only Claude is signed in. `BUSYBOY_GH_PATH` is `tests/fake-gh/gh`. `CLAUDE_CONFIG_DIR` and `CODEX_HOME` sit inside the temporary directory, so the run does not read `~/.claude`, `~/.codex`, or `~/.busyboy`.
 
-Launch is finished only when the app is usable. Usable means the page title contains BusyBoy, the log named `Transcript` has `data-connected="true"`, the text says `BusyBoy is ready. What should we work on?`, the link `BusyBoy, director` is visible, and the link `Settings` is visible. A process that merely accepts HTTP is not ready.
+Launch is finished only when the app is usable. Usable means the page title contains BusyBoy, the log named `Transcript` has `data-connected="true"`, the text says `BusyBoy is ready. What should we work on?`, and the link `Settings` is visible. A process that merely accepts HTTP is not ready.
 
 Launch prints the URL, the surface `next`, the data directory, `.verify/evidence`, and the Chrome DevTools Protocol websocket URL. A second `pnpm drive launch` while that keeper is alive exits with an error. Run `pnpm drive cleanup` first. One checkout drives one instance; the state file is `.verify/run.json`.
 
@@ -57,7 +57,6 @@ Prefer roles and accessible names. The handles below are the ones the journeys u
 | Message field     | `textbox`    | `Message`                               |
 | Send              | `button`     | `Send`                                  |
 | Settings          | `link`       | `Settings`                              |
-| Director row      | `link`       | `BusyBoy, director`                     |
 | Settings page     | `main`       | `Settings`                              |
 | Settings sections | `navigation` | `Settings sections`                     |
 | Plan card         | `group`      | `Plan from web · Add a footer`          |
@@ -68,7 +67,6 @@ Prefer roles and accessible names. The handles below are the ones the journeys u
 | Closed card       | `group`      | `Card from web · Add a footer`          |
 | Task line         | `listitem`   | `web · Add a footer`                    |
 | Message the task  | `button`     | `Message web · Add a footer`            |
-| Companion         | `radio`      | `Ming the seal`                         |
 
 The middle dot in those names is `·` (U+00B7).
 

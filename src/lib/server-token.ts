@@ -26,12 +26,6 @@ export function taskMcpTokenFor(serverToken: string, project: string) {
   return createHmac("sha256", serverToken).update(`busyboy-mcp-task:${project}`).digest("hex");
 }
 
-export const MCP_MANAGER_PARAM = "manager";
-
-export function managerMcpTokenFor(serverToken: string, manager: string) {
-  return createHmac("sha256", serverToken).update(`busyboy-mcp-manager:${manager}`).digest("hex");
-}
-
 // why: The hook file is readable by a task agent, so this token opens only the always-ask path.
 export function alwaysAskTokenFor(serverToken: string) {
   return createHmac("sha256", serverToken).update("busyboy-always-ask").digest("hex");

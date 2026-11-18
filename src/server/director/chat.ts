@@ -12,7 +12,6 @@ import {
   messageImages,
   readSavedImage,
 } from "../chat-attachments";
-import { getManagerAt, isListedManager, listManagersAt, subscribeToManagers } from "../managers";
 import { pathKey, samePath } from "../paths";
 import { PROVIDERS } from "../providers";
 import {
@@ -47,7 +46,7 @@ import {
 } from "../task-cards";
 import { listTasksAt, messageTaskAt, readTasksAt, subscribeToTasks, type TaskView } from "../tasks";
 import { directorTiming } from "./context";
-import { directorPrompt, managerPrompt } from "./prompt";
+import { directorPrompt } from "./prompt";
 import { appendTranscriptLine, readTranscript, type TranscriptCursor } from "./transcript-log";
 
 type McpServers = Record<string, McpServer>;
@@ -55,7 +54,6 @@ type McpServers = Record<string, McpServer>;
 // why: The display transcript is our own file, so it does not depend on what the provider still holds after compaction.
 
 export const DIRECTOR_FOLDER = "director";
-export const MANAGERS_FOLDER = "managers";
 const STATE_FILE = "state.json";
 
 export type ChatEntry =
@@ -127,18 +125,8 @@ type DirectorState = {
 export const REPLY_CUT_OFF_NOTE =
   "BusyBoy restarted before the Director finished replying. Send your message again if you still need an answer.";
 
-export type ChatSummary = {
-  chat: string | null;
-  name: string;
-  project: string | null;
-  preview: string;
-  status: DirectorStatus;
-  waiting: number;
-};
-
 type Director = {
   folder: string;
-  chat: string | null;
   closed?: boolean;
   ready: Promise<void>;
   loaded: boolean;
@@ -174,17 +162,7 @@ const DIRECTORS_KEY = Symbol.for("busyboy.directors");
 const globalStore = globalThis as typeof globalThis & { [DIRECTORS_KEY]?: Map<string, Director> };
 const directors = (globalStore[DIRECTORS_KEY] ??= new Map());
 
-const directorFolder = (director: Director) =>
-  director.chat
-    ? join(director.folder, MANAGERS_FOLDER, director.chat)
-    : join(director.folder, DIRECTOR_FOLDER);
-
-const directorKey = (folder: string, chat: string | null) =>
-  chat ? `${pathKey(folder)}\n${chat}` : pathKey(folder);
-
-function chatOf(folder: string, owner: string | null | undefined) {
-  return owner && isListedManager(folder, owner) ? owner : null;
-}
+const directorFolder = (director: Director) => join(director.folder, DIRECTOR_FOLDER);
 
 const WATCHED_KEY = Symbol.for("busyboy.director-folders");
 const watchedStore = globalThis as typeof globalThis & { [WATCHED_KEY]?: Set<string> };
@@ -194,14 +172,13 @@ function watchFolder(folder: string) {
   const key = pathKey(folder);
   if (watched.has(key)) return;
   watched.add(key);
-  void listManagersAt(folder).catch(() => {});
   subscribeToTasks(folder, (task) => {
     for (const director of directors.values()) {
       if (samePath(director.folder, folder)) broadcast(director, { type: "task", task });
     }
   });
   subscribeToCards(folder, (update) => {
-    const director = getDirector(folder, chatOf(folder, update.card.chat));
+    const director = getDirector(folder);
     if (update.type === "open") {
       broadcast(director, { type: "card-opened", card: update.card });
       return;
@@ -229,18 +206,15 @@ function watchFolder(folder: string) {
 }
 
 function cardsOf(director: Director) {
-  return openCards(director.folder).filter(
-    (card) => chatOf(director.folder, card.chat) === director.chat,
-  );
+  return openCards(director.folder);
 }
 
-function getDirector(folder: string, chat: string | null = null): Director {
-  const key = directorKey(folder, chat);
+function getDirector(folder: string): Director {
+  const key = pathKey(folder);
   let director = directors.get(key);
   if (director) return director;
   director = {
     folder,
-    chat,
     ready: Promise.resolve(),
     loaded: false,
     entries: [],
@@ -264,13 +238,8 @@ function getDirector(folder: string, chat: string | null = null): Director {
   return director;
 }
 
-const roleOf = (director: Director) => (director.chat ? "manager" : "Director");
-
 async function promptOf(director: Director) {
-  if (!director.chat) return directorPrompt(director.folder);
-  const manager = await getManagerAt(director.folder, director.chat);
-  if (!manager) throw new Error("This manager was removed.");
-  return managerPrompt(director.folder, manager);
+  return directorPrompt(director.folder);
 }
 
 async function load(director: Director) {
@@ -308,10 +277,7 @@ async function load(director: Director) {
         ? { provider: state.provider as ProviderId, sessionId: state.sessionId as string }
         : {};
     if (state?.turnOpen === true) {
-      const text = director.chat
-        ? REPLY_CUT_OFF_NOTE.replace("the Director", "the manager")
-        : REPLY_CUT_OFF_NOTE;
-      saveEntry(director, newEntry("note", { text, tone: "info" }));
+      saveEntry(director, newEntry("note", { text: REPLY_CUT_OFF_NOTE, tone: "info" }));
       saveState(director);
     }
   } catch {
@@ -402,7 +368,7 @@ function rememberRemoval(director: Director, id: string) {
     .catch(() => {})
     .then(() => appendTranscriptLine(folder, line, director.transcriptFile))
     .catch((error: unknown) =>
-      console.error(`busyboy: could not save the ${roleOf(director)} transcript`, error),
+      console.error(`busyboy: could not save the Director transcript`, error),
     );
 }
 
@@ -418,7 +384,7 @@ function saveEntry(director: Director, entry: ChatEntry) {
     .catch(() => {})
     .then(() => appendTranscriptLine(folder, `${JSON.stringify(entry)}\n`, director.transcriptFile))
     .catch((error: unknown) =>
-      console.error(`busyboy: could not save the ${roleOf(director)} transcript`, error),
+      console.error(`busyboy: could not save the Director transcript`, error),
     );
 }
 
@@ -521,7 +487,7 @@ function onAgentEvent(director: Director, agentId: string, { event }: AgentEvent
       break;
     case "approval":
       if (event.title.startsWith("mcp__") && !event.detail?.startsWith(BUSYBOY_FILES_RULE)) {
-        openDirectorApproval({ folder: director.folder, chat: director.chat, agentId, event });
+        openDirectorApproval({ folder: director.folder, chat: null, agentId, event });
         break;
       }
       queueMicrotask(() =>
@@ -529,8 +495,8 @@ function onAgentEvent(director: Director, agentId: string, { event }: AgentEvent
           kind: "approval",
           allow: false,
           message: event.detail?.startsWith(BUSYBOY_FILES_RULE)
-            ? `The ${roleOf(director)} cannot touch BusyBoy's own files. Use BusyBoy's tools to read or change tasks and settings.`
-            : `The ${roleOf(director)} cannot run this. Create a task for work in a project instead.`,
+            ? `The Director cannot touch BusyBoy's own files. Use BusyBoy's tools to read or change tasks and settings.`
+            : `The Director cannot run this. Create a task for work in a project instead.`,
         }),
       );
       break;
@@ -729,7 +695,6 @@ function scheduleCompaction(director: Director) {
 
 export type SendToDirectorInput = {
   folder: string;
-  chat?: string | null;
   text: string;
   attachments?: AttachmentInput[];
   resolveProvider: (current: ProviderId | undefined) => Promise<ProviderId | null>;
@@ -737,7 +702,7 @@ export type SendToDirectorInput = {
 };
 
 export async function sendToDirector(input: SendToDirectorInput) {
-  const director = getDirector(input.folder, input.chat ?? null);
+  const director = getDirector(input.folder);
   await director.ready;
   const turn = await attachmentsTurn({
     folder: directorFolder(director),
@@ -796,8 +761,8 @@ async function sendTurn(
   director.batchTimer = setTimeout(() => void flush(director), directorTiming().batchMs);
 }
 
-export async function sendDirectorQueueNow(folder: string, chat: string | null = null) {
-  const director = getDirector(folder, chat);
+export async function sendDirectorQueueNow(folder: string) {
+  const director = getDirector(folder);
   await director.ready;
   if (director.pending.length === 0 || director.closed) return;
   clearTimeout(director.batchTimer);
@@ -816,16 +781,15 @@ export async function sendDirectorQueueNow(folder: string, chat: string | null =
   if (!director.probing) void flush(director);
 }
 
-async function imageFolder(folder: string, chat: string | null, task: string | null | undefined) {
+async function imageFolder(folder: string, task: string | null | undefined) {
   if (task) return (await readTasksAt(folder)).find(({ id }) => id === task)?.worktree ?? null;
-  if (chat && !(await getManagerAt(folder, chat))) return null;
-  return chat ? join(folder, MANAGERS_FOLDER, chat) : join(folder, DIRECTOR_FOLDER);
+  return join(folder, DIRECTOR_FOLDER);
 }
 
 async function savedImages(director: Director, images: MessageImage[]): Promise<TurnImage[]> {
   const read = await Promise.all(
     images.map(async ({ name, file, task }) => {
-      const from = await imageFolder(director.folder, director.chat, task);
+      const from = await imageFolder(director.folder, task);
       const saved = from ? await readSavedImage(from, file) : null;
       return (
         saved && {
@@ -843,7 +807,7 @@ async function savedImages(director: Director, images: MessageImage[]): Promise<
 export async function reviseDirectorMessage(
   input: SendToDirectorInput & { entryId: string; keepImages?: boolean },
 ) {
-  const director = getDirector(input.folder, input.chat ?? null);
+  const director = getDirector(input.folder);
   await director.ready;
   if (director.closed) return;
   const editable = () => {
@@ -889,8 +853,8 @@ export async function reviseDirectorMessage(
   await sendTurn(director, turn, input);
 }
 
-export async function stopDirector(folder: string, chat: string | null = null) {
-  const director = getDirector(folder, chat);
+export async function stopDirector(folder: string) {
+  const director = getDirector(folder);
   await director.ready;
   clearTimeout(director.batchTimer);
   director.batchTimer = undefined;
@@ -923,7 +887,7 @@ export async function replyToTaskCard({
   attachments?: AttachmentInput[];
 }) {
   const card = openCards(folder).find(({ id }) => id === cardId);
-  const director = getDirector(folder, chatOf(folder, card?.chat));
+  const director = getDirector(folder);
   await director.ready;
   const task = card ? (await readTasksAt(folder)).find(({ id }) => id === card.taskId) : undefined;
   const turn = await attachmentsTurn({
@@ -959,7 +923,7 @@ export async function sendToTask({
 }) {
   const sent = await messageTaskAt(folder, taskId, { text, attachments });
   const { view } = sent;
-  const director = getDirector(folder, chatOf(folder, view.chat));
+  const director = getDirector(folder);
   await director.ready;
   saveEntry(
     director,
@@ -973,25 +937,19 @@ export async function sendToTask({
 
 export async function readChatImage({
   folder,
-  chat,
   task,
   file,
 }: {
   folder: string;
-  chat: string | null;
   task: string | null;
   file: string;
 }) {
-  const from = await imageFolder(folder, chat, task);
+  const from = await imageFolder(folder, task);
   return from ? readSavedImage(from, file) : null;
 }
 
-export async function attachTaskToDirector(
-  folder: string,
-  task: TaskView,
-  chat: string | null = null,
-) {
-  const director = getDirector(folder, chat);
+export async function attachTaskToDirector(folder: string, task: TaskView) {
+  const director = getDirector(folder);
   await director.ready;
   const current =
     director.turnTasksId && director.entries.find(({ id }) => id === director.turnTasksId);
@@ -1007,9 +965,8 @@ export async function attachTaskToDirector(
 export async function subscribeToDirector(
   folder: string,
   listener: (update: DirectorUpdate) => void,
-  chat: string | null = null,
 ) {
-  const director = getDirector(folder, chat);
+  const director = getDirector(folder);
   await director.ready;
   const tasks = await listTasksAt(folder);
   listener({
@@ -1025,97 +982,4 @@ export async function subscribeToDirector(
   return () => {
     director.listeners.delete(listener);
   };
-}
-
-const PREVIEW_LENGTH = 120;
-
-function previewOf(director: Director) {
-  const last = director.entries.findLast(
-    (entry) => entry.kind === "user" || entry.kind === "director",
-  );
-  const shown = last?.kind === "user" ? userPreview(last) : (last?.text ?? "");
-  const text = shown.replace(/\s+/g, " ").trim();
-  return text.length > PREVIEW_LENGTH ? `${text.slice(0, PREVIEW_LENGTH)}…` : text;
-}
-
-function userPreview(entry: Extract<ChatEntry, { kind: "user" }>) {
-  const typed = entry.text.trim();
-  if (typed) return typed;
-  return entry.images?.length ? "Image" : "";
-}
-
-async function chatSummaries(
-  folder: string,
-): Promise<{ chats: ChatSummary[]; directors: Director[] }> {
-  const managers = await listManagersAt(folder);
-  const all = [getDirector(folder), ...managers.map(({ id }) => getDirector(folder, id))];
-  await Promise.all(all.map(({ ready }) => ready));
-  const chats = all.map((director, index) => ({
-    chat: director.chat,
-    name: index === 0 ? "" : managers[index - 1].name,
-    project: index === 0 ? null : managers[index - 1].project,
-    preview: previewOf(director),
-    status: director.status,
-    waiting: cardsOf(director).filter(
-      (card) => card.kind === "question" || card.kind === "approval" || card.kind === "plan",
-    ).length,
-  }));
-  return { chats, directors: all };
-}
-
-export async function subscribeToChats(folder: string, listener: (chats: ChatSummary[]) => void) {
-  let closed = false;
-  let following: Director[] = [];
-  let queued = false;
-  const onUpdate = (update: DirectorUpdate) => {
-    if (update.type === "draft" || update.type === "task" || update.type === "queue") return;
-    refresh();
-  };
-  const send = async () => {
-    queued = false;
-    const { chats, directors: current } = await chatSummaries(folder);
-    if (closed) return;
-    for (const director of following) director.listeners.delete(onUpdate);
-    following = current;
-    for (const director of following) director.listeners.add(onUpdate);
-    listener(chats);
-  };
-  const refresh = () => {
-    if (queued || closed) return;
-    queued = true;
-    queueMicrotask(
-      () =>
-        void send().catch((error: unknown) =>
-          console.error("busyboy: could not read the chat list", error),
-        ),
-    );
-  };
-  const unsubscribe = subscribeToManagers(folder, refresh);
-  await send();
-  return () => {
-    closed = true;
-    unsubscribe();
-    for (const director of following) director.listeners.delete(onUpdate);
-  };
-}
-
-export async function adoptTasks(folder: string, taskIds: string[]) {
-  if (taskIds.length === 0) return;
-  const director = getDirector(folder);
-  await director.ready;
-  saveEntry(director, newEntry("tasks", { taskIds }));
-}
-
-export async function closeChat(folder: string, chat: string) {
-  const key = directorKey(folder, chat);
-  const director = directors.get(key);
-  if (!director) return;
-  director.closed = true;
-  clearTimeout(director.batchTimer);
-  clearTimeout(director.idleTimer);
-  director.pending = [];
-  const agentId = director.agentId;
-  director.agentId = undefined;
-  if (agentId) await stopAgent(agentId).catch(() => {});
-  directors.delete(key);
 }

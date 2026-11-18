@@ -73,32 +73,6 @@ test("asking a question should answer without creating a task", async ({
   );
 });
 
-test("the Director's replies should come from the chosen companion", async ({
-  page,
-  context,
-  baseURL,
-}) => {
-  const { home } = await useProjectsHome(context, baseURL!, ["web"]);
-  const settingsFile = join(home, "app-settings.json");
-  writeFileSync(
-    settingsFile,
-    JSON.stringify({ ...JSON.parse(readFileSync(settingsFile, "utf8")), companion: "rippu" }),
-  );
-  await openChat(page);
-
-  await expect(page.getByRole("textbox", { name: "Message" })).toHaveAttribute(
-    "aria-placeholder",
-    "Message Rippu",
-  );
-  await send(page, QUESTION);
-
-  const transcript = page.getByRole("log", { name: "Transcript" });
-  await expect(transcript.getByLabel("Reply", { exact: true })).toContainText(
-    "check out more than one branch",
-  );
-  await expect(transcript.getByText("Rippu", { exact: true })).toBeVisible();
-});
-
 test("asking for work should create a worktree and show the task in chat", async ({
   page,
   context,

@@ -12,7 +12,6 @@ import { Toggle } from "@/components/ui/toggle";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useExternalSync } from "@/hooks/use-external-sync";
 
-import { CommandPalette } from "./command-palette";
 import { FocusHandler } from "./focus-handler";
 import { ShellStateProvider, useShellState } from "./shell-state";
 import {
@@ -27,7 +26,6 @@ import { UpdateButton } from "./update-button";
 
 type AppShellProps = {
   children: React.ReactNode;
-  chats: React.ReactNode;
   panel: React.ReactNode;
 };
 
@@ -63,7 +61,7 @@ function useBottomPanel(panelOpen: boolean, setPanelOpen: (open: boolean) => voi
   return { panelRef, onResize };
 }
 
-function ShellLayout({ children, chats, panel }: AppShellProps) {
+function ShellLayout({ children, panel }: AppShellProps) {
   const { panelOpen, setPanelOpen, togglePanel } = useShellState();
   const bottomPanel = useBottomPanel(panelOpen, setPanelOpen);
 
@@ -77,7 +75,6 @@ function ShellLayout({ children, chats, panel }: AppShellProps) {
   return (
     <div data-slot="app-shell" className="flex h-dvh min-h-0 w-full flex-col overflow-hidden">
       <FocusHandler />
-      <CommandPalette />
       <header
         data-slot="title-bar"
         className="flex h-10 shrink-0 items-center gap-1 border-b pr-2 pl-[var(--title-bar-inset,0.75rem)] [app-region:drag]"
@@ -110,7 +107,6 @@ function ShellLayout({ children, chats, panel }: AppShellProps) {
         </div>
       </header>
       <div className="flex min-h-0 flex-1">
-        {chats}
         <main className="min-h-0 min-w-0 flex-1">
           <ResizablePanelGroup orientation="vertical">
             <ResizablePanel id="chat" minSize={160}>

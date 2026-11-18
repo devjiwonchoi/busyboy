@@ -12,7 +12,6 @@ import {
   sendToTask,
   stopDirector,
 } from "@/server/director/chat";
-import { getManagerAt } from "@/server/managers";
 import { busyboyMcpServers } from "@/server/mcp-tools";
 import { defaultProvider, providerState } from "@/server/providers";
 import type { ProviderId } from "@/server/runner/contract";
@@ -26,13 +25,6 @@ async function resolveDirectorProvider(current?: ProviderId): Promise<ProviderId
   if (provider) return provider;
   if (current && (await providerState(current)).state === "unknown") return current;
   return null;
-}
-
-async function checkChat(chat: unknown) {
-  if (chat === null || chat === undefined) return null;
-  if (typeof chat !== "string" || !(await getManagerAt(await dataFolder(), chat)))
-    throw new Error("That manager no longer exists.");
-  return chat;
 }
 
 function attachmentInputs(value: unknown): AttachmentInput[] {
@@ -55,7 +47,6 @@ function attachmentInputs(value: unknown): AttachmentInput[] {
 
 export async function sendToDirectorAction(
   text: string,
-  chat?: string | null,
   attachments?: AttachmentInput[],
 ): Promise<{ error?: string }> {
   if (typeof text !== "string" || text.length > MAX_MESSAGE_LENGTH) {
@@ -65,14 +56,12 @@ export async function sendToDirectorAction(
     const files = attachmentInputs(attachments);
     if (!text.trim() && files.length === 0)
       throw new Error("A message must be non-empty text of at most 100,000 characters.");
-    const manager = await checkChat(chat);
     await sendToDirector({
       folder: await dataFolder(),
-      chat: manager,
       text,
       attachments: files,
       resolveProvider: (current) => resolveDirectorProvider(current),
-      mcp: await busyboyMcpServers(undefined, undefined, manager ?? undefined),
+      mcp: await busyboyMcpServers(),
     });
     return {};
   } catch (error) {
@@ -81,18 +70,17 @@ export async function sendToDirectorAction(
   }
 }
 
-export async function stopDirectorAction(chat?: string | null) {
-  await stopDirector(await dataFolder(), await checkChat(chat));
+export async function stopDirectorAction() {
+  await stopDirector(await dataFolder());
 }
 
-export async function sendDirectorQueueNowAction(chat?: string | null) {
-  await sendDirectorQueueNow(await dataFolder(), await checkChat(chat));
+export async function sendDirectorQueueNowAction() {
+  await sendDirectorQueueNow(await dataFolder());
 }
 
 export async function reviseDirectorMessageAction(
   entryId: string,
   text: string,
-  chat?: string | null,
   attachments?: AttachmentInput[],
   keepImages?: boolean,
 ): Promise<{ error?: string }> {
@@ -104,16 +92,14 @@ export async function reviseDirectorMessageAction(
     const files = attachmentInputs(attachments);
     if (!text.trim() && files.length === 0 && keepImages !== true)
       throw new Error("A message must be non-empty text of at most 100,000 characters.");
-    const manager = await checkChat(chat);
     await reviseDirectorMessage({
       folder: await dataFolder(),
-      chat: manager,
       entryId,
       text,
       attachments: files,
       keepImages: keepImages === true,
       resolveProvider: (current) => resolveDirectorProvider(current),
-      mcp: await busyboyMcpServers(undefined, undefined, manager ?? undefined),
+      mcp: await busyboyMcpServers(),
     });
     return {};
   } catch (error) {

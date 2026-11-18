@@ -7,15 +7,12 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 
 import {
-  MCP_MANAGER_PARAM,
   MCP_TASK_PROJECT_PARAM,
   MCP_TOKEN_HEADER,
-  managerMcpTokenFor,
   mcpTokenFor,
   SERVER_TOKEN_ENV,
   taskMcpTokenFor,
 } from "@/lib/server-token";
-import { listManagers } from "@/server/managers";
 import { McpToolError, toolsFor, type McpCaller } from "@/server/mcp-tools";
 
 // why: McpServer reports an unknown tool as a tool result, so a forbidden tool has to fail as a JSON-RPC error.
@@ -32,23 +29,14 @@ async function callerOf(request: Request): Promise<McpCaller> {
   const serverToken = process.env[SERVER_TOKEN_ENV];
   const provided = request.headers.get(MCP_TOKEN_HEADER);
   const project = params.get(MCP_TASK_PROJECT_PARAM);
-  const id = params.get(MCP_MANAGER_PARAM);
   if (!serverToken) {
     if (project) return { kind: "task", project };
-    return id ? managerCaller(id) : { kind: "director" };
+    return { kind: "director" };
   }
-  // why: The proxy lets a manager token in for its manager parameter, so a project on the URL must not widen that.
   if (provided && project && provided === taskMcpTokenFor(serverToken, project))
     return { kind: "task", project };
-  if (provided && id && provided === managerMcpTokenFor(serverToken, id)) return managerCaller(id);
   if (!provided || provided === mcpTokenFor(serverToken)) return { kind: "director" };
   throw new RefusedCallerError("This token cannot be used here.");
-}
-
-async function managerCaller(id: string): Promise<McpCaller> {
-  const manager = (await listManagers()).find((entry) => entry.id === id);
-  if (!manager) throw new RefusedCallerError("This manager was removed.");
-  return { kind: "manager", manager: manager.id, project: manager.project };
 }
 
 class RefusedCallerError extends Error {}

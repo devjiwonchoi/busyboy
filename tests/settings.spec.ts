@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 
 import { expect, test, type Page } from "@playwright/test";
@@ -11,19 +11,11 @@ import {
   useTestHome,
 } from "./support/test-home";
 
-const PNG = Buffer.from(
-  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
-  "base64",
-);
-
 const folders: string[] = [];
 
 test.afterEach(() => {
   for (const folder of folders.splice(0)) removeFolder(folder);
 });
-
-const readSettings = (home: string) =>
-  JSON.parse(readFileSync(join(home, "app-settings.json"), "utf8"));
 
 async function openSettings(page: Page) {
   await page.goto("/");
@@ -76,26 +68,6 @@ test("settings should show the desktop app version from the bridge", async ({
   await expect(page.getByText("BusyBoy 0.0.30", { exact: true })).toBeVisible();
   await expect(page.getByText("BusyBoy dev", { exact: true })).toHaveCount(0);
   await expect(page.getByText("BusyBoy 0.0.0", { exact: true })).toHaveCount(0);
-});
-
-test("choosing a companion in settings should save it without a Continue button", async ({
-  page,
-  context,
-  baseURL,
-}) => {
-  const { home, projects } = await useProjectsHome(context, baseURL!, ["web"], {
-    claude: "signed-in",
-  });
-  folders.push(home, ...Object.values(projects).map((path) => dirname(path)));
-  await openSettings(page);
-
-  await page.getByRole("radio", { name: /^Ming the/ }).click();
-
-  await expect.poll(() => readSettings(home).companion).toBe("ming");
-  await expect(page.getByRole("radio", { name: /^Ming the/ })).toBeChecked();
-  await expect(page.getByRole("button", { name: "Continue" })).toHaveCount(0);
-  await expect(page.getByText(/Step \d of/)).toHaveCount(0);
-  await expect(page.getByRole("link", { name: "Approvals" })).toHaveCount(0);
 });
 
 test("removing a project in settings should keep its folder", async ({
@@ -198,51 +170,4 @@ test("choosing folders in the desktop picker should add them as projects", async
   const list = page.getByRole("list", { name: "Projects" });
   await expect(list).toContainText("api");
   await expect(list).toContainText("site");
-});
-
-test("choosing a picture over the size limit should show an error", async ({
-  page,
-  context,
-  baseURL,
-}) => {
-  const { home, projects } = await useProjectsHome(context, baseURL!, ["web"]);
-  folders.push(home, ...Object.values(projects).map((path) => dirname(path)));
-
-  await openSettings(page);
-  const large = Buffer.concat([PNG, Buffer.alloc(1024 * 1024)]);
-  await page
-    .getByLabel("Your own picture")
-    .setInputFiles({ name: "large.png", mimeType: "image/png", buffer: large });
-  await page.getByRole("button", { name: "Use picture" }).click();
-
-  await expect(page.getByRole("alert").filter({ hasText: "picture" })).toHaveText(
-    "Choose a picture under 900 KB.",
-  );
-  expect(existsSync(join(home, "app-companion-image.png"))).toBe(false);
-});
-
-test("setting a companion picture should show it in the director greeting", async ({
-  page,
-  context,
-  baseURL,
-}) => {
-  const { home, projects } = await useProjectsHome(context, baseURL!, ["web"], {
-    claude: "signed-in",
-  });
-  folders.push(home, ...Object.values(projects).map((path) => dirname(path)));
-
-  await openSettings(page);
-  await page.getByRole("radio", { name: /^Ming the/ }).click();
-  await expect.poll(() => readSettings(home).companion).toBe("ming");
-  await page
-    .getByLabel("Your own picture")
-    .setInputFiles({ name: "me.png", mimeType: "image/png", buffer: PNG });
-  await page.getByRole("button", { name: "Use picture" }).click();
-  await expect(page.getByRole("button", { name: "Remove picture" })).toBeVisible();
-  expect(readFileSync(join(home, "app-companion-image.png"))).toEqual(PNG);
-
-  await page.getByRole("link", { name: "Back to chat" }).click();
-  await expect(
-    page.getByRole("region", { name: "Chat" }).locator('img[src^="/api/companion-image"]'),
-  ).toBeVisible();
 });

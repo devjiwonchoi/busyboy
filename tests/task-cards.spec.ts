@@ -118,7 +118,7 @@ test.describe("Claude task agents", () => {
     await expect(card).toContainText("Bash: rm -rf dist");
     await expect(page.getByRole("textbox", { name: "Message" })).toHaveAttribute(
       "aria-placeholder",
-      "Message BusyBoy",
+      "Message Director",
     );
     await expect(card.getByRole("button", { name: /^[A-C]\. / })).toHaveText([
       "AAllow",
@@ -190,7 +190,7 @@ test.describe("Claude task agents", () => {
     await expect(card).toBeVisible();
 
     const composer = page.getByRole("textbox", { name: "Message" });
-    await expect(composer).toHaveAttribute("aria-placeholder", "Message BusyBoy");
+    await expect(composer).toHaveAttribute("aria-placeholder", "Message Director");
     await card.getByRole("button", { name: "View details" }).click();
     const details = page.getByRole("dialog", { name: "Add a site footer" });
     await details.getByRole("button", { name: "Request changes" }).click();
@@ -222,7 +222,7 @@ test.describe("Claude task agents", () => {
       ],
     );
     await expect(transcript(page).getByLabel("Your message")).toHaveCount(0);
-    await expect(composer).toHaveAttribute("aria-placeholder", "Message BusyBoy");
+    await expect(composer).toHaveAttribute("aria-placeholder", "Message Director");
 
     await composer.fill("What is running right now?");
     await page.getByRole("button", { name: "Send" }).click();
@@ -252,7 +252,7 @@ test.describe("Claude task agents", () => {
 
     await expect(
       page.getByRole("alert").filter({ hasText: "The card you were replying to closed" }),
-    ).toContainText("Send again to message BusyBoy.");
+    ).toContainText("Send again to message Director.");
     await expect(composer).toHaveText("Yes, go ahead.");
     await expect(transcript(page).getByLabel("Your message")).toHaveCount(0);
   });
@@ -271,7 +271,7 @@ test.describe("Claude task agents", () => {
     await expect(composer).toHaveText("What is running right now?");
     await expect(page.getByText(/^Replying to /)).toHaveCount(0);
     await composer.fill("");
-    await expect(composer).toHaveAttribute("aria-placeholder", "Message BusyBoy");
+    await expect(composer).toHaveAttribute("aria-placeholder", "Message Director");
   });
 
   test("answering two questions that share their text should keep both answers", async ({

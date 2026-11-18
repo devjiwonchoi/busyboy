@@ -3,12 +3,6 @@
 import { refresh } from "next/cache";
 import { redirect } from "next/navigation";
 
-import {
-  assignRandomCompanion,
-  CompanionImageError,
-  removeCompanionImage,
-  saveCompanionImage,
-} from "@/server/companions";
 import { updateSettings } from "@/server/config";
 import { ensureHarnessSkills } from "@/server/link-skills";
 import { addProject, ProjectError, removeProject } from "@/server/projects";
@@ -22,27 +16,6 @@ import type { ProviderId } from "@/server/runner/contract";
 
 export type FormResult = { error?: string };
 
-export async function setCompanionImageAction(
-  _previous: FormResult,
-  form: FormData,
-): Promise<FormResult> {
-  const file = form.get("image");
-  if (!(file instanceof File) || file.size === 0) return { error: "Choose a picture first." };
-  try {
-    await saveCompanionImage(file);
-  } catch (error) {
-    if (error instanceof CompanionImageError) return { error: error.message };
-    throw error;
-  }
-  refresh();
-  return {};
-}
-
-export async function removeCompanionImageAction() {
-  await removeCompanionImage();
-  refresh();
-}
-
 export async function finishSetupAction(form: FormData) {
   const signedIn = await signedInProviders();
   if (signedIn.length === 0) redirect("/setup");
@@ -52,7 +25,6 @@ export async function finishSetupAction(form: FormData) {
     if (!signedIn.includes(provider as ProviderId)) throw new Error("That agent is not signed in.");
     await setDefaultProvider(provider as ProviderId);
   }
-  await assignRandomCompanion();
   await ensureHarnessSkills();
   await updateSettings((current) => {
     current.setupCompletedAt ??= new Date().toISOString();

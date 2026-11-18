@@ -6,12 +6,10 @@ import { Suspense } from "react";
 
 import { recheckProvidersAction, removeProjectAction } from "@/app/setup/actions";
 import { AppVersionLabel } from "@/components/settings/app-version-label";
-import { CompanionSettings } from "@/components/settings/companion-settings";
 import { ConnectorAddForm } from "@/components/settings/connector-add-form";
 import { HarnessChoice } from "@/components/settings/harness-choice";
 import { ThemeChoice } from "@/components/settings/theme-choice";
 import { AddProjectForm } from "@/components/setup/add-project-form";
-import { CompanionImageForm } from "@/components/setup/companion-step";
 import { CopyCommand } from "@/components/setup/copy-command";
 import { FolderPicker } from "@/components/setup/folder-picker";
 import { UpdateButton } from "@/components/shell/update-button";
@@ -25,10 +23,8 @@ import {
   ItemGroup,
   ItemTitle,
 } from "@/components/ui/item";
-import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { COMPANIONS, companionImageUrl, currentCompanion } from "@/server/companions";
 import { isSetupComplete, readSettings } from "@/server/config";
 import { listConnectors, type ConnectorStatus } from "@/server/connectors";
 import { defaultProvider, PROVIDERS, providerState, skillsState } from "@/server/providers";
@@ -98,11 +94,6 @@ async function Body({ searchParams }: Pick<PageProps<"/settings">, "searchParams
 }
 
 const HEADINGS: Record<SectionId, { title: string; description: string }> = {
-  companion: {
-    title: "Director",
-    description:
-      "The main agent who leads every manager. Pick a character. You can change it any time.",
-  },
   appearance: {
     title: "Appearance",
     description: "BusyBoy starts in dark. System follows this device.",
@@ -110,7 +101,7 @@ const HEADINGS: Record<SectionId, { title: string; description: string }> = {
   agents: {
     title: "Agents",
     description:
-      "BusyBoy uses the Claude Code, Codex, and Grok CLIs you already have. It never signs in for you. Every chat uses the harness you choose here.",
+      "BusyBoy uses the Claude Code, Codex, and Grok CLIs you already have. It never signs in for you. The Director uses the harness you choose here.",
   },
   connectors: {
     title: "Connectors",
@@ -131,7 +122,6 @@ function Section({ id }: { id: SectionId }) {
         <h1 className="text-xl font-semibold">{title}</h1>
         <p className="text-muted-foreground text-sm">{description}</p>
       </div>
-      {id === "companion" && <CompanionSection />}
       {id === "appearance" && <AppearanceSection />}
       {id === "agents" && <AgentsSection />}
       {id === "connectors" && <ConnectorsSection />}
@@ -143,17 +133,6 @@ function Section({ id }: { id: SectionId }) {
 async function AppearanceSection() {
   const { theme } = await readSettings();
   return <ThemeChoice selected={theme} />;
-}
-
-async function CompanionSection() {
-  const [companion, imageUrl] = await Promise.all([currentCompanion(), companionImageUrl()]);
-  return (
-    <>
-      <CompanionSettings companions={COMPANIONS} selected={companion?.id} imageUrl={imageUrl} />
-      <Separator />
-      <CompanionImageForm hasImage={Boolean(imageUrl)} />
-    </>
-  );
 }
 
 const STATUS_TEXT: Record<SignInStatus["state"], string> = {

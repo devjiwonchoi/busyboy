@@ -66,7 +66,6 @@ test("a progress card should not say someone is waiting", async ({ page, context
   await expect(
     transcript(page).getByRole("group", { name: "Progress from web · Add a footer" }),
   ).toBeVisible();
-  await expect(page.getByRole("link", { name: "BusyBoy, director" })).not.toContainText(/waiting/i);
 });
 
 test("a running record between turns should not say Needs you", async ({ page, context }) => {

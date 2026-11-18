@@ -3,17 +3,10 @@
 import { refresh } from "next/cache";
 
 import { isThemeName } from "@/lib/theme";
-import { chooseCompanion, findCompanion } from "@/server/companions";
 import { updateSettings } from "@/server/config";
 import { addConnector } from "@/server/connectors";
 import { PROVIDERS, setDefaultProvider } from "@/server/providers";
 import type { ProviderId } from "@/server/runner/contract";
-
-export async function setCompanionAction(id: unknown) {
-  if (typeof id !== "string" || !findCompanion(id)) throw new Error("Unknown director.");
-  await chooseCompanion(id);
-  refresh();
-}
 
 export async function setThemeAction(theme: unknown) {
   if (!isThemeName(theme)) throw new Error("Unknown theme.");

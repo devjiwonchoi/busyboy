@@ -68,7 +68,7 @@ export function summarizeGraph(
   if (projects.length === 0) {
     return wanted
       ? `There is no project named "${project}".`
-      : "There are no projects yet. The user adds a git repository from the Director with New manager.";
+      : "There are no projects yet. The user adds a git repository in Settings, under Projects.";
   }
   const lines = projects.map(({ name, tasks }) =>
     tasks.length === 0

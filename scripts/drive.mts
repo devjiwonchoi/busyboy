@@ -431,23 +431,9 @@ async function openSettings(page: Page) {
     await page.getByRole("link", { name: "Settings" }).click();
   }
   await page.getByRole("main", { name: "Settings" }).waitFor({ timeout: actionMs });
-  await page.getByRole("heading", { name: "Director", exact: true }).waitFor({ timeout: actionMs });
-}
-
-function settingsCompanion(dataDir: string) {
-  const settings = readJson(join(dataDir, "app-settings.json")) as { companion?: string | null };
-  return settings.companion ?? null;
-}
-
-async function waitForCompanion(dataDir: string, companion: string) {
-  const deadline = Date.now() + actionMs;
-  while (Date.now() < deadline) {
-    if (settingsCompanion(dataDir) === companion) return;
-    await delay(100);
-  }
-  throw new Error(
-    `Settings did not save companion "${companion}". The file has ${String(settingsCompanion(dataDir))}.`,
-  );
+  await page
+    .getByRole("heading", { name: "Appearance", exact: true })
+    .waitFor({ timeout: actionMs });
 }
 
 async function approvePlan(page: Page) {
@@ -560,7 +546,15 @@ async function runStep(drive: Drive, command: Command): Promise<Result> {
   }
   if (name === "open-settings") {
     await openSettings(drive.page);
-    return result(true, "Settings is open on Director.");
+    return result(true, "Settings is open on Appearance.");
+  }
+  if (name === "open-setup") {
+    rmSync(join(drive.dataDir, "app-settings.json"), { force: true });
+    await drive.page.goto(drive.url, { waitUntil: "domcontentloaded", timeout: readyMs });
+    await drive.page
+      .getByRole("heading", { name: "Sign in to an agent" })
+      .waitFor({ timeout: readyMs });
+    return result(true, "Setup is showing Sign in to an agent.");
   }
   if (name === "show-progress") {
     await showProgress(drive.page);
@@ -575,7 +569,7 @@ async function runStep(drive: Drive, command: Command): Promise<Result> {
     return result(true, `Merged in order. ${log} records pr merge 12 and pr merge 13.`);
   }
   return fail(
-    `Unknown step "${name ?? ""}". Steps: open-chat, send-message, approve-plan, open-settings, show-progress, ship-footer, merge-pulls.`,
+    `Unknown step "${name ?? ""}". Steps: open-chat, send-message, open-setup, approve-plan, open-settings, show-progress, ship-footer, merge-pulls.`,
   );
 }
 
@@ -592,18 +586,20 @@ async function runJourney(drive: Drive, name: string | undefined): Promise<Resul
   if (name === "settings") {
     await openChat(drive);
     await openSettings(drive.page);
-    await drive.page.getByRole("radio", { name: "Ming the seal" }).click();
-    await waitForCompanion(drive.dataDir, "ming");
-    const checked = await drive.page.getByRole("radio", { name: "Ming the seal" }).isChecked();
-    if (!checked) return fail("Ming the seal is saved, and the radio is not checked.");
+    await drive.page.getByRole("link", { name: "Agents" }).click();
+    await drive.page
+      .getByRole("radio", { name: "Use Claude Code by default" })
+      .waitFor({ timeout: actionMs });
     if ((await drive.page.getByRole("link", { name: "Approvals" }).count()) !== 0)
       return fail("Approvals is still a settings section.");
+    if ((await drive.page.getByRole("radio", { name: "Ming the seal" }).count()) !== 0)
+      return fail("Director characters are still a settings section.");
     await drive.page.getByText("BusyBoy dev", { exact: true }).waitFor({ timeout: actionMs });
     if ((await drive.page.getByText("BusyBoy 0.0.0", { exact: true }).count()) !== 0)
       return fail("Settings shows package.json's 0.0.0 instead of the running app.");
     return result(
       true,
-      `Settings saved companion "ming" in ${join(drive.dataDir, "app-settings.json")}, the Ming the seal radio is checked, and the header says BusyBoy dev.`,
+      "Settings opens on Appearance, Agents lists the harness, and the header says BusyBoy dev.",
     );
   }
   if (name === "approve-plan") {
@@ -653,23 +649,14 @@ async function runJourney(drive: Drive, name: string | undefined): Promise<Resul
   }
   if (name === "first-run") {
     const director = await firstRun(drive);
-    return result(
-      true,
-      `A fresh profile signed in and opened the Director as ${director}, with no projects.`,
-    );
+    return result(true, `A fresh profile signed in and opened the ${director}, with no projects.`);
   }
   return fail(
     "Unknown journey. Journeys: director-send, approve-plan, progress-and-done, pr-card, settings, first-run.",
   );
 }
 
-const DIRECTORS: Record<string, string> = {
-  jota: "Jota",
-  rippu: "Rippu",
-  ming: "Ming",
-  yam: "Yam",
-  jjeromming: "Jjeromming",
-};
+const DIRECTOR_GREETING = "BusyBoy is ready. What should we work on?";
 
 async function firstRun(drive: Drive) {
   rmSync(join(drive.dataDir, "app-settings.json"), { force: true });
@@ -686,20 +673,17 @@ async function firstRun(drive: Drive) {
   await log.waitFor({ timeout: readyMs });
   await waitForAttribute(log, "data-connected", "true", readyMs);
   const settings = readJson(join(drive.dataDir, "app-settings.json")) as {
-    companion?: string | null;
     projects?: unknown[];
+    companion?: string | null;
   };
-  const name = settings.companion ? DIRECTORS[settings.companion] : undefined;
-  if (!name) throw new Error(`Companion ${String(settings.companion)} is not a director.`);
+  if (settings.companion) throw new Error("A fresh profile assigned a director character.");
   if ((settings.projects ?? []).length !== 0)
     throw new Error("A fresh profile started with a project.");
-  await drive.page.getByRole("link", { name: `${name}, director` }).waitFor({ timeout: actionMs });
-  await drive.page
-    .getByText(`${name}, your director`, { exact: true })
-    .waitFor({ timeout: actionMs });
+  await drive.page.getByText(DIRECTOR_GREETING).waitFor({ timeout: actionMs });
+  await drive.page.getByText("Director", { exact: true }).first().waitFor({ timeout: actionMs });
   if ((await drive.page.getByText("No managers yet.").count()) > 0)
     throw new Error("The chat list explains an empty manager list.");
-  return name;
+  return "Director";
 }
 
 async function inspect(drive: Drive) {
@@ -1051,7 +1035,7 @@ async function keeper(surface: Surface) {
         .getByText("BusyBoy is ready. What should we work on?")
         .waitFor({ timeout: actionMs });
       await browserDrive.page
-        .getByRole("link", { name: "BusyBoy, director" })
+        .getByRole("link", { name: "Settings" })
         .waitFor({ timeout: actionMs });
     }
   } catch (error) {
@@ -1337,7 +1321,7 @@ async function doctor() {
 function help() {
   return `pnpm drive launch [--surface next|electron]
 pnpm drive doctor
-pnpm drive step <open-chat|send-message|approve-plan|open-settings|show-progress|ship-footer|merge-pulls> [--text TEXT]
+pnpm drive step <open-chat|send-message|open-setup|approve-plan|open-settings|show-progress|ship-footer|merge-pulls> [--text TEXT]
 pnpm drive journey <director-send|approve-plan|progress-and-done|pr-card|settings|first-run>
 pnpm drive click --role ROLE --name NAME
 pnpm drive fill --role ROLE --name NAME --value VALUE

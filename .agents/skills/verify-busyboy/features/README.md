@@ -1,6 +1,6 @@
 # BusyBoy verification map
 
-This directory is the maintained source for verifying what a person can do in BusyBoy. Read this index, then follow the feature file. The information architecture is the setup flow, the main window (title bar, chat sidebar, Director and manager chats, task group, cards, composer, terminal, command palette), settings, and the desktop tray.
+This directory is the maintained source for verifying what a person can do in BusyBoy. Read this index, then follow the feature file. The information architecture is the setup flow, the main window (title bar, Director chat, task group, cards, composer, terminal), and settings.
 
 ## Baseline preconditions
 
@@ -41,5 +41,5 @@ Each feature file starts with an H1 and one paragraph. It then uses these four H
 - [Plan card approve](./plan-card-approve.md) opens a plan from a Director message and approves it.
 - [Progress and done cards](./progress-and-done-cards.md) shows the todo steps, then the done card after the task is told to ship.
 - [PR card](./pr-card.md) lists the stack and merges it in order.
-- [Settings](./settings.md) opens settings and saves a new Director.
+- [Settings](./settings.md) opens settings and checks the harness list.
 - [First run](./first-run.md) signs in to a harness and opens the Director with no project.

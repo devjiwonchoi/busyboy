@@ -22,14 +22,6 @@ type Registry = Map<string, Shortcut>;
 type Keys = Pick<Shortcut, "key" | "mod" | "shift" | "alt">;
 
 export const TOGGLE_PANEL_KEYS = { key: "j", mod: true } as const;
-export const COMMAND_PALETTE_KEYS = { key: "k", mod: true } as const;
-export const NEW_TASK_KEYS = { key: "n", mod: true } as const;
-
-const CHAT_SWITCH_KEYS = ["1", "2", "3", "4", "5", "6", "7", "8", "9"] as const;
-
-export function isChatSwitchShortcut(event: KeyboardEvent, mac: boolean) {
-  return CHAT_SWITCH_KEYS.some((key) => matchesShortcut({ key, mod: true }, event, mac));
-}
 
 const ShortcutRegistryContext = createContext<Registry | null>(null);
 

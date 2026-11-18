@@ -29,22 +29,12 @@ export type ProjectEntry = {
   addedAt: string;
 };
 
-export type ManagerEntry = {
-  id: string;
-  name: string;
-  project: string;
-  createdAt: string;
-};
-
 export type Settings = {
   version: number;
   setupCompletedAt: string | null;
   defaultProvider: ProviderId | null;
   theme: ThemeName;
-  companion: string | null;
-  companionImage: string | null;
   projects: ProjectEntry[];
-  managers: ManagerEntry[];
   // why: Null until the user edits the list, so a newer BusyBoy's defaults still apply.
   alwaysAsk: string[] | null;
   [unknownKey: string]: unknown;
@@ -55,10 +45,7 @@ const EMPTY_SETTINGS: Settings = {
   setupCompletedAt: null,
   defaultProvider: null,
   theme: "dark",
-  companion: null,
-  companionImage: null,
   projects: [],
-  managers: [],
   alwaysAsk: null,
 };
 
@@ -115,7 +102,7 @@ function parseSettings(text: string): Settings | undefined {
     return undefined;
   }
   if (!isRecord(value)) return undefined;
-  return {
+  const settings: Settings = {
     ...value,
     version: typeof value.version === "number" && value.version > 1 ? value.version : 1,
     setupCompletedAt: typeof value.setupCompletedAt === "string" ? value.setupCompletedAt : null,
@@ -126,8 +113,6 @@ function parseSettings(text: string): Settings | undefined {
         ? value.defaultProvider
         : null,
     theme: isThemeName(value.theme) ? value.theme : "dark",
-    companion: typeof value.companion === "string" ? value.companion : null,
-    companionImage: typeof value.companionImage === "string" ? value.companionImage : null,
     projects: Array.isArray(value.projects)
       ? value.projects.filter(
           (project): project is ProjectEntry =>
@@ -136,20 +121,16 @@ function parseSettings(text: string): Settings | undefined {
             typeof project.path === "string",
         )
       : [],
-    managers: Array.isArray(value.managers)
-      ? value.managers.filter(
-          (manager): manager is ManagerEntry =>
-            isRecord(manager) &&
-            typeof manager.id === "string" &&
-            typeof manager.name === "string" &&
-            typeof manager.project === "string",
-        )
-      : [],
     alwaysAsk:
       Array.isArray(value.alwaysAsk) && value.alwaysAsk.every((rule) => typeof rule === "string")
         ? value.alwaysAsk
         : null,
   };
+  delete settings.companion;
+  delete settings.companionImage;
+  delete settings.managers;
+  delete settings.rooms;
+  return settings;
 }
 
 async function readSettingsFile(file: string) {

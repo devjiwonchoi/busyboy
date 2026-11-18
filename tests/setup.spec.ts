@@ -3,8 +3,6 @@ import { join } from "node:path";
 
 import { expect, test, type Page } from "@playwright/test";
 
-import { COMPANIONS } from "@/server/companions";
-
 import { removeFolder, useTestHome } from "./support/test-home";
 
 const PLAIN_PROMPT = "Reply with exactly this sentence and nothing else: Hello from busyboy.";
@@ -22,7 +20,6 @@ function track(folder: string) {
 
 function readSettings(home: string) {
   return JSON.parse(readFileSync(join(home, "app-settings.json"), "utf8")) as {
-    companion: string | null;
     projects: unknown[];
     alwaysAsk: unknown;
     defaultProvider: string | null;
@@ -64,14 +61,12 @@ test("finishing setup should open the director with no project", async ({
   await expect(page.getByRole("region", { name: "Chat" })).toBeVisible();
   await expect(page.getByText("No managers yet.")).toHaveCount(0);
   const settings = readSettings(home);
-  const companion = COMPANIONS.find((entry) => entry.id === settings.companion);
-  expect(companion, settings.companion ?? "missing").toBeTruthy();
   expect(settings.projects).toEqual([]);
   expect(settings.alwaysAsk ?? null).toBeNull();
   expect(settings.setupCompletedAt).toEqual(expect.any(String));
   const chat = page.getByRole("region", { name: "Chat" });
-  await expect(chat.getByText(`${companion!.name}, your director`, { exact: true })).toBeVisible();
-  await expect(chat.getByText(companion!.greeting)).toBeVisible();
+  await expect(chat.getByText("Director", { exact: true }).first()).toBeVisible();
+  await expect(chat.getByText("BusyBoy is ready. What should we work on?")).toBeVisible();
 
   await page.getByRole("textbox", { name: "Message" }).fill(PLAIN_PROMPT);
   await page.getByRole("button", { name: "Send" }).click();

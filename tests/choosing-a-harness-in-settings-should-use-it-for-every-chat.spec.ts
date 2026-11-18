@@ -52,25 +52,4 @@ test("choosing a harness in Settings should use it for every chat", async ({
     .poll(() => JSON.parse(readFileSync(join(home, "director", "state.json"), "utf8")).provider)
     .toBe("codex");
   expect(existsSync(join(home, "director", "harness.json"))).toBe(false);
-
-  await page.getByRole("button", { name: "New manager" }).click();
-  await page.getByRole("dialog", { name: "New manager" }).getByLabel("Name").fill("Ada");
-  await page.getByRole("radio", { name: "web" }).click();
-  await page.getByRole("button", { name: "Create manager" }).click();
-  await expect(
-    page.getByRole("log", { name: "Transcript" }).getByText("Ada, manager of web"),
-  ).toBeVisible();
-  await expect(page.getByLabel("Model")).toHaveCount(0);
-  await expect(page.getByLabel("Effort")).toHaveCount(0);
-  await page.getByRole("textbox", { name: "Message" }).fill(CODEX_PROMPT);
-  await page.getByRole("button", { name: "Send" }).click();
-  await expect(page.getByLabel("Reply", { exact: true })).toHaveText("Hello from busyboy.");
-  const id = new URL(page.url()).searchParams.get("manager");
-  expect(id).toBeTruthy();
-  await expect
-    .poll(
-      () => JSON.parse(readFileSync(join(home, "managers", id!, "state.json"), "utf8")).provider,
-    )
-    .toBe("codex");
-  expect(existsSync(join(home, "managers", id!, "harness.json"))).toBe(false);
 });

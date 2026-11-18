@@ -271,16 +271,6 @@ function notify(folder: string, task: TaskRecord) {
   for (const listener of listeners.get(pathKey(folder)) ?? []) listener(view);
 }
 
-export async function releaseTasksOf(folder: string, chat: string) {
-  const released = await updateTasksAt(folder, (tasks) => {
-    const own = tasks.filter((task) => task.chat === chat);
-    for (const task of own) task.chat = null;
-    return own;
-  });
-  for (const task of released) notify(folder, task);
-  return released.filter(({ archivedAt }) => !archivedAt).map(({ id }) => id);
-}
-
 export async function listTasksAt(folder: string): Promise<TaskView[]> {
   void resumeTasks(folder);
   return (await readTasksAt(folder)).map(taskView);

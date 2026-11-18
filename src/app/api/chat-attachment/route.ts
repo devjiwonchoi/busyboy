@@ -10,7 +10,6 @@ export async function GET(request: NextRequest) {
   if (!file) return new Response(null, { status: 404 });
   const image = await readChatImage({
     folder: await dataFolder(),
-    chat: params.get("chat"),
     task: params.get("task"),
     file,
   });
