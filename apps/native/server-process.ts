@@ -5,8 +5,8 @@ import { dirname, join } from "node:path";
 
 import { app, utilityProcess, type UtilityProcess } from "electron";
 
-import { SHUTDOWN_DONE_MESSAGE, SHUTDOWN_MESSAGE } from "../web/src/lib/server-shutdown";
-import { SERVER_TOKEN_ENV, SERVER_TOKEN_HEADER } from "../web/src/lib/server-token";
+import { SHUTDOWN_DONE_MESSAGE, SHUTDOWN_MESSAGE } from "../web/lib/server-shutdown";
+import { SERVER_TOKEN_ENV, SERVER_TOKEN_HEADER } from "../web/lib/server-token";
 import { standaloneServerPath } from "./standalone-server";
 
 const LOOPBACK = "127.0.0.1";

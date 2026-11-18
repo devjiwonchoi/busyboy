@@ -1,6 +1,6 @@
 import type { NextConfig } from "next";
 
-import { serverExternalPackages } from "./src/lib/server-external-packages";
+import { serverExternalPackages } from "./lib/server-external-packages";
 
 const isDev = process.env.NODE_ENV === "development";
 
@@ -41,7 +41,7 @@ const nextConfig: NextConfig = {
   },
   serverExternalPackages,
   // why: The file cache writes under .next, inside the signed app bundle.
-  cacheHandler: require.resolve("./src/lib/memory-cache-handler.mjs"),
+  cacheHandler: require.resolve("./lib/memory-cache-handler.mjs"),
   images: { customCacheHandler: true },
   async headers() {
     return [

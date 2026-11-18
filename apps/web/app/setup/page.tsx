@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { connection } from "next/server";
-import { Suspense } from "react";
+import { Suspense, type CSSProperties } from "react";
 
 import { CopyCommand } from "@/components/setup/copy-command";
 import { Badge } from "@/components/ui/badge";
@@ -29,7 +29,16 @@ export const metadata: Metadata = { title: "Setup · BusyBoy" };
 export default function SetupPage() {
   return (
     <div className="flex min-h-dvh flex-col">
-      <header className="flex h-10 shrink-0 items-center border-b pr-2 pl-[var(--title-bar-inset,0.75rem)] [app-region:drag]">
+      {/* why: macOS traffic lights sit in the title bar, and the drag region is not a token class. */}
+      <header
+        className="flex h-10 shrink-0 items-center border-b pr-2"
+        style={
+          {
+            paddingLeft: "var(--title-bar-inset, 0.75rem)",
+            WebkitAppRegion: "drag",
+          } as CSSProperties
+        }
+      >
         <span className="text-sm font-medium">BusyBoy</span>
         <Suspense>
           <BackToChat />
@@ -50,11 +59,8 @@ async function BackToChat() {
   return (
     <Link
       href="/"
-      className={buttonVariants({
-        variant: "ghost",
-        size: "sm",
-        className: "ml-auto [app-region:no-drag]",
-      })}
+      className={buttonVariants({ variant: "ghost", size: "sm", className: "ml-auto" })}
+      style={{ WebkitAppRegion: "no-drag" } as CSSProperties}
     >
       Back to chat
     </Link>

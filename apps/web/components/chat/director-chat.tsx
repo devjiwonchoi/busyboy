@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 
-import { sendToDirectorAction, stopDirectorAction } from "@/app/(main)/director-actions";
+import { sendToDirectorAction, stopDirectorAction } from "@/app/director-actions";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { useExternalSync } from "@/hooks/use-external-sync";

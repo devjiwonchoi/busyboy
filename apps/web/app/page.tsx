@@ -5,9 +5,11 @@ import { DirectorChat } from "@/components/chat/director-chat";
 
 export default function ChatPage() {
   return (
-    <Suspense>
-      <Chat />
-    </Suspense>
+    <div className="flex h-dvh min-h-0 flex-col">
+      <Suspense>
+        <Chat />
+      </Suspense>
+    </div>
   );
 }
 

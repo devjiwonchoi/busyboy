@@ -1,13 +1,14 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 
-const allowed = "apps/web/src/hooks/use-external-sync.ts";
+const allowed = "apps/web/hooks/use-external-sync.ts";
 
 function filesUnder(directory: string): string[] {
   const found: string[] = [];
   for (const entry of readdirSync(directory)) {
     const path = join(directory, entry);
     if (statSync(path).isDirectory()) {
+      if (entry === "node_modules" || entry === ".next" || entry === "scripts") continue;
       found.push(...filesUnder(path));
       continue;
     }
@@ -17,7 +18,7 @@ function filesUnder(directory: string): string[] {
 }
 
 const failures: string[] = [];
-for (const path of filesUnder("apps/web/src")) {
+for (const path of filesUnder("apps/web")) {
   if (path === allowed) continue;
   const lines = readFileSync(path, "utf8").split("\n");
   lines.forEach((line, index) => {
@@ -32,7 +33,7 @@ if (failures.length === 0) {
 }
 
 console.error(
-  "Do not sync state in an effect; compute it during render, handle the event, reset with a key, or subscribe with useSyncExternalStore. External setup goes through useExternalSync from apps/web/src/hooks/use-external-sync.ts (https://react.dev/learn/you-might-not-need-an-effect).",
+  "Do not sync state in an effect; compute it during render, handle the event, reset with a key, or subscribe with useSyncExternalStore. External setup goes through useExternalSync from apps/web/hooks/use-external-sync.ts (https://react.dev/learn/you-might-not-need-an-effect).",
 );
 for (const failure of failures) console.error(failure);
 process.exit(1);

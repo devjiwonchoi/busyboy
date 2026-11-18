@@ -4,7 +4,7 @@ import { dirname, join, resolve } from "node:path";
 
 import { app, Notification, type BrowserWindow } from "electron";
 
-import { SERVER_TOKEN_HEADER } from "../web/src/lib/server-token";
+import { SERVER_TOKEN_HEADER } from "../web/lib/server-token";
 import type { Background } from "./background";
 import type { ServerHandle } from "./server-process";
 import type { ShellPathResult } from "./shell-env";

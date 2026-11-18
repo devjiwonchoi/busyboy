@@ -2,7 +2,7 @@
 import { existsSync, readdirSync, readFileSync, realpathSync } from "node:fs";
 import { basename, isAbsolute, join, relative } from "node:path";
 
-import { serverExternalPackages } from "../../web/src/lib/server-external-packages.ts";
+import { serverExternalPackages } from "../../web/lib/server-external-packages.ts";
 import { standaloneAppDir, standaloneServerPath } from "../standalone-server.ts";
 import { assertServerResolves } from "./check-server-resolution.mts";
 
