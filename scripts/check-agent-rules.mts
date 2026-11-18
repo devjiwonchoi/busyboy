@@ -1,18 +1,10 @@
 import { diffFromMergeBase } from "./git-text.mts";
 
 const kebab = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
-const recordFiles = new Set([
-  "ALIGN.md",
-  "ALIGN.approved.md",
-  "STATUS.md",
-  "VERIFY.md",
-  "REVIEW.md",
-  "REMEMBER.md",
-]);
-const toolFiles = new Set(["README.md", "AGENTS.md"]);
+const toolFiles = new Set(["README.md", "AGENTS.md", "DOMAIN.md"]);
 
 export function segmentIsKebab(segment: string): boolean {
-  if (recordFiles.has(segment) || toolFiles.has(segment)) return true;
+  if (toolFiles.has(segment)) return true;
   if (/^\([a-z0-9]+(?:-[a-z0-9]+)*\)$/.test(segment)) return true;
   if (/^@[a-z0-9]+(?:-[a-z0-9]+)*$/.test(segment)) return true;
   if (/^\[(?:\.\.\.)?[a-z0-9]+(?:-[a-z0-9]+)*\]$/.test(segment)) return true;
@@ -125,14 +117,15 @@ function main() {
     if (!file) continue;
     if (!pathIsKebab(file)) {
       failures.push(
-        `Rename "${file}" to kebab-case, for example "${suggestedName(file)}". Keep a tool-fixed name such as page.tsx, next.config.ts, or a record file (ALIGN.md, STATUS.md, VERIFY.md, REVIEW.md, REMEMBER.md).`,
+        `Rename "${file}" to kebab-case, for example "${suggestedName(file)}". Keep a tool-fixed name such as page.tsx, next.config.ts, README.md, AGENTS.md, or DOMAIN.md.`,
       );
     }
     if (
       /\.(?:md|mdx|rst)$/.test(file) &&
       !file.startsWith("tests/") &&
       !file.startsWith(".agents/skills/") &&
-      file !== "AGENTS.md"
+      file !== "AGENTS.md" &&
+      file !== "DOMAIN.md"
     ) {
       failures.push(
         `Do not add "${file}". Put the note in the pull request description. A skill and its feature map belong under .agents/skills/.`,

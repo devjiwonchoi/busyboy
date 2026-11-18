@@ -3,15 +3,6 @@ import { timingSafeEqual } from "node:crypto";
 import { NextResponse, type NextRequest } from "next/server";
 
 import {
-  ALWAYS_ASK_PATH,
-  alwaysAskTokenFor,
-  MCP_MANAGER_PARAM,
-  MCP_PATH,
-  MCP_TASK_PROJECT_PARAM,
-  MCP_TOKEN_HEADER,
-  managerMcpTokenFor,
-  mcpTokenFor,
-  taskMcpTokenFor,
   SERVER_TOKEN_COOKIE,
   SERVER_TOKEN_ENV,
   SERVER_TOKEN_HEADER,
@@ -66,26 +57,9 @@ export async function proxy(request: NextRequest) {
   } else {
     const provided =
       request.cookies.get(SERVER_TOKEN_COOKIE)?.value ?? request.headers.get(SERVER_TOKEN_HEADER);
-    if (!(provided && sameToken(provided, expected)) && !hasMcpToken(request, expected))
-      return forbidden("token");
+    if (!(provided && sameToken(provided, expected))) return forbidden("token");
   }
   return (await setupRedirect(request)) ?? NextResponse.next();
-}
-
-// why: The MCP token and the always-ask token are derived from the server token and open only their own routes.
-function hasMcpToken(request: NextRequest, serverToken: string) {
-  if (request.nextUrl.pathname === ALWAYS_ASK_PATH) {
-    const provided = request.headers.get(MCP_TOKEN_HEADER);
-    return Boolean(provided && sameToken(provided, alwaysAskTokenFor(serverToken)));
-  }
-  if (request.nextUrl.pathname !== MCP_PATH) return false;
-  const provided = request.headers.get(MCP_TOKEN_HEADER);
-  if (!provided) return false;
-  if (sameToken(provided, mcpTokenFor(serverToken))) return true;
-  const project = request.nextUrl.searchParams.get(MCP_TASK_PROJECT_PARAM);
-  if (project && sameToken(provided, taskMcpTokenFor(serverToken, project))) return true;
-  const manager = request.nextUrl.searchParams.get(MCP_MANAGER_PARAM);
-  return Boolean(manager && sameToken(provided, managerMcpTokenFor(serverToken, manager)));
 }
 
 async function setupRedirect(request: NextRequest) {

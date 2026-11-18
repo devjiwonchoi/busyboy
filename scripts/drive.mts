@@ -11,7 +11,6 @@ import {
   readlinkSync,
   renameSync,
   rmSync,
-  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { writeFile } from "node:fs/promises";
@@ -48,16 +47,6 @@ const electronFiles = [
 ];
 
 const directorQuestion = "What does git worktree do? Answer in one sentence.";
-const directorReply = "check out more than one branch";
-const planMessage = "In @web, add a footer with the project name to the web app.";
-const progressMessage = "In @web, build the site footer and report each step.";
-const shipMessage = "Ship the footer.";
-const planCard = "Plan from web · Add a footer";
-const progressCard = "Progress from web · Add a footer";
-const doneCard = "Done from web · Add a footer";
-const pullCard = "Pull requests from web · Add a footer";
-const closedCard = "Card from web · Add a footer";
-const taskLine = "web · Add a footer";
 
 type Surface = "next" | "electron";
 
@@ -283,98 +272,24 @@ function exists(file: string) {
   }
 }
 
-function executable(file: string) {
-  try {
-    accessSync(file, constants.X_OK);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-function findNamed(dir: string, name: string, depth = 0): string[] {
-  if (depth > 8) return [];
-  const found: string[] = [];
-  let entries;
-  try {
-    entries = readdirSync(dir, { withFileTypes: true });
-  } catch {
-    return found;
-  }
-  for (const entry of entries) {
-    if (entry.name === ".git" || entry.name === "node_modules") continue;
-    const path = join(dir, entry.name);
-    if (entry.isDirectory()) found.push(...findNamed(path, name, depth + 1));
-    else if (entry.name === name) found.push(path);
-  }
-  return found;
-}
-
 function readJson(file: string) {
   return JSON.parse(readFileSync(file, "utf8")) as unknown;
 }
 
 function seedData(dataDir: string) {
-  const project = join(dataDir, "projects", "web");
-  mkdirSync(project, { recursive: true });
-  writeFileSync(join(project, "README.md"), "# web\n");
-  execFileSync("git", ["init", "-q", "-b", "main"], { cwd: project, stdio: "ignore" });
-  execFileSync("git", ["add", "."], { cwd: project, stdio: "ignore" });
-  execFileSync(
-    "git",
-    [
-      "-c",
-      "user.name=BusyBoy Verify",
-      "-c",
-      "user.email=verify@example.com",
-      "commit",
-      "-q",
-      "-m",
-      "Initial commit",
-    ],
-    {
-      cwd: project,
-      stdio: "ignore",
-    },
-  );
   const settings = {
     version: 1,
     setupCompletedAt: new Date(0).toISOString(),
     defaultProvider: "claude",
-    theme: "dark",
-    companion: null,
-    companionImage: null,
-    projects: [{ name: "web", path: project, addedAt: new Date(0).toISOString() }],
-    managers: [],
-    alwaysAsk: null,
   };
   writeFileSync(join(dataDir, "app-settings.json"), `${JSON.stringify(settings, null, 2)}\n`);
-  const scripts = join(dataDir, "provider-scripts");
-  mkdirSync(scripts, { recursive: true });
-  for (const source of [
-    join(root, "tests", "provider-scripts"),
-    join(root, "scripts", "drive-providers"),
-  ]) {
-    for (const entry of readdirSync(source, { withFileTypes: true })) {
-      if (!entry.isFile() || !entry.name.endsWith(".json")) continue;
-      const destination = join(scripts, entry.name);
-      if (exists(destination)) throw new Error(`Two provider scripts are named ${entry.name}.`);
-      symlinkSync(join(source, entry.name), destination);
-    }
-  }
-  return scripts;
 }
 
-function serverEnv(dataDir: string, scriptsDir: string, port: number | undefined) {
+function serverEnv(dataDir: string, port: number | undefined) {
   const env: NodeJS.ProcessEnv = { ...process.env };
   delete env.BUSYBOY_TOKEN;
   env.BUSYBOY_HOME = dataDir;
   env.BUSYBOY_TEST_MODE = "1";
-  env.BUSYBOY_PROVIDER_SCRIPTS = scriptsDir;
-  env.BUSYBOY_CODEX_PATH = join(root, "scripts", "drive-providers", "missing-codex");
-  env.BUSYBOY_GROK_PATH = join(root, "scripts", "drive-providers", "missing-grok");
-  env.BUSYBOY_GH_PATH = join(root, "tests", "fake-gh", "gh");
-  env.BUSYBOY_TEST_SHELL = "/bin/sh";
   env.CLAUDE_CONFIG_DIR = join(dataDir, "claude-config");
   env.CODEX_HOME = join(dataDir, "codex-home");
   env.NEXT_TELEMETRY_DISABLED = "1";
@@ -423,97 +338,7 @@ async function openChat(drive: Drive) {
   await log.waitFor({ timeout: readyMs });
   await waitForAttribute(log, "data-connected", "true", readyMs);
   await drive.page.getByRole("textbox", { name: "Message" }).waitFor({ timeout: actionMs });
-  await drive.page.getByRole("link", { name: "Settings" }).waitFor({ timeout: actionMs });
-}
-
-async function openSettings(page: Page) {
-  if ((await page.getByRole("main", { name: "Settings" }).count()) === 0) {
-    await page.getByRole("link", { name: "Settings" }).click();
-  }
-  await page.getByRole("main", { name: "Settings" }).waitFor({ timeout: actionMs });
-  await page.getByRole("heading", { name: "Director", exact: true }).waitFor({ timeout: actionMs });
-}
-
-function settingsCompanion(dataDir: string) {
-  const settings = readJson(join(dataDir, "app-settings.json")) as { companion?: string | null };
-  return settings.companion ?? null;
-}
-
-async function waitForCompanion(dataDir: string, companion: string) {
-  const deadline = Date.now() + actionMs;
-  while (Date.now() < deadline) {
-    if (settingsCompanion(dataDir) === companion) return;
-    await delay(100);
-  }
-  throw new Error(
-    `Settings did not save companion "${companion}". The file has ${String(settingsCompanion(dataDir))}.`,
-  );
-}
-
-async function approvePlan(page: Page) {
-  const card = page.getByRole("group", { name: planCard });
-  await card.waitFor({ timeout: actionMs });
-  await card.getByRole("button", { name: "Approve" }).click();
-  const closed = page.getByRole("group", { name: closedCard }).filter({ hasText: "Approved" });
-  await closed.waitFor({ timeout: actionMs });
-}
-
-async function alignApproved(dataDir: string) {
-  const deadline = Date.now() + actionMs;
-  while (Date.now() < deadline) {
-    const files = findNamed(dataDir, "ALIGN.md").filter((file) =>
-      readFileSync(file, "utf8").includes("Status: approved"),
-    );
-    if (files.length > 0) return files[0] ?? "";
-    await delay(150);
-  }
-  throw new Error("The plan card closed, and no ALIGN.md contains Status: approved.");
-}
-
-async function showProgress(page: Page) {
-  const card = page.getByRole("group", { name: progressCard });
-  await card.waitFor({ timeout: actionMs });
-  await card.getByText("Running: Wire the pages").waitFor({ timeout: actionMs });
-  await card.getByText("Done: Footer component").waitFor({ timeout: actionMs });
-  await card.getByRole("button", { name: "View details" }).waitFor({ timeout: actionMs });
-}
-
-async function shipFooter(page: Page) {
-  await page.getByRole("button", { name: `Message ${taskLine}` }).click();
-  await sendMessage(page, shipMessage);
-  await page.getByRole("group", { name: doneCard }).waitFor({ timeout: actionMs });
-  await page.getByRole("group", { name: pullCard }).waitFor({ timeout: actionMs });
-}
-
-function taskWorktree(dataDir: string) {
-  const file = join(dataDir, "task-list.json");
-  const list = readJson(file) as { tasks?: { title?: string; worktree?: string }[] };
-  const task = list.tasks?.find((entry) => entry.title === "Add a footer" && entry.worktree);
-  if (!task?.worktree) throw new Error("task-list.json has no worktree for Add a footer.");
-  return task.worktree;
-}
-
-async function mergePulls(drive: Drive) {
-  const card = drive.page.getByRole("group", { name: pullCard });
-  await card.waitFor({ timeout: actionMs });
-  await card.getByRole("button", { name: "Merge in order" }).click();
-  await drive.page
-    .getByRole("group", { name: closedCard })
-    .filter({ hasText: "Merged in order" })
-    .waitFor({ timeout: actionMs });
-  const log = join(taskWorktree(drive.dataDir), ".gh-merge.log");
-  const deadline = Date.now() + actionMs;
-  while (Date.now() < deadline) {
-    if (
-      exists(log) &&
-      readFileSync(log, "utf8").includes("pr merge 12 --merge") &&
-      readFileSync(log, "utf8").includes("pr merge 13 --merge")
-    ) {
-      return log;
-    }
-    await delay(150);
-  }
-  throw new Error(`Merge in order closed the card, and ${log} does not record both merges.`);
+  await drive.page.getByRole("button", { name: "Stop" }).waitFor({ timeout: actionMs });
 }
 
 async function directorSend(drive: Drive) {
@@ -524,18 +349,13 @@ async function directorSend(drive: Drive) {
     .getByLabel("Your message")
     .filter({ hasText: directorQuestion })
     .waitFor({ timeout: actionMs });
-  await log
-    .getByLabel("Reply", { exact: true })
-    .filter({ hasText: directorReply })
-    .waitFor({ timeout: actionMs });
-  await waitForAttribute(log, "data-status", "idle", actionMs);
   const file = join(drive.dataDir, "director", "transcript.jsonl");
   const deadline = Date.now() + actionMs;
   while (Date.now() < deadline) {
-    if (exists(file) && readFileSync(file, "utf8").includes(directorReply)) return file;
+    if (exists(file) && readFileSync(file, "utf8").includes(directorQuestion)) return file;
     await delay(150);
   }
-  throw new Error(`The reply is on screen, and ${file} does not contain it.`);
+  throw new Error(`The message is on screen, and ${file} does not contain it.`);
 }
 
 async function runStep(drive: Drive, command: Command): Promise<Result> {
@@ -553,30 +373,7 @@ async function runStep(drive: Drive, command: Command): Promise<Result> {
       .waitFor({ timeout: actionMs });
     return result(true, "The message is in the transcript.");
   }
-  if (name === "approve-plan") {
-    await approvePlan(drive.page);
-    const file = await alignApproved(drive.dataDir);
-    return result(true, `Approved. ${file} contains Status: approved.`);
-  }
-  if (name === "open-settings") {
-    await openSettings(drive.page);
-    return result(true, "Settings is open on Director.");
-  }
-  if (name === "show-progress") {
-    await showProgress(drive.page);
-    return result(true, "The progress card shows a finished step and a running step.");
-  }
-  if (name === "ship-footer") {
-    await shipFooter(drive.page);
-    return result(true, "The done card and the pull request card are visible.");
-  }
-  if (name === "merge-pulls") {
-    const log = await mergePulls(drive);
-    return result(true, `Merged in order. ${log} records pr merge 12 and pr merge 13.`);
-  }
-  return fail(
-    `Unknown step "${name ?? ""}". Steps: open-chat, send-message, approve-plan, open-settings, show-progress, ship-footer, merge-pulls.`,
-  );
+  return fail(`Unknown step "${name ?? ""}". Steps: open-chat, send-message.`);
 }
 
 async function runJourney(drive: Drive, name: string | undefined): Promise<Result> {
@@ -587,89 +384,14 @@ async function runJourney(drive: Drive, name: string | undefined): Promise<Resul
   }
   if (name === "director-send") {
     const file = await directorSend(drive);
-    return result(true, `The Director answered in the chat. ${file} contains "${directorReply}".`);
-  }
-  if (name === "settings") {
-    await openChat(drive);
-    await openSettings(drive.page);
-    await drive.page.getByRole("radio", { name: "Ming the seal" }).click();
-    await waitForCompanion(drive.dataDir, "ming");
-    const checked = await drive.page.getByRole("radio", { name: "Ming the seal" }).isChecked();
-    if (!checked) return fail("Ming the seal is saved, and the radio is not checked.");
-    if ((await drive.page.getByRole("link", { name: "Approvals" }).count()) !== 0)
-      return fail("Approvals is still a settings section.");
-    await drive.page.getByText("BusyBoy dev", { exact: true }).waitFor({ timeout: actionMs });
-    if ((await drive.page.getByText("BusyBoy 0.0.0", { exact: true }).count()) !== 0)
-      return fail("Settings shows package.json's 0.0.0 instead of the running app.");
-    return result(
-      true,
-      `Settings saved companion "ming" in ${join(drive.dataDir, "app-settings.json")}, the Ming the seal radio is checked, and the header says BusyBoy dev.`,
-    );
-  }
-  if (name === "approve-plan") {
-    await openChat(drive);
-    await sendMessage(drive.page, planMessage);
-    await approvePlan(drive.page);
-    const file = await alignApproved(drive.dataDir);
-    const line = transcript(drive.page).getByRole("listitem", { name: taskLine });
-    await line.getByText("Idle").waitFor({ timeout: actionMs });
-    return result(
-      true,
-      `The plan card closed as Approved, the task line is Idle, and ${file} contains Status: approved.`,
-    );
-  }
-  if (name === "progress-and-done") {
-    await openChat(drive);
-    await sendMessage(drive.page, progressMessage);
-    await showProgress(drive.page);
-    await shipFooter(drive.page);
-    await drive.page
-      .getByRole("group", { name: doneCard })
-      .getByRole("button", { name: "View plan" })
-      .waitFor({ timeout: actionMs });
-    await drive.page
-      .getByRole("group", { name: pullCard })
-      .getByRole("link", { name: "Open" })
-      .waitFor({ timeout: actionMs });
-    return result(
-      true,
-      "The progress card showed a running step, then the done card and the pull request card replaced it.",
-    );
-  }
-  if (name === "pr-card") {
-    await openChat(drive);
-    await sendMessage(drive.page, progressMessage);
-    await showProgress(drive.page);
-    await shipFooter(drive.page);
-    const log = await mergePulls(drive);
-    await drive.page
-      .getByRole("group", { name: doneCard })
-      .getByText("Done")
-      .waitFor({ timeout: actionMs });
-    return result(
-      true,
-      `Merge in order closed the pull request card. ${log} records both merges, and the done line says Done.`,
-    );
+    return result(true, `The message is in the chat. ${file} contains "${directorQuestion}".`);
   }
   if (name === "first-run") {
-    const director = await firstRun(drive);
-    return result(
-      true,
-      `A fresh profile signed in and opened the Director as ${director}, with no projects.`,
-    );
+    await firstRun(drive);
+    return result(true, "A fresh profile signed in and opened the Director chat.");
   }
-  return fail(
-    "Unknown journey. Journeys: director-send, approve-plan, progress-and-done, pr-card, settings, first-run.",
-  );
+  return fail("Unknown journey. Journeys: director-send, first-run.");
 }
-
-const DIRECTORS: Record<string, string> = {
-  jota: "Jota",
-  rippu: "Rippu",
-  ming: "Ming",
-  yam: "Yam",
-  jjeromming: "Jjeromming",
-};
 
 async function firstRun(drive: Drive) {
   rmSync(join(drive.dataDir, "app-settings.json"), { force: true });
@@ -685,36 +407,25 @@ async function firstRun(drive: Drive) {
   const log = transcript(drive.page);
   await log.waitFor({ timeout: readyMs });
   await waitForAttribute(log, "data-connected", "true", readyMs);
-  const settings = readJson(join(drive.dataDir, "app-settings.json")) as {
-    companion?: string | null;
-    projects?: unknown[];
-  };
-  const name = settings.companion ? DIRECTORS[settings.companion] : undefined;
-  if (!name) throw new Error(`Companion ${String(settings.companion)} is not a director.`);
-  if ((settings.projects ?? []).length !== 0)
-    throw new Error("A fresh profile started with a project.");
-  await drive.page.getByRole("link", { name: `${name}, director` }).waitFor({ timeout: actionMs });
   await drive.page
-    .getByText(`${name}, your director`, { exact: true })
+    .getByText("BusyBoy is ready. What should we work on?")
     .waitFor({ timeout: actionMs });
-  if ((await drive.page.getByText("No managers yet.").count()) > 0)
-    throw new Error("The chat list explains an empty manager list.");
-  return name;
+  const settings = readJson(join(drive.dataDir, "app-settings.json")) as {
+    setupCompletedAt?: string | null;
+  };
+  if (!settings.setupCompletedAt) throw new Error("Continue did not finish setup.");
 }
 
 async function inspect(drive: Drive) {
   const log = transcript(drive.page);
   const connected =
     (await log.count()) > 0 ? await log.first().getAttribute("data-connected") : null;
-  const status = (await log.count()) > 0 ? await log.first().getAttribute("data-status") : null;
   return {
     url: drive.page.url(),
     title: await drive.page.title(),
     transcriptConnected: connected,
-    transcriptStatus: status,
     setupHeading:
       (await drive.page.getByRole("heading", { name: "Sign in to an agent" }).count()) > 0,
-    settingsMain: (await drive.page.getByRole("main", { name: "Settings" }).count()) > 0,
   };
 }
 
@@ -915,7 +626,7 @@ function stringEnv(env: NodeJS.ProcessEnv) {
   return Object.fromEntries(entries);
 }
 
-async function launchNext(dataDir: string, scriptsDir: string) {
+async function launchNext(dataDir: string) {
   const port = await freePort();
   const url = `http://${host}:${port}`;
   const log = createWriteStream(serverLogPath, { flags: "a" });
@@ -924,7 +635,7 @@ async function launchNext(dataDir: string, scriptsDir: string) {
     ["exec", "next", "dev", "--hostname", host, "--port", String(port)],
     {
       cwd: root,
-      env: serverEnv(dataDir, scriptsDir, port),
+      env: serverEnv(dataDir, port),
       stdio: ["ignore", "pipe", "pipe"],
     },
   );
@@ -965,7 +676,7 @@ async function launchElectron(dataDir: string) {
     executablePath,
     args: [root],
     cwd: root,
-    env: stringEnv(serverEnv(dataDir, join(root, "tests", "provider-scripts"), undefined)),
+    env: stringEnv(serverEnv(dataDir, undefined)),
     timeout: readyMs,
   });
   const page = await app.firstWindow({ timeout: readyMs });
@@ -1026,8 +737,8 @@ async function keeper(surface: Surface) {
       state.cdp = drive.cdp;
       state.serverPid = launched.app.process().pid ?? null;
     } else {
-      const scriptsDir = seedData(dataDir);
-      const launched = await launchNext(dataDir, scriptsDir);
+      seedData(dataDir);
+      const launched = await launchNext(dataDir);
       const browserDrive: Drive = {
         surface,
         page: undefined as unknown as Page,
@@ -1049,9 +760,6 @@ async function keeper(surface: Surface) {
       await openChat(browserDrive);
       await browserDrive.page
         .getByText("BusyBoy is ready. What should we work on?")
-        .waitFor({ timeout: actionMs });
-      await browserDrive.page
-        .getByRole("link", { name: "BusyBoy, director" })
         .waitFor({ timeout: actionMs });
     }
   } catch (error) {
@@ -1282,19 +990,12 @@ async function doctor() {
   }
   const serverTree = state.serverPid ? descendants(state.serverPid) : [];
   const tokenPid = serverTree.find((pid) => envValue(pid, "BUSYBOY_TOKEN"));
-  const scriptsPid = serverTree.find((pid) => envValue(pid, "BUSYBOY_PROVIDER_SCRIPTS"));
   if (state.surface === "next") {
-    if (!scriptsPid) problems.push("BUSYBOY_PROVIDER_SCRIPTS is not set on the server.");
-    if (tokenPid) problems.push("A launch token is set, so provider scripts are ignored.");
-    else if (scriptsPid)
-      lines.push(
-        `scripted providers: active (${envValue(scriptsPid, "BUSYBOY_PROVIDER_SCRIPTS")})`,
-      );
+    if (tokenPid) problems.push("A launch token is set on the Next server.");
     const home = server ? envValue(server, "BUSYBOY_HOME") : undefined;
     if (home !== state.dataDir)
       problems.push("The server data folder is not this run's temporary folder.");
-  } else if (tokenPid)
-    lines.push("scripted providers: inactive (the desktop server set a launch token)");
+  } else if (tokenPid) lines.push("desktop server: launch token is set");
   else
     problems.push(
       "The desktop server has no launch token, so this is not the Electron app this command starts.",
@@ -1305,8 +1006,6 @@ async function doctor() {
       ? "electron bundle: present"
       : `electron bundle: missing ${missing.join(", ")}`,
   );
-  const gh = join(root, "tests", "fake-gh", "gh");
-  lines.push(executable(gh) ? `gh: ${gh}` : `gh: ${gh} is not executable`);
   try {
     const response = await call({ cmd: "inspect" });
     const page = response.data as {
@@ -1337,8 +1036,8 @@ async function doctor() {
 function help() {
   return `pnpm drive launch [--surface next|electron]
 pnpm drive doctor
-pnpm drive step <open-chat|send-message|approve-plan|open-settings|show-progress|ship-footer|merge-pulls> [--text TEXT]
-pnpm drive journey <director-send|approve-plan|progress-and-done|pr-card|settings|first-run>
+pnpm drive step <open-chat|send-message> [--text TEXT]
+pnpm drive journey <director-send|first-run>
 pnpm drive click --role ROLE --name NAME
 pnpm drive fill --role ROLE --name NAME --value VALUE
 pnpm drive press --key KEY
