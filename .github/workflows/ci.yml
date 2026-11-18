@@ -56,7 +56,7 @@ jobs:
           node scripts/check-agent-rules.mts "origin/${{ github.base_ref }}"
 
   e2e:
-    name: End-to-end tests
+    name: E2E tests
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
