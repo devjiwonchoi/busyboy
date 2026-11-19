@@ -1,8 +1,4 @@
 #!/usr/bin/env node
-// A stand-in for the `claude` CLI that speaks the Agent SDK's stream-json
-// protocol. Each user turn streams FAKE_CLAUDE_REPLY one word at a time, with
-// FAKE_CLAUDE_DELAY_MS between words, so a test can watch the reply grow. It
-// first waits FAKE_CLAUDE_THINK_MS, as a model does while it thinks.
 import { createInterface } from "node:readline";
 
 const REPLY =
