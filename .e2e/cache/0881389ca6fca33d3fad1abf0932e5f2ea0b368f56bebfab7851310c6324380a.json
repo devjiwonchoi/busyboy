@@ -1,0 +1,86 @@
+{
+  "schemaVersion": "trace-1",
+  "createdAt": "2026-11-19T06:29:28.559Z",
+  "payload": {
+    "actions": [
+      {
+        "name": "type",
+        "summary": "type \"Say something long.\" into textbox \"Message\"",
+        "target": {
+          "role": "textbox",
+          "name": "Message",
+          "placeholder": "Message"
+        },
+        "value": "Say something long."
+      },
+      {
+        "name": "tap",
+        "summary": "tap button \"Send\"",
+        "target": {
+          "role": "button",
+          "name": "Send"
+        }
+      }
+    ],
+    "executor": {
+      "name": "claude-code",
+      "version": "1"
+    },
+    "recordedFor": {
+      "testId": "tests/chat.e2e.ts::chat::streams%20a%20reply%20in%20before%20it%20finishes",
+      "targetId": "web",
+      "instructionDigest": "4f13822910d52b173be34f4058192009fab57b73fc144e0e08604097da8563b1",
+      "paramsDigest": "08e57a4ae3754bdcc57e0b1ac2153a5873ebed3f27242d10dba9c6473993c4af",
+      "callIndex": 0,
+      "agent": "default"
+    },
+    "summary": "The message \"Say something long.\" was sent. The transcript now shows it as \"Your message\" with a Copy action, and the status reads \"Thinking…\" with a Stop button, so the assistant is responding. The cached replay performed the typing and the Send tap.",
+    "startPath": "/",
+    "endPath": "/",
+    "endAnchors": [
+      {
+        "role": "status",
+        "name": "Thinking…"
+      },
+      {
+        "text": "Say something long."
+      },
+      {
+        "role": "button",
+        "name": "Copy"
+      },
+      {
+        "role": "button",
+        "name": "Stop"
+      },
+      {
+        "role": "article",
+        "name": "Your message"
+      },
+      {
+        "role": "toolbar",
+        "name": "Message actions"
+      }
+    ],
+    "goneAnchors": [
+      {
+        "text": "BusyBoy is ready. What should we work on?"
+      },
+      {
+        "role": "button",
+        "name": "Send"
+      }
+    ],
+    "endWaitMs": 10111,
+    "keyedBy": {
+      "cacheSchema": "trace-1",
+      "policyVersion": "conservative/6",
+      "project": "04f3476642e613803421b92ad0fc3513fd1b2ec022197449b34f2dd7c419f9cc",
+      "platform": "web",
+      "engineName": "web",
+      "engineSpiVersion": 1,
+      "appIdentity": "f9f49ed79c2662c7f6e0522da33af26cd0588919fce8b674530ba7c83e5d217c",
+      "agentContextDigest": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  }
+}

@@ -1,0 +1,71 @@
+{
+  "schemaVersion": "trace-1",
+  "createdAt": "2026-11-19T06:29:58.260Z",
+  "payload": {
+    "actions": [
+      {
+        "name": "type",
+        "summary": "type \"Think first.\" into textbox \"Message\"",
+        "target": {
+          "role": "textbox",
+          "name": "Message",
+          "placeholder": "Message"
+        },
+        "value": "Think first."
+      },
+      {
+        "name": "tap",
+        "summary": "tap button \"Send\"",
+        "target": {
+          "role": "button",
+          "name": "Send"
+        }
+      }
+    ],
+    "executor": {
+      "name": "claude-code",
+      "version": "1"
+    },
+    "recordedFor": {
+      "testId": "tests/chat.e2e.ts::chat::shows%20thinking%20until%20the%20reply%20starts",
+      "targetId": "web",
+      "instructionDigest": "4f13822910d52b173be34f4058192009fab57b73fc144e0e08604097da8563b1",
+      "paramsDigest": "ca140b83de38943b0571573f15e717c2ce3c498b96565be6ef073fcad6b9c558",
+      "callIndex": 0,
+      "agent": "default"
+    },
+    "summary": "Typed \"Think first.\" into the Message field and tapped Send. A new user message \"Think first.\" appeared in the transcript, and a \"Thinking…\" status shows while the Send button changed to Stop.",
+    "startPath": "/",
+    "endPath": "/",
+    "endAnchors": [
+      {
+        "role": "status",
+        "name": "Thinking…"
+      },
+      {
+        "text": "Think first."
+      },
+      {
+        "role": "button",
+        "name": "Stop"
+      }
+    ],
+    "goneAnchors": [
+      {
+        "role": "button",
+        "name": "Send"
+      }
+    ],
+    "endWaitMs": 14996,
+    "keyedBy": {
+      "cacheSchema": "trace-1",
+      "policyVersion": "conservative/6",
+      "project": "04f3476642e613803421b92ad0fc3513fd1b2ec022197449b34f2dd7c419f9cc",
+      "platform": "web",
+      "engineName": "web",
+      "engineSpiVersion": 1,
+      "appIdentity": "f9f49ed79c2662c7f6e0522da33af26cd0588919fce8b674530ba7c83e5d217c",
+      "agentContextDigest": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  }
+}
