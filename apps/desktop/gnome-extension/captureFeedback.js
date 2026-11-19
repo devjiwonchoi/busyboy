@@ -4,6 +4,7 @@ import GLib from "gi://GLib";
 import Meta from "gi://Meta";
 import St from "gi://St";
 import * as Main from "resource:///org/gnome/shell/ui/main.js";
+
 import { captureDestinationFrame, findCaptureDestination } from "./feedbackGeometry.js";
 
 export class CaptureFeedback {

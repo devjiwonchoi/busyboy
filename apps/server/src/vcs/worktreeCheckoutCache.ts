@@ -14,8 +14,8 @@ import * as Schema from "effect/Schema";
 import * as Semaphore from "effect/Semaphore";
 
 import * as CheckoutCloner from "./CheckoutCloner.ts";
-import type * as GitVcsDriver from "./GitVcsDriver.ts";
 import { indexEntryStat, parseIndex, restatIndex, type IndexEntryStat } from "./gitIndexStat.ts";
+import type * as GitVcsDriver from "./GitVcsDriver.ts";
 
 const KEEP_PER_REPOSITORY = 3;
 // Moving a cached checkout costs about 0.1 ms per changed file when a worktree is created, while

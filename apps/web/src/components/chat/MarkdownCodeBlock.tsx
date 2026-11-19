@@ -1,6 +1,6 @@
 import { T, useGT } from "gt-react";
-import { PlayIcon, WrapTextIcon, CheckIcon, CopyIcon } from "lucide-react";
 import { toHtml } from "hast-util-to-html";
+import { PlayIcon, WrapTextIcon, CheckIcon, CopyIcon } from "lucide-react";
 import React, { use, useEffect, useState, type ReactNode } from "react";
 
 import { useCopyToClipboard } from "../../hooks/useCopyToClipboard";
@@ -20,12 +20,12 @@ import {
 import { Button } from "../ui/button";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { HighlightedCodeLines } from "./HighlightedCodeLines";
+import { reportMarkdownActionFailure } from "./markdownActionFailure";
 import {
   createHighlightCacheKey,
   estimateHighlightedSize,
   extractFenceLanguage,
 } from "./MarkdownCodeBlock.logic";
-import { reportMarkdownActionFailure } from "./markdownActionFailure";
 import { PierreEntryIcon } from "./PierreEntryIcon";
 
 const MAX_HIGHLIGHT_CACHE_ENTRIES = 500;

@@ -2,8 +2,8 @@ import type { EnvironmentId, ThreadId } from "@t3tools/contracts";
 import { T, useGT } from "gt-react-native";
 import { Platform, Pressable, ScrollView, View } from "react-native";
 
-import { AppText as Text } from "../../components/ui/AppText";
 import { SymbolView } from "../../components/ui/AppSymbol";
+import { AppText as Text } from "../../components/ui/AppText";
 import { cn } from "../../lib/cn";
 import { useSideChats } from "../../state/entities";
 import { useOpenLinkedThread } from "./useOpenLinkedThread";

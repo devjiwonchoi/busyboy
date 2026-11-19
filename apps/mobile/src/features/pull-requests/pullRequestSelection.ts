@@ -1,4 +1,5 @@
 import type { NavigationState } from "@react-navigation/native";
+
 import { pullRequestListKey } from "./pullRequestList";
 
 export function selectedPullRequestKey(state: Pick<NavigationState, "routes" | "index">) {

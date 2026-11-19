@@ -1,14 +1,14 @@
-import { remapComposerContextAttachments } from "@t3tools/shared/composerContextReferences";
-import { appendUserInputAttachmentPaths } from "../provider/userInputAttachments.ts";
 import type { ChatAttachment, OrchestrationV2Command } from "@t3tools/contracts";
+import { remapComposerContextAttachments } from "@t3tools/shared/composerContextReferences";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Schema from "effect/Schema";
+
 import { resolveAttachmentPath } from "../attachmentStore.ts";
 import * as ServerConfig from "../config.ts";
-import * as Orchestrator from "./Orchestrator.ts";
-
+import { appendUserInputAttachmentPaths } from "../provider/userInputAttachments.ts";
 import * as AttachmentClaims from "./AttachmentClaims.ts";
+import * as Orchestrator from "./Orchestrator.ts";
 import * as ThreadLaunch from "./ThreadLaunchService.ts";
 import * as ThreadManagement from "./ThreadManagementService.ts";
 

@@ -1,10 +1,10 @@
-import * as React from "react";
-import * as Schema from "effect/Schema";
 import {
   COMPOSER_CONTEXT_CLIPBOARD_MIME,
   encodeComposerContextClipboardHtml,
 } from "@t3tools/shared/composerContextClipboard";
+import * as Schema from "effect/Schema";
 import { msg } from "gt-react";
+import * as React from "react";
 
 import { m } from "../i18n/messages";
 import { useStableCallback } from "./useStableCallback";

@@ -7,10 +7,14 @@ import {
   OrchestratorMcpFailure,
   type OrchestrationV2Command,
 } from "@t3tools/contracts";
-import * as Effect from "effect/Effect";
 import { modelSelectionCommandType } from "@t3tools/shared/model";
 import { topOfPinnedRunOrderKey } from "@t3tools/shared/pinOrderKey";
+import * as Effect from "effect/Effect";
 
+import { queuedRunsInDeliveryOrder } from "../../../orchestration-v2/QueuedRunOrder.ts";
+import type * as ThreadManagement from "../../../orchestration-v2/ThreadManagementService.ts";
+import * as ThreadSearch from "../../../orchestration-v2/ThreadSearch.ts";
+import * as ScheduledTasks from "../../../scheduledTasks/ScheduledTaskService.ts";
 import * as McpInvocationContext from "../../McpInvocationContext.ts";
 import * as McpToolAccess from "../../McpToolAccess.ts";
 import {
@@ -20,10 +24,6 @@ import {
   readThread,
   unavailable,
 } from "../../threadAccess.ts";
-import type * as ThreadManagement from "../../../orchestration-v2/ThreadManagementService.ts";
-import * as ThreadSearch from "../../../orchestration-v2/ThreadSearch.ts";
-import * as ScheduledTasks from "../../../scheduledTasks/ScheduledTaskService.ts";
-import { queuedRunsInDeliveryOrder } from "../../../orchestration-v2/QueuedRunOrder.ts";
 import { ThreadToolkit } from "./tools.ts";
 
 function queueEntry(

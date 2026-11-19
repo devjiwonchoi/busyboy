@@ -1,11 +1,11 @@
-import * as AcpCompat from "./compat.ts";
 import * as Rpc from "effect/rpc/Rpc";
 import * as RpcGroup from "effect/rpc/RpcGroup";
 import * as Schema from "effect/Schema";
 
-import * as AcpSchema from "./_generated/schema.gen.ts";
-import * as AcpSchemaV1 from "./_generated/schema-v1.gen.ts";
 import { AGENT_METHODS, CLIENT_METHODS } from "./_generated/meta.gen.ts";
+import * as AcpSchemaV1 from "./_generated/schema-v1.gen.ts";
+import * as AcpSchema from "./_generated/schema.gen.ts";
+import * as AcpCompat from "./compat.ts";
 
 export const V1_AGENT_METHODS = {
   authenticate: "authenticate",

@@ -2,23 +2,22 @@ import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, describe, it } from "@effect/vitest";
 import { KiroSettings } from "@t3tools/provider-kiro/settings";
-import * as Deferred from "effect/Deferred";
-import type * as Duration from "effect/Duration";
-import * as Effect from "effect/Effect";
-import * as Fiber from "effect/Fiber";
-import * as Layer from "effect/Layer";
-import * as Queue from "effect/Queue";
-import * as Schema from "effect/Schema";
-import * as Sink from "effect/Sink";
-import * as Stream from "effect/Stream";
-import { ChildProcess, ChildProcessSpawner } from "effect/process";
-import * as TestClock from "effect/testing/TestClock";
-
 import {
   checkKiroProviderStatus,
   kiroAgentDescriptor,
   kiroDefaultModelId,
 } from "@t3tools/provider-kiro/testing";
+import * as Deferred from "effect/Deferred";
+import type * as Duration from "effect/Duration";
+import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
+import * as Layer from "effect/Layer";
+import { ChildProcess, ChildProcessSpawner } from "effect/process";
+import * as Queue from "effect/Queue";
+import * as Schema from "effect/Schema";
+import * as Sink from "effect/Sink";
+import * as Stream from "effect/Stream";
+import * as TestClock from "effect/testing/TestClock";
 
 const encoder = new TextEncoder();
 const settings = Schema.decodeSync(KiroSettings)({ enabled: true });

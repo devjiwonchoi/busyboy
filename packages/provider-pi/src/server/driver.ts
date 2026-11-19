@@ -1,43 +1,43 @@
 // User-wide ~/.pi/agent state makes continuation identity use default instance grouping.
 import { ProviderDriverKind, type ServerProvider } from "@t3tools/contracts";
-import { PiSettings } from "../settings.ts";
-import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
-import * as Path from "effect/Path";
-import * as Schema from "effect/Schema";
-import * as HttpClient from "effect/http/HttpClient";
-import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
-
-import * as ProviderLatestVersions from "@t3tools/provider-core/server/ProviderLatestVersions";
-import * as ProviderHost from "@t3tools/provider-core/server/ProviderHost";
-import { piUsageReader } from "./usage.ts";
-import { makePiTextGeneration } from "./textGeneration.ts";
-import { PiAdapterV2Driver, type PiAdapterV2DriverEnv } from "./adapter.ts";
-import { ProviderDriverError } from "@t3tools/provider-core/server/errors";
-import {
-  buildInitialPiProviderSnapshot,
-  checkPiProviderStatus,
-  discoverPiCommandsForCwd,
-  enrichPiSnapshot,
-} from "./status.ts";
-import { makeManagedServerProvider } from "@t3tools/provider-core/server/managedProvider";
 import {
   defaultProviderContinuationIdentity,
   type ProviderDriver,
   type ProviderInstance,
 } from "@t3tools/provider-core/server/driver";
-import type { ServerProviderDraft } from "@t3tools/provider-core/server/snapshotProbe";
+import { ProviderDriverError } from "@t3tools/provider-core/server/errors";
 import { mergeProviderInstanceEnvironment } from "@t3tools/provider-core/server/instanceEnvironment";
 import {
   makeCachedProviderMaintenanceResolution,
   makePackageManagedProviderMaintenanceResolver,
   resolveProviderMaintenanceCapabilitiesEffect,
 } from "@t3tools/provider-core/server/maintenanceResolver";
+import { makeManagedServerProvider } from "@t3tools/provider-core/server/managedProvider";
+import * as ProviderHost from "@t3tools/provider-core/server/ProviderHost";
+import * as ProviderLatestVersions from "@t3tools/provider-core/server/ProviderLatestVersions";
+import type { ServerProviderDraft } from "@t3tools/provider-core/server/snapshotProbe";
 import {
   haveProviderSnapshotSettingsChanged,
   makeProviderSnapshotSettingsSource,
   type ProviderSnapshotSettings,
 } from "@t3tools/provider-core/server/snapshotSettings";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as HttpClient from "effect/http/HttpClient";
+import * as Path from "effect/Path";
+import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
+import * as Schema from "effect/Schema";
+
+import { PiSettings } from "../settings.ts";
+import { PiAdapterV2Driver, type PiAdapterV2DriverEnv } from "./adapter.ts";
+import {
+  buildInitialPiProviderSnapshot,
+  checkPiProviderStatus,
+  discoverPiCommandsForCwd,
+  enrichPiSnapshot,
+} from "./status.ts";
+import { makePiTextGeneration } from "./textGeneration.ts";
+import { piUsageReader } from "./usage.ts";
 
 const decodePiSettings = Schema.decodeSync(PiSettings);
 

@@ -1,57 +1,56 @@
-import { NativeScrollView } from "../../native/NativeScrollViewMarker";
+import { LegendList } from "@legendapp/list/react-native";
+import { useNavigation } from "@react-navigation/native";
 import { errorDisplayMessage } from "@t3tools/client-runtime/errors";
-import { Button } from "../../components/ui/Button";
-import * as Dialog from "../../components/ui/Dialog";
-import { AppActivityIndicator } from "../../components/ui/AppActivityIndicator";
-import { SelectionRow } from "../../components/ui/SelectionRow";
+import {
+  isAtomCommandInterrupted,
+  squashAtomCommandFailure,
+} from "@t3tools/client-runtime/state/runtime";
 import type { EnvironmentProject } from "@t3tools/client-runtime/state/shell";
-import { shouldCheckoutNewTaskBranch } from "./new-task-context-presentation";
 import type { VcsRef } from "@t3tools/client-runtime/state/vcs";
 import {
   AuthSourceControlWriteScope,
   resolveEnvironmentMachineKind,
   type EnvironmentId,
 } from "@t3tools/contracts";
-import { LegendList } from "@legendapp/list/react-native";
-import {
-  isAtomCommandInterrupted,
-  squashAtomCommandFailure,
-} from "@t3tools/client-runtime/state/runtime";
-import * as Haptics from "expo-haptics";
-import { useNavigation } from "@react-navigation/native";
-import { T, useGT, useMessages, Var } from "gt-react-native";
-import { m } from "../../i18n/messages";
-import { useRef, useState, type ReactNode } from "react";
 import { sanitizeNewRefName } from "@t3tools/shared/git";
+import * as Haptics from "expo-haptics";
+import { T, useGT, useMessages, Var } from "gt-react-native";
+import { useRef, useState, type ReactNode } from "react";
 import { Platform, Pressable, ScrollView, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { EnvironmentMachineSymbol } from "../../components/EnvironmentMachineSymbol";
+import { AppActivityIndicator } from "../../components/ui/AppActivityIndicator";
 import { AppBar } from "../../components/ui/AppBar";
-import { ScreenContent } from "../../components/ui/ScreenContent";
+import type { AppBarSearch } from "../../components/ui/AppBar";
 import { SymbolView } from "../../components/ui/AppSymbol";
 import { AppText as Text } from "../../components/ui/AppText";
-import { EnvironmentMachineSymbol } from "../../components/EnvironmentMachineSymbol";
+import { Button } from "../../components/ui/Button";
+import * as Dialog from "../../components/ui/Dialog";
+import { ScreenContent } from "../../components/ui/ScreenContent";
+import { SelectionRow } from "../../components/ui/SelectionRow";
 import { ThemedSwitch } from "../../components/ui/ThemedSwitch";
+import { useSearchToolbarInset } from "../../components/ui/useBarInset";
+import { m } from "../../i18n/messages";
 import { cn } from "../../lib/cn";
+import { NativeScrollView } from "../../native/NativeScrollViewMarker";
+import { useEnvironmentPresentation } from "../../state/presentation";
+import { useDebouncedValue, usePaginatedBranches } from "../../state/queries";
 import { useEnvironmentScope } from "../../state/session";
 import { useAtomCommand } from "../../state/use-atom-command";
-import { vcsEnvironment } from "../../state/vcs";
-import { useSearchToolbarInset } from "../../components/ui/useBarInset";
-import type { AppBarSearch } from "../../components/ui/AppBar";
-import { branchBadgeLabel, useNewTaskFlow } from "./new-task-flow-provider";
-import { checkoutNewTaskBranch } from "./checkout-new-task-branch";
-import { filterNewTaskBranches } from "./new-task-context-presentation";
-import { useDebouncedValue, usePaginatedBranches } from "../../state/queries";
 import { setPendingConnectionError } from "../../state/use-remote-environment-registry";
-
-import { useEnvironmentPresentation } from "../../state/presentation";
 import { useRemoteConnections } from "../../state/use-remote-environment-registry";
-import { ConnectionStatusDot } from "../connection/ConnectionStatusDot";
+import { vcsEnvironment } from "../../state/vcs";
 import {
   ConnectionDiagnosisDetails,
   useConnectionDiagnosis,
 } from "../connection/ConnectionDiagnosisDetails";
+import { ConnectionStatusDot } from "../connection/ConnectionStatusDot";
 import { environmentStatusText } from "../connection/environmentStatusText";
+import { checkoutNewTaskBranch } from "./checkout-new-task-branch";
+import { shouldCheckoutNewTaskBranch } from "./new-task-context-presentation";
+import { filterNewTaskBranches } from "./new-task-context-presentation";
+import { branchBadgeLabel, useNewTaskFlow } from "./new-task-flow-provider";
 
 const BRANCH_SEARCH_DEBOUNCE_MS = 150;
 

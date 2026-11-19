@@ -1,3 +1,4 @@
+import { describe, expect, it } from "@effect/vitest";
 import {
   DEFAULT_SERVER_SETTINGS,
   EnvironmentId,
@@ -10,7 +11,6 @@ import {
   UsageLimitSourceId,
 } from "@t3tools/contracts";
 import { splitSocketFrame } from "@t3tools/shared/socketFrameParts";
-import { describe, expect, it } from "@effect/vitest";
 import * as Cause from "effect/Cause";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
@@ -20,11 +20,12 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Queue from "effect/Queue";
 import * as Schema from "effect/Schema";
+import * as Socket from "effect/socket/Socket";
 import * as Stream from "effect/Stream";
 import * as SubscriptionRef from "effect/SubscriptionRef";
-import * as Socket from "effect/socket/Socket";
 import * as TestClock from "effect/testing/TestClock";
 
+import { toServerClock } from "../clock.ts";
 import {
   AVAILABLE_CONNECTION_STATE,
   ConnectionBlockedError,
@@ -34,10 +35,9 @@ import {
 } from "../connection/model.ts";
 import * as EnvironmentSupervisor from "../connection/supervisor.ts";
 import * as Persistence from "../platform/persistence.ts";
-import * as RpcSession from "./session.ts";
-import { toServerClock } from "../clock.ts";
 import { makeEnvironmentServerConfigState } from "../state/server.ts";
 import { applyServerConfigProjection } from "../state/serverConfigProjection.ts";
+import * as RpcSession from "./session.ts";
 
 type SocketEventType = "open" | "message" | "close" | "error";
 type SocketEvent = {

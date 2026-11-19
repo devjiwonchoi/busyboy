@@ -1,5 +1,5 @@
-import * as Schema from "effect/Schema";
 import * as Record from "effect/Record";
+import * as Schema from "effect/Schema";
 import { useSyncExternalStore } from "react";
 
 export class LocalStorageOperationError extends Schema.TaggedError<LocalStorageOperationError>()(

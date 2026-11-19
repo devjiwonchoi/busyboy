@@ -1,3 +1,4 @@
+import { EnvironmentId, MessageId, ThreadId } from "@t3tools/contracts";
 import {
   act,
   createElement,
@@ -10,19 +11,18 @@ import {
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
-import { inlineFilePreviewKind, isPdfFile } from "./filePreview";
+import { MediaVideoPlayer } from "../components/MediaVideoPlayer";
+import { AudioFilePreview } from "../features/files/AudioFilePreview";
+import { ThreadFeed } from "../features/threads/ThreadFeed";
 import { ThreadInlineFilePreview } from "../features/threads/ThreadInlineFilePreview";
 import {
   ThreadMediaRetainContext,
   ThreadMediaVisibleContext,
 } from "../features/threads/ThreadMarkdownVideo";
-import { AudioFilePreview } from "../features/files/AudioFilePreview";
-import { MediaVideoPlayer } from "../components/MediaVideoPlayer";
-import { EnvironmentId, MessageId, ThreadId } from "@t3tools/contracts";
-import { acquireAudioSession, activateAudioSession, releaseAudioSession } from "./audioSession";
-import { ThreadFeed } from "../features/threads/ThreadFeed";
-import type { ThreadFeedEntry } from "./threadActivity";
 import type { MarkdownImageRenderer } from "../native/SelectableMarkdownText";
+import { acquireAudioSession, activateAudioSession, releaseAudioSession } from "./audioSession";
+import { inlineFilePreviewKind, isPdfFile } from "./filePreview";
+import type { ThreadFeedEntry } from "./threadActivity";
 
 const audio = vi.hoisted(() => ({
   status: {

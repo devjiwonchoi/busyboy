@@ -1,16 +1,19 @@
 // @effect-diagnostics nodeBuiltinImport:off -- Native, consent-gated compositor config I/O.
-import * as NodeFSP from "node:fs/promises";
-import * as NodeFS from "node:fs";
-import * as NodePath from "node:path";
-import * as NodeCrypto from "node:crypto";
+
 import * as NodeChildProcess from "node:child_process";
+import * as NodeCrypto from "node:crypto";
+import * as NodeFS from "node:fs";
+import * as NodeFSP from "node:fs/promises";
+import * as NodePath from "node:path";
 import * as NodeUtil from "node:util";
-import * as Schema from "effect/Schema";
+
 import type {
   DesktopCaptureConfigApplied,
   DesktopCaptureConfigPreview,
   DesktopCaptureConfigRequest,
 } from "@t3tools/contracts";
+import * as Schema from "effect/Schema";
+
 import {
   captureConfigKeys,
   editCaptureConfig,

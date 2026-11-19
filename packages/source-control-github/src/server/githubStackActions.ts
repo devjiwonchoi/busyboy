@@ -3,16 +3,16 @@ import type {
   PullRequestMergeMethod,
   PullRequestStackHead,
 } from "@t3tools/contracts";
-import * as Effect from "effect/Effect";
 import * as Clock from "effect/Clock";
+import * as Effect from "effect/Effect";
 import { GraphQLClient, GraphQLClientError, GraphQLResolver } from "effect/graphql";
 import * as RequestResolver from "effect/RequestResolver";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 
-import * as GitHubRest from "./GitHubRest.ts";
 import * as GitHubGraphQlClient from "./gitHubGraphQlClient.ts";
 import { decodePullRequestStacksJson, toCanWrite } from "./gitHubPullRequestJson.ts";
+import * as GitHubRest from "./GitHubRest.ts";
 import { cascadeRebaseStack } from "./githubStackRebase.ts";
 import { StackActionsGraphQLGroup } from "./stackActions.graphql.ts";
 

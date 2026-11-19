@@ -1,33 +1,5 @@
-import { useNativeFileDrag } from "../useNativeFileDrag";
-import { resolvePathLinkTarget } from "@t3tools/shared/fileLinks";
 import { useAtomValue } from "@effect/atom-react";
-import { documentChipKindForFileName } from "~/pierre-icons";
 import { isProviderSkillUserInvocable } from "@t3tools/client-runtime/providerSkills";
-import { formatProviderSkillDisplayName } from "@t3tools/shared/inlineSkills";
-import {
-  Extension,
-  findChildren,
-  InputRule,
-  Node,
-  wrappingInputRule,
-  type JSONContent,
-  type TiptapEditorHTMLElement,
-} from "@tiptap/core";
-import { ReactNodeViewRenderer, NodeViewWrapper, type NodeViewProps } from "@tiptap/react";
-import StarterKit from "@tiptap/starter-kit";
-import { useGT } from "gt-react";
-import { newlineInCode, splitBlockKeepMarks } from "@tiptap/pm/commands";
-import { isHistoryTransaction } from "@tiptap/pm/history";
-import {
-  type EditorState,
-  NodeSelection,
-  Plugin,
-  PluginKey,
-  TextSelection,
-  type Transaction,
-} from "@tiptap/pm/state";
-import { Decoration, DecorationSet, type EditorView } from "@tiptap/pm/view";
-import type { NodeType, ResolvedPos } from "@tiptap/pm/model";
 import type {
   AssistantCitation,
   ComposerContextClipboardFragment,
@@ -41,6 +13,33 @@ import {
   COMPOSER_CONTEXT_CLIPBOARD_MIME,
   encodeComposerContextClipboardHtml,
 } from "@t3tools/shared/composerContextClipboard";
+import { resolvePathLinkTarget } from "@t3tools/shared/fileLinks";
+import { formatProviderSkillDisplayName } from "@t3tools/shared/inlineSkills";
+import {
+  Extension,
+  findChildren,
+  InputRule,
+  Node,
+  wrappingInputRule,
+  type JSONContent,
+  type TiptapEditorHTMLElement,
+} from "@tiptap/core";
+import { newlineInCode, splitBlockKeepMarks } from "@tiptap/pm/commands";
+import { isHistoryTransaction } from "@tiptap/pm/history";
+import type { NodeType, ResolvedPos } from "@tiptap/pm/model";
+import {
+  type EditorState,
+  NodeSelection,
+  Plugin,
+  PluginKey,
+  TextSelection,
+  type Transaction,
+} from "@tiptap/pm/state";
+import { Decoration, DecorationSet, type EditorView } from "@tiptap/pm/view";
+import { ReactNodeViewRenderer, NodeViewWrapper, type NodeViewProps } from "@tiptap/react";
+import { EditorContent, useEditor } from "@tiptap/react";
+import StarterKit from "@tiptap/starter-kit";
+import { useGT } from "gt-react";
 import {
   createContext,
   use,
@@ -54,25 +53,30 @@ import {
   type ReactNode,
   type RefObject,
 } from "react";
-import { EditorContent, useEditor } from "@tiptap/react";
 
+import {
+  convertCodeFenceOnEnter,
+  exitCodeBlockOnClosingFence,
+  exitCodeBlockOnTrailingBlankLines,
+  indentCodeBlock,
+  indentedNewlineInCodeBlock,
+  selectionInOneCodeBlock,
+} from "~/composer-code-block";
+import {
+  collectComposerPromptInlineTokens,
+  selectionTouchesMentionBoundary,
+} from "~/composer-editor-mentions";
 import {
   clampCollapsedComposerCursor,
   collapseExpandedComposerCursor,
   expandCollapsedComposerCursor,
   pastedPathQueryLength,
 } from "~/composer-logic";
-import { useStableCallback } from "~/hooks/useStableCallback";
-import { caretLineDirection, ComposerTextDirectionExtension } from "~/composer-text-direction";
 import {
   collapseShownMarkdownSource,
   ComposerMarkdownSourceExtension,
 } from "~/composer-markdown-source";
 import { MARKDOWN_SOURCE_MARK } from "~/composer-rich-text";
-import {
-  collectComposerPromptInlineTokens,
-  selectionTouchesMentionBoundary,
-} from "~/composer-editor-mentions";
 import {
   buildDocJson,
   ComposerBlockExtensions,
@@ -100,57 +104,54 @@ import {
   type IsKnownModel,
   type SkillMeta,
 } from "~/composer-rich-text-doc";
-import {
-  convertCodeFenceOnEnter,
-  exitCodeBlockOnClosingFence,
-  exitCodeBlockOnTrailingBlankLines,
-  indentCodeBlock,
-  indentedNewlineInCodeBlock,
-  selectionInOneCodeBlock,
-} from "~/composer-code-block";
+import { caretLineDirection, ComposerTextDirectionExtension } from "~/composer-text-direction";
 import {
   COMPOSER_UNDO_GROUP_DELAY,
   type ComposerChangeKind,
   groupUndoByChangeKind,
   markAsClipboardEdit,
 } from "~/composer-undo-grouping";
+import { useStableCallback } from "~/hooks/useStableCallback";
+import { isRichTextFormattingShortcut } from "~/keybindings";
+import { isThreadNavigationShortcut } from "~/keybindings";
+import type { AssistantCitationSourceAnchor } from "~/lib/assistantTextSelection";
 import { collectInlineContextIds } from "~/lib/composerContextReferences";
 import { resolveDiffThemeName } from "~/lib/diffRendering";
-import { isRichTextFormattingShortcut } from "~/keybindings";
 import { cn, isMacPlatform } from "~/lib/utils";
-import { isThreadNavigationShortcut } from "~/keybindings";
-import { appAtomRegistry } from "~/rpc/atomRegistry";
-import { primaryServerKeybindingsAtom } from "~/state/server";
-import { hasCommandForKeyDown } from "~/shortcuts/dispatcher";
+import { documentChipKindForFileName } from "~/pierre-icons";
 import { basenameOfPath } from "~/pierre-icons";
-import { WorkspaceEntryTooltip } from "./chat/WorkspaceEntryIcon";
-import { FileTagChipContent } from "./chat/FileTagChip";
-import { SkillChipPopover, skillPopoverDescription } from "./chat/SkillInlineText";
+import { appAtomRegistry } from "~/rpc/atomRegistry";
+import { hasCommandForKeyDown } from "~/shortcuts/dispatcher";
+import { primaryServerKeybindingsAtom } from "~/state/server";
+
+import { useNativeFileDrag } from "../useNativeFileDrag";
 import { AssistantCitationChip } from "./chat/AssistantCitationChip";
+import { resolveAssistantCitationCommentDismissal } from "./chat/assistantCitationCommentDismissal";
+import { ComposerCodeBlockNodeView } from "./chat/ComposerCodeBlockNodeView";
+import { FileTagChipContent } from "./chat/FileTagChip";
 import { ModelMentionChip, modelMentionKey, modelMentionKeysAtom } from "./chat/ModelMentionChip";
 import { getTimelinePageScrollKey } from "./chat/pageScrollController";
-import { ContextChip } from "./ContextChip";
+import { SkillChipPopover, skillPopoverDescription } from "./chat/SkillInlineText";
+import { WorkspaceEntryTooltip } from "./chat/WorkspaceEntryIcon";
+import {
+  captureComposerAttachmentInsertion,
+  type ComposerAttachmentInsertion,
+} from "./composerAttachmentInsertion";
+import { composerCodeBlockHighlight } from "./composerCodeBlockHighlight";
 import {
   ComposerContextActionsContext,
   ComposerContextReferenceChip,
   ComposerContextRecordsContext,
 } from "./composerContextPresentation";
-import type { AssistantCitationSourceAnchor } from "~/lib/assistantTextSelection";
-import { Tooltip, TooltipPopup, TooltipTrigger } from "./ui/tooltip";
-import { ComposerCodeBlockNodeView } from "./chat/ComposerCodeBlockNodeView";
-import { resolveAssistantCitationCommentDismissal } from "./chat/assistantCitationCommentDismissal";
-import { composerCodeBlockHighlight } from "./composerCodeBlockHighlight";
+import type { ComposerDraftContextRecords } from "./composerContextPresentation";
 import {
   importPastedComposerText,
   readPastedComposerContext,
   readPastedPlainText,
 } from "./composerInlineTokenPaste";
 import { didComposerSelectionChangeVisibly } from "./composerSelection";
-import {
-  captureComposerAttachmentInsertion,
-  type ComposerAttachmentInsertion,
-} from "./composerAttachmentInsertion";
-import type { ComposerDraftContextRecords } from "./composerContextPresentation";
+import { ContextChip } from "./ContextChip";
+import { Tooltip, TooltipPopup, TooltipTrigger } from "./ui/tooltip";
 
 export interface ComposerPromptEditorHandle {
   focus: () => void;

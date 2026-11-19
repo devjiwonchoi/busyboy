@@ -4,14 +4,17 @@ import { AsyncResult } from "effect/reactivity";
 import { StrictMode, type ReactNode } from "react";
 import { describe, expect, it, vi } from "vite-plus/test";
 import { userEvent } from "vite-plus/test/browser";
-import { act, fakeTimers, render } from "../../../test/render";
-import appCss from "~/index.css?inline";
+
 import { isMacPlatform } from "~/lib/utils";
 import {
   createWorkspaceFocusController,
   startWorkspaceFocus,
   workspaceAreaProps,
 } from "~/lib/workspaceFocus";
+
+import { act, fakeTimers, render } from "../../../test/render";
+
+import appCss from "~/index.css?inline";
 
 const state = vi.hoisted(() => ({
   file: null as ProjectReadFileResult | null,

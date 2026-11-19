@@ -1,5 +1,6 @@
 // Adapted from opencode (MIT). Copyright (c) 2025 opencode. See LICENSE.opencode.
 import { rangeRect, type CellRange, type GridMeta } from "@betteroffice/xlsx/headless";
+
 import { columnName } from "./sheet-cells";
 import type { SheetFrame, SheetFrameRequest } from "./sheet-protocol";
 

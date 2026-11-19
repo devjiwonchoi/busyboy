@@ -11,9 +11,8 @@ import * as Schema from "effect/Schema";
 import { msg, T, useGT } from "gt-react";
 import { type ReactNode, useEffect, useEffectEvent, useRef, useState } from "react";
 
-import { m } from "../../i18n/messages";
-
 import { isElectron } from "../../env";
+import { m } from "../../i18n/messages";
 import { runConnectMcpApproval } from "../../state/connectMcpApproval";
 import { resolveClerkSignInProps } from "../clerk/authRedirect";
 import { retryClerkLoad, useClerkLoadFailed } from "../clerk/clerkLoadFailure";

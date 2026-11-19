@@ -8,7 +8,6 @@ import { page } from "vite-plus/test/browser";
 
 import "~/index.css";
 import { render } from "../../../test/render";
-
 import { BrowserDocumentFrame, HtmlRenderDocument } from "./BrowserDocumentFrame";
 
 const sizeChanged = (height: number) => ({

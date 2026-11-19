@@ -1,4 +1,3 @@
-import { T, useGT, useMessages } from "gt-react-native";
 import { useAtomValue } from "@effect/atom-react";
 import {
   AVAILABLE_CONNECTION_STATE,
@@ -10,8 +9,9 @@ import {
   type EnvironmentPresentation,
 } from "@t3tools/client-runtime/connection";
 import type { EnvironmentId } from "@t3tools/contracts";
-import Constants from "expo-constants";
 import { AsyncResult } from "effect/reactivity";
+import Constants from "expo-constants";
+import { T, useGT, useMessages } from "gt-react-native";
 import { Linking, View } from "react-native";
 
 import { AppText as Text } from "../../components/ui/AppText";

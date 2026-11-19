@@ -11,6 +11,12 @@ import * as NodeURL from "node:url";
 
 import { PNG } from "pngjs";
 
+import {
+  SHOWCASE_ENVIRONMENTS,
+  SHOWCASE_PROJECTS,
+  SHOWCASE_THREADS,
+  seedShowcaseEnvironment,
+} from "./mobile-showcase-environment.ts";
 import showcaseConfig, {
   type ShowcaseAppearance,
   type ShowcaseAndroidDevice,
@@ -23,12 +29,6 @@ import showcaseConfig, {
   SHOWCASE_THEMES,
   type ShowcaseTheme,
 } from "./mobile-showcase.config.ts";
-import {
-  SHOWCASE_ENVIRONMENTS,
-  SHOWCASE_PROJECTS,
-  SHOWCASE_THREADS,
-  seedShowcaseEnvironment,
-} from "./mobile-showcase-environment.ts";
 
 const REPO_ROOT = NodePath.resolve(NodePath.dirname(NodeURL.fileURLToPath(import.meta.url)), "..");
 const MOBILE_ROOT = NodePath.join(REPO_ROOT, "apps/mobile");

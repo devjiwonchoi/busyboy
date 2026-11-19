@@ -1,11 +1,12 @@
-import { it as effectIt } from "@effect/vitest";
 import * as NodeServices from "@effect/platform-node/NodeServices";
+import { it as effectIt } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
-import * as Stream from "effect/Stream";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
+import * as Stream from "effect/Stream";
 import { expect, it } from "vite-plus/test";
+
 import { gradePrContent } from "./grade.ts";
 
 effectIt.live("rejects an empty case before requiring Codex or creating output", () =>

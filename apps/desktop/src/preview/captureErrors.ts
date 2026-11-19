@@ -1,5 +1,6 @@
 import { PreviewCaptureFailure } from "@t3tools/contracts";
 import * as Cause from "effect/Cause";
+
 import type { PreviewManagerError } from "./Manager.ts";
 
 /** Classify before Electron replaces a rejected IPC Error with its message. */

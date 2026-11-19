@@ -1,10 +1,3 @@
-import type {
-  EnvironmentId,
-  OrchestrationV2PendingBackgroundTask,
-  OrchestrationV2ProviderGoal,
-  OrchestrationV2ProviderSession,
-  ThreadId,
-} from "@t3tools/contracts";
 import type { EnvironmentThreadShell, ThreadStructure } from "@t3tools/client-runtime/state/shell";
 import {
   presentPendingBackgroundWork,
@@ -13,6 +6,13 @@ import {
 } from "@t3tools/client-runtime/state/thread-execution";
 import { childThreadInputsTitle } from "@t3tools/client-runtime/state/threads";
 import { commandDisplayText } from "@t3tools/client-runtime/work-log/command-label";
+import type {
+  EnvironmentId,
+  OrchestrationV2PendingBackgroundTask,
+  OrchestrationV2ProviderGoal,
+  OrchestrationV2ProviderSession,
+  ThreadId,
+} from "@t3tools/contracts";
 import { formatDuration } from "@t3tools/shared/orchestrationTimingCopy";
 import * as DateTime from "effect/DateTime";
 import { msg, T, Var } from "gt-react";
@@ -27,12 +27,14 @@ import {
   TriangleAlertIcon,
 } from "lucide-react";
 import { Fragment } from "react";
+
 import { m, type MessageResolver } from "~/i18n/messages";
 import { tickTextContent } from "~/lib/tickTextContent";
-import { BackgroundWorkDetails } from "./BackgroundWorkDetails";
+
 import { Button, InlineButton } from "../ui/button";
-import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { Popover, PopoverPopup, PopoverTrigger } from "../ui/popover";
+import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
+import { BackgroundWorkDetails } from "./BackgroundWorkDetails";
 import type { ComposerBannerStackItem } from "./ComposerBannerStack";
 import type { ThreadNowItem } from "./ThreadNow";
 

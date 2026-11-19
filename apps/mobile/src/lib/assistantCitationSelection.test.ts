@@ -1,11 +1,12 @@
-import { expect, it } from "vite-plus/test";
-import { collectMobileAssistantTextSelectors } from "./assistantCitationSelection";
+import { EnvironmentId, ThreadId, MessageId } from "@t3tools/contracts";
 import {
   findAssistantCitationText,
   serializeAssistantCitation,
   expandAssistantCitationsForProvider,
 } from "@t3tools/shared/assistantCitations";
-import { EnvironmentId, ThreadId, MessageId } from "@t3tools/contracts";
+import { expect, it } from "vite-plus/test";
+
+import { collectMobileAssistantTextSelectors } from "./assistantCitationSelection";
 
 it("offers distinct source choices within a block and maps recursive folds without merging occurrences", () => {
   const paragraph = `${"x".repeat(40)}**quote**${"x".repeat(40)}`;

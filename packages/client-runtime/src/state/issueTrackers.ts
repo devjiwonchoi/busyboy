@@ -8,13 +8,13 @@ import { Atom } from "effect/reactivity";
 import { mFallback, msg } from "gt-i18n";
 import type { MFunctionType } from "gt-i18n/types";
 
+import type { EnvironmentRegistry } from "../connection/registry.ts";
+import * as Persistence from "../platform/persistence.ts";
 import {
   createAtomCommandScheduler,
   createEnvironmentRpcCommand,
   createEnvironmentRpcQueryAtomFamily,
 } from "./runtime.ts";
-import type { EnvironmentRegistry } from "../connection/registry.ts";
-import * as Persistence from "../platform/persistence.ts";
 
 /**
  * Standalone issue trackers (Linear, Jira) per environment: which are connected, as whom, which

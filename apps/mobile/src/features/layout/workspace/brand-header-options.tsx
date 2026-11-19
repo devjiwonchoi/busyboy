@@ -3,8 +3,8 @@ import { msg } from "gt-react-native";
 import { Platform } from "react-native";
 
 import { brandTitleOffset, CompactBrandTitle } from "../../../components/CompactBrandTitle";
-import { WorkspaceConnectionTitle } from "../../home/WorkspaceConnectionTitle";
 import { m, type MessageResolver } from "../../../i18n/messages";
+import { WorkspaceConnectionTitle } from "../../home/WorkspaceConnectionTitle";
 
 function renderCompactBrandTitle() {
   return <CompactBrandTitle allowFontScaling={Platform.OS === "ios"} />;

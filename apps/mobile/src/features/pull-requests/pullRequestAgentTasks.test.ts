@@ -1,12 +1,13 @@
+import { sourceControlClients } from "@t3tools/client-runtime/source-control-clients";
+import { IsoDateTime, ProjectId, ThreadId } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
+
 import {
   appendPullRequestAgentPrompt,
   pullRequestAgentPrompt,
   pullRequestAgentThread,
   pullRequestAgentThreadActions,
 } from "./pullRequestAgentTasks";
-import { IsoDateTime, ProjectId, ThreadId } from "@t3tools/contracts";
-import { sourceControlClients } from "@t3tools/client-runtime/source-control-clients";
 
 const GITHUB = sourceControlClients.get("github").changeRequest;
 

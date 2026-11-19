@@ -2,8 +2,9 @@
 
 import * as NodeFS from "node:fs";
 import * as NodePath from "node:path";
-import tailwindColors from "tailwindcss/colors";
+
 import { BUILT_IN_THEME_IDS, type BuiltInThemeId } from "@t3tools/shared/themePalettes";
+import tailwindColors from "tailwindcss/colors";
 
 import {
   createMobileThemeVariables,

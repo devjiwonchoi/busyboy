@@ -3,9 +3,9 @@ import { useGT } from "gt-react";
 import { PinIcon, PinOffIcon } from "lucide-react";
 import type { KeyboardEvent } from "react";
 
-import { resolveShortcutCommand } from "../keybindings";
-
 import { cn } from "~/lib/utils";
+
+import { resolveShortcutCommand } from "../keybindings";
 import { Button } from "./ui/button";
 
 /** The thread pin shortcut, which pins the highlighted row in a project list. */

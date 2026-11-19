@@ -1,6 +1,5 @@
-import { findSearchTokenRanges, splitSearchText } from "@t3tools/shared/paletteSearch";
 import type { EnvironmentThreadSearchMatch } from "@t3tools/client-runtime/state/thread-search";
-
+import { findSearchTokenRanges, splitSearchText } from "@t3tools/shared/paletteSearch";
 import { useGT } from "gt-react-native";
 
 import { AppText as Text } from "../../components/ui/AppText";

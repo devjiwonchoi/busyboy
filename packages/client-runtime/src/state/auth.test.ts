@@ -1,5 +1,5 @@
-import { AuthSessionId } from "@t3tools/contracts";
 import { describe, expect, it } from "@effect/vitest";
+import { AuthSessionId } from "@t3tools/contracts";
 import * as DateTime from "effect/DateTime";
 
 import { applyAuthAccessStreamEvent, EMPTY_AUTH_ACCESS_SNAPSHOT } from "./auth.ts";

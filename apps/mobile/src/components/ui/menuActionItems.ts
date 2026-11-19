@@ -1,4 +1,5 @@
 import type { MenuAction } from "@react-native-menu/menu";
+
 import type { AppBarMenuItem } from "./AppBar.types";
 
 /** Adapts a `MenuAction` tree and its selection handler to `AppBar` menu items. */

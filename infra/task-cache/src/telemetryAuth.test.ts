@@ -1,7 +1,8 @@
 import { generateKeyPair, SignJWT } from "jose";
 import { expect, it, vi } from "vite-plus/test";
-import { authorizeCacheWrite, authorizeTelemetry } from "./telemetryAuth.ts";
+
 import { authorize, ISSUER } from "../vendor/vite-plus-remote-cache-cloudflare/src/auth.ts";
+import { authorizeCacheWrite, authorizeTelemetry } from "./telemetryAuth.ts";
 
 it("accepts signed stacked PR telemetry without granting cache writes or trusting another repository", async () => {
   vi.useFakeTimers({ toFake: ["Date"] });

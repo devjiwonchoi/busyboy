@@ -13,9 +13,9 @@ import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Queue from "effect/Queue";
+import { Atom } from "effect/reactivity";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
-import { Atom } from "effect/reactivity";
 import { msg } from "gt-react";
 
 import { m } from "~/i18n/messages";

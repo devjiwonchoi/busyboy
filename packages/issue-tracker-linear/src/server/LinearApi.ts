@@ -1,3 +1,5 @@
+import { IssueTrackerError } from "@t3tools/source-control-core/server/IssueTracker";
+import * as IssueTrackerHost from "@t3tools/source-control-core/server/IssueTrackerHost";
 /**
  * Linear's GraphQL API, signed with the API key saved in Settings. The operations live in
  * `LinearApi.graphql` and their client is generated (`vp run generate`). A rate-limit refusal
@@ -7,9 +9,6 @@ import * as Clock from "effect/Clock";
 import * as Config from "effect/Config";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import * as Option from "effect/Option";
-import * as Schema from "effect/Schema";
 import {
   GraphQLClient,
   GraphQLClientError,
@@ -18,9 +17,9 @@ import {
 } from "effect/graphql";
 import { HttpClient } from "effect/http";
 import * as Headers from "effect/http/Headers";
-import { LINEAR_KIND } from "../shared/issueUrl.ts";
-import { IssueTrackerError } from "@t3tools/source-control-core/server/IssueTracker";
-import * as IssueTrackerHost from "@t3tools/source-control-core/server/IssueTrackerHost";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
 
 import type {
   CommentCreateInput,
@@ -28,6 +27,7 @@ import type {
   IssueFilter,
   IssueUpdateInput,
 } from "../../schema/linear.graphql.ts";
+import { LINEAR_KIND } from "../shared/issueUrl.ts";
 import {
   LinearApiGraphQLGroup,
   type Attachment,

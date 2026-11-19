@@ -1,5 +1,6 @@
 import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import * as NodeServices from "@effect/platform-node/NodeServices";
+import { assert, describe, it } from "@effect/vitest";
 import {
   ProjectId,
   MessageId,
@@ -13,43 +14,41 @@ import {
   type RuntimeMode,
   ThreadId,
 } from "@t3tools/contracts";
-import { GrokSettings } from "@t3tools/provider-grok/settings";
-import * as HostProcess from "@t3tools/shared/HostProcess";
-import { resolveSelfInvocation } from "@t3tools/shared/nodeRuntime";
-import * as EffectAcpErrors from "effect-acp/errors";
-import { xAiRateLimitedErrorCode } from "@t3tools/provider-grok/testing";
-import { assert, describe, it } from "@effect/vitest";
-import * as DateTime from "effect/DateTime";
-import * as Effect from "effect/Effect";
-import * as Deferred from "effect/Deferred";
-import * as FileSystem from "effect/FileSystem";
-import * as Path from "effect/Path";
-import * as Stream from "effect/Stream";
-import * as Layer from "effect/Layer";
-import * as PlatformError from "effect/PlatformError";
-import * as Schema from "effect/Schema";
-import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
-import type * as EffectAcpSchema from "effect-acp/compat";
-
-import * as TestProviderHost from "@t3tools/provider-testing/TestProviderHost";
-import * as ProjectStore from "../ProjectStore.ts";
-import { buildInitialGrokProviderSnapshot } from "@t3tools/provider-grok/testing";
+import { acpCompletedTurnShouldTerminalizeTool } from "@t3tools/provider-acp/server/adapter";
+import { acpPermissionDisposition } from "@t3tools/provider-acp/server/clientPolicy";
 import type { ProviderInstance } from "@t3tools/provider-core/server/driver";
-import * as ProviderInstanceRegistry from "../../provider/ProviderInstanceRegistry.ts";
 import * as IdAllocator from "@t3tools/provider-core/server/IdAllocator";
 import * as McpProviderSessions from "@t3tools/provider-core/server/McpProviderSessions";
 import * as ProviderAdapter from "@t3tools/provider-core/server/ProviderAdapter";
-import * as RuntimePolicy from "../RuntimePolicy.ts";
-import * as ServerSettings from "../../serverSettings.ts";
-import { acpPermissionDisposition } from "@t3tools/provider-acp/server/clientPolicy";
-import { acpCompletedTurnShouldTerminalizeTool } from "@t3tools/provider-acp/server/adapter";
+import { GrokSettings } from "@t3tools/provider-grok/settings";
+import { xAiRateLimitedErrorCode } from "@t3tools/provider-grok/testing";
+import { buildInitialGrokProviderSnapshot } from "@t3tools/provider-grok/testing";
 import {
   makeGrokAcpAdapterFlavor,
   makeGrokAdapterV2,
   GROK_PROVIDER,
   GROK_ACP_INITIALIZE_META,
 } from "@t3tools/provider-grok/testing";
+import * as TestProviderHost from "@t3tools/provider-testing/TestProviderHost";
+import * as HostProcess from "@t3tools/shared/HostProcess";
+import { resolveSelfInvocation } from "@t3tools/shared/nodeRuntime";
+import type * as EffectAcpSchema from "effect-acp/compat";
+import * as EffectAcpErrors from "effect-acp/errors";
+import * as DateTime from "effect/DateTime";
+import * as Deferred from "effect/Deferred";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Layer from "effect/Layer";
+import * as Path from "effect/Path";
+import * as PlatformError from "effect/PlatformError";
+import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
+import * as Schema from "effect/Schema";
+import * as Stream from "effect/Stream";
 
+import * as ProviderInstanceRegistry from "../../provider/ProviderInstanceRegistry.ts";
+import * as ServerSettings from "../../serverSettings.ts";
+import * as ProjectStore from "../ProjectStore.ts";
+import * as RuntimePolicy from "../RuntimePolicy.ts";
 import { makeAcpReplayRuntime, type AcpReplayTranscript } from "./AcpAdapterV2.testkit.ts";
 
 const LAUNCH_TEST_GROK_SETTINGS = Schema.decodeSync(GrokSettings)({

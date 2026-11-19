@@ -1,10 +1,5 @@
-import {
-  serializeAssistantCitation,
-  expandAssistantCitationsForProvider,
-} from "@t3tools/shared/assistantCitations";
 import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import { expect, it, vi } from "vite-plus/test";
 import { it as effectIt } from "@effect/vitest";
 import {
   CheckpointScopeId,
@@ -30,12 +25,18 @@ import {
   type OrchestrationV2ThreadProjection,
   OrchestrationV2DomainEvent,
 } from "@t3tools/contracts";
+import * as IdAllocator from "@t3tools/provider-core/server/IdAllocator";
+import * as ProviderAdapter from "@t3tools/provider-core/server/ProviderAdapter";
+import {
+  serializeAssistantCitation,
+  expandAssistantCitationsForProvider,
+} from "@t3tools/shared/assistantCitations";
 import * as Cause from "effect/Cause";
 import * as DateTime from "effect/DateTime";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
 import * as Fiber from "effect/Fiber";
+import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
@@ -43,48 +44,47 @@ import * as PlatformError from "effect/PlatformError";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import * as TestClock from "effect/testing/TestClock";
+import { expect, it, vi } from "vite-plus/test";
 
 import * as ServerConfig from "../config.ts";
-import * as McpAppModelContext from "../mcpApps/McpAppModelContext.ts";
-import * as PreviewAgentActivity from "../preview/PreviewAgentActivity.ts";
-import * as CheckpointService from "./CheckpointService.ts";
-import * as ProviderEventIngestor from "./ProviderEventIngestor.ts";
-import {
-  withCheckpointRestoreReservation,
-  withWorkspaceLease,
-} from "../workspace/workspaceLease.ts";
 import * as GitWorkflow from "../git/GitWorkflowService.ts";
+import * as McpAppModelContext from "../mcpApps/McpAppModelContext.ts";
+import * as SqlitePersistence from "../persistence/Sqlite.ts";
+import * as PreviewAgentActivity from "../preview/PreviewAgentActivity.ts";
+import * as ProjectService from "../project/ProjectService.ts";
+import * as ProviderAuthService from "../provider/ProviderAuthService.ts";
+import * as ServerSettings from "../serverSettings.ts";
+import * as ProviderUsageAnalytics from "../telemetry/ProviderUsageAnalytics.ts";
+import * as GitVcsDriver from "../vcs/GitVcsDriver.ts";
 import {
   layerThreadWorktreeRestore,
   ThreadWorktreeRestore,
 } from "../workspace/restoreMissingWorktree.ts";
-import * as GitVcsDriver from "../vcs/GitVcsDriver.ts";
-import { layerRealGit } from "./ProviderTurnStartService.testkit.ts";
-import * as ProjectService from "../project/ProjectService.ts";
-import * as ProviderAuthService from "../provider/ProviderAuthService.ts";
-import * as ServerSettings from "../serverSettings.ts";
-import * as ContextHandoffService from "./ContextHandoffService.ts";
+import {
+  withCheckpointRestoreReservation,
+  withWorkspaceLease,
+} from "../workspace/workspaceLease.ts";
+import { CodexProviderCapabilitiesV2 } from "./Adapters/CodexAdapterV2.ts";
+import * as CheckpointRollbackService from "./CheckpointRollbackService.ts";
+import * as CheckpointService from "./CheckpointService.ts";
 import { withInlineContext } from "./ContextHandoffDelivery.ts";
-import * as EventSink from "./EventSink.ts";
-import * as SqlitePersistence from "../persistence/Sqlite.ts";
+import * as ContextHandoffService from "./ContextHandoffService.ts";
 import * as EffectOutbox from "./EffectOutbox.ts";
 import * as EffectWorker from "./EffectWorker.ts";
-import * as CheckpointRollbackService from "./CheckpointRollbackService.ts";
+import * as EventSink from "./EventSink.ts";
+import * as ProjectionStore from "./ProjectionStore.ts";
+import * as ProviderEventIngestor from "./ProviderEventIngestor.ts";
+import * as ProviderSessionManager from "./ProviderSessionManager.ts";
 import * as ProviderTurnControlService from "./ProviderTurnControlService.ts";
+import { layerRealGit } from "./ProviderTurnStartService.testkit.ts";
+import * as ProviderTurnStart from "./ProviderTurnStartService.ts";
+import * as RunExecutionService from "./RunExecutionService.ts";
 import * as RunFinalizationService from "./RunFinalizationService.ts";
+import * as RuntimePolicy from "./RuntimePolicy.ts";
 import * as RuntimeRequestService from "./RuntimeRequestService.ts";
 import * as ThreadCommandExecutor from "./ThreadCommandExecutor.ts";
 import * as ThreadManagementService from "./ThreadManagementService.ts";
 import * as ThreadTitleRegenerationService from "./ThreadTitleRegenerationService.ts";
-import * as IdAllocator from "@t3tools/provider-core/server/IdAllocator";
-import { CodexProviderCapabilitiesV2 } from "./Adapters/CodexAdapterV2.ts";
-import * as ProjectionStore from "./ProjectionStore.ts";
-import * as ProviderAdapter from "@t3tools/provider-core/server/ProviderAdapter";
-import * as ProviderSessionManager from "./ProviderSessionManager.ts";
-import * as ProviderTurnStart from "./ProviderTurnStartService.ts";
-import * as RunExecutionService from "./RunExecutionService.ts";
-import * as ProviderUsageAnalytics from "../telemetry/ProviderUsageAnalytics.ts";
-import * as RuntimePolicy from "./RuntimePolicy.ts";
 import * as TurnItemPositionStore from "./TurnItemPositionStore.ts";
 
 const isDomainEvent = Schema.is(OrchestrationV2DomainEvent);

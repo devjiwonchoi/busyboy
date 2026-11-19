@@ -64,6 +64,7 @@ vi.mock("~/state/preview", async () => {
 import { readThreadPreviewState, resetPreviewStateForTests } from "~/previewStateStore";
 import { AppAtomRegistryProvider, appAtomRegistry } from "~/rpc/atomRegistry";
 import { previewEnvironment } from "~/state/preview";
+
 import { useDesktopHostedPreviewSessions } from "./usePreviewSession";
 
 describe("desktop-hosted preview session sync", () => {

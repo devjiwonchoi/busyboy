@@ -1,11 +1,45 @@
-import { rewindToMessage } from "./chat/chatViewSend";
-import * as session from "../state/session";
+import { ProviderDriverKind, type ServerProvider } from "@t3tools/contracts";
+import {
+  CommandId,
+  EnvironmentId,
+  MessageId,
+  ProjectId,
+  PROVIDER_SEND_TURN_MAX_ATTACHMENTS,
+  ProviderInstanceId,
+  ProviderSessionId,
+  ProviderThreadId,
+  ThreadId,
+  RunId,
+  TurnItemId,
+  type OrchestrationV2ProjectedTurnItem,
+  type WorktreeSetupSnapshot,
+} from "@t3tools/contracts";
+import { threadContextRecord } from "@t3tools/shared/composerContextReferences";
+import * as DateTime from "effect/DateTime";
+import * as Option from "effect/Option";
+import { AsyncResult, Atom } from "effect/reactivity";
+import { afterEach, describe, expect, it, vi } from "vite-plus/test";
+
+import { DraftId, hydrateImagesFromPersisted, useComposerDraftStore } from "../composerDraftStore";
 import {
   environmentContextRecord,
   environmentContextReference,
   threadContextReference,
 } from "../lib/composerContextRecords";
-import { threadContextRecord } from "@t3tools/shared/composerContextReferences";
+import {
+  responseContextRecord,
+  responseContextReference,
+  terminalContextReference,
+} from "../lib/composerContextRecords";
+import { ensureInlineContextReferences } from "../lib/composerContextReferences";
+import { deriveProviderInstanceEntries } from "../providerInstances";
+import { appAtomRegistry } from "../rpc/atomRegistry";
+import { derivePhase } from "../session-logic";
+import * as session from "../state/session";
+import { environmentThreadDetails } from "../state/threads";
+import { makeThreadFixture, makeThreadProjectionFixture } from "../test-fixtures";
+import type { Thread } from "../types";
+import { rewindToMessage } from "./chat/chatViewSend";
 import {
   prepareRevertedMessageAttachments,
   boundAttachmentIds,
@@ -23,40 +57,6 @@ import {
   recallCheckoutIsRepo,
   rememberCheckoutIsRepo,
 } from "./ChatView.logic";
-import { ProviderDriverKind, type ServerProvider } from "@t3tools/contracts";
-import { deriveProviderInstanceEntries } from "../providerInstances";
-import { ensureInlineContextReferences } from "../lib/composerContextReferences";
-import {
-  responseContextRecord,
-  responseContextReference,
-  terminalContextReference,
-} from "../lib/composerContextRecords";
-import {
-  CommandId,
-  EnvironmentId,
-  MessageId,
-  ProjectId,
-  PROVIDER_SEND_TURN_MAX_ATTACHMENTS,
-  ProviderInstanceId,
-  ProviderSessionId,
-  ProviderThreadId,
-  ThreadId,
-  RunId,
-  TurnItemId,
-  type OrchestrationV2ProjectedTurnItem,
-  type WorktreeSetupSnapshot,
-} from "@t3tools/contracts";
-import * as DateTime from "effect/DateTime";
-import * as Option from "effect/Option";
-import { afterEach, describe, expect, it, vi } from "vite-plus/test";
-import { AsyncResult, Atom } from "effect/reactivity";
-import { appAtomRegistry } from "../rpc/atomRegistry";
-import { environmentThreadDetails } from "../state/threads";
-
-import type { Thread } from "../types";
-import { DraftId, hydrateImagesFromPersisted, useComposerDraftStore } from "../composerDraftStore";
-import { derivePhase } from "../session-logic";
-import { makeThreadFixture, makeThreadProjectionFixture } from "../test-fixtures";
 import {
   getAntigravitySendBlockReason,
   resolveComposerProviderSelection,

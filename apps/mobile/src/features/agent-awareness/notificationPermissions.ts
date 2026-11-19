@@ -1,8 +1,8 @@
-import * as Notifications from "expo-notifications";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
-import { Platform } from "react-native";
+import * as Notifications from "expo-notifications";
 import { msg } from "gt-react-native";
+import { Platform } from "react-native";
 
 import { m } from "../../i18n/messages";
 

@@ -1,12 +1,15 @@
 // @effect-diagnostics nodeBuiltinImport:off -- Native extension installation uses isolated filesystem fixtures.
+
+import * as NodeEvents from "node:events";
 import * as NodeFSP from "node:fs/promises";
 import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
-import * as NodeEvents from "node:events";
+
 import type { Message, MessageBus } from "dbus-next";
 import { afterEach, beforeEach, expect, it, vi } from "vite-plus/test";
-import { GnomeCaptureSetup, installGnomeCaptureBundle } from "./GnomeCaptureSetup.ts";
+
 import { GNOME_CAPTURE_FILES, GNOME_CAPTURE_UUID } from "./gnomeCaptureBundle.ts";
+import { GnomeCaptureSetup, installGnomeCaptureBundle } from "./GnomeCaptureSetup.ts";
 
 let dataHome: string;
 const bundle = NodePath.resolve(import.meta.dirname, "../../gnome-extension");

@@ -7,12 +7,13 @@
 import * as NodeChildProcess from "node:child_process";
 import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
+
 import * as NodeWS from "@effect/platform-node/NodeWS";
 import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
+import { FetchHttpClient, HttpClient, HttpClientResponse } from "effect/http";
 import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
-import { FetchHttpClient, HttpClient, HttpClientResponse } from "effect/http";
 import { Socket } from "effect/socket";
 
 import { poolError } from "../mobile-e2e/device.ts";

@@ -1,13 +1,3 @@
-/**
- * Standalone issue trackers as Settings manages them: one credential per tracker kind in the
- * secret store, and the per-project binding that puts a tracker's scope beside the project's
- * git-host issues. Disconnecting clears the bindings that pointed at the tracker.
- */
-import * as Context from "effect/Context";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import * as Option from "effect/Option";
-import * as DateTime from "effect/DateTime";
 import {
   IssueTrackerConnectionError,
   IssueTrackerKind,
@@ -17,6 +7,16 @@ import {
   type IssueTrackerConnectionList,
 } from "@t3tools/contracts";
 import type { StandaloneIssueTrackerApi } from "@t3tools/source-control-core/server/IssueTracker";
+/**
+ * Standalone issue trackers as Settings manages them: one credential per tracker kind in the
+ * secret store, and the per-project binding that puts a tracker's scope beside the project's
+ * git-host issues. Disconnecting clears the bindings that pointed at the tracker.
+ */
+import * as Context from "effect/Context";
+import * as DateTime from "effect/DateTime";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 
 import * as ServerSecretStore from "../auth/ServerSecretStore.ts";
 import * as IssueTrackerBindings from "../persistence/IssueTrackerBindings.ts";

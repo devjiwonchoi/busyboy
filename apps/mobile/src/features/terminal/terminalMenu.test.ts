@@ -1,8 +1,6 @@
-import { describe, expect, it } from "vite-plus/test";
-
 import { DEFAULT_TERMINAL_ID } from "@t3tools/contracts";
-
 import { getTerminalLabel } from "@t3tools/shared/terminalLabels";
+import { describe, expect, it } from "vite-plus/test";
 
 import {
   nextOpenTerminalId,

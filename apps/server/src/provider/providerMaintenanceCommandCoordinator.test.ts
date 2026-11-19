@@ -3,8 +3,10 @@ import * as NodeChildProcess from "node:child_process";
 import * as NodeCrypto from "node:crypto";
 import * as NodeModule from "node:module";
 import * as NodeUtil from "node:util";
+
 import { assert, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
+
 import {
   machineLockFile,
   makeProviderMaintenanceCommandCoordinator,

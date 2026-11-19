@@ -1,5 +1,5 @@
-import { EnvironmentId, ThreadId } from "@t3tools/contracts";
 import { scopeThreadRef, scopedThreadKey } from "@t3tools/client-runtime/environment";
+import { EnvironmentId, ThreadId } from "@t3tools/contracts";
 import { AsyncResult } from "effect/reactivity";
 import { expect, it, vi } from "vite-plus/test";
 import { page } from "vite-plus/test/browser";
@@ -29,11 +29,12 @@ vi.mock("../state/server", async (original) => {
 });
 
 import { DEFAULT_CLIENT_SETTINGS } from "@t3tools/contracts/settings";
-import { __setClientSettingsForTests } from "../hooks/useSettings";
+
 import { ToastProvider } from "../components/ui/toast";
-import { AppAtomRegistryProvider } from "../rpc/atomRegistry";
-import { useRightPanelStore } from "../rightPanelStore";
 import { useDiffPanelStore } from "../diffPanelStore";
+import { __setClientSettingsForTests } from "../hooks/useSettings";
+import { useRightPanelStore } from "../rightPanelStore";
+import { AppAtomRegistryProvider } from "../rpc/atomRegistry";
 import { useOpenChangeRequestLink } from "./openPullRequestLink";
 
 const environmentId = EnvironmentId.make("local");

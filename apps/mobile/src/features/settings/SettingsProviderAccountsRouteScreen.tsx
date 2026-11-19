@@ -1,6 +1,6 @@
+import { useAtomValue } from "@effect/atom-react";
+import type { MenuAction } from "@react-native-menu/menu";
 import { errorDisplayMessage } from "@t3tools/client-runtime/errors";
-import { T, useGT, Var } from "gt-react-native";
-import * as Dialog from "../../components/ui/Dialog";
 import {
   isAtomCommandInterrupted,
   squashAtomCommandFailure,
@@ -12,30 +12,29 @@ import {
   type ProviderAuthResponse,
   type ServerProvider,
 } from "@t3tools/contracts";
-import { useAtomValue } from "@effect/atom-react";
+import { T, useGT, Var } from "gt-react-native";
 import { useRef, useState } from "react";
 import { Linking, Pressable, ScrollView, TextInput, useWindowDimensions, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { m } from "../../i18n/messages";
-
-import type { MenuAction } from "@react-native-menu/menu";
 
 import { AppActivityIndicator } from "../../components/ui/AppActivityIndicator";
 import { AppText as Text } from "../../components/ui/AppText";
 import { ControlPill } from "../../components/ui/ControlPill";
+import * as Dialog from "../../components/ui/Dialog";
+import { ListActionRow as SettingsActionRow } from "../../components/ui/ListActionRow";
 import { Menu } from "../../components/ui/Menu";
 import { ScreenScrollView } from "../../components/ui/ScreenScrollView";
+import { m } from "../../i18n/messages";
 import { environmentPresentations } from "../../state/presentation";
 import { useEnvironmentQuery } from "../../state/query";
 import { serverEnvironment } from "../../state/server";
 import { useEnvironmentsWithScope } from "../../state/session";
 import { useAtomCommand } from "../../state/use-atom-command";
-import { ListActionRow as SettingsActionRow } from "../../components/ui/ListActionRow";
+import { CLAUDE_DRIVER } from "./claude-accounts";
+import { AddClaudeAccount, ClaudeAccount } from "./ClaudeAccounts";
 import { useSettingsEnvironmentMenu } from "./components/SettingsEnvironmentFilterHeader";
 import { SettingsScreen } from "./components/SettingsScreen";
 import { SettingsSection } from "./components/SettingsSection";
-import { AddClaudeAccount, ClaudeAccount } from "./ClaudeAccounts";
-import { CLAUDE_DRIVER } from "./claude-accounts";
 import { useSettingsEnvironmentFilter, type SettingsTarget } from "./settings-environment-filter";
 
 export function SettingsProviderAccountsRouteScreen() {

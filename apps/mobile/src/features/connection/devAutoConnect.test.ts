@@ -1,4 +1,5 @@
 import * as NodeModule from "node:module";
+
 import type { NavigationState, PartialState } from "@react-navigation/native";
 import { expect, it, vi } from "vite-plus/test";
 

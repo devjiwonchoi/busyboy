@@ -2,8 +2,9 @@ import { HeaderHeightContext } from "@react-navigation/elements";
 import { use, useState, type ReactNode } from "react";
 import { View, type ColorValue } from "react-native";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
-import { NativeColumnLayoutMetricsContext } from "./native-layout-metrics";
+
 import type { NativeLayoutMetrics } from "../lib/reserved-regions";
+import { NativeColumnLayoutMetricsContext } from "./native-layout-metrics";
 import { NativeLayoutObserver } from "./NativeLayoutObserver";
 import {
   NativeWorkspaceTabActivityContext,

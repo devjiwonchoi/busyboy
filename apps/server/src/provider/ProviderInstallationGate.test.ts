@@ -1,5 +1,5 @@
-import { ProviderInstanceId } from "@t3tools/contracts";
 import { assert, it } from "@effect/vitest";
+import { ProviderInstanceId } from "@t3tools/contracts";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";

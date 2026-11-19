@@ -1,11 +1,11 @@
 /* oxlint-disable t3code/no-global-process-runtime -- Runs in the packaged engine before an Effect runtime exists. */
 // @effect-diagnostics nodeBuiltinImport:off
 import * as NodeFS from "node:fs";
-import * as NodePath from "node:path";
 import * as NodeModule from "node:module";
+import * as NodePath from "node:path";
+import * as NodeURL from "node:url";
 import * as NodeV8 from "node:v8";
 import * as NodeZlib from "node:zlib";
-import * as NodeURL from "node:url";
 
 export const runtimeIdentity = () =>
   [

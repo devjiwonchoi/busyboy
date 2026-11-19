@@ -1,29 +1,8 @@
 import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
-import { m as resolveMessage } from "~/i18n/messages";
-import { useEnvironmentScope } from "../../state/session";
-import { useEnvironmentsWithScope, readEnvironmentScope } from "../../state/session";
 import {
-  ChevronDownIcon,
-  CircleXIcon,
-  EllipsisIcon,
-  FileJsonIcon,
-  MinusIcon,
-  PlusIcon,
-  SearchIcon,
-  TriangleAlertIcon,
-  XIcon,
-} from "lucide-react";
-import { useLocation } from "@tanstack/react-router";
-import {
-  type KeyboardEvent,
-  type ReactNode,
-  type RefObject,
-  useReducer,
-  useRef,
-  useState,
-} from "react";
-import { flushSync } from "react-dom";
-import { T, useGT, useMessages } from "gt-react";
+  isAtomCommandInterrupted,
+  squashAtomCommandFailure,
+} from "@t3tools/client-runtime/state/runtime";
 import {
   AuthOrchestrationOperateScope,
   AuthSettingsWriteScope,
@@ -36,17 +15,39 @@ import {
   mergeWithDefaultKeybindings,
   parseKeybindingWhenExpression,
 } from "@t3tools/shared/keybindings";
+import { useLocation } from "@tanstack/react-router";
+import { T, useGT, useMessages } from "gt-react";
 import {
-  isAtomCommandInterrupted,
-  squashAtomCommandFailure,
-} from "@t3tools/client-runtime/state/runtime";
+  ChevronDownIcon,
+  CircleXIcon,
+  EllipsisIcon,
+  FileJsonIcon,
+  MinusIcon,
+  PlusIcon,
+  SearchIcon,
+  TriangleAlertIcon,
+  XIcon,
+} from "lucide-react";
+import {
+  type KeyboardEvent,
+  type ReactNode,
+  type RefObject,
+  useReducer,
+  useRef,
+  useState,
+} from "react";
+import { flushSync } from "react-dom";
 
-import { isElectron } from "../../env";
+import { m as resolveMessage } from "~/i18n/messages";
+
 import { useOpenInPreferredEditor } from "../../editorPreferences";
+import { isElectron } from "../../env";
 import { formatShortcutLabel } from "../../keybindings";
 import { cn } from "../../lib/utils";
 import { serverEnvironment } from "../../state/server";
-import { useSettingsScope } from "./SettingsScopeContext";
+import { useEnvironmentScope } from "../../state/session";
+import { useEnvironmentsWithScope, readEnvironmentScope } from "../../state/session";
+import { useAtomCommand } from "../../state/use-atom-command";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
@@ -55,8 +56,9 @@ import { Kbd, KbdGroup } from "../ui/kbd";
 import { Menu, MenuItem, MenuPopup, MenuTrigger } from "../ui/menu";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
-import { Toggle } from "../ui/toggle";
 import { toastManager } from "../ui/toast";
+import { Toggle } from "../ui/toggle";
+import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import {
   buildKeybindingRows,
   filterKeybindingRows,
@@ -79,9 +81,8 @@ import {
 } from "./KeybindingsSettings.logic";
 import { SettingsGroup } from "./SettingsGroup";
 import { SettingsPageContainer, SettingsRow, SettingsSection } from "./settingsLayout";
+import { useSettingsScope } from "./SettingsScopeContext";
 import { keybindingSearchAnchorId, useSearchableSetting } from "./settingsSearch";
-import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
-import { useAtomCommand } from "../../state/use-atom-command";
 
 function KeybindingPill({ value }: { value: string }) {
   // Keys dedupe repeated parts; a literal "+" in a shortcut splits into empty strings.

@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import type { ColorValue } from "react-native";
+
 import type { AppSymbolName } from "./AppSymbol";
 
 export interface AppBarAction {

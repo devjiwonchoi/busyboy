@@ -1,17 +1,18 @@
 import { useGT } from "gt-react-native";
+
 import {
   BASE_FONT_SIZE_STEP,
   MAX_BASE_FONT_SIZE,
   MIN_BASE_FONT_SIZE,
 } from "../../../../lib/appearancePreferences";
 import { SettingsSection } from "../../components/SettingsSection";
+import { SettingsSwitchRow } from "../../components/SettingsSwitchRow";
 import { useAppearancePreferences } from "../AppearancePreferencesProvider";
 import {
   AppearancePreviewSeparator,
   TextAppearancePreview,
 } from "../components/AppearancePreviews";
 import { FontSizeSliderRow } from "../components/FontSizeSliderRow";
-import { SettingsSwitchRow } from "../../components/SettingsSwitchRow";
 
 export function TextAppearanceSection() {
   const gt = useGT();

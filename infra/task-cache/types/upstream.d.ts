@@ -1,5 +1,6 @@
 // The source-only upstream package expects Wrangler-generated globals but does not ship them.
 import type * as Cloudflare from "@cloudflare/workers-types";
+
 import type { ProtocolBindings } from "../src/protocolTypes.ts";
 
 declare global {

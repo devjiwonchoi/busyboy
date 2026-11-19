@@ -1,5 +1,6 @@
 import type { LegendListRef } from "@legendapp/list/react";
 import { type RefObject } from "react";
+
 import { useStableCallback } from "./useStableCallback";
 
 /** Refresh scroll-derived UI when layout changes without a scroll event. */

@@ -1,28 +1,44 @@
-import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
-import { m } from "~/i18n/messages";
-import { pipe } from "effect/Function";
-import { ChevronsLeftRightEllipsisIcon, PlusIcon, TerminalIcon } from "lucide-react";
 import { useAtomValue } from "@effect/atom-react";
-import { type KeyboardEvent, type ReactNode, useEffect, useRef, useState } from "react";
-import { T, useGT, useMessages, Var } from "gt-react";
-import {
-  type DesktopDiscoveredSshHost,
-  type DesktopSshEnvironmentTarget,
-} from "@t3tools/contracts";
 import {
   RelayConnectionRegistration,
   RelayConnectionTarget,
 } from "@t3tools/client-runtime/connection";
+import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
 import {
   isAtomCommandInterrupted,
   squashAtomCommandFailure,
 } from "@t3tools/client-runtime/state/runtime";
+import {
+  type DesktopDiscoveredSshHost,
+  type DesktopSshEnvironmentTarget,
+} from "@t3tools/contracts";
+import { pipe } from "effect/Function";
 import * as Option from "effect/Option";
+import { T, useGT, useMessages, Var } from "gt-react";
+import { ChevronsLeftRightEllipsisIcon, PlusIcon, TerminalIcon } from "lucide-react";
+import { type KeyboardEvent, type ReactNode, useEffect, useRef, useState } from "react";
 
+import { environmentCatalog } from "~/connection/catalog";
+import {
+  connectPairing as connectPairingAtom,
+  connectSshEnvironment as connectSshEnvironmentAtom,
+} from "~/connection/onboarding";
+import { m } from "~/i18n/messages";
+import { desktopSshHostsStateAtom, filterDiscoveredSshHosts } from "~/state/desktopSshHosts";
+import { type EnvironmentPresentation, useRelayEnvironmentDiscovery } from "~/state/environments";
+import { useEnvironmentQuery } from "~/state/query";
+import { primaryServerKeybindingsAtom } from "~/state/server";
+
+import {
+  resolveShortcutCommand,
+  shortcutLabelForCommand,
+  threadJumpCommandForIndex,
+  threadJumpIndexFromCommand,
+} from "../../keybindings";
 import { cn } from "../../lib/utils";
-import { formatDesktopSshTarget } from "./EnvironmentRow";
-import { Input } from "../ui/input";
-import { CommandShortcut } from "../ui/command";
+import { useAtomCommand } from "../../state/use-atom-command";
+import { AnimatedHeight } from "../AnimatedHeight";
+import { Alert, AlertDescription } from "../ui/alert";
 import {
   Autocomplete,
   AutocompleteEmpty,
@@ -31,6 +47,8 @@ import {
   AutocompleteList,
   AutocompletePopup,
 } from "../ui/autocomplete";
+import { Button } from "../ui/button";
+import { CommandShortcut } from "../ui/command";
 import {
   Dialog,
   DialogDescription,
@@ -40,33 +58,16 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "../ui/dialog";
+import { Input } from "../ui/input";
 import { stackedThreadToast, toastManager } from "../ui/toast";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
-import { Alert, AlertDescription } from "../ui/alert";
-import { Button } from "../ui/button";
-import { AnimatedHeight } from "../AnimatedHeight";
-import { environmentCatalog } from "~/connection/catalog";
-import {
-  connectPairing as connectPairingAtom,
-  connectSshEnvironment as connectSshEnvironmentAtom,
-} from "~/connection/onboarding";
-import { useEnvironmentQuery } from "~/state/query";
-import { desktopSshHostsStateAtom, filterDiscoveredSshHosts } from "~/state/desktopSshHosts";
-import { type EnvironmentPresentation, useRelayEnvironmentDiscovery } from "~/state/environments";
-import { useAtomCommand } from "../../state/use-atom-command";
-import { primaryServerKeybindingsAtom } from "~/state/server";
-import {
-  resolveShortcutCommand,
-  shortcutLabelForCommand,
-  threadJumpCommandForIndex,
-  threadJumpIndexFromCommand,
-} from "../../keybindings";
 import {
   parseManualDesktopSshTarget,
   parsePairingUrlFields,
   parseRemotePairingFields,
   formatDesktopSshConnectionError,
 } from "./ConnectionsSettings.logic";
+import { formatDesktopSshTarget } from "./EnvironmentRow";
 
 const SSH_PROTOCOL_NAME = "SSH";
 const EMPTY_DISCOVERED_SSH_HOSTS: ReadonlyArray<DesktopDiscoveredSshHost> = [];

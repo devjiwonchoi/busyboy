@@ -4,8 +4,8 @@ import { createThreadVisitTracker } from "@t3tools/client-runtime/state/thread-v
 import { type ScopedThreadRef } from "@t3tools/contracts";
 
 import { environmentCatalog } from "../../connection/catalog";
-import { useUiStateStore } from "../../uiStateStore";
 import { environmentThreadShells, threadEnvironment } from "../../state/threads";
+import { useUiStateStore } from "../../uiStateStore";
 
 const threadVisitTracker = createThreadVisitTracker({
   threadShellAtom: environmentThreadShells.threadShellAtom,

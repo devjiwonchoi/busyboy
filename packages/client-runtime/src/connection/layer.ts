@@ -1,20 +1,20 @@
 import type { RelayEnvironmentStatusResponse } from "@t3tools/contracts/relay";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as Stream from "effect/Stream";
 import * as Option from "effect/Option";
+import * as Stream from "effect/Stream";
 import * as SubscriptionRef from "effect/SubscriptionRef";
-import { orchestrationProtocolCompatibilityError } from "./compatibility.ts";
 
-import * as ConnectionResolver from "./resolver.ts";
-import * as ConnectionDriver from "./driver.ts";
-import * as EnvironmentRegistry from "./registry.ts";
-import * as ConnectionOnboarding from "./onboarding.ts";
-import { connectionRoutes, hasRelayRoute } from "./routes.ts";
+import * as RemoteEnvironmentAuthorization from "../authorization/service.ts";
 import * as PlatformConnectionSource from "../platform/source.ts";
 import * as RelayEnvironmentDiscovery from "../relay/discovery.ts";
-import * as RemoteEnvironmentAuthorization from "../authorization/service.ts";
 import * as RpcSession from "../rpc/session.ts";
+import { orchestrationProtocolCompatibilityError } from "./compatibility.ts";
+import * as ConnectionDriver from "./driver.ts";
+import * as ConnectionOnboarding from "./onboarding.ts";
+import * as EnvironmentRegistry from "./registry.ts";
+import * as ConnectionResolver from "./resolver.ts";
+import { connectionRoutes, hasRelayRoute } from "./routes.ts";
 
 export const watchDiscoveredCompatibility = Effect.fn("connection.watchDiscoveredCompatibility")(
   function* () {

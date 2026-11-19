@@ -4,8 +4,8 @@ import { withUniwind } from "uniwind";
 
 import { cn } from "../../lib/cn";
 import { NATIVE_LIQUID_GLASS_SUPPORTED } from "../../native/native-glass";
-import { AppText } from "./AppText";
 import { SymbolView, type AppSymbolName } from "./AppSymbol";
+import { AppText } from "./AppText";
 
 const ChipGlass = withUniwind(GlassView, {
   style: { fromClassName: "className" },

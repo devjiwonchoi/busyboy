@@ -1,6 +1,7 @@
 import { requireNativeModule } from "expo";
 import { useEffect, useMemo, useState } from "react";
 import { AppState, Platform } from "react-native";
+
 import { createMessageTimeFormatter } from "./messageTimestamp";
 
 function systemUses24HourClock() {

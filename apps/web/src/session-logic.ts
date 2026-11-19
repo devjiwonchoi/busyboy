@@ -1,6 +1,19 @@
-import type { ThreadStructureRuntime } from "@t3tools/client-runtime/state/shell";
-import { msg } from "gt-react";
 import { resolveThreadWorkingStartedAt } from "@t3tools/client-runtime/state/models";
+import type { ThreadStructureRuntime } from "@t3tools/client-runtime/state/shell";
+import type { ThreadRunSummary, ThreadRuntimeSummary } from "@t3tools/client-runtime/state/shell";
+import type { ThreadCheckpointSummary } from "@t3tools/client-runtime/state/thread-checkpoints";
+import { threadRuntimeHasInterruptibleRun } from "@t3tools/client-runtime/state/thread-execution";
+import type {
+  ThreadPendingApproval,
+  ThreadPendingUserInput,
+} from "@t3tools/client-runtime/state/thread-requests";
+import { turnItemIsWorkspacePreparation } from "@t3tools/client-runtime/state/turn-item-presentation";
+import { turnItemDetailRevision } from "@t3tools/client-runtime/work-log/item-detail";
+import {
+  contextCompactionLabel,
+  workEntryIndicatesToolFailure,
+} from "@t3tools/client-runtime/work-log/presentation";
+import { extractToolActivityPresentation } from "@t3tools/client-runtime/work-log/tool-presentation";
 import {
   type AssetResource,
   type OrchestrationV2Checkpoint,
@@ -16,30 +29,21 @@ import {
   type ThreadId,
   type TurnItemId,
 } from "@t3tools/contracts";
-import { extractToolActivityPresentation } from "@t3tools/client-runtime/work-log/tool-presentation";
+import type { HtmlRenderReference } from "@t3tools/shared/htmlRender";
+import type { McpAppReference } from "@t3tools/shared/mcpApp";
 import { classifyToolActivity, collectToolFilePaths } from "@t3tools/shared/toolActivity";
 import { formatReadToolLabel, formatSearchToolLabel } from "@t3tools/shared/toolActivityCopy";
-import type { HtmlRenderReference } from "@t3tools/shared/htmlRender";
-import { turnItemDetailRevision } from "@t3tools/client-runtime/work-log/item-detail";
-import type { McpAppReference } from "@t3tools/shared/mcpApp";
 import {
   htmlRenderFromToolItem,
   mcpAppFromToolItem,
   sentMessageFromToolItem,
 } from "@t3tools/shared/toolOutput";
-import {
-  contextCompactionLabel,
-  workEntryIndicatesToolFailure,
-} from "@t3tools/client-runtime/work-log/presentation";
-import type { ThreadCheckpointSummary } from "@t3tools/client-runtime/state/thread-checkpoints";
-import type {
-  ThreadPendingApproval,
-  ThreadPendingUserInput,
-} from "@t3tools/client-runtime/state/thread-requests";
-import type { ThreadRunSummary, ThreadRuntimeSummary } from "@t3tools/client-runtime/state/shell";
-import { threadRuntimeHasInterruptibleRun } from "@t3tools/client-runtime/state/thread-execution";
-import { turnItemIsWorkspacePreparation } from "@t3tools/client-runtime/state/turn-item-presentation";
+import * as DateTime from "effect/DateTime";
+import * as Equal from "effect/Equal";
+import { msg } from "gt-react";
+import { shallow } from "zustand/vanilla/shallow";
 
+import { m, type MessageResolver } from "./i18n/messages";
 import {
   isImageAttachment,
   type ChatAttachment,
@@ -48,10 +52,6 @@ import {
   type SessionPhase,
   type TurnDiffSummary,
 } from "./types";
-import { m, type MessageResolver } from "./i18n/messages";
-import * as DateTime from "effect/DateTime";
-import * as Equal from "effect/Equal";
-import { shallow } from "zustand/vanilla/shallow";
 
 export {
   workEntryDisplayIndicatesToolFailure,

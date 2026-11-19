@@ -1,12 +1,12 @@
-import { Button } from "../../components/ui/Button";
-import { projectCloneDisplayName, type ProjectCloneSnapshot } from "@t3tools/contracts";
 import { projectCloneProgressSummary } from "@t3tools/client-runtime/contract-labels";
+import { projectCloneDisplayName, type ProjectCloneSnapshot } from "@t3tools/contracts";
 import { T, useGT, useMessages, Var } from "gt-react-native";
 import { View } from "react-native";
 
 import { AppActivityIndicator } from "../../components/ui/AppActivityIndicator";
-import { cn } from "../../lib/cn";
 import { AppText as Text } from "../../components/ui/AppText";
+import { Button } from "../../components/ui/Button";
+import { cn } from "../../lib/cn";
 
 export function ProjectCloneBanner(props: {
   readonly clone: ProjectCloneSnapshot;

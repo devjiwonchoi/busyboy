@@ -1,5 +1,6 @@
 import { type EnvironmentId, type MessageId, type RuntimeRequestId } from "@t3tools/contracts";
 import { useState } from "react";
+
 import { type ComposerSubmissionIntent } from "../../composer-logic";
 import { type SessionPhase, type Thread } from "../../types";
 import {

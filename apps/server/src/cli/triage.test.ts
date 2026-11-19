@@ -12,10 +12,10 @@ import { assert, it } from "@effect/vitest";
 import { TRIAGE_PROMPT_FILE_NAME } from "@t3tools/contracts";
 import * as HostProcess from "@t3tools/shared/HostProcess";
 import * as NetService from "@t3tools/shared/Net";
+import { Command } from "effect/cli";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
-import { Command } from "effect/cli";
 import * as TestConsole from "effect/testing/TestConsole";
 import { expect, vi } from "vite-plus/test";
 

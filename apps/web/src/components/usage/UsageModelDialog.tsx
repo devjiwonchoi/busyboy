@@ -1,6 +1,6 @@
-import { T, useGT, useLocale, Var } from "gt-react";
 import { formatPercent, formatTokens, formatUsd } from "@t3tools/shared/usageFormat";
 import { isModelCostUnknown, type ModelTotals } from "@t3tools/shared/usageMerge";
+import { T, useGT, useLocale, Var } from "gt-react";
 
 import { mergeAnsweredUsage, type EnvironmentUsageStatus } from "../../state/usage";
 import { ProviderInstanceIcon } from "../chat/ProviderInstanceIcon";
@@ -14,8 +14,6 @@ import {
   DialogPopup,
   DialogTitle,
 } from "../ui/dialog";
-import { UsageProviderChart, type UsageChartMetric } from "./UsageProviderChart";
-import { UsageShareBar } from "./UsageShareBar";
 import {
   cacheHitRate,
   costPerMillionTokens,
@@ -23,7 +21,9 @@ import {
   speedCostSegments,
   tokenTypeSegments,
 } from "./usageBreakdown";
+import { UsageProviderChart, type UsageChartMetric } from "./UsageProviderChart";
 import { PROVIDER_PRESENTATION } from "./usageProviders";
+import { UsageShareBar } from "./UsageShareBar";
 
 export interface UsageChartWindow {
   readonly days: readonly string[];

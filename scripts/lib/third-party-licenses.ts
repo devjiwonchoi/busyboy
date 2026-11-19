@@ -1,9 +1,9 @@
 // @effect-diagnostics nodeBuiltinImport:off globalFetch:off - Vite's build plugin runs before an Effect runtime exists.
 
 import * as NodeFSP from "node:fs/promises";
+import * as NodeModule from "node:module";
 import * as NodePath from "node:path";
 import * as NodeURL from "node:url";
-import * as NodeModule from "node:module";
 
 import type { Plugin } from "vite-plus";
 

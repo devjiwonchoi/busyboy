@@ -1,5 +1,4 @@
 import "~/index.css";
-
 import { RegistryContext } from "@effect/atom-react";
 import { scopeThreadRef } from "@t3tools/client-runtime/environment";
 import { type DeviceServiceState, type EnvironmentId, ThreadId } from "@t3tools/contracts";
@@ -15,8 +14,8 @@ import {
 } from "../../previewMiniPlayerStore";
 import { appAtomRegistry } from "../../rpc/atomRegistry";
 import { deviceEnvironment } from "../../state/device";
-import { ChatCanvas } from "../chat/ChatCanvas";
 import { createChatCanvasStore } from "../chat/canvasStore";
+import { ChatCanvas } from "../chat/ChatCanvas";
 import { deviceStreamScreenAtom } from "../device/deviceStreamSession";
 import { ThreadPreviewMiniPlayer, useThreadPreviewCanvasSource } from "./ThreadPreviewMiniPlayer";
 

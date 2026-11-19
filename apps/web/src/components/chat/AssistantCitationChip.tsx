@@ -15,23 +15,25 @@ import {
   type MouseEvent as ReactMouseEvent,
   type ReactNode,
 } from "react";
+
 import {
   findAssistantCitationSourceAnchor,
   type AssistantCitationSourceAnchor,
 } from "~/lib/assistantTextSelection";
+import { cn } from "~/lib/utils";
+import { useQuietThreadShell } from "~/state/entities";
+import { textDirection } from "~/textDirection";
+
 import {
   assistantCitationNavigation,
   assistantCitationRoute,
 } from "../../lib/assistantCitationNavigation";
-import { cn } from "~/lib/utils";
-import { useQuietThreadShell } from "~/state/entities";
 import { ContextChip, ContextChipAction, ContextChipLabel } from "../ContextChip";
 import { Popover, PopoverPopup, PopoverTrigger } from "../ui/popover";
-import { AssistantCitationCommentEditor } from "./AssistantCitationCommentEditor";
 import { resolveAssistantCitationCommentDismissal } from "./assistantCitationCommentDismissal";
+import { AssistantCitationCommentEditor } from "./AssistantCitationCommentEditor";
 import { observeAssistantCitationCommentSource } from "./AssistantCitationSource";
 import { composerFloatingLayerProps } from "./composerEventScope";
-import { textDirection } from "~/textDirection";
 
 function useCitationSourceLinkProps(citation: AssistantCitation) {
   const navigate = useNavigate();

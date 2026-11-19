@@ -1,8 +1,3 @@
-import { trimOptionalString as trimmed } from "@t3tools/source-control-core/server/pullRequestUtils";
-import * as Cause from "effect/Cause";
-import * as Exit from "effect/Exit";
-import * as Result from "effect/Result";
-import * as Schema from "effect/Schema";
 import type {
   PullRequestActor,
   PullRequestCheck,
@@ -26,6 +21,11 @@ import { TrimmedNonEmptyString } from "@t3tools/contracts";
 import { quoteGitPatchPath } from "@t3tools/shared/gitPatchPath";
 import { decodeJsonResult } from "@t3tools/shared/schemaJson";
 import type { ProviderChangeRequestWatchFingerprint } from "@t3tools/source-control-core/server/PullRequestProvider";
+import { trimOptionalString as trimmed } from "@t3tools/source-control-core/server/pullRequestUtils";
+import * as Cause from "effect/Cause";
+import * as Exit from "effect/Exit";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
 
 /** Unknown pipeline or merge status values must not fail the whole payload. */
 const RawUserSchema = Schema.Struct({

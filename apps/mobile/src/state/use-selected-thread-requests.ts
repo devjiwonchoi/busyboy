@@ -1,34 +1,10 @@
-import * as Dialog from "../components/ui/Dialog";
-import { msg } from "gt-react-native";
-import { m } from "../i18n/messages";
-import { useServerConfigs } from "./entities";
-import {
-  questionAttachmentDraftKey,
-  questionAttachmentDraftPrefix,
-  questionAttachmentPreparationAtom,
-} from "./question-attachments";
-import { scopedThreadKey } from "../lib/scopedEntities";
-import {
-  appendComposerDraftAttachments,
-  clearComposerDraft,
-  composerDraftsAtom,
-  getComposerDraftSnapshot,
-  questionAttachmentDraftsAtom,
-} from "./use-composer-drafts";
-import {
-  composerAttachmentUploadsAtom,
-  composerAttachmentUploadBlockReason,
-  composerAttachmentsStillUploading,
-} from "./composer-attachment-uploads";
 import { useAtomValue } from "@effect/atom-react";
-import { useRef, useState } from "react";
-
 import {
-  type EnvironmentId,
-  type ProviderApprovalDecision,
-  type RuntimeRequestId,
-  type ThreadId,
-} from "@t3tools/contracts";
+  buildPendingUserInputAnswers,
+  setPendingUserInputCustomAnswer,
+  togglePendingUserInputOptionSelection,
+  type PendingUserInputDraftAnswer,
+} from "@t3tools/client-runtime/state/pending-user-input";
 import {
   type PendingThreadRequests,
   type ThreadUserInputQuestion,
@@ -38,21 +14,44 @@ import {
   seedUserInputDraftAnswers,
   userInputDraftKey,
 } from "@t3tools/client-runtime/state/thread-requests";
+import {
+  type EnvironmentId,
+  type ProviderApprovalDecision,
+  type RuntimeRequestId,
+  type ThreadId,
+} from "@t3tools/contracts";
 import { AuthOrchestrationOperateScope } from "@t3tools/contracts";
 import { Atom } from "effect/reactivity";
+import { msg } from "gt-react-native";
+import { useRef, useState } from "react";
 
-import { environmentThreadDetails, threadEnvironment } from "./threads";
-import {
-  buildPendingUserInputAnswers,
-  setPendingUserInputCustomAnswer,
-  togglePendingUserInputOptionSelection,
-  type PendingUserInputDraftAnswer,
-} from "@t3tools/client-runtime/state/pending-user-input";
+import * as Dialog from "../components/ui/Dialog";
+import { m } from "../i18n/messages";
+import { scopedThreadKey } from "../lib/scopedEntities";
 import { appAtomRegistry } from "./atom-registry";
+import {
+  composerAttachmentUploadsAtom,
+  composerAttachmentUploadBlockReason,
+  composerAttachmentsStillUploading,
+} from "./composer-attachment-uploads";
+import { useServerConfigs } from "./entities";
+import {
+  questionAttachmentDraftKey,
+  questionAttachmentDraftPrefix,
+  questionAttachmentPreparationAtom,
+} from "./question-attachments";
+import { readEnvironmentScope } from "./session";
+import { environmentThreadDetails, threadEnvironment } from "./threads";
+import { useAtomCommand } from "./use-atom-command";
+import {
+  appendComposerDraftAttachments,
+  clearComposerDraft,
+  composerDraftsAtom,
+  getComposerDraftSnapshot,
+  questionAttachmentDraftsAtom,
+} from "./use-composer-drafts";
 import { useSelectedThreadPendingRequests } from "./use-thread-detail";
 import { useThreadSelection } from "./use-thread-selection";
-import { useAtomCommand } from "./use-atom-command";
-import { readEnvironmentScope } from "./session";
 
 const EMPTY_PENDING_REQUESTS: PendingThreadRequests = { approvals: [], userInputs: [] };
 

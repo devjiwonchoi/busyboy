@@ -10,8 +10,8 @@ import * as Clock from "effect/Clock";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Latch from "effect/Latch";
-import * as Stream from "effect/Stream";
 import type { RpcServer } from "effect/rpc";
+import * as Stream from "effect/Stream";
 
 const MAX_PENDING_CHUNKS = 8;
 const MAX_PENDING_BYTES = 64 * 1024;

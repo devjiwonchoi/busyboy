@@ -3,7 +3,6 @@ import { encodeSpeechPcmRequest } from "@t3tools/shared/speech";
 import * as NodeHttpServer from "@effect/platform-node/NodeHttpServer";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { it as effectIt } from "@effect/vitest";
-import { expect, vi } from "vite-plus/test";
 import {
   AuthSessionId,
   AuthOrchestrationOperateScope,
@@ -18,20 +17,22 @@ import {
   EnvironmentVoiceHttpApi,
 } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import * as Redacted from "effect/Redacted";
-import * as Schema from "effect/Schema";
-import * as HttpRouter from "effect/http/HttpRouter";
-import * as HttpServer from "effect/http/HttpServer";
 import * as HttpApi from "effect/http-api/HttpApi";
 import * as HttpApiBuilder from "effect/http-api/HttpApiBuilder";
+import * as HttpRouter from "effect/http/HttpRouter";
+import * as HttpServer from "effect/http/HttpServer";
+import * as Layer from "effect/Layer";
 import type * as NetAddress from "effect/net/NetAddress";
-import * as SpeechService from "./SpeechService.ts";
-import * as CloudSpeech from "./CloudSpeech.ts";
+import * as Redacted from "effect/Redacted";
+import * as Schema from "effect/Schema";
+import { expect, vi } from "vite-plus/test";
+
+import * as ProviderRegistry from "../provider/ProviderRegistry.ts";
 import * as ServerSettings from "../serverSettings.ts";
 import * as TextGeneration from "../textGeneration/TextGeneration.ts";
-import * as ProviderRegistry from "../provider/ProviderRegistry.ts";
+import * as CloudSpeech from "./CloudSpeech.ts";
 import { speechHttpApiLayer } from "./http.ts";
+import * as SpeechService from "./SpeechService.ts";
 
 const decodeSessionId = Schema.decodeUnknownSync(AuthSessionId);
 

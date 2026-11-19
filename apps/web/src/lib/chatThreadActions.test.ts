@@ -1,5 +1,6 @@
 import { ProviderInstanceId, type ModelSelection } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
+
 import { resolveNewThreadModelSelectionOverride } from "./chatThreadActions";
 
 const PROJECT_DEFAULT_SELECTION: ModelSelection = {

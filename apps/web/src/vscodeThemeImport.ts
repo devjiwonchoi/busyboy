@@ -1,8 +1,7 @@
-import { parse, type ParseError } from "jsonc-parser";
 import { msg } from "gt-react";
+import { parse, type ParseError } from "jsonc-parser";
 
 import { m } from "./i18n/messages";
-
 import {
   createVividThemeColors,
   getStandardThemeColors,

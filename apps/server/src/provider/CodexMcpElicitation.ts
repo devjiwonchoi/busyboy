@@ -1,6 +1,6 @@
 import type { ProviderApprovalDecision, ProviderApprovalOption } from "@t3tools/contracts";
-import * as Schema from "effect/Schema";
 import type * as EffectCodexSchema from "effect-codex-app-server/schema";
+import * as Schema from "effect/Schema";
 
 const NullableMcpElicitationString = Schema.NullOr(Schema.String);
 const McpElicitationMetadata = Schema.Struct({

@@ -9,6 +9,7 @@ import {
   Vector3,
 } from "three";
 import { expect, it } from "vite-plus/test";
+
 import { createDuoScene, duoDisplayKey, duoRawPoint } from "./duoScene.ts";
 
 function fixture() {

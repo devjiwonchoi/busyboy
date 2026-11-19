@@ -1,4 +1,5 @@
 import * as NodeModule from "node:module";
+
 import type { ParamListBase, StackNavigationState } from "@react-navigation/native";
 import { describe, expect, it } from "vite-plus/test";
 

@@ -1,5 +1,7 @@
-import { act, render } from "../../../test/render";
 import { expect, it, vi } from "vite-plus/test";
+
+import { act, render } from "../../../test/render";
+
 import "~/index.css";
 
 const { refresh, assetUrlState } = vi.hoisted(() => ({
@@ -40,10 +42,11 @@ vi.mock(import("./office/WordDocument"), async () => {
   };
 });
 
-import { AttachmentFilePreview } from "./AttachmentFilePreview";
 import JSZip from "jszip";
-import { OFFICE_PREVIEW_MAX_COLUMNS, type OfficeWorkerResult } from "./officePreviewProtocol";
+
+import { AttachmentFilePreview } from "./AttachmentFilePreview";
 import { WORD_LIMITS } from "./officeArchive";
+import { OFFICE_PREVIEW_MAX_COLUMNS, type OfficeWorkerResult } from "./officePreviewProtocol";
 import { previewErrorText, previewFailureText } from "./previewFailureMessages";
 
 it.each(["<w:body/>", "<w:body></w:body>"])(

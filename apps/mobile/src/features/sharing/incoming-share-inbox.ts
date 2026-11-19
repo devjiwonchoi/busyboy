@@ -2,7 +2,6 @@ import type { SharePayload } from "expo-sharing";
 import { msg } from "gt-react-native";
 
 import { m } from "../../i18n/messages";
-
 import { SerializedAsyncQueue } from "../../lib/serialized-async-queue";
 import {
   hasIncomingShareContent,

@@ -1,5 +1,6 @@
-import { useStableCallback } from "../../hooks/useStableCallback";
 import { useLayoutEffect, useRef } from "react";
+
+import { useStableCallback } from "../../hooks/useStableCallback";
 import {
   DRAFT_HERO_TRANSITION_ANIMATION_ID,
   DRAFT_HERO_TRANSITION_EASING,

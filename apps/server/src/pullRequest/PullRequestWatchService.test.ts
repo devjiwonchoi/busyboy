@@ -1,3 +1,4 @@
+import { describe, expect, it } from "@effect/vitest";
 import {
   ProjectId,
   ProviderInstanceId,
@@ -10,7 +11,6 @@ import {
   type ThreadPullRequestLink,
   SourceControlProviderKind,
 } from "@t3tools/contracts";
-import { describe, expect, it } from "@effect/vitest";
 import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -24,8 +24,8 @@ import {
 } from "../orchestration-v2/testkit/pullRequestFixtures.ts";
 import * as ProjectService from "../project/ProjectService.ts";
 import * as PullRequestService from "./PullRequestService.ts";
-import * as PullRequestWatchService from "./PullRequestWatchService.ts";
 import type { PullRequestTarget } from "./pullRequestTarget.ts";
+import * as PullRequestWatchService from "./PullRequestWatchService.ts";
 
 const PROJECT_ID = ProjectId.make("project-1");
 const THREAD_ID = ThreadId.make("thread-1");

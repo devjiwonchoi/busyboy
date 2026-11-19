@@ -1,8 +1,8 @@
 import { assert, describe, it } from "@effect/vitest";
-import * as Tracer from "effect/Tracer";
-import * as Effect from "effect/Effect";
-
 import { materializeReplayTranscriptWorkspace } from "@t3tools/provider-testing/replayTranscript";
+import * as Effect from "effect/Effect";
+import * as Tracer from "effect/Tracer";
+
 import { CodexOrchestratorReplayHarness } from "../Adapters/CodexAdapterV2.testkit.ts";
 import {
   findReplayFixture,

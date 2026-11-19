@@ -1,4 +1,3 @@
-import { msg } from "gt-react";
 import type { FileDiffContentsLoader, FileDiffMetadata } from "@pierre/diffs";
 import {
   squashAtomCommandFailure,
@@ -13,6 +12,7 @@ import type {
   ReviewDiffFileContentsResult,
   ReviewDiffPreviewSourceKind,
 } from "@t3tools/contracts";
+import { msg } from "gt-react";
 
 import { m } from "../i18n/messages";
 import { resolveFileDiffPath } from "./diffRendering";

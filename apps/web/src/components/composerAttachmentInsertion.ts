@@ -1,4 +1,5 @@
 import type { Editor, EditorEvents } from "@tiptap/core";
+
 import {
   flatToMarkdown,
   flatToPm,
@@ -6,12 +7,12 @@ import {
   pmToFlat,
   serializeEditorDoc,
 } from "../composer-rich-text-doc";
+import { markAsClipboardEdit } from "../composer-undo-grouping";
 import {
   type ComposerContextReference,
   formatInlineContextReference,
   inlineContextReferenceReplacement,
 } from "../lib/composerContextReferences";
-import { markAsClipboardEdit } from "../composer-undo-grouping";
 
 const INSERTION_ORDER_META = "composerAttachmentInsertionOrder";
 let nextInsertionOrder = 0;

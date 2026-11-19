@@ -1,30 +1,6 @@
 // @effect-diagnostics-next-line nodeBuiltinImport:off -- the SDK's spawn hook returns a Node child process.
 import * as NodeChildProcess from "node:child_process";
 
-import { resolveProviderProbeTimeoutMs } from "@t3tools/provider-core/server/snapshotProbe";
-import {
-  type ClaudeSettings,
-  type ModelCapabilities,
-  type ServerProvider,
-  type ServerProviderModel,
-  type ServerProviderSlashCommand,
-  type ServerProviderResetCredits,
-} from "@t3tools/contracts";
-import * as Cause from "effect/Cause";
-import * as DateTime from "effect/DateTime";
-import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
-import * as Option from "effect/Option";
-import * as Path from "effect/Path";
-import * as Ref from "effect/Ref";
-import * as Result from "effect/Result";
-import * as Schema from "effect/Schema";
-import { ChildProcess, ChildProcessSpawner } from "effect/process";
-import { createModelCapabilities } from "@t3tools/shared/model";
-import { envTrampoline, supportsEnvChdir } from "@t3tools/shared/envTrampoline";
-import * as HostProcess from "@t3tools/shared/HostProcess";
-import * as SpawnWorker from "../process/SpawnWorker.ts";
-import { resolveSpawnCommand } from "@t3tools/shared/shell";
 import {
   query as claudeQuery,
   type ModelInfo as ClaudeModelInfo,
@@ -35,7 +11,16 @@ import {
   type SettingSource,
   type SpawnOptions as ClaudeSpawnOptions,
 } from "@anthropic-ai/claude-agent-sdk";
-
+import {
+  type ClaudeSettings,
+  type ModelCapabilities,
+  type ServerProvider,
+  type ServerProviderModel,
+  type ServerProviderSlashCommand,
+  type ServerProviderResetCredits,
+} from "@t3tools/contracts";
+import type { ProviderWorkspaceSnapshot } from "@t3tools/provider-core/server/driver";
+import { resolveProviderProbeTimeoutMs } from "@t3tools/provider-core/server/snapshotProbe";
 import {
   buildServerProvider,
   COMPACT_SLASH_COMMAND,
@@ -47,24 +32,23 @@ import {
   spawnAndCollect,
   type ServerProviderDraft,
 } from "@t3tools/provider-core/server/snapshotProbe";
-import { resolveClaudeSdkExecutablePath } from "./Drivers/ClaudeExecutable.ts";
-import {
-  claudeSignedOutMessage,
-  hasClaudeManagedMcpConfig,
-  makeClaudeEnvironment,
-} from "./Drivers/ClaudeHome.ts";
-import {
-  customClaudeApiEndpointHost,
-  discoverClaudeSkills,
-  readClaudeSettingsEnv,
-} from "./Drivers/ClaudeSkills.ts";
-import type { ProviderWorkspaceSnapshot } from "@t3tools/provider-core/server/driver";
 import { makeUnavailableUsageLimits } from "@t3tools/provider-core/server/usageLimits";
-import {
-  type ClaudeScopedLimitNames,
-  claudeUsageResponseToLimits,
-  recordClaudeUsageResponse,
-} from "./claudeUsageLimits.ts";
+import { envTrampoline, supportsEnvChdir } from "@t3tools/shared/envTrampoline";
+import * as HostProcess from "@t3tools/shared/HostProcess";
+import { createModelCapabilities } from "@t3tools/shared/model";
+import { resolveSpawnCommand } from "@t3tools/shared/shell";
+import * as Cause from "effect/Cause";
+import * as DateTime from "effect/DateTime";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Option from "effect/Option";
+import * as Path from "effect/Path";
+import { ChildProcess, ChildProcessSpawner } from "effect/process";
+import * as Ref from "effect/Ref";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
+
+import * as SpawnWorker from "../process/SpawnWorker.ts";
 import {
   BUNDLED_CLAUDE_MODEL_CATALOG,
   CLAUDE_EFFORT_LEVELS,
@@ -78,6 +62,22 @@ import {
   resolveClaudeUpdateRequiredModels,
   withUltracodeToggle,
 } from "./ClaudeModelCatalog.ts";
+import {
+  type ClaudeScopedLimitNames,
+  claudeUsageResponseToLimits,
+  recordClaudeUsageResponse,
+} from "./claudeUsageLimits.ts";
+import { resolveClaudeSdkExecutablePath } from "./Drivers/ClaudeExecutable.ts";
+import {
+  claudeSignedOutMessage,
+  hasClaudeManagedMcpConfig,
+  makeClaudeEnvironment,
+} from "./Drivers/ClaudeHome.ts";
+import {
+  customClaudeApiEndpointHost,
+  discoverClaudeSkills,
+  readClaudeSettingsEnv,
+} from "./Drivers/ClaudeSkills.ts";
 
 const DEFAULT_CLAUDE_MODEL_CAPABILITIES: ModelCapabilities = createModelCapabilities({
   optionDescriptors: [],

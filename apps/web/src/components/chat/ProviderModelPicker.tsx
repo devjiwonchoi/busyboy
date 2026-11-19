@@ -1,3 +1,4 @@
+import { RegistryContext } from "@effect/atom-react";
 import {
   ANTIGRAVITY_DEFAULT_MODEL,
   type ProviderInstanceId,
@@ -5,7 +6,6 @@ import {
   type ProviderDriverKind,
   type ResolvedKeybindingsConfig,
 } from "@t3tools/contracts";
-import { RegistryContext } from "@effect/atom-react";
 import { T, useGT } from "gt-react";
 import {
   createContext,
@@ -17,22 +17,24 @@ import {
   useRef,
   useState,
 } from "react";
+
+import { cn } from "~/lib/utils";
+
+import { useMediaQuery } from "../../hooks/useMediaQuery";
+import { shortcutLabelForCommand } from "../../keybindings";
+import { shouldShowInstanceBadge, type ProviderInstanceEntry } from "../../providerInstances";
+import { serverEnvironment } from "../../state/server";
+import { useAtomCommand } from "../../state/use-atom-command";
 import { Badge } from "../ui/badge";
 import { Popover, PopoverPopup, PopoverTrigger } from "../ui/popover";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
-import { cn } from "~/lib/utils";
-import { useMediaQuery } from "../../hooks/useMediaQuery";
-import { ModelPickerContent, resolveModelPickerSelectedModel } from "./ModelPickerContent";
-import { retainedModelWhileProviderLocked } from "./ProviderModelPicker.logic";
 import { ChatGptSharingControl } from "./ChatGptSharingControl";
-import { ProviderInstanceIcon } from "./ProviderInstanceIcon";
-import { ModelEsque, getDisplayModelName, getTriggerDisplayModelName } from "./providerIconUtils";
-import { shouldShowInstanceBadge, type ProviderInstanceEntry } from "../../providerInstances";
 import { ComposerControl, type ComposerControlSize } from "./ComposerControl";
 import { takeOpenTarget, useComposerMenuProps } from "./composerEventScope";
-import { shortcutLabelForCommand } from "../../keybindings";
-import { serverEnvironment } from "../../state/server";
-import { useAtomCommand } from "../../state/use-atom-command";
+import { ModelPickerContent, resolveModelPickerSelectedModel } from "./ModelPickerContent";
+import { ModelEsque, getDisplayModelName, getTriggerDisplayModelName } from "./providerIconUtils";
+import { ProviderInstanceIcon } from "./ProviderInstanceIcon";
+import { retainedModelWhileProviderLocked } from "./ProviderModelPicker.logic";
 
 /** Holds the page still behind the open picker; its lifetime is the popup element's. */
 function lockBackgroundScroll(popup: HTMLElement | null) {

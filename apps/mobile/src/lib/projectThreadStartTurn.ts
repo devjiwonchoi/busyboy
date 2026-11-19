@@ -1,4 +1,8 @@
 import {
+  deriveThreadTitleSeed,
+  threadTitleTextFromPrompt,
+} from "@t3tools/client-runtime/operations";
+import {
   CommandId,
   MessageId,
   ThreadId,
@@ -9,10 +13,6 @@ import {
   type ProviderInteractionMode,
   type RuntimeMode,
 } from "@t3tools/contracts";
-import {
-  deriveThreadTitleSeed,
-  threadTitleTextFromPrompt,
-} from "@t3tools/client-runtime/operations";
 import { msg } from "gt-react-native";
 
 import { m } from "../i18n/messages";

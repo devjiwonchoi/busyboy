@@ -1,9 +1,9 @@
-import * as Effect from "effect/Effect";
+import { it } from "@effect/vitest";
 import * as HostProcess from "@t3tools/shared/HostProcess";
+import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
 import { app } from "electron";
 import { expect, vi } from "vite-plus/test";
-import { it } from "@effect/vitest";
-import * as Fiber from "effect/Fiber";
 
 const { getAppMetrics, kill } = vi.hoisted(() => ({ getAppMetrics: vi.fn(), kill: vi.fn() }));
 vi.mock("node:process", () => ({ kill }));

@@ -12,6 +12,8 @@ import {
   type SettingsSecretSlot,
   withSettingsSecrets,
 } from "@t3tools/contracts";
+import type { AnyProviderDriver, ProviderInstance } from "@t3tools/provider-core/server/driver";
+import * as SecretResolver from "@t3tools/secret-provider-core/server/SecretResolver";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Equal from "effect/Equal";
@@ -25,11 +27,8 @@ import * as Scope from "effect/Scope";
 import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
 
-import * as SecretResolver from "@t3tools/secret-provider-core/server/SecretResolver";
-
-import { buildUnavailableProviderSnapshot } from "./unavailableProviderSnapshot.ts";
 import * as ProviderInstanceRegistryMutator from "./ProviderInstanceRegistryMutator.ts";
-import type { AnyProviderDriver, ProviderInstance } from "@t3tools/provider-core/server/driver";
+import { buildUnavailableProviderSnapshot } from "./unavailableProviderSnapshot.ts";
 
 export class ProviderInstanceRegistry extends Context.Service<
   ProviderInstanceRegistry,

@@ -7,8 +7,8 @@ import type { Atom } from "effect/reactivity";
 import type * as Socket from "effect/socket/Socket";
 
 import { describeOutdatedHost, updateOutdatedHost } from "../connection/outdatedHostUpdate.ts";
-import type * as ConnectionResolver from "../connection/resolver.ts";
 import type * as EnvironmentRegistry from "../connection/registry.ts";
+import type * as ConnectionResolver from "../connection/resolver.ts";
 import type * as RelayEnvironmentDiscovery from "../relay/discovery.ts";
 import { createAtomCommandScheduler, createRuntimeCommand } from "./runtime.ts";
 import { serverUpdateFailure, serverUpdateStateAtom, type ServerUpdateStage } from "./server.ts";

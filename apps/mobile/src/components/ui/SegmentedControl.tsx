@@ -2,9 +2,9 @@ import { requireNativeView } from "expo";
 import { View, type NativeSyntheticEvent, type ViewProps } from "react-native";
 
 import { SegmentedControl as FlatSegmentedControl } from "./SegmentedControl.shared";
+import type { SegmentedControlProps } from "./SegmentedControl.types";
 import { segmentedControlColors } from "./segmentedControlColors";
 import { useControlTheme } from "./useControlTheme";
-import type { SegmentedControlProps } from "./SegmentedControl.types";
 
 export type { SegmentedControlProps } from "./SegmentedControl.types";
 

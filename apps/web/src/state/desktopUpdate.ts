@@ -2,10 +2,10 @@ import { useAtomValue } from "@effect/atom-react";
 import type { DesktopBridge, DesktopUpdateState } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Queue from "effect/Queue";
+import { Atom } from "effect/reactivity";
+import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
-import * as AsyncResult from "effect/reactivity/AsyncResult";
-import { Atom } from "effect/reactivity";
 import { msg } from "gt-react";
 
 import { m } from "../i18n/messages";

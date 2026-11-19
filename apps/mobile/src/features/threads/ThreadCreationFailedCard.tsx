@@ -1,8 +1,8 @@
 import { T, useGT } from "gt-react-native";
-import { Button } from "../../components/ui/Button";
 import { View } from "react-native";
 
 import { AppText as Text } from "../../components/ui/AppText";
+import { Button } from "../../components/ui/Button";
 
 export function ThreadCreationFailedCard(props: {
   readonly reason: string;

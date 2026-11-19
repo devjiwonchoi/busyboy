@@ -1,4 +1,5 @@
 import type { MaterialColors } from "@expo/ui/jetpack-compose";
+
 import { flattenThemeColor, type MobileThemeVariables } from "./mobileTheme";
 
 export function createNativeThemeColors(colors: MobileThemeVariables): MaterialColors {

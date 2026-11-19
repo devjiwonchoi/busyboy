@@ -1,13 +1,15 @@
 // @effect-diagnostics nodeBuiltinImport:off - worker threads and Node streams implement the platform spawner boundary.
-import * as NodeEvents from "node:events";
+
 import type * as NodeChildProcess from "node:child_process";
+import * as NodeEvents from "node:events";
 import * as NodeStream from "node:stream";
 import * as NodeWorkerThreads from "node:worker_threads";
+
 import * as NodeChildProcessSpawner from "@effect/platform-node-shared/NodeChildProcessSpawner";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 import { supportsEnvChdir } from "@t3tools/shared/envTrampoline";
 import * as HostProcess from "@t3tools/shared/HostProcess";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 
 // Windows runs CreateProcess synchronously on the calling thread, and antivirus or a busy disk can
 // hold it for seconds; Linux's spawn waits for chdir and the PATH search, which a hung mount

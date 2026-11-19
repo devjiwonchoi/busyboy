@@ -1,17 +1,17 @@
 #!/usr/bin/env node
 
+import { make as makeJsonSchemaGenerator } from "@effect/openapi-generator/JsonSchemaGenerator";
 import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import { make as makeJsonSchemaGenerator } from "@effect/openapi-generator/JsonSchemaGenerator";
+import { Command, Flag } from "effect/cli";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import { FetchHttpClient, HttpClient, HttpClientResponse } from "effect/http";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
 import * as Path from "effect/Path";
-import * as Schema from "effect/Schema";
-import { Command, Flag } from "effect/cli";
-import { FetchHttpClient, HttpClient, HttpClientResponse } from "effect/http";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
+import * as Schema from "effect/Schema";
 
 const V2_SCHEMA_RELEASE = "schema-v2.0.0-alpha.3";
 const V1_SCHEMA_RELEASE = "schema-v1.21.0";

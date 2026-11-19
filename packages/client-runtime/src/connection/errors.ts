@@ -1,8 +1,7 @@
 import type { ClientConnectionMethod, EnvironmentId } from "@t3tools/contracts";
 import type { RelayProtectedError } from "@t3tools/contracts/relay";
-import type { ManagedRelayClientError } from "../relay/managedRelay.ts";
 import { msg } from "gt-i18n";
-import { dpopFailureText, relayProtectedErrorText } from "../relay/errorPresentation.ts";
+
 import type { RemoteEnvironmentAuthError } from "../authorization/remote.ts";
 import { NETWORK_BLOCKING_HINT } from "../errors/network.ts";
 import {
@@ -11,6 +10,8 @@ import {
   markedTextEnglish,
   translatableDetail,
 } from "../errors/translatable.ts";
+import { dpopFailureText, relayProtectedErrorText } from "../relay/errorPresentation.ts";
+import type { ManagedRelayClientError } from "../relay/managedRelay.ts";
 import {
   ConnectionBlockedError,
   type ConnectionAttemptError,

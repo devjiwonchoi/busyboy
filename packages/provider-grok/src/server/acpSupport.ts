@@ -1,21 +1,21 @@
-import type * as EffectAcpSchema from "effect-acp/compat";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import {
   type ProviderApprovalOption,
   ProviderDriverKind,
   type RuntimeMode,
 } from "@t3tools/contracts";
-import type { GrokSettings } from "../settings.ts";
+import * as AcpSessionRuntime from "@t3tools/provider-acp/server/AcpSessionRuntime";
+import * as HostProcess from "@t3tools/shared/HostProcess";
+import { normalizeModelSlug } from "@t3tools/shared/model";
+import type * as EffectAcpSchema from "effect-acp/compat";
+import * as EffectAcpErrors from "effect-acp/errors";
 import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as Scope from "effect/Scope";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
-import * as EffectAcpErrors from "effect-acp/errors";
-import * as HostProcess from "@t3tools/shared/HostProcess";
-import { normalizeModelSlug } from "@t3tools/shared/model";
+import * as Scope from "effect/Scope";
 
-import * as AcpSessionRuntime from "@t3tools/provider-acp/server/AcpSessionRuntime";
+import type { GrokSettings } from "../settings.ts";
 import { makeXAiPromptCompletionRuntime } from "./xaiAcpExtension.ts";
 
 const GROK_API_KEY_ENV = "XAI_API_KEY";

@@ -1,6 +1,6 @@
-import { expect, it, vi } from "vite-plus/test";
-import { unified } from "unified";
 import remarkParse from "remark-parse";
+import { unified } from "unified";
+import { expect, it, vi } from "vite-plus/test";
 
 import { remarkKeepWindowsPaths, remarkKeepWindowsProsePaths } from "./markdownWindowsPaths.ts";
 

@@ -3,13 +3,13 @@ import { deadlineStore, minuteTick } from "@t3tools/client-runtime/clock";
 import { Atom } from "effect/reactivity";
 
 import {
-  reconcilePendingThreadOrder,
-  type PendingThreadOrder,
-} from "../features/threads/threadOrder";
-import {
   getThreadListV2OrderedSection,
   nextSnoozeWakeAfter,
 } from "../features/threads/threadListV2";
+import {
+  reconcilePendingThreadOrder,
+  type PendingThreadOrder,
+} from "../features/threads/threadOrder";
 import { appAtomRegistry } from "./atom-registry";
 import { environmentServerConfigsAtom } from "./server";
 import { steadyNavigationThreadShellsAtom } from "./threads";

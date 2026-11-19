@@ -1,11 +1,13 @@
 // @effect-diagnostics nodeBuiltinImport:off - raw sockets speak SOCKS5 to the proxy.
-import { describe, expect, it } from "@effect/vitest";
-import { vi } from "vite-plus/test";
-import * as Effect from "effect/Effect";
+
 import type * as NodeDns from "node:dns";
 import * as NodeDnsPromises from "node:dns/promises";
 import * as NodeNet from "node:net";
 import * as NodeOS from "node:os";
+
+import { describe, expect, it } from "@effect/vitest";
+import * as Effect from "effect/Effect";
+import { vi } from "vite-plus/test";
 
 import { publicProxy } from "./publicProxy.ts";
 

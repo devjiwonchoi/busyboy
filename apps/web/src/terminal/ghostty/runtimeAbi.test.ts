@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vite-plus/test";
 
+import pinnedVersion from "../../../../../native/libghostty-vt/VERSION?raw";
 import wasmDataUrl from "./vendor/ghostty-vt.wasm?inline";
 import writePtyWasmDataUrl from "./vendor/ghostty-write-pty.wasm?inline";
-import pinnedVersion from "../../../../../native/libghostty-vt/VERSION?raw";
 
 type WasmFunction = (...args: number[]) => number;
 

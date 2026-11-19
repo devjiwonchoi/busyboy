@@ -1,22 +1,36 @@
-import { errorDisplayMessage } from "@t3tools/client-runtime/errors";
-import * as Dialog from "./ui/Dialog";
-import { ComposerContextId } from "@t3tools/contracts";
 import { useAtomValue } from "@effect/atom-react";
-import { AsyncResult } from "effect/reactivity";
+import { errorDisplayMessage } from "@t3tools/client-runtime/errors";
 import { settlePromise, squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
-import { T, useGT } from "gt-react-native";
-import { useEffect, useState } from "react";
+import { ComposerContextId } from "@t3tools/contracts";
 import type { EnvironmentId } from "@t3tools/contracts";
-import { encodeComposerContextFragment } from "@t3tools/shared/composerContextClipboard";
-import { collectComposerContextReferences } from "@t3tools/shared/composerContextReferences";
 import {
   collectAssistantCitations,
   serializeAssistantCitation,
   withAssistantCitationComment,
 } from "@t3tools/shared/assistantCitations";
-import { AssistantCitationSheet } from "./AssistantCitationSheet";
+import { encodeComposerContextFragment } from "@t3tools/shared/composerContextClipboard";
+import { collectComposerContextReferences } from "@t3tools/shared/composerContextReferences";
+import { AsyncResult } from "effect/reactivity";
+import { T, useGT } from "gt-react-native";
+import { useEffect, useState } from "react";
+
+import { useOpenLinkedThread } from "../features/threads/useOpenLinkedThread";
+import { m } from "../i18n/messages";
+import {
+  assistantCitationDraftWithinLimit,
+  composerDocumentAttachment,
+  composerMentionPath,
+  type ComposerDocumentAttachment,
+} from "../lib/composerContext";
+import { importComposerContextClipboard } from "../lib/composerContextClipboard";
+import { enrichedModelDetails, enrichedModelReference } from "../lib/enrichedLinkPresentation";
 import { ComposerEditor as NativeComposerEditor } from "../native/T3ComposerEditor";
 import type { ComposerEditorProps as NativeComposerEditorProps } from "../native/T3ComposerEditor";
+import { appAtomRegistry } from "../state/atom-registry";
+import { startComposerDraftOperation } from "../state/composerDraftOperations";
+import { useModelMentions } from "../state/model-mentions";
+import { useLinkedEnvironments } from "../state/peerLinks";
+import { mobilePreferencesAtom } from "../state/preferences";
 import {
   appendComposerDraftAttachments,
   composerContextImportsAtom,
@@ -31,23 +45,10 @@ import {
   useComposerDraft,
   useComposerDraftResetGeneration,
 } from "../state/use-composer-drafts";
-import { importComposerContextClipboard } from "../lib/composerContextClipboard";
-import { startComposerDraftOperation } from "../state/composerDraftOperations";
-import { appAtomRegistry } from "../state/atom-registry";
-import { enrichedModelDetails, enrichedModelReference } from "../lib/enrichedLinkPresentation";
-import { useModelMentions } from "../state/model-mentions";
-import { mobilePreferencesAtom } from "../state/preferences";
-import { useOpenLinkedThread } from "../features/threads/useOpenLinkedThread";
-import { useLinkedEnvironments } from "../state/peerLinks";
+import { AssistantCitationSheet } from "./AssistantCitationSheet";
 import { ComposerContextSheet } from "./ComposerContextSheet";
 import { AppText as Text } from "./ui/AppText";
-import {
-  assistantCitationDraftWithinLimit,
-  composerDocumentAttachment,
-  composerMentionPath,
-  type ComposerDocumentAttachment,
-} from "../lib/composerContext";
-import { m } from "../i18n/messages";
+import * as Dialog from "./ui/Dialog";
 
 export type ComposerEditorProps = NativeComposerEditorProps & {
   readonly draftKey?: string | null;

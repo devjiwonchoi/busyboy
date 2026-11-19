@@ -16,16 +16,16 @@ import {
 import * as previewRuntime from "~/browser/previewRuntime";
 import { __setClientSettingsForTests } from "~/hooks/useSettings";
 import {
-  hostRightPanel,
-  selectActiveRightPanelSurface,
-  useRightPanelStore,
-} from "~/rightPanelStore";
-import {
   applyPreviewServerSnapshot,
   readThreadPreviewState,
   resetPreviewStateForTests,
   setActivePreviewTab,
 } from "~/previewStateStore";
+import {
+  hostRightPanel,
+  selectActiveRightPanelSurface,
+  useRightPanelStore,
+} from "~/rightPanelStore";
 
 import { openPreviewSession } from "./openPreviewSession";
 

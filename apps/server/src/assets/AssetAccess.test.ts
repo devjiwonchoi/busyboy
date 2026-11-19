@@ -1,8 +1,11 @@
 // @effect-diagnostics nodeBuiltinImport:off - tests inject swaps at the native open boundary.
-import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
-import * as NodeServices from "@effect/platform-node/NodeServices";
-import * as NodeHttpPlatform from "@effect/platform-node/NodeHttpPlatform";
+
 import * as NodeFSP from "node:fs/promises";
+
+import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
+import * as NodeHttpPlatform from "@effect/platform-node/NodeHttpPlatform";
+import * as NodeServices from "@effect/platform-node/NodeServices";
+import { describe, expect, it } from "@effect/vitest";
 import {
   AssetAccessError,
   AssetCreateUrlInput,
@@ -11,38 +14,37 @@ import {
   ThreadId,
   TurnItemId,
 } from "@t3tools/contracts";
-import { PROJECT_FAVICON_FALLBACK_MARKER } from "@t3tools/shared/projectFavicon";
+import * as HostProcess from "@t3tools/shared/HostProcess";
 import { MCP_APP_MAX_HTML_BYTES } from "@t3tools/shared/mcpApp";
-import { describe, expect, it } from "@effect/vitest";
+import { PROJECT_FAVICON_FALLBACK_MARKER } from "@t3tools/shared/projectFavicon";
+import { symlinksSupported } from "@t3tools/shared/testing/symlinks";
+import { fakeSourceControlDriverInstance } from "@t3tools/source-control-testing/fakeSourceControlDriver";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import { HttpClientRequest, HttpClientResponse, HttpServerResponse } from "effect/http";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as PlatformError from "effect/PlatformError";
 import * as Schema from "effect/Schema";
 import * as TestClock from "effect/testing/TestClock";
-import { HttpClientRequest, HttpClientResponse, HttpServerResponse } from "effect/http";
 import { vi } from "vite-plus/test";
 
-import * as AssetSigner from "./AssetSigner.ts";
 import * as ServerSecretStore from "../auth/ServerSecretStore.ts";
 import * as ServerConfig from "../config.ts";
-import { makeFakeWslHost } from "../testUtils/fakeWsl.ts";
+import { assetFileResponse } from "../http.ts";
 import * as Orchestrator from "../orchestration-v2/Orchestrator.ts";
 import * as ProjectFaviconResolver from "../project/ProjectFaviconResolver.ts";
-import * as T3ProjectFileLoader from "../project/T3ProjectFileLoader.ts";
-import * as WorkspacePaths from "../workspace/WorkspacePaths.ts";
-import { assetFileResponse } from "../http.ts";
-import { ASSET_ROUTE_PREFIX, issueAssetUrl, readMcpAppHtml, resolveAsset } from "./AssetAccess.ts";
-import * as NativeAppIconResolver from "./NativeAppIconResolver.ts";
 import * as RepositoryIdentityResolver from "../project/RepositoryIdentityResolver.ts";
-import { symlinksSupported } from "@t3tools/shared/testing/symlinks";
-import { fakeSourceControlDriverInstance } from "@t3tools/source-control-testing/fakeSourceControlDriver";
+import * as T3ProjectFileLoader from "../project/T3ProjectFileLoader.ts";
 import * as BuiltInDrivers from "../sourceControl/builtInDrivers.ts";
 import { sourceControlDefinitions } from "../sourceControl/sourceControlDefinitions.ts";
+import { makeFakeWslHost } from "../testUtils/fakeWsl.ts";
+import * as WorkspacePaths from "../workspace/WorkspacePaths.ts";
+import { ASSET_ROUTE_PREFIX, issueAssetUrl, readMcpAppHtml, resolveAsset } from "./AssetAccess.ts";
+import * as AssetSigner from "./AssetSigner.ts";
+import * as NativeAppIconResolver from "./NativeAppIconResolver.ts";
 import { sourceControlMediaResponse } from "./sourceControlMediaResponse.ts";
-import * as HostProcess from "@t3tools/shared/HostProcess";
 
 vi.mock("node:fs/promises", async (importOriginal) => {
   const actual = await importOriginal<typeof NodeFSP>();

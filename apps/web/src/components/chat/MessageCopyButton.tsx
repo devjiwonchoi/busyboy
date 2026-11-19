@@ -1,12 +1,14 @@
 import { useGT } from "gt-react";
-import { memo, useRef } from "react";
 import { CheckIcon, CopyIcon, type LucideIcon } from "lucide-react";
-import { Button } from "../ui/button";
+import { memo, useRef } from "react";
+
 import { useCopyToClipboard } from "~/hooks/useCopyToClipboard";
+
 import {
   ANCHORED_COPY_TOAST_TIMEOUT_MS,
   showAnchoredCopyErrorToast,
 } from "../ui/anchoredCopyToast";
+import { Button } from "../ui/button";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 
 export const MessageCopyButton = memo(function MessageCopyButton({

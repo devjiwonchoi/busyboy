@@ -1,18 +1,18 @@
 import { RegistryContext } from "@effect/atom-react";
 import {
+  AVAILABLE_CONNECTION_STATE,
+  type SupervisorConnectionState,
+} from "@t3tools/client-runtime/connection";
+import {
   DEFAULT_SERVER_SETTINGS,
   EnvironmentId,
   ProviderInstanceId,
   type ServerSettings,
   type ServerSettingsPatch,
 } from "@t3tools/contracts";
-import {
-  AVAILABLE_CONNECTION_STATE,
-  type SupervisorConnectionState,
-} from "@t3tools/client-runtime/connection";
+import { applyServerSettingsPatch } from "@t3tools/shared/serverSettings";
 import * as Cause from "effect/Cause";
 import { AsyncResult, Atom, AtomRegistry } from "effect/reactivity";
-import { applyServerSettingsPatch } from "@t3tools/shared/serverSettings";
 import type { ReactNode } from "react";
 import { describe, expect, it, vi } from "vite-plus/test";
 
@@ -77,6 +77,7 @@ vi.mock(import("~/state/use-atom-command"), async (original) => ({
 }));
 
 import { appAtomRegistry } from "~/rpc/atomRegistry";
+
 import {
   ensureClientSettingsHydrated,
   startModelPreferencesMigration,

@@ -6,11 +6,6 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 
 import * as ServerConfig from "../config.ts";
-import { resolveAntigravityInstanceDirectories } from "../provider/antigravityAuthSupport.ts";
-import {
-  ANTIGRAVITY_SUBAGENT_BATCH_TITLE,
-  describeAntigravitySubagentLaunches,
-} from "../provider/acp/AntigravityChildWork.ts";
 import {
   CHILD,
   invokeStep,
@@ -18,6 +13,11 @@ import {
   makeProfile,
   ROOT,
 } from "../provider/acp/AntigravityChildWork.testkit.ts";
+import {
+  ANTIGRAVITY_SUBAGENT_BATCH_TITLE,
+  describeAntigravitySubagentLaunches,
+} from "../provider/acp/AntigravityChildWork.ts";
+import { resolveAntigravityInstanceDirectories } from "../provider/antigravityAuthSupport.ts";
 import * as NativeChildWorkQuery from "./NativeChildWorkQuery.ts";
 import * as ThreadManagement from "./ThreadManagementService.ts";
 

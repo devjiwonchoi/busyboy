@@ -13,7 +13,6 @@ import { AsyncResult } from "effect/reactivity";
 import { msg } from "gt-react";
 
 import { m } from "../i18n/messages";
-
 import { readEnvironmentScope } from "./session";
 import { useAtomCommand } from "./use-atom-command";
 

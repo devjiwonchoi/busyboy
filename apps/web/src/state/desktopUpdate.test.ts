@@ -1,6 +1,6 @@
 import type { DesktopUpdateState } from "@t3tools/contracts";
-import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { AtomRegistry } from "effect/reactivity";
+import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 
 import { createDesktopUpdateStateAtom } from "./desktopUpdate";

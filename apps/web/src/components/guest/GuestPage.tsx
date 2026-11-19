@@ -1,3 +1,11 @@
+import type { LegendListRef } from "@legendapp/list/react";
+import { formatAttachmentSize } from "@t3tools/client-runtime/state/attachments";
+import {
+  deriveRunlessWorkStartedAt,
+  deriveThreadActivityRun,
+  deriveThreadStructureRuntime,
+} from "@t3tools/client-runtime/state/thread-execution";
+import { createQuestionHistoryProjector } from "@t3tools/client-runtime/state/thread-requests";
 import {
   EnvironmentId,
   GUEST_MESSAGE_MAX_LENGTH,
@@ -14,16 +22,9 @@ import {
   type ThreadGuestMessage,
   type ThreadGuestMessageStatus,
 } from "@t3tools/contracts";
-import type { LegendListRef } from "@legendapp/list/react";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
-import { formatAttachmentSize } from "@t3tools/client-runtime/state/attachments";
-import {
-  deriveRunlessWorkStartedAt,
-  deriveThreadActivityRun,
-  deriveThreadStructureRuntime,
-} from "@t3tools/client-runtime/state/thread-execution";
-import { createQuestionHistoryProjector } from "@t3tools/client-runtime/state/thread-requests";
+import { msg, T, useGT, useMessages } from "gt-react";
 import { ArrowUpIcon, PaperclipIcon, XIcon } from "lucide-react";
 import {
   useEffect,
@@ -34,31 +35,30 @@ import {
   type FormEvent,
   type KeyboardEvent,
 } from "react";
-import { msg, T, useGT, useMessages } from "gt-react";
-
-import { m } from "~/i18n/messages";
 
 import { useIncrementalTimelineEntries } from "~/hooks/useIncrementalTimelineEntries";
 import { useNowMinute } from "~/hooks/useNowMinute";
 import { useStableCallback } from "~/hooks/useStableCallback";
 import { useTheme } from "~/hooks/useTheme";
+import { m } from "~/i18n/messages";
 import { cn } from "~/lib/utils";
 import { deriveActiveWorkStartedAt, derivePhase } from "~/session-logic";
+
 import { ComposerControl, ComposerControlIcon } from "../chat/ComposerControl";
 import type { ExpandedImagePreview } from "../chat/ExpandedImagePreview";
 import { GuestMessageAttachments } from "../chat/GuestMessageAttachments";
-import { HostImageUrlContext } from "../chat/hostImageUrl";
-import { PierreEntryIcon } from "../chat/PierreEntryIcon";
 import { GuestMessageName, guestBubbleClassName } from "../chat/guestMessageStyle";
+import { HostImageUrlContext } from "../chat/hostImageUrl";
 import { MessagesTimeline, type MessagesTimelineHistoryControls } from "../chat/MessagesTimeline";
-import { ProviderInstanceIcon } from "../chat/ProviderInstanceIcon";
+import { PierreEntryIcon } from "../chat/PierreEntryIcon";
 import { getDisplayModelName, getTriggerDisplayModelName } from "../chat/providerIconUtils";
+import { ProviderInstanceIcon } from "../chat/ProviderInstanceIcon";
 import { ScrollToEndButton } from "../chat/TimelineOverlays";
 import type { TimelineRow } from "../chat/timelineRowContext";
 import { useTimelineFollow } from "../chat/useTimelineFollow";
-import { GuestHtmlRender } from "./GuestHtmlRender";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
+import { GuestHtmlRender } from "./GuestHtmlRender";
 import {
   applyGuestStreamEvent,
   formatGuestExpiry,

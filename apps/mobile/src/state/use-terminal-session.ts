@@ -16,8 +16,8 @@ import {
 import { useMemo } from "react";
 
 import { useEnvironmentQuery } from "./query";
-import { terminalEnvironment } from "./terminal";
 import { useEnvironmentScope } from "./session";
+import { terminalEnvironment } from "./terminal";
 
 type LegacyTerminalSessionState = TerminalSessionState & { readonly buffer: string };
 const EMPTY_LEGACY_TERMINAL_SESSION_STATE: LegacyTerminalSessionState = {

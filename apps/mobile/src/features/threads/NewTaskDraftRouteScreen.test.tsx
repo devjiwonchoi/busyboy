@@ -1,7 +1,7 @@
+import { AsyncResult } from "effect/reactivity";
 import type { ReactNode } from "react";
 import { act, useSyncExternalStore } from "react";
 import { createRoot } from "react-dom/client";
-import { AsyncResult } from "effect/reactivity";
 import { expect, it, vi } from "vite-plus/test";
 
 interface Snapshot {

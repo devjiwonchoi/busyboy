@@ -3,18 +3,20 @@ import * as NodeChildProcess from "node:child_process";
 import * as NodeFS from "node:fs";
 import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
-import { expect } from "vite-plus/test";
+
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import * as Option from "effect/Option";
 import { afterAll, assert, describe, it } from "@effect/vitest";
 import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
+import * as Option from "effect/Option";
+import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import * as Sink from "effect/Sink";
 import * as Stream from "effect/Stream";
-import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import * as TestClock from "effect/testing/TestClock";
+import { expect } from "vite-plus/test";
 
+import { decide, readWorkspace } from "../.github/scripts/ci-changes.cjs";
 import {
   comparisonBase,
   defaultConcurrency,
@@ -25,7 +27,6 @@ import {
   splitTests,
   type Step,
 } from "./check-changed.ts";
-import { decide, readWorkspace } from "../.github/scripts/ci-changes.cjs";
 
 const GiB = 1024 ** 3;
 

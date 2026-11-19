@@ -1,11 +1,4 @@
-import { requestGuarded, runStreamGuarded } from "../rpc/client.ts";
-import { EnvironmentSupervisor } from "../connection/supervisor.ts";
-import * as SubscriptionRef from "effect/SubscriptionRef";
-import * as Option from "effect/Option";
-import * as Stream from "effect/Stream";
-import type { RpcSession } from "../rpc/session.ts";
 import { describe, expect, it } from "@effect/vitest";
-import { vi } from "vite-plus/test";
 import {
   AuthAccessReadScope,
   AuthAccessWriteScope,
@@ -29,12 +22,20 @@ import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import { Atom, AtomRegistry, AsyncResult } from "effect/reactivity";
-import { EnvironmentRegistry } from "../connection/registry.ts";
-import { createCommandPermissions } from "./commandPermissions.ts";
-import { createEnvironmentRpcCommand } from "./runtime.ts";
+import * as Stream from "effect/Stream";
+import * as SubscriptionRef from "effect/SubscriptionRef";
+import { vi } from "vite-plus/test";
+
 import { AVAILABLE_CONNECTION_STATE, BearerConnectionTarget } from "../connection/model.ts";
+import { EnvironmentRegistry } from "../connection/registry.ts";
+import { EnvironmentSupervisor } from "../connection/supervisor.ts";
+import { requestGuarded, runStreamGuarded } from "../rpc/client.ts";
+import type { RpcSession } from "../rpc/session.ts";
+import { createCommandPermissions } from "./commandPermissions.ts";
 import { createPeerLinkEnvironmentAtoms } from "./peerLinks.ts";
+import { createEnvironmentRpcCommand } from "./runtime.ts";
 
 vi.mock("./session.ts", () => ({
   createEnvironmentSessionAtoms: () => ({ sessionStateAtom: sessions }),

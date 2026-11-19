@@ -1,11 +1,3 @@
-import { msg } from "gt-react";
-import {
-  AuthOrchestrationOperateScope,
-  AuthOrchestrationReadScope,
-  PROVIDER_SEND_TURN_SUPPORTED_IMAGE_MIME_TYPES,
-  type ChatAttachment,
-  type EnvironmentId,
-} from "@t3tools/contracts";
 import { parseScopedThreadKey } from "@t3tools/client-runtime/environment";
 import { errorDisplayMessage } from "@t3tools/client-runtime/errors";
 import { resolveAssetUrl } from "@t3tools/client-runtime/state/assets";
@@ -19,11 +11,19 @@ import {
   verifyPersistedAttachmentUpload,
   type PersistedAttachmentVerification,
 } from "@t3tools/client-runtime/state/attachments";
-import { create } from "zustand";
+import {
+  AuthOrchestrationOperateScope,
+  AuthOrchestrationReadScope,
+  PROVIDER_SEND_TURN_SUPPORTED_IMAGE_MIME_TYPES,
+  type ChatAttachment,
+  type EnvironmentId,
+} from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as Option from "effect/Option";
 import { AsyncResult } from "effect/reactivity";
+import { msg } from "gt-react";
+import { create } from "zustand";
 
 import {
   DraftId,
@@ -32,13 +32,13 @@ import {
   type ComposerImageAttachment,
   type ComposerThreadTarget,
 } from "../composerDraftStore";
-import { appAtomRegistry } from "../rpc/atomRegistry";
 import { environmentCatalog } from "../connection/catalog";
+import { m } from "../i18n/messages";
+import { appAtomRegistry } from "../rpc/atomRegistry";
 import { assetEnvironment } from "../state/assets";
 import { attachmentEnvironment } from "../state/attachments";
 import { readEnvironmentScope, readPreparedConnection } from "../state/session";
 import type { AttachmentUploadState, ReadyAttachmentUpload } from "./attachmentUploadState";
-import { m } from "../i18n/messages";
 
 const MAX_UPLOADS_PER_ENVIRONMENT = 3;
 const UPLOAD_TIMEOUT_MS = 5 * 60_000;

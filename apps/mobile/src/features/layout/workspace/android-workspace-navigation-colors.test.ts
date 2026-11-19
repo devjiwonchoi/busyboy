@@ -1,10 +1,10 @@
-import { describe, expect, it } from "vite-plus/test";
 import { Hct, SchemeTonalSpot, argbFromHex, hexFromArgb } from "@material/material-color-utilities";
+import { describe, expect, it } from "vite-plus/test";
 
+import type { MaterialYouPalette } from "../../../lib/materialYouPalette";
+import { materialYouPaletteToMobileThemeVariables } from "../../../lib/materialYouTheme.android";
 import { MOBILE_THEME_IDS } from "../../../lib/mobileTheme";
 import { getMobileThemeRuntimeVariables } from "../../../lib/mobileThemeVariables";
-import { materialYouPaletteToMobileThemeVariables } from "../../../lib/materialYouTheme.android";
-import type { MaterialYouPalette } from "../../../lib/materialYouPalette";
 import { androidWorkspaceNavigationColors } from "./android-workspace-navigation-colors";
 
 function luminance(hex: string) {

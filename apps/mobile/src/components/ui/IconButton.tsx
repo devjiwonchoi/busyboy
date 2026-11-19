@@ -1,8 +1,8 @@
-import type { IconButtonProps } from "./IconButton.types";
-import { cn } from "../../lib/cn";
 import { Pressable } from "react-native";
 
+import { cn } from "../../lib/cn";
 import { SymbolView } from "./AppSymbol";
+import type { IconButtonProps } from "./IconButton.types";
 
 const VARIANT_CLASS_NAMES = {
   standard: ["", "accent-foreground"],

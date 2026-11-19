@@ -1,12 +1,12 @@
+import { describe, expect, it } from "@effect/vitest";
 import { SourceControlProviderKind } from "@t3tools/contracts";
 import { ProjectId, type PullRequestSummary, type VcsStatusResult } from "@t3tools/contracts";
-import { describe, expect, it } from "@effect/vitest";
 
+import { newestPullRequestSummary } from "../state/pullRequests";
 import {
   resolveDisplayedThreadPr,
   resolveDisplayedThreadPrProvider,
 } from "./ThreadStatusIndicators";
-import { newestPullRequestSummary } from "../state/pullRequests";
 
 function status(overrides: Partial<VcsStatusResult> = {}): VcsStatusResult {
   return {

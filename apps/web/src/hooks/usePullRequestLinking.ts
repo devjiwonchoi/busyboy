@@ -1,4 +1,5 @@
-import type { EnvironmentId, ScopedThreadRef, ThreadPullRequestLink } from "@t3tools/contracts";
+import { useAtomValue } from "@effect/atom-react";
+import { sourceControlClients } from "@t3tools/client-runtime/source-control-clients";
 import {
   isAtomCommandInterrupted,
   squashAtomCommandFailure,
@@ -11,8 +12,7 @@ import {
   threadPullRequestKeysEqual,
   visibleThreadPullRequests,
 } from "@t3tools/client-runtime/thread-pull-requests";
-import { sourceControlClients } from "@t3tools/client-runtime/source-control-clients";
-import { useAtomValue } from "@effect/atom-react";
+import type { EnvironmentId, ScopedThreadRef, ThreadPullRequestLink } from "@t3tools/contracts";
 import { Atom } from "effect/reactivity";
 import { msg } from "gt-react";
 

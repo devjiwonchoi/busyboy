@@ -1,5 +1,5 @@
-import { expect } from "e2e";
 import type { Browser } from "@e2e-dev/web";
+import { expect } from "e2e";
 
 import { test, WEB } from "./t3.ts";
 

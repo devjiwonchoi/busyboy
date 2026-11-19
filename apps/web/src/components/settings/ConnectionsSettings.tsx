@@ -1,12 +1,11 @@
-import { errorDisplayMessage, thrownErrorMessage } from "@t3tools/client-runtime/errors";
-import { m as resolveMessage } from "~/i18n/messages";
-import { managedCapabilityDenial } from "@t3tools/client-runtime/contract-labels";
-import { SessionPermissions } from "./SessionPermissions";
-import { useSearch } from "@tanstack/react-router";
-import { ChevronRightIcon, EllipsisIcon } from "lucide-react";
 import { useAtomValue } from "@effect/atom-react";
-import { type ReactNode, useState } from "react";
-import { T, useGT, useMessages, Var } from "gt-react";
+import { managedCapabilityDenial } from "@t3tools/client-runtime/contract-labels";
+import { errorDisplayMessage, thrownErrorMessage } from "@t3tools/client-runtime/errors";
+import {
+  isAtomCommandInterrupted,
+  settlePromise,
+  squashAtomCommandFailure,
+} from "@t3tools/client-runtime/state/runtime";
 import {
   AuthAccessReadScope,
   AuthAccessWriteScope,
@@ -22,36 +21,69 @@ import {
   EnvironmentId,
   resolveEnvironmentMachineKind,
 } from "@t3tools/contracts";
-import {
-  isAtomCommandInterrupted,
-  settlePromise,
-  squashAtomCommandFailure,
-} from "@t3tools/client-runtime/state/runtime";
+import { useSearch } from "@tanstack/react-router";
 import * as Cause from "effect/Cause";
+import { T, useGT, useMessages, Var } from "gt-react";
+import { ChevronRightIcon, EllipsisIcon } from "lucide-react";
+import { type ReactNode, useState } from "react";
+
+import { hasCloudPublicConfig } from "~/cloud/publicConfig";
+import { requestConfirmDialog } from "~/confirmDialog";
+import { environmentCatalog } from "~/connection/catalog";
+import { isDesktopLocalConnectionTarget } from "~/connection/desktopLocal";
+import { type ServerClientSessionRecord } from "~/environments/primary";
+import { useUpdateEnvironmentSettings } from "~/hooks/useSettings";
+import { m as resolveMessage } from "~/i18n/messages";
+import { authEnvironment } from "~/state/auth";
+import {
+  desktopNetworkAccessStateAtom,
+  refreshDesktopNetworkAccessState,
+} from "~/state/desktopNetworkAccess";
+import { useDesktopUpdateState } from "~/state/desktopUpdate";
+import { desktopWslAccessStateAtom, refreshDesktopWslState } from "~/state/desktopWslState";
+import { environmentIdsKey } from "~/state/environmentAtomList";
+import {
+  type EnvironmentPresentation,
+  useEnvironment,
+  useEnvironments,
+  usePrimaryEnvironment,
+} from "~/state/environments";
+import { usePeerLinkHosts } from "~/state/peerLinks";
+import { useEnvironmentQuery } from "~/state/query";
+import { environmentUpdateStatesAtom, serverEnvironment } from "~/state/server";
+import {
+  readEnvironmentScope,
+  useEnvironmentScope,
+  useEnvironmentSessionState,
+} from "~/state/session";
+import { useUiStateStore } from "~/uiStateStore";
+import {
+  resolveServerConfigVersionMismatch,
+  resolveServerSelfUpdateCapability,
+  supportsDesktopAppUpdate,
+} from "~/versionSkew";
 
 import { isLocalEnvironmentDisabled } from "../../localEnvironment";
-import {
-  applyWslEnableSelection,
-  connectDeviceName,
-  isWslSettingsRowVisible,
-  missingTailscaleEndpointDescription,
-  resolveLocalVersionStatusLabel,
-  resolveTailscaleServeBaseUrl,
-} from "./ConnectionsSettings.logic";
-import { settingsScopeEnvironmentLabel } from "./settingsScopeAxis";
-import { useAccessEnvironment } from "./useAccessEnvironment";
-import { SettingsPageContainer, SettingsRow, SettingsSection } from "./settingsLayout";
+import { useAtomCommand } from "../../state/use-atom-command";
+import { RemoveT3ConnectEnvironmentDialog } from "../clerk/RemoveT3ConnectEnvironmentDialog";
+import { EnvironmentMachineIcon } from "../EnvironmentMachineIcon";
 import { ManagedByOrganization } from "../ManagedPolicy";
-import { LocalEnvironmentSetting } from "./LocalEnvironmentSetting";
-import { useSearchableSetting } from "./settingsSearch";
-import { ConnectDeviceApprovalSettings } from "./ConnectDeviceApprovalSettings";
-import { EnvironmentIconMenu } from "./EnvironmentIconPicker";
-import { FoldedSettingsSection } from "./FoldedSettingsSection";
-import { LinkedEnvironmentsSettings } from "./LinkedEnvironmentsSettings";
-import { usePeerLinkHosts } from "~/state/peerLinks";
-import { LoadBalancingSettings } from "./LoadBalancingSettings";
-import { PullRequestRoutingSettings } from "./PullRequestRoutingSettings";
-import { Input } from "../ui/input";
+import {
+  ServerUpdateAction,
+  ServerUpdateProgress,
+  ServerUpdatesAction,
+  type ServerUpdateTarget,
+} from "../ServerUpdateAction";
+import {
+  AlertDialog,
+  AlertDialogClose,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogPopup,
+  AlertDialogTitle,
+} from "../ui/alert-dialog";
+import { Button } from "../ui/button";
 import {
   Dialog,
   DialogClose,
@@ -62,65 +94,30 @@ import {
   DialogPopup,
   DialogTitle,
 } from "../ui/dialog";
-import { ScrollArea } from "../ui/scroll-area";
-import {
-  AlertDialog,
-  AlertDialogClose,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogPopup,
-  AlertDialogTitle,
-} from "../ui/alert-dialog";
-import { Spinner } from "../ui/spinner";
-import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
+import { Input } from "../ui/input";
 import { Menu, MenuPopup, MenuTrigger } from "../ui/menu";
+import { ScrollArea } from "../ui/scroll-area";
+import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
+import { Spinner } from "../ui/spinner";
 import { Switch } from "../ui/switch";
 import { stackedThreadToast, toastManager } from "../ui/toast";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
-import { Button } from "../ui/button";
-import { EnvironmentMachineIcon } from "../EnvironmentMachineIcon";
-import { type ServerClientSessionRecord } from "~/environments/primary";
-import { isDesktopLocalConnectionTarget } from "~/connection/desktopLocal";
-import { useUiStateStore } from "~/uiStateStore";
+import { AddEnvironmentDialog } from "./AddEnvironmentDialog";
 import {
-  resolveServerConfigVersionMismatch,
-  resolveServerSelfUpdateCapability,
-  supportsDesktopAppUpdate,
-} from "~/versionSkew";
-import { hasCloudPublicConfig } from "~/cloud/publicConfig";
-import { RemoveT3ConnectEnvironmentDialog } from "../clerk/RemoveT3ConnectEnvironmentDialog";
-import { authEnvironment } from "~/state/auth";
-import { environmentCatalog } from "~/connection/catalog";
+  AdvertisedEndpointListRow,
+  AuthorizedClientsHeaderAction,
+  NetworkAccessDescription,
+  PairingClientsList,
+} from "./AuthorizedClientsSettings";
+import { ConnectDeviceApprovalSettings } from "./ConnectDeviceApprovalSettings";
 import {
-  readEnvironmentScope,
-  useEnvironmentScope,
-  useEnvironmentSessionState,
-} from "~/state/session";
-import { useEnvironmentQuery } from "~/state/query";
-import {
-  desktopNetworkAccessStateAtom,
-  refreshDesktopNetworkAccessState,
-} from "~/state/desktopNetworkAccess";
-import { desktopWslAccessStateAtom, refreshDesktopWslState } from "~/state/desktopWslState";
-import { useDesktopUpdateState } from "~/state/desktopUpdate";
-import {
-  type EnvironmentPresentation,
-  useEnvironment,
-  useEnvironments,
-  usePrimaryEnvironment,
-} from "~/state/environments";
-import { requestConfirmDialog } from "~/confirmDialog";
-import { useUpdateEnvironmentSettings } from "~/hooks/useSettings";
-import { useAtomCommand } from "../../state/use-atom-command";
-import { environmentIdsKey } from "~/state/environmentAtomList";
-import { environmentUpdateStatesAtom, serverEnvironment } from "~/state/server";
-import {
-  ServerUpdateAction,
-  ServerUpdateProgress,
-  ServerUpdatesAction,
-  type ServerUpdateTarget,
-} from "../ServerUpdateAction";
+  applyWslEnableSelection,
+  connectDeviceName,
+  isWslSettingsRowVisible,
+  missingTailscaleEndpointDescription,
+  resolveLocalVersionStatusLabel,
+  resolveTailscaleServeBaseUrl,
+} from "./ConnectionsSettings.logic";
 import {
   sortDesktopPairingLinks,
   summarizeAuthorizedClients,
@@ -132,23 +129,27 @@ import {
   isTailscaleHttpsEndpoint,
   endpointDefaultPreferenceKey,
 } from "./ConnectionsSettings.logic";
-import {
-  AdvertisedEndpointListRow,
-  AuthorizedClientsHeaderAction,
-  NetworkAccessDescription,
-  PairingClientsList,
-} from "./AuthorizedClientsSettings";
+import { EnvironmentIconMenu } from "./EnvironmentIconPicker";
+import { FoldedSettingsSection } from "./FoldedSettingsSection";
 import { ITEM_ROW_CLASSNAME } from "./itemRows";
+import { LinkedEnvironmentsSettings } from "./LinkedEnvironmentsSettings";
+import { LoadBalancingSettings } from "./LoadBalancingSettings";
+import { LocalEnvironmentSetting } from "./LocalEnvironmentSetting";
+import { PullRequestRoutingSettings } from "./PullRequestRoutingSettings";
+import {
+  type ConnectDeviceRevokeRequest,
+  RevokeConnectDeviceDialog,
+} from "./RevokeConnectDeviceDialog";
 import {
   CloudLinkRow,
   CloudRemoteEnvironmentRows,
   SavedBackendListRow,
 } from "./SavedEnvironmentRows";
-import { AddEnvironmentDialog } from "./AddEnvironmentDialog";
-import {
-  type ConnectDeviceRevokeRequest,
-  RevokeConnectDeviceDialog,
-} from "./RevokeConnectDeviceDialog";
+import { SessionPermissions } from "./SessionPermissions";
+import { SettingsPageContainer, SettingsRow, SettingsSection } from "./settingsLayout";
+import { settingsScopeEnvironmentLabel } from "./settingsScopeAxis";
+import { useSearchableSetting } from "./settingsSearch";
+import { useAccessEnvironment } from "./useAccessEnvironment";
 
 // Sessions T3 Connect minted for a device signed in to the linked account.
 const CLOUD_CONNECT_SESSION_SUBJECT = "cloud-connect";

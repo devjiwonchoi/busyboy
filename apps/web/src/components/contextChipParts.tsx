@@ -9,19 +9,20 @@ import {
   type MouseEvent,
   type ReactNode,
 } from "react";
-import { useAssetUrlState } from "~/assets/assetUrls";
-import { documentChipKindForFileName } from "~/pierre-icons";
 
+import { useAssetUrlState } from "~/assets/assetUrls";
 import { PULL_REQUEST_STATE_PRESENTATION } from "~/components/pullRequest/pullRequestIcons";
 import type { PullRequestContextDisplayState } from "~/lib/composerContextRecords";
+import { usePullRequestPreviewTarget } from "~/lib/openPullRequestLink";
+import { documentChipKindForFileName } from "~/pierre-icons";
+
 import { PierreEntryIcon } from "./chat/PierreEntryIcon";
 import { middleTruncateAttachmentName } from "./composerInlineChip";
-import { PullRequestContextDetails } from "./PullRequestContextDetails";
 import { ContextChip, ContextChipLabel, type ContextChipKind } from "./ContextChip";
+import { PullRequestLinkPreview } from "./pullRequest/PullRequestLinkPreview";
+import { PullRequestContextDetails } from "./PullRequestContextDetails";
 import { Popover, PopoverPopup, PopoverTitle, PopoverTrigger } from "./ui/popover";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "./ui/tooltip";
-import { PullRequestLinkPreview } from "./pullRequest/PullRequestLinkPreview";
-import { usePullRequestPreviewTarget } from "~/lib/openPullRequestLink";
 
 export const PULL_REQUEST_CHIP_KINDS = {
   open: "pr-open",

@@ -1,14 +1,14 @@
-import { errorDisplayMessage } from "../errors/translatable.ts";
-import * as Schema from "effect/Schema";
 import { replaceTextRange } from "@t3tools/shared/composerTrigger";
+import * as Schema from "effect/Schema";
+import { mFallback, msg } from "gt-i18n";
+import type { MFunctionType } from "gt-i18n/types";
 
+import { errorDisplayMessage } from "../errors/translatable.ts";
 import {
   VoiceTranscriptionError,
   type PreparedVoiceTranscription,
   type VoiceTranscriber,
 } from "./transcription.ts";
-import { mFallback, msg } from "gt-i18n";
-import type { MFunctionType } from "gt-i18n/types";
 
 const isVoiceTranscriptionError = Schema.is(VoiceTranscriptionError);
 

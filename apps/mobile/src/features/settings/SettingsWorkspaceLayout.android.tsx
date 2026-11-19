@@ -1,5 +1,5 @@
-import { T, useGT } from "gt-react-native";
 import { NavigationRouteContext } from "@react-navigation/native";
+import { T, useGT } from "gt-react-native";
 import { Activity, useState, type ReactNode } from "react";
 import { View } from "react-native";
 
@@ -7,8 +7,8 @@ import { AppText } from "../../components/ui/AppText";
 import { PaneContext } from "../../components/ui/Pane";
 import { useAdaptiveWorkspaceLayout } from "../layout/adaptive-workspace-context";
 import { useAndroidWorkspaceRoot } from "../layout/workspace/AndroidWorkspaceTabsProvider";
-import { SettingsListScreen } from "./SettingsRouteScreen";
 import { SettingsScreen } from "./components/SettingsScreen";
+import { SettingsListScreen } from "./SettingsRouteScreen";
 
 const SETTINGS_LIST_ROUTE = { key: "settings-sidebar", name: "Settings" };
 

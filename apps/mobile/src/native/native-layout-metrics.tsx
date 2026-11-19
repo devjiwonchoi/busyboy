@@ -1,5 +1,6 @@
 import { createContext, use, useState, type ReactNode } from "react";
 import { Platform } from "react-native";
+
 import { deriveDeviceType, isDuoDevice, type DeviceType } from "../lib/device-type";
 import type { NativeLayoutMetrics } from "../lib/reserved-regions";
 import { NativeLayoutObserver } from "./NativeLayoutObserver";

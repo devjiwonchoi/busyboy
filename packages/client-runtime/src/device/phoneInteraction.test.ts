@@ -1,4 +1,5 @@
 import { expect, it, vi } from "vite-plus/test";
+
 import { createPhoneInteraction, phoneWheelNavigation } from "./phoneInteraction.ts";
 
 it("keeps a captured screen gesture separate from orbit and ends it once on cancellation", () => {

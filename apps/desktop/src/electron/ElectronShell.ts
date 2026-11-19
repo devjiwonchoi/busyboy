@@ -1,4 +1,3 @@
-import { MAC_PERMISSION_SETTINGS_URLS } from "../permissions/MacPermission.ts";
 import {
   isLocalEditorFileUrl,
   REMOTE_CAPABLE_EDITOR_IDS,
@@ -9,8 +8,9 @@ import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
-
 import * as Electron from "electron";
+
+import { MAC_PERMISSION_SETTINGS_URLS } from "../permissions/MacPermission.ts";
 
 // Remote editor deep links and local editor file links must reach the OS handler.
 const SAFE_WEB_PROTOCOLS = new Set(["http:", "https:"]);

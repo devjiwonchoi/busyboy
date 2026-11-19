@@ -1,17 +1,18 @@
 import { useNavigation, useRoute, StackActions } from "@react-navigation/native";
 import { isStandaloneIssueLink, resolveIssueLinkTarget } from "@t3tools/client-runtime/issue-links";
+import { isAtomCommandInterrupted } from "@t3tools/client-runtime/state/runtime";
+import { EnvironmentId, ThreadId } from "@t3tools/contracts";
+
+import { tryOpenExternalUrl } from "../lib/openExternalUrl";
 import {
   nativePullRequestDestination,
   pullRequestCandidateForIssueLink,
 } from "../lib/pullRequestNavigation";
-import { isAtomCommandInterrupted } from "@t3tools/client-runtime/state/runtime";
-import { EnvironmentId, ThreadId } from "@t3tools/contracts";
-import { useProjects, useThreadShell } from "../state/entities";
-import { tryOpenExternalUrl } from "../lib/openExternalUrl";
 import { appAtomRegistry } from "../state/atom-registry";
-import { environmentServerConfigsAtom } from "../state/server";
+import { useProjects, useThreadShell } from "../state/entities";
 import { issueTrackerEnvironment } from "../state/issueTrackers";
 import { composerPullRequests } from "../state/pull-requests";
+import { environmentServerConfigsAtom } from "../state/server";
 import { useAtomQueryRunner } from "../state/use-atom-query-runner";
 import { withKnownPullRequestSummary } from "../state/use-thread-pr";
 

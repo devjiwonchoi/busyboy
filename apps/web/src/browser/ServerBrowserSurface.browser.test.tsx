@@ -1,9 +1,9 @@
-import { EnvironmentId } from "@t3tools/contracts";
 import type {
   PreviewStreamControl,
   PreviewStreamEvents,
   PreviewStreamInput,
 } from "@t3tools/client-runtime/preview/server-browser-stream";
+import { EnvironmentId } from "@t3tools/contracts";
 import { describe, expect, it, vi } from "vite-plus/test";
 import { userEvent } from "vite-plus/test/browser";
 

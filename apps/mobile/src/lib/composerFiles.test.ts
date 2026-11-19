@@ -1,6 +1,6 @@
-import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import { PROVIDER_SEND_TURN_MAX_IMAGE_BYTES } from "@t3tools/contracts";
 import type { ImagePickerAsset } from "expo-image-picker";
+import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 const mocks = vi.hoisted(() => ({
   documentUri: "file:///documents",
@@ -88,6 +88,7 @@ vi.mock("expo-image-manipulator", () => ({
 }));
 vi.mock("./uuid", () => ({ uuidv4: () => "attachment-id" }));
 
+import { retainComposerAttachmentFile } from "./composerAttachmentFiles";
 import {
   persistComposerAttachmentFile,
   isComposerImageAttachment,
@@ -97,7 +98,6 @@ import {
   removePersistedComposerAttachmentFile,
 } from "./composerImages";
 import { isForegroundHandoffActive } from "./foreground-handoff";
-import { retainComposerAttachmentFile } from "./composerAttachmentFiles";
 
 describe("composer file attachments", () => {
   beforeEach(() => {

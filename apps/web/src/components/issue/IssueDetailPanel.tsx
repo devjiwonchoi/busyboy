@@ -1,6 +1,5 @@
 import { RegistryContext, useAtomValue } from "@effect/atom-react";
 import { issueEventSentence, issueWriteAccess } from "@t3tools/client-runtime/issue-presentation";
-import { createIssueCommentPager } from "@t3tools/client-runtime/state/issues";
 import {
   issueAssigneeHeld,
   issueAssigneesAfterPicks,
@@ -11,6 +10,7 @@ import {
   noIssuePicks,
 } from "@t3tools/client-runtime/issue-selection";
 import { isSelected, toggleSelection } from "@t3tools/client-runtime/pull-request-selection";
+import { createIssueCommentPager } from "@t3tools/client-runtime/state/issues";
 import { executeAtomQuery, squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
 import type {
   EnvironmentId,
@@ -26,6 +26,7 @@ import type {
   PullRequestRef,
   ScopedThreadRef,
 } from "@t3tools/contracts";
+import { msg, T, useGT, useMessages, Var } from "gt-react";
 import {
   CheckIcon,
   ChevronDownIcon,
@@ -34,44 +35,43 @@ import {
   UserPlusIcon,
   UsersIcon,
 } from "lucide-react";
-import { msg, T, useGT, useMessages, Var } from "gt-react";
 import { useContext, useState, type ReactNode } from "react";
 
 import { RefreshIcon } from "~/components/ui/refresh-icon";
 import { m } from "~/i18n/messages";
-import { issueEnvironment, refreshIssueLists } from "~/state/issues";
+import { cn } from "~/lib/utils";
 import { useProjects } from "~/state/entities";
+import { issueEnvironment, refreshIssueLists } from "~/state/issues";
 import { useEnvironmentQuery } from "~/state/query";
 import { useAtomCommand } from "~/state/use-atom-command";
 import { formatRelativeTimeLabel } from "~/timestampFormat";
 
-import { Alert, AlertDescription, AlertTitle } from "../ui/alert";
-import { Button, InlineButton } from "../ui/button";
-import { Input } from "../ui/input";
-import { Menu, MenuItem, MenuPopup, MenuTrigger } from "../ui/menu";
-import { cn } from "~/lib/utils";
-import { PullRequestMetaRow, PullRequestSection } from "../pullRequest/PullRequestSummaryTab";
-import { toastManager } from "../ui/toast";
 import { PullRequestCandidatePicker } from "../pullRequest/PullRequestCandidatePicker";
 import { PullRequestCommentBody } from "../pullRequest/PullRequestCommentBody";
+import { readableFailure } from "../pullRequest/pullRequestDetail.logic";
 import { PullRequestDetailTitleRow } from "../pullRequest/PullRequestDetailLayout";
 import { PullRequestEditButton } from "../pullRequest/PullRequestEditButton";
+import { pullRequestLabelColor } from "../pullRequest/pullRequestList.logic";
 import { PullRequestMarkdown } from "../pullRequest/PullRequestMarkdown";
 import { PullRequestMarkdownEditor } from "../pullRequest/PullRequestMarkdownEditor";
-import { readableFailure } from "../pullRequest/pullRequestDetail.logic";
-import { pullRequestLabelColor } from "../pullRequest/pullRequestList.logic";
 import {
   PullRequestActorLabel,
   PullRequestLabelChip,
   PullRequestMetaLine,
   PullRequestStateGlyph,
 } from "../pullRequest/pullRequestPresentation";
+import { ReactionBar } from "../pullRequest/PullRequestReactions";
+import { PullRequestMetaRow, PullRequestSection } from "../pullRequest/PullRequestSummaryTab";
+import { PullRequestsUnavailableState } from "../pullRequest/PullRequestsUnavailableState";
+import { Alert, AlertDescription, AlertTitle } from "../ui/alert";
+import { Button, InlineButton } from "../ui/button";
+import { Input } from "../ui/input";
+import { Menu, MenuItem, MenuPopup, MenuTrigger } from "../ui/menu";
+import { toastManager } from "../ui/toast";
 import { IssueCommentComposer } from "./IssueCommentComposer";
 import { IssueDetailGhost } from "./IssueDetailGhost";
-import { IssueThreadLinks } from "./IssueThreadLinks";
-import { ReactionBar } from "../pullRequest/PullRequestReactions";
-import { PullRequestsUnavailableState } from "../pullRequest/PullRequestsUnavailableState";
 import { issueTrackerPresentation, issueStatePresentation } from "./issuePresentation";
+import { IssueThreadLinks } from "./IssueThreadLinks";
 
 function IssueReactionBar({
   reactions,

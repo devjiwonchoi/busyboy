@@ -1,6 +1,6 @@
 import DOMPurify from "dompurify";
-import type { DiagramType, MathResolver } from "pele/lazy";
 import { T, useGT, Var } from "gt-react";
+import type { DiagramType, MathResolver } from "pele/lazy";
 import { use, useState } from "react";
 
 import { serializeCodeBlockToMarkdown } from "../../markdown-clipboard";

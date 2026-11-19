@@ -1,11 +1,10 @@
-import { msg } from "gt-react-native";
-
-import { m } from "../../i18n/messages";
 import type {
   EnvironmentProject,
   EnvironmentThreadShell,
 } from "@t3tools/client-runtime/state/shell";
+import { msg } from "gt-react-native";
 
+import { m } from "../../i18n/messages";
 import type {
   AgentActivityPhase,
   AgentActivityProps,

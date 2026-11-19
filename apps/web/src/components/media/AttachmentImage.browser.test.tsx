@@ -1,7 +1,8 @@
-import { act, render, type Screen } from "../../../test/render";
 import { expect, it, vi } from "vite-plus/test";
-import { AttachmentImage } from "./AttachmentImage";
+
+import { act, render, type Screen } from "../../../test/render";
 import { decodeImagePreview } from "../files/decodeImagePreview";
+import { AttachmentImage } from "./AttachmentImage";
 
 vi.mock("../files/decodeImagePreview", () => ({
   decodeImagePreview: vi.fn(),

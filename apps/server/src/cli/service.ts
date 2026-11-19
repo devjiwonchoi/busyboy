@@ -1,13 +1,13 @@
 import * as NodeUtil from "node:util";
 
 import * as HostProcess from "@t3tools/shared/HostProcess";
+import { Command, Flag, GlobalFlag, Prompt } from "effect/cli";
 import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import { FetchHttpClient } from "effect/http";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
-import { Command, Flag, GlobalFlag, Prompt } from "effect/cli";
-import { FetchHttpClient } from "effect/http";
 
 import packageJson from "../../package.json" with { type: "json" };
 import * as BootService from "../cloud/bootService.ts";

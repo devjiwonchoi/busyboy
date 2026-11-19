@@ -1,18 +1,18 @@
-import { NativeScrollView } from "../../native/NativeScrollViewMarker";
-import { Button } from "../../components/ui/Button";
 import { LegendList } from "@legendapp/list/react-native";
 import type { ProjectEntry } from "@t3tools/contracts";
-import { AppActivityIndicator } from "../../components/ui/AppActivityIndicator";
-import { SymbolView } from "../../components/ui/AppSymbol";
 import { T, useGT } from "gt-react-native";
 import { useEffect, useRef, useState } from "react";
 import { Pressable, View } from "react-native";
-import { RefreshControl } from "../../components/ui/RefreshControl";
 
-import { AppText as Text } from "../../components/ui/AppText";
 import { PierreEntryIcon } from "../../components/PierreEntryIcon";
-import { cn } from "../../lib/cn";
+import { AppActivityIndicator } from "../../components/ui/AppActivityIndicator";
+import { SymbolView } from "../../components/ui/AppSymbol";
+import { AppText as Text } from "../../components/ui/AppText";
+import { Button } from "../../components/ui/Button";
+import { RefreshControl } from "../../components/ui/RefreshControl";
 import { useContentBottomInset, useContentTopInset } from "../../components/ui/useBarInset";
+import { cn } from "../../lib/cn";
+import { NativeScrollView } from "../../native/NativeScrollViewMarker";
 import {
   buildFileTree,
   flattenFileTree,

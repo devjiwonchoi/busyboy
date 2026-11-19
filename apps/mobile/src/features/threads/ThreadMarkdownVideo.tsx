@@ -1,12 +1,13 @@
 import { useGT } from "gt-react-native";
 import { createContext, useContext } from "react";
+
 import { MediaVideoPlayer } from "../../components/MediaVideoPlayer";
-import { useAssetUrlState, useRefreshAssetUrl } from "../../state/assets";
 import {
   mediaVideoPreviewUri,
   mediaVideoThumbnailKey,
   type MediaVideoPreviewSource,
 } from "../../lib/videoPreviewSource";
+import { useAssetUrlState, useRefreshAssetUrl } from "../../state/assets";
 
 export const ThreadMediaVisibleContext = createContext(false);
 /** Asks the feed to keep this row out of list recycling while its media holds playback state. */

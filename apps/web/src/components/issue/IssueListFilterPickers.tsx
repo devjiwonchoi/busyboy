@@ -5,8 +5,8 @@ import type {
   IssueListState,
   ProjectId,
 } from "@t3tools/contracts";
-import { FolderGit2Icon, LayersIcon, ListFilterIcon, TagIcon, UserIcon } from "lucide-react";
 import { T, useGT } from "gt-react";
+import { FolderGit2Icon, LayersIcon, ListFilterIcon, TagIcon, UserIcon } from "lucide-react";
 import { useState } from "react";
 
 import { Button } from "~/components/ui/button";
@@ -27,13 +27,12 @@ import {
 import { useIssueFilterCandidates } from "~/state/issues";
 
 import type { ProjectFaviconProject } from "../ProjectFavicon";
-
+import { pullRequestLabelColor } from "../pullRequest/pullRequestList.logic";
 import {
   PullRequestFilterRadioSubmenu,
   pullRequestProjectKey,
   type PullRequestFilterOption,
 } from "../pullRequest/PullRequestListFilters";
-import { pullRequestLabelColor } from "../pullRequest/pullRequestList.logic";
 
 const VISIBLE_CHOICES = 30;
 const ALL_PROJECTS = "all";

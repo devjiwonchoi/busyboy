@@ -1,5 +1,6 @@
 import { useAtomValue } from "@effect/atom-react";
 import { scopeThreadRef } from "@t3tools/client-runtime/environment";
+import type { EnvironmentThread } from "@t3tools/client-runtime/state/shell";
 import {
   resolveWorkflowOpening,
   workflowMemberModelSelection,
@@ -8,7 +9,6 @@ import {
   type RuntimeSubagent,
 } from "@t3tools/client-runtime/state/subagentRuntime";
 import type { EnvironmentId, ScopedThreadRef, ThreadId } from "@t3tools/contracts";
-import type { EnvironmentThread } from "@t3tools/client-runtime/state/shell";
 import { Atom } from "effect/reactivity";
 import { T, useGT, useMessages } from "gt-react-native";
 import { useState } from "react";
@@ -19,8 +19,8 @@ import { environmentThreadDetails } from "../../state/threads";
 import { useAppearancePreferences } from "../settings/appearance/AppearancePreferencesProvider";
 import { useMarkdownCodeHighlight } from "./markdownCodeHighlightState";
 import { SubagentRow } from "./SubagentRow";
-import { WorkLogBlock } from "./work-log-layout";
 import { useOpenLinkedThread } from "./useOpenLinkedThread";
+import { WorkLogBlock } from "./work-log-layout";
 
 const FOLDED_SCRIPT_LINES = 10;
 

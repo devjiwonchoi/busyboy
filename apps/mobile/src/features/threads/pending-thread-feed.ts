@@ -1,15 +1,15 @@
+import { threadHasCaughtUpTo } from "@t3tools/client-runtime/state/threads";
+import { resolveUserMessageGrouping } from "@t3tools/client-runtime/user-message";
 import {
   isCompactionCommandMessage,
   type ThreadGuestMessage,
   type ThreadGuestShare,
 } from "@t3tools/contracts";
-import { LIVE_ACTIVITY_ROW_ID, type ThreadFeedEntry } from "../../lib/threadActivity";
-import { scopedThreadKey } from "../../lib/scopedEntities";
-import { threadHasCaughtUpTo } from "@t3tools/client-runtime/state/threads";
-import { resolveUserMessageGrouping } from "@t3tools/client-runtime/user-message";
 import { msg } from "gt-react-native";
 
 import { m, type MessageResolver } from "../../i18n/messages";
+import { scopedThreadKey } from "../../lib/scopedEntities";
+import { LIVE_ACTIVITY_ROW_ID, type ThreadFeedEntry } from "../../lib/threadActivity";
 import type {
   AcknowledgedThreadMessage,
   QueuedThreadMessage,

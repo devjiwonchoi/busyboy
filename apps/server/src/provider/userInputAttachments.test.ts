@@ -2,26 +2,28 @@
 import * as NodeChildProcess from "node:child_process";
 import * as NodeFS from "node:fs";
 import * as NodePath from "node:path";
+import * as NodeZlib from "node:zlib";
+
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { describe, expect, it } from "@effect/vitest";
-import * as Effect from "effect/Effect";
+import * as HostProcess from "@t3tools/shared/HostProcess";
 import * as Deferred from "effect/Deferred";
+import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
-import * as Queue from "effect/Queue";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
+import * as Queue from "effect/Queue";
 import * as TestClock from "effect/testing/TestClock";
 import { vi } from "vite-plus/test";
-import * as HostProcess from "@t3tools/shared/HostProcess";
+
 import * as ServerConfig from "../config.ts";
-import * as DocumentText from "./DocumentText.ts";
-import { extractDocumentText } from "./documentTextWorker.ts";
-import * as Cleanup from "../orchestration-v2/ResourceCleanupService.ts";
 import * as DeviceService from "../device/DeviceService.ts";
-import * as TerminalManager from "../terminal/Manager.ts";
+import * as Cleanup from "../orchestration-v2/ResourceCleanupService.ts";
 import * as PreviewManager from "../preview/Manager.ts";
 import * as ScheduledTaskService from "../scheduledTasks/ScheduledTaskService.ts";
-import * as NodeZlib from "node:zlib";
+import * as TerminalManager from "../terminal/Manager.ts";
+import * as DocumentText from "./DocumentText.ts";
+import { extractDocumentText } from "./documentTextWorker.ts";
 import { appendUserInputAttachmentPaths } from "./userInputAttachments.ts";
 
 vi.mock("node:child_process", { spy: true });

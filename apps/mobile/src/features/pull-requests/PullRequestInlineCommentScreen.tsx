@@ -1,23 +1,24 @@
-import { settlePromise } from "@t3tools/client-runtime/state/runtime";
-import { AsyncResult } from "effect/reactivity";
-import * as Dialog from "../../components/ui/Dialog";
 import { useFocusEffect, useNavigation, type StaticScreenProps } from "@react-navigation/native";
+import { settlePromise } from "@t3tools/client-runtime/state/runtime";
+import type { PullRequestReviewPosition } from "@t3tools/contracts";
+import { AsyncResult } from "effect/reactivity";
 import { T, useGT, useMessages } from "gt-react-native";
 import { useRef, useState } from "react";
 import { View } from "react-native";
-import type { PullRequestReviewPosition } from "@t3tools/contracts";
+
 import { AppText as Text, AppTextInput as TextInput } from "../../components/ui/AppText";
 import { Button } from "../../components/ui/Button";
+import * as Dialog from "../../components/ui/Dialog";
 import { uuidv4 } from "../../lib/uuid";
 import { composerPullRequests } from "../../state/pull-requests";
 import { useEnvironmentQuery } from "../../state/query";
-import { PullRequestSheetContent } from "./PullRequestSheetContent";
-import { usePullRequestReviewDraft } from "./usePullRequestReviewDraft";
+import { PullRequestCompletionSuggestions } from "./PullRequestCompletionSuggestions";
 import { reviewPositionLabel } from "./pullRequestDiffComments";
+import { PullRequestSheetContent } from "./PullRequestSheetContent";
+import { usePullRequestCompletions } from "./usePullRequestCompletions";
 import { pullRequestTarget, type PullRequestParams } from "./usePullRequestDiff";
 import { usePullRequestPermissions } from "./usePullRequestPermissions";
-import { PullRequestCompletionSuggestions } from "./PullRequestCompletionSuggestions";
-import { usePullRequestCompletions } from "./usePullRequestCompletions";
+import { usePullRequestReviewDraft } from "./usePullRequestReviewDraft";
 
 export type InlineCommentParams = PullRequestParams & {
   readonly draftId?: string;

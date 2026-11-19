@@ -1,5 +1,5 @@
-import type { NotificationResponse } from "expo-notifications";
 import * as Schema from "effect/Schema";
+import type { NotificationResponse } from "expo-notifications";
 
 export class NotificationNavigationError extends Schema.TaggedError<NotificationNavigationError>()(
   "NotificationNavigationError",

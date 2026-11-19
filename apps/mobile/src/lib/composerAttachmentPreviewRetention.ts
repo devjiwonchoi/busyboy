@@ -1,5 +1,5 @@
-import type { FileBackedComposerAttachment } from "./composerImages";
 import { retainComposerAttachmentFile } from "./composerAttachmentFiles";
+import type { FileBackedComposerAttachment } from "./composerImages";
 
 /** State owns files but cannot be imported here; it registers cleanup when draft owners load. */
 type UnusedAttachmentHandler = (attachment: FileBackedComposerAttachment) => void;

@@ -1,3 +1,12 @@
+import type { ChangeRequestTerminology } from "@t3tools/client-runtime/source-control-clients";
+import {
+  changeRequestTerminologyFor,
+  type DefaultBranchActionDialogCopy,
+  type DefaultBranchConfirmableAction,
+  type GitActionIconName,
+  type GitDialogAction,
+  vcsActionLabelText,
+} from "@t3tools/client-runtime/state/vcs";
 import type {
   GitRunStackedActionResult,
   GitStackedAction,
@@ -8,17 +17,9 @@ import type {
 import { summarizeChangedFiles } from "@t3tools/shared/changedFileKind";
 import { isTemporaryWorktreeBranch } from "@t3tools/shared/git";
 import { msg } from "gt-react";
+
 import { m, type MessageResolver } from "../i18n/messages";
 import { changeRequestTermKind } from "./pullRequest/changeRequestTerm";
-import type { ChangeRequestTerminology } from "@t3tools/client-runtime/source-control-clients";
-import {
-  changeRequestTerminologyFor,
-  type DefaultBranchActionDialogCopy,
-  type DefaultBranchConfirmableAction,
-  type GitActionIconName,
-  type GitDialogAction,
-  vcsActionLabelText,
-} from "@t3tools/client-runtime/state/vcs";
 
 export {
   requiresDefaultBranchConfirmation,

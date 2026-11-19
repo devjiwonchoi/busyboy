@@ -1,19 +1,10 @@
-import { AppActivityIndicator } from "../../components/ui/AppActivityIndicator";
-import { ChatGptUsageSummary } from "./ChatGptUsageSummary";
-import { ScreenScrollView as ScrollView } from "../../components/ui/ScreenScrollView";
-import { EnvironmentId, USAGE_CONTRACT_VERSION, type UsageProviderKind } from "@t3tools/contracts";
 import { type RouteProp, useIsFocused, useRoute } from "@react-navigation/native";
 import {
   updatingProvidersLabel,
   usageEnvironmentProgress,
   usageProgress,
 } from "@t3tools/client-runtime/state/usage-progress";
-import {
-  isCompatibleUsageContractVersion,
-  isModelCostUnknown,
-  type DailyTotals,
-  type MergedUsage,
-} from "@t3tools/shared/usageMerge";
+import { EnvironmentId, USAGE_CONTRACT_VERSION, type UsageProviderKind } from "@t3tools/contracts";
 import {
   enumerateDays,
   enumerateHourStarts,
@@ -24,29 +15,38 @@ import {
   makeWindow,
 } from "@t3tools/shared/usageFormat";
 import { formatUsageContractMismatch, usageSourceMessages } from "@t3tools/shared/usageFormatCopy";
+import {
+  isCompatibleUsageContractVersion,
+  isModelCostUnknown,
+  type DailyTotals,
+  type MergedUsage,
+} from "@t3tools/shared/usageMerge";
 import { msg, T, useGT, useLocale, useMessages, Var } from "gt-react-native";
 import { use, useRef, useState, type ReactNode } from "react";
 import { View } from "react-native";
-import { RefreshControl } from "../../components/ui/RefreshControl";
 import Animated, { FadeIn, ReduceMotion } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { SegmentedControl } from "../../components/ui/SegmentedControl";
-import { useReduceMotionEnabled } from "../../lib/appState";
+import { AppActivityIndicator } from "../../components/ui/AppActivityIndicator";
 import { AppText as Text } from "../../components/ui/AppText";
-import { useWorkspaceSettledContentWidth } from "../layout/workspace-content-width";
-import { cn } from "../../lib/cn";
+import { RefreshControl } from "../../components/ui/RefreshControl";
+import { ScreenScrollView as ScrollView } from "../../components/ui/ScreenScrollView";
+import { SegmentedControl } from "../../components/ui/SegmentedControl";
 import type { MessageResolver } from "../../i18n/messages";
-import { SettingsScreen } from "../settings/components/SettingsScreen";
+import { useReduceMotionEnabled } from "../../lib/appState";
+import { cn } from "../../lib/cn";
 import { NativeWorkspaceTabActivityContext } from "../../native/v5-workspace-context";
 import { useUsage, type EnvironmentUsageStatus } from "../../state/usage";
+import { useWorkspaceSettledContentWidth } from "../layout/workspace-content-width";
+import { SettingsScreen } from "../settings/components/SettingsScreen";
 import { SettingsSection } from "../settings/components/SettingsSection";
+import { ChatGptUsageSummary } from "./ChatGptUsageSummary";
 import { usageAxisDayLabel, usageAxisHourLabel } from "./usageAxisLabels";
+import type { UsageChartMetric } from "./usageChartData";
 import { UsageDailyChart } from "./UsageDailyChart";
 import { toggleUsageEnvironment } from "./usageEnvironmentSelection";
-import { useRefreshLimits } from "./UsageLimitsSection";
 import { UsageLimitsSection } from "./UsageLimitsPooled";
-import type { UsageChartMetric } from "./usageChartData";
+import { useRefreshLimits } from "./UsageLimitsSection";
 import { PROVIDER_LABEL, useProviderColors, useUsageMixColors } from "./usageProviders";
 
 type UsageView = UsageChartMetric | "limits";

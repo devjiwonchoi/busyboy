@@ -1,3 +1,4 @@
+import { describe, expect, it } from "@effect/vitest";
 import {
   type DesktopSshEnvironmentTarget,
   EnvironmentId,
@@ -6,7 +7,7 @@ import {
   type ExecutionEnvironmentDescriptor,
   type ServerConfig,
 } from "@t3tools/contracts";
-import { describe, expect, it } from "@effect/vitest";
+import type { RelayEnvironmentStatusResponse } from "@t3tools/contracts/relay";
 import * as Context from "effect/Context";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
@@ -22,8 +23,13 @@ import * as Stream from "effect/Stream";
 import * as SubscriptionRef from "effect/SubscriptionRef";
 import * as Tracer from "effect/Tracer";
 
-import * as ClientCapabilities from "../platform/capabilities.ts";
 import * as TokenStore from "../authorization/tokenStore.ts";
+import * as ClientCapabilities from "../platform/capabilities.ts";
+import * as Persistence from "../platform/persistence.ts";
+import * as RelayEnvironmentDiscovery from "../relay/discovery.ts";
+import * as RpcSession from "../rpc/session.ts";
+import { v2ShellSnapshot } from "../state/orchestrationV2TestFixtures.ts";
+import { runDesktopCommitWithReconnectObserver } from "../state/server.ts";
 import {
   BearerConnectionCredential,
   BearerConnectionProfile,
@@ -42,7 +48,7 @@ import * as Connectivity from "./connectivity.ts";
 import * as ConnectionCredentialStore from "./credentialStore.ts";
 import * as ConnectionDriver from "./driver.ts";
 import type { RouteCheck } from "./driver.ts";
-import { connectionRouteId, connectionRouteKind } from "./routes.ts";
+import { watchDiscoveredCompatibility } from "./layer.ts";
 import {
   ConnectionTransientError,
   ConnectionBlockedError,
@@ -54,22 +60,16 @@ import {
   type PreparedConnection,
   type SupervisorConnectionState,
 } from "./model.ts";
-import * as Persistence from "../platform/persistence.ts";
 import * as ConnectionProfileStore from "./profileStore.ts";
-import * as EnvironmentRegistry from "./registry.ts";
 import {
   PullRequestRoutingPermissions,
   type StoredPullRequestRoutingPermission,
   makePullRequestRoutingPermissions,
 } from "./pullRequestRoutingPermissions.ts";
-import * as RpcSession from "../rpc/session.ts";
+import * as EnvironmentRegistry from "./registry.ts";
+import { connectionRouteId, connectionRouteKind } from "./routes.ts";
 import * as EnvironmentSupervisor from "./supervisor.ts";
 import * as ConnectionWakeups from "./wakeups.ts";
-import { watchDiscoveredCompatibility } from "./layer.ts";
-import * as RelayEnvironmentDiscovery from "../relay/discovery.ts";
-import type { RelayEnvironmentStatusResponse } from "@t3tools/contracts/relay";
-import { runDesktopCommitWithReconnectObserver } from "../state/server.ts";
-import { v2ShellSnapshot } from "../state/orchestrationV2TestFixtures.ts";
 
 const TARGET = new PrimaryConnectionTarget({
   environmentId: EnvironmentId.make("environment-1"),

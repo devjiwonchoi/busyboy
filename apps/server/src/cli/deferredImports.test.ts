@@ -5,13 +5,13 @@ import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, it } from "@effect/vitest";
 import * as NetService from "@t3tools/shared/Net";
+import { Command } from "effect/cli";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
 import * as FileSystem from "effect/FileSystem";
-import * as Layer from "effect/Layer";
-import { Command } from "effect/cli";
 import { FetchHttpClient } from "effect/http";
+import * as Layer from "effect/Layer";
 import { vi } from "vite-plus/test";
 
 import { cli } from "../binCli.ts";

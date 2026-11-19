@@ -1,15 +1,15 @@
-import { NativeScrollView } from "../../native/NativeScrollViewMarker";
-import { sourceControlClients } from "@t3tools/client-runtime/source-control-clients";
 import { AnimatedLegendList } from "@legendapp/list/reanimated";
 import { StackActions, useNavigation, type StaticScreenProps } from "@react-navigation/native";
+import { sourceControlClients } from "@t3tools/client-runtime/source-control-clients";
 import type { PullRequestChangeBreakdown } from "@t3tools/contracts";
 import { msg, T, useGT, useMessages, Var } from "gt-react-native";
 import { useState } from "react";
 import { View } from "react-native";
 import Animated from "react-native-reanimated";
+
 import { PierreEntryIcon } from "../../components/PierreEntryIcon";
-import { AppText as Text } from "../../components/ui/AppText";
 import { SymbolView } from "../../components/ui/AppSymbol";
+import { AppText as Text } from "../../components/ui/AppText";
 import { Button } from "../../components/ui/Button";
 import { EmptyState } from "../../components/ui/EmptyState";
 import { IconButton } from "../../components/ui/IconButton";
@@ -17,10 +17,13 @@ import { Menu } from "../../components/ui/Menu";
 import { RowPressable } from "../../components/ui/RowPressable";
 import { ScreenContent } from "../../components/ui/ScreenContent";
 import { SheetHeader } from "../../components/ui/SheetHeader";
+import type { MessageResolver } from "../../i18n/messages";
+import { NativeScrollView } from "../../native/NativeScrollViewMarker";
 import { composerPullRequests } from "../../state/pull-requests";
 import { useEnvironmentQuery } from "../../state/query";
 import type { ReviewParsedDiff, ReviewRenderableFile } from "../review/reviewModel";
 import { PR_ROW_ENTER, PR_ROW_EXIT, PR_ROW_LAYOUT } from "./pullRequestAnimations";
+import { pullRequestFileJumpScope, requestPullRequestFileJump } from "./pullRequestFileJump";
 import { PullRequestDiffStats, PullRequestReadStatus } from "./PullRequestPresentation";
 import { PullRequestSectionHeading } from "./PullRequestSectionHeading";
 import {
@@ -31,8 +34,6 @@ import {
 } from "./usePullRequestDiff";
 import { usePullRequestFileFilter } from "./usePullRequestFileFilter";
 import { usePullRequestFilesViewed } from "./usePullRequestFilesViewed";
-import { pullRequestFileJumpScope, requestPullRequestFileJump } from "./pullRequestFileJump";
-import type { MessageResolver } from "../../i18n/messages";
 
 const BREAKDOWN_LABELS = {
   code: msg("Code", { $context: "kind of changed file" }),

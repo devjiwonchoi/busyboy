@@ -1,4 +1,3 @@
-import { ThreadDetailsControl } from "./ThreadDetailsControl";
 import {
   AuthOrchestrationOperateScope,
   buildRemoteOpenUrl,
@@ -7,13 +6,19 @@ import {
   type ResolvedKeybindingsConfig,
 } from "@t3tools/contracts";
 import { T, useGT, useMessages, Var } from "gt-react";
+import { ChevronDownIcon, FolderClosedIcon, SquareArrowOutUpRightIcon } from "lucide-react";
 import { memo, use, useRef } from "react";
-import { BackgroundThreadContext } from "./backgroundThread";
-import { shortcutLabelForCommand } from "../../keybindings";
-import { OPEN_FAVORITE_EDITOR_ATTRIBUTE } from "./OpenInPickerShortcut";
-import { usePreferredEditor } from "../../editorPreferences";
+
+import { announce } from "~/lib/announce";
+import { cn, isMacPlatform, isWindowsPlatform } from "~/lib/utils";
+import { readEnvironmentScope, useEnvironmentScope } from "~/state/session";
+import { shellEnvironment } from "~/state/shell";
+import { useAtomCommand } from "~/state/use-atom-command";
+
 import { editorLabelForPlatform } from "../../editorLabels";
+import { usePreferredEditor } from "../../editorPreferences";
 import type { MessageResolver } from "../../i18n/messages";
+import { shortcutLabelForCommand } from "../../keybindings";
 import {
   openRemoteEditorUrl,
   useRemoteCapableEditors,
@@ -21,21 +26,6 @@ import {
   useRemoteOpenState,
 } from "../../remoteOpen";
 import { useEnvironment } from "../../state/environments";
-import { ChevronDownIcon, FolderClosedIcon, SquareArrowOutUpRightIcon } from "lucide-react";
-
-import { Group, GroupSeparator } from "../ui/group";
-import {
-  Menu,
-  MenuItem,
-  MenuItemLabel,
-  MenuPopup,
-  MenuShortcut,
-  MenuSub,
-  MenuSubTrigger,
-  MenuSubPopup,
-  MenuTrigger,
-} from "../ui/menu";
-import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import {
   AntigravityIcon,
   CursorIcon,
@@ -63,10 +53,22 @@ import {
   RustRoverIcon,
   WebStormIcon,
 } from "../JetBrainsIcons";
-import { announce } from "~/lib/announce";
-import { cn, isMacPlatform, isWindowsPlatform } from "~/lib/utils";
-import { shellEnvironment } from "~/state/shell";
-import { useAtomCommand } from "~/state/use-atom-command";
+import { Group, GroupSeparator } from "../ui/group";
+import {
+  Menu,
+  MenuItem,
+  MenuItemLabel,
+  MenuPopup,
+  MenuShortcut,
+  MenuSub,
+  MenuSubTrigger,
+  MenuSubPopup,
+  MenuTrigger,
+} from "../ui/menu";
+import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
+import { BackgroundThreadContext } from "./backgroundThread";
+import { OPEN_FAVORITE_EDITOR_ATTRIBUTE } from "./OpenInPickerShortcut";
+import { ThreadDetailsControl } from "./ThreadDetailsControl";
 import {
   THREAD_DETAILS_PANEL_CHEVRON_CLASS,
   THREAD_DETAILS_PANEL_ICON_CLASS,
@@ -74,7 +76,6 @@ import {
   THREAD_DETAILS_PANEL_SPLIT_GROUP_CLASS,
   THREAD_DETAILS_PANEL_SPLIT_SEPARATOR_CLASS,
 } from "./threadDetailsPanelStyles";
-import { readEnvironmentScope, useEnvironmentScope } from "~/state/session";
 import { useComposerMenuState } from "./useComposerMenuState";
 
 type OpenInOption = {

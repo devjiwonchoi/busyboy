@@ -1,8 +1,9 @@
-import { mediaKindFromPath } from "@t3tools/shared/mediaPreview";
 import { mediaUrlReference } from "@t3tools/client-runtime/media-reference";
+import { mediaKindFromPath } from "@t3tools/shared/mediaPreview";
+
+import { resolveProtocolRelativeMediaUrl } from "../media/mediaContent";
 import type { ExpandedImageItem, ExpandedImagePreview } from "./ExpandedImagePreview";
 import { resolveExternalWebLinkHost } from "./externalLinkContextMenu";
-import { resolveProtocolRelativeMediaUrl } from "../media/mediaContent";
 
 export const markdownImageItems = new WeakMap<Element, ExpandedImageItem>();
 

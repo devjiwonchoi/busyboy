@@ -2,6 +2,7 @@ import type { EnvironmentMachineKind } from "@t3tools/contracts";
 import { msg } from "gt-react";
 import { CloudIcon, LaptopIcon, MonitorIcon, ServerIcon, type LucideProps } from "lucide-react";
 import type { FunctionComponent, SVGProps } from "react";
+
 import { LinuxIcon } from "./Icons";
 
 function LucideLike(props: SVGProps<SVGSVGElement>) {

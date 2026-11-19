@@ -5,9 +5,9 @@ import { expect } from "e2e";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
+import { FetchHttpClient, HttpClient, HttpClientResponse } from "effect/http";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
-import { FetchHttpClient, HttpClient, HttpClientResponse } from "effect/http";
 
 import { APP_DIR, T3_HOME } from "../e2e.config.ts";
 import { run, ScenarioError } from "./shell.ts";

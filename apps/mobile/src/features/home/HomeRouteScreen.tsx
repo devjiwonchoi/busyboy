@@ -1,46 +1,45 @@
-import { uuidv4 } from "../../lib/uuid";
-import { ThreadUndoNotice } from "./ThreadUndoNotice";
-import { use } from "react";
-import { NativePrimaryColumnContext } from "../../native/v5-workspace-context";
 import { useNavigation } from "@react-navigation/native";
+import { pickableProjectGroups } from "@t3tools/client-runtime/state/project-grouping";
+import type { EnvironmentThreadShell } from "@t3tools/client-runtime/state/shell";
+import { useGT, useMessages } from "gt-react-native";
+import { use } from "react";
 import { useMemo, useState } from "react";
 import { Platform } from "react-native";
-import { useGT, useMessages } from "gt-react-native";
 
-import type { EnvironmentThreadShell } from "@t3tools/client-runtime/state/shell";
-import { pickableProjectGroups } from "@t3tools/client-runtime/state/project-grouping";
-
+import { uuidv4 } from "../../lib/uuid";
+import { NativePrimaryColumnContext } from "../../native/v5-workspace-context";
 import { useProjects } from "../../state/entities";
 import { steadyNavigationThreadShellsAtom } from "../../state/threads";
 import { useLaunchingThreads, usePendingNewTasks } from "../../state/use-pending-new-tasks";
-import { useWorkspaceState } from "../../state/workspace";
 import { useSavedRemoteConnections } from "../../state/use-remote-environment-registry";
+import { useWorkspaceState } from "../../state/workspace";
 import {
   useAdaptiveWorkspaceLayout,
   useWorkspacePaneState,
 } from "../layout/AdaptiveWorkspaceLayout";
+import { useSelectWorkspaceDetail } from "../layout/workspace/useSelectWorkspaceDetail";
+import { useSelectWorkspaceTab } from "../layout/workspace/useSelectWorkspaceTab";
+import { WorkspaceListEmptyDetail } from "../layout/workspace/WorkspaceListEmptyDetail";
+import { WorkspaceListHeader } from "../layout/workspace/WorkspaceListHeader";
+import { useWorkspaceTabs } from "../layout/workspace/WorkspaceTabsContext";
+import { openSettings } from "../settings/settings-navigation";
 import { AndroidHomeFabLayout } from "./AndroidHomeFab";
-import { HomeScreen } from "./HomeScreen";
+import { buildHomeListFilterMenuItems, homeListFilterEnvironments } from "./home-list-filter-menu";
 import { useHomeListOptions } from "./home-list-options";
 import {
   runWhenHomeCovered,
   useAtomValueWhileVisible,
   useHomeRouteVisible,
 } from "./home-route-visibility";
+import { HomeScreen } from "./HomeScreen";
 import {
   buildHomeProjectScopes,
   resolveHomeProjectFilterScope,
   sortHomeProjectScopes,
 } from "./homeThreadList";
+import { ThreadUndoNotice } from "./ThreadUndoNotice";
 import { usePendingTaskListActions } from "./usePendingTaskListActions";
 import { useThreadListActions } from "./useThreadListActions";
-import { useWorkspaceTabs } from "../layout/workspace/WorkspaceTabsContext";
-import { openSettings } from "../settings/settings-navigation";
-import { useSelectWorkspaceTab } from "../layout/workspace/useSelectWorkspaceTab";
-import { useSelectWorkspaceDetail } from "../layout/workspace/useSelectWorkspaceDetail";
-import { WorkspaceListEmptyDetail } from "../layout/workspace/WorkspaceListEmptyDetail";
-import { WorkspaceListHeader } from "../layout/workspace/WorkspaceListHeader";
-import { buildHomeListFilterMenuItems, homeListFilterEnvironments } from "./home-list-filter-menu";
 
 export function HomeRouteScreen() {
   const gt = useGT();

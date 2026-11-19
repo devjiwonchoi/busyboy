@@ -1,6 +1,7 @@
 // Adapted from opencode (MIT). Copyright (c) 2025 opencode. See LICENSE.opencode.
 import type { ImageResolver } from "@betteroffice/docx/layout/render";
 import type { YrsMediaSource } from "@betteroffice/docx/yrs";
+
 import { officeImageBitmap } from "./image-bitmap";
 import type { VectorBitmap, VectorRequest } from "./vector-pictures";
 

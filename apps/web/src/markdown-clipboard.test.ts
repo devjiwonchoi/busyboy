@@ -1,3 +1,15 @@
+import { EnvironmentId, MessageId, ThreadId } from "@t3tools/contracts";
+import {
+  collectAssistantCitations,
+  serializeAssistantCitation,
+} from "@t3tools/shared/assistantCitations";
+import { markdownMathRanges, parseMarkdownWithMath } from "@t3tools/shared/markdownMath";
+import {
+  CHAT_MARKDOWN_REMARK_PLUGINS,
+  CHAT_USER_MARKDOWN_REMARK_PLUGINS,
+} from "@t3tools/shared/markdownPipeline";
+import remarkParse from "remark-parse";
+import { unified } from "unified";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 import {
@@ -5,19 +17,6 @@ import {
   serializeRenderedMarkdownFragment,
   serializeTableElementToMarkdown,
 } from "./markdown-clipboard";
-import { EnvironmentId, MessageId, ThreadId } from "@t3tools/contracts";
-import {
-  collectAssistantCitations,
-  serializeAssistantCitation,
-} from "@t3tools/shared/assistantCitations";
-import { markdownMathRanges, parseMarkdownWithMath } from "@t3tools/shared/markdownMath";
-
-import { unified } from "unified";
-import remarkParse from "remark-parse";
-import {
-  CHAT_MARKDOWN_REMARK_PLUGINS,
-  CHAT_USER_MARKDOWN_REMARK_PLUGINS,
-} from "@t3tools/shared/markdownPipeline";
 
 const userMarkdown = unified()
   .use(remarkParse)

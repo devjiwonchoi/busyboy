@@ -2,7 +2,6 @@ import { msg } from "gt-react-native";
 import type { HeaderBarButtonMailSearchToolbarItem } from "react-native-screens";
 
 import { m, type MessageResolver } from "../../i18n/messages";
-
 import { NATIVE_LIQUID_GLASS_SUPPORTED } from "../../native/native-glass";
 
 export const NATIVE_MAIL_SEARCH_TOOLBAR_SUPPORTED = NATIVE_LIQUID_GLASS_SUPPORTED;

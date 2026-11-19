@@ -1,5 +1,5 @@
-import { parsePatchFiles } from "@pierre/diffs/utils/parsePatchFiles";
 import type { ChangeTypes, FileDiffMetadata } from "@pierre/diffs/types";
+import { parsePatchFiles } from "@pierre/diffs/utils/parsePatchFiles";
 import {
   checkpointFileTotals,
   type ThreadCheckpointSummary,

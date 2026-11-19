@@ -1,12 +1,14 @@
 import { useAtomValue } from "@effect/atom-react";
+import * as Atom from "effect/reactivity/Atom";
+import * as Schema from "effect/Schema";
 import { msg } from "gt-react-native";
 import { useEffect } from "react";
 import { AppState } from "react-native";
-import * as Atom from "effect/reactivity/Atom";
-import * as Schema from "effect/Schema";
-import { appAtomRegistry } from "../../state/atom-registry";
+
+import { m } from "../../i18n/messages";
 import { writeFileAtomically } from "../../lib/atomic-file";
 import { SerializedAsyncQueue } from "../../lib/serialized-async-queue";
+import { appAtomRegistry } from "../../state/atom-registry";
 import {
   EMPTY_REVIEW_DRAFT,
   ReviewDraftDocument,
@@ -14,7 +16,6 @@ import {
   type ReviewDraft,
 } from "./pullRequestReviewDrafts";
 import type { PullRequestParams } from "./usePullRequestDiff";
-import { m } from "../../i18n/messages";
 
 const state = Atom.make<{
   drafts: Record<string, ReviewDraft>;

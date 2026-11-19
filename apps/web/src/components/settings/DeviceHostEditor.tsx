@@ -1,12 +1,12 @@
-import { T, useGT } from "gt-react";
-import { useState } from "react";
-import * as Option from "effect/Option";
 import type { SshDeviceHostConfig } from "@t3tools/contracts";
+import * as Option from "effect/Option";
+import { T, useGT } from "gt-react";
 import { CheckIcon, ChevronDownIcon, MonitorIcon, XIcon } from "lucide-react";
+import { useState } from "react";
+
+import { DeviceHostAvailability } from "../device/DeviceHostAvailability";
 import { Button, InlineButton } from "../ui/button";
 import { Collapsible, CollapsiblePanel, CollapsibleTrigger } from "../ui/collapsible";
-import { Input } from "../ui/input";
-import { Spinner } from "../ui/spinner";
 import {
   Dialog,
   DialogPopup,
@@ -16,13 +16,14 @@ import {
   DialogPanel,
   DialogFooter,
 } from "../ui/dialog";
-import { DeviceHostAvailability } from "../device/DeviceHostAvailability";
-import { useHostConnectionChecks } from "./useHostConnectionChecks";
+import { Input } from "../ui/input";
+import { Spinner } from "../ui/spinner";
 import {
   deviceHostConnectionKey,
   parseDeviceHostDraft,
   type DeviceHostCheckTarget,
 } from "./deviceHostConnectionChecks";
+import { useHostConnectionChecks } from "./useHostConnectionChecks";
 
 const EXAMPLE_HOST_NAME = "Mac mini";
 

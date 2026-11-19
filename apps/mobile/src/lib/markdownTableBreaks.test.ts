@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
+
 import { markdownWithTableBreaks } from "./markdownDocument";
 
 const table = "| Company | Fit |\n|---|---|\n| Acme | A |";

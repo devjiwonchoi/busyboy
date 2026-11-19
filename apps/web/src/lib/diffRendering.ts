@@ -1,6 +1,6 @@
-import { parsePatchFiles } from "@pierre/diffs/utils/parsePatchFiles";
 import { parseDiffFromFile } from "@pierre/diffs";
 import type { FileDiffMetadata } from "@pierre/diffs/types";
+import { parsePatchFiles } from "@pierre/diffs/utils/parsePatchFiles";
 import { msg } from "gt-react";
 
 import { m, type MessageResolver } from "../i18n/messages";

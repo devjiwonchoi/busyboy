@@ -1,5 +1,13 @@
-import { useAtomCommand } from "~/state/use-atom-command";
 import { scopeProjectRef } from "@t3tools/client-runtime/environment";
+import {
+  sourceControlClients,
+  type ChangeRequestTerminology,
+} from "@t3tools/client-runtime/source-control-clients";
+import {
+  deriveLogicalProjectKeyFromSettings,
+  derivePhysicalProjectKey,
+  selectProjectGroupingSettings,
+} from "@t3tools/client-runtime/state/project-grouping";
 import {
   isAtomCommandInterrupted,
   squashAtomCommandFailure,
@@ -14,32 +22,24 @@ import type {
   PullRequestSummary,
   ScopedThreadRef,
 } from "@t3tools/contracts";
+import { resolveProjectSettings } from "@t3tools/shared/projectSettings";
 import { msg } from "gt-react";
 import { useRef, useState } from "react";
-import {
-  sourceControlClients,
-  type ChangeRequestTerminology,
-} from "@t3tools/client-runtime/source-control-clients";
-import { resolveProjectSettings } from "@t3tools/shared/projectSettings";
-import { useClientSettings, useEnvironmentSettings } from "~/hooks/useSettings";
-import {
-  deriveLogicalProjectKeyFromSettings,
-  derivePhysicalProjectKey,
-  selectProjectGroupingSettings,
-} from "@t3tools/client-runtime/state/project-grouping";
-import { buildPhysicalToLogicalProjectKeyMap } from "~/sidebarProjectGrouping";
-import { useProjects } from "~/state/entities";
-import { usePrimaryEnvironmentId } from "~/state/environments";
 
 import { type DraftId, useComposerDraftStore } from "~/composerDraftStore";
 import { useNewThreadHandler } from "~/hooks/useHandleNewThread";
-import { usePreparePullRequestThreadAction } from "~/state/sourceControlActions";
-import type { ReviewCommentContext } from "~/reviewCommentContext";
-import { pullRequestEnvironment } from "~/state/pullRequests";
-
+import { useClientSettings, useEnvironmentSettings } from "~/hooks/useSettings";
 import { m } from "~/i18n/messages";
+import type { ReviewCommentContext } from "~/reviewCommentContext";
+import { buildPhysicalToLogicalProjectKeyMap } from "~/sidebarProjectGrouping";
+import { useProjects } from "~/state/entities";
+import { usePrimaryEnvironmentId } from "~/state/environments";
+import { pullRequestEnvironment } from "~/state/pullRequests";
+import { usePreparePullRequestThreadAction } from "~/state/sourceControlActions";
+import { useAtomCommand } from "~/state/use-atom-command";
 
 import { toastManager } from "../ui/toast";
+import { changeRequestTermKind, type ChangeRequestTermKind } from "./changeRequestTerm";
 import { offHeadPullRequestCheckoutToast } from "./pullRequestCheckoutToast";
 import {
   checkoutFailureDescription,
@@ -47,8 +47,6 @@ import {
   readableFailure,
 } from "./pullRequestDetail.logic";
 import { pullRequestEntryKey, type EnvironmentPullRequestEntry } from "./pullRequestList.logic";
-
-import { changeRequestTermKind, type ChangeRequestTermKind } from "./changeRequestTerm";
 
 export function usePullRequestDefaultMergeMethodResolver(
   environmentId: EnvironmentId,

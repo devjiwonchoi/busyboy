@@ -1,21 +1,21 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import * as FileSystem from "effect/FileSystem";
-import * as Path from "effect/Path";
-import * as Logger from "effect/Logger";
-import * as PlatformError from "effect/PlatformError";
 import { assert, expect, it } from "@effect/vitest";
 import * as HostProcess from "@t3tools/shared/HostProcess";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
+import * as FileSystem from "effect/FileSystem";
+import * as Logger from "effect/Logger";
+import * as Path from "effect/Path";
+import * as PlatformError from "effect/PlatformError";
 
+import { posixLauncherScript } from "./pinnedRuntime.ts";
+import * as ServiceLauncherClient from "./serviceLauncherClient.ts";
 import {
   SERVICE_LAUNCHER_CONTEXT_ENV,
   SERVICE_LAUNCHER_PROTOCOL,
   type ServiceLauncherChildMessage,
   type ServiceLauncherParentMessage,
 } from "./serviceProtocol.ts";
-import { posixLauncherScript } from "./pinnedRuntime.ts";
-import * as ServiceLauncherClient from "./serviceLauncherClient.ts";
 
 class FakeLauncherProcess {
   readonly connected: boolean;

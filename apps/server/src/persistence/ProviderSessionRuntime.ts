@@ -1,15 +1,3 @@
-import * as Arr from "effect/Array";
-import * as NodeSqliteClient from "@t3tools/shared/nodeSqliteClient";
-import * as Context from "effect/Context";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import * as Option from "effect/Option";
-import * as Result from "effect/Result";
-import * as Schema from "effect/Schema";
-import * as Struct from "effect/Struct";
-import * as SqlClient from "effect/sql/SqlClient";
-import * as SqlSchema from "effect/sql/SqlSchema";
-
 import {
   AgentSessionImportSource,
   IsoDateTime,
@@ -17,6 +5,17 @@ import {
   RuntimeMode,
   ThreadId,
 } from "@t3tools/contracts";
+import * as NodeSqliteClient from "@t3tools/shared/nodeSqliteClient";
+import * as Arr from "effect/Array";
+import * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
+import * as SqlClient from "effect/sql/SqlClient";
+import * as SqlSchema from "effect/sql/SqlSchema";
+import * as Struct from "effect/Struct";
 
 import {
   PersistenceDecodeError,

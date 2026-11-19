@@ -1,27 +1,42 @@
-import { Button } from "../../components/ui/Button";
-import { ThreadSubagentGroup } from "./thread-subagent-group";
-import { ProposedPlanCard } from "./ProposedPlanCard";
-import {
-  WorkLogLabel,
-  WorkLogBlock,
-  WorkLogRows,
-  WorkLogIconSlot,
-  WorkLogPressable,
-} from "./work-log-layout";
-import { QuestionAnswerHistory } from "./QuestionAnswerHistory";
-import { ThreadCommandOutput, useCommandOutputStreaming } from "./thread-command-output";
-import {
-  getQuestionAnswerPreview,
-  hasQuestionAnswer,
-} from "@t3tools/client-runtime/work-log/user-input";
-import * as Haptics from "expo-haptics";
-import { T, useGT, useMessages } from "gt-react-native";
-import { Image } from "expo-image";
-import { type AppSymbolName, SymbolView } from "../../components/ui/AppSymbol";
+import { useAtomValue } from "@effect/atom-react";
 import { MaskedView } from "@expo/ui/community/masked-view";
 import type { LegendListRef } from "@legendapp/list/react-native";
 import { AnimatedLegendList } from "@legendapp/list/reanimated";
 import { useIsFocused } from "@react-navigation/native";
+import { scopeThreadRef } from "@t3tools/client-runtime/environment";
+import { notificationChildThreadId } from "@t3tools/client-runtime/state/thread-execution";
+import {
+  commandHighlightLanguage,
+  withVisibleControlCharacters,
+} from "@t3tools/client-runtime/work-log/command-label";
+import {
+  isJsonToolText,
+  toolCallLines,
+  turnItemOutputImages,
+  turnItemOutputText,
+} from "@t3tools/client-runtime/work-log/item-detail";
+import {
+  resolveWorkEntryToolPresentation,
+  toolGroupAction,
+  type ToolGroupSummaryKind,
+  workEntryViewedImagePath,
+} from "@t3tools/client-runtime/work-log/presentation";
+import {
+  getQuestionAnswerPreview,
+  hasQuestionAnswer,
+} from "@t3tools/client-runtime/work-log/user-input";
+import {
+  ORCHESTRATION_V2_WORKSPACE_PREPARATION_FAILURE_CODE,
+  type EnvironmentId,
+  type RunId,
+  type ThreadId,
+  type ToolActivityIcon,
+} from "@t3tools/contracts";
+import { toolActivityFaviconUrl } from "@t3tools/shared/favicon";
+import { isJavaScriptReplTool } from "@t3tools/shared/toolActivity";
+import * as Haptics from "expo-haptics";
+import { Image } from "expo-image";
+import { T, useGT, useMessages } from "gt-react-native";
 import {
   useEffect,
   useId,
@@ -42,60 +57,6 @@ import {
   useAnimatedValue,
   View,
 } from "react-native";
-import Svg, { Defs, LinearGradient, Rect, Stop } from "react-native-svg";
-import {
-  ORCHESTRATION_V2_WORKSPACE_PREPARATION_FAILURE_CODE,
-  type EnvironmentId,
-  type RunId,
-  type ThreadId,
-  type ToolActivityIcon,
-} from "@t3tools/contracts";
-import { useAtomValue } from "@effect/atom-react";
-import { scopeThreadRef } from "@t3tools/client-runtime/environment";
-import { environmentThreadDetails, threadEnvironment } from "../../state/threads";
-import { useAtomCommand } from "../../state/use-atom-command";
-import { toolActivityFaviconUrl } from "@t3tools/shared/favicon";
-import { isJavaScriptReplTool } from "@t3tools/shared/toolActivity";
-import { useMarkdownCodeHighlight } from "./markdownCodeHighlightState";
-import { highlightCommand, type HighlightedLines } from "../../lib/highlights";
-import {
-  commandHighlightLanguage,
-  withVisibleControlCharacters,
-} from "@t3tools/client-runtime/work-log/command-label";
-
-import { AppText as Text } from "../../components/ui/AppText";
-import { T3Wordmark } from "../../components/T3Wordmark";
-import { BrowserAppIcon } from "./BrowserAppIcon";
-import { useAppActive, useReduceMotionEnabled } from "../../lib/appState";
-import { cn } from "../../lib/cn";
-import { THREAD_WORK_ROW_MIN_HEIGHT, type deriveThreadWorkLogSizing } from "../../lib/layout";
-import {
-  formatItemFullDetail,
-  type ThreadFeedActivity,
-  workEntryRowLabel,
-} from "../../lib/threadActivity";
-import {
-  isJsonToolText,
-  toolCallLines,
-  turnItemOutputImages,
-  turnItemOutputText,
-} from "@t3tools/client-runtime/work-log/item-detail";
-import { useTurnItemDetail } from "../../state/queries";
-import {
-  resolveThreadWorkGroupInitialScroll,
-  type ThreadWorkGroupScrollPosition,
-} from "./thread-feed-scroll-position";
-import {
-  resolveWorkEntryToolPresentation,
-  toolGroupAction,
-  type ToolGroupSummaryKind,
-  workEntryViewedImagePath,
-} from "@t3tools/client-runtime/work-log/presentation";
-import { notificationChildThreadId } from "@t3tools/client-runtime/state/thread-execution";
-import type { MarkdownImageRenderer } from "../../native/SelectableMarkdownText";
-import type { FilePreviewSource } from "../../components/ui/FilePreviewModal";
-import { FilePreviewGallery } from "../../components/ui/FilePreviewGallery";
-import { ThreadMarkdownImage } from "./ThreadMarkdownImage";
 import Animated, {
   FadeIn,
   FadeOut,
@@ -106,9 +67,48 @@ import Animated, {
   useSharedValue,
   withTiming,
 } from "react-native-reanimated";
+import Svg, { Defs, LinearGradient, Rect, Stop } from "react-native-svg";
+
+import { T3Wordmark } from "../../components/T3Wordmark";
+import { type AppSymbolName, SymbolView } from "../../components/ui/AppSymbol";
+import { AppText as Text } from "../../components/ui/AppText";
+import { Button } from "../../components/ui/Button";
+import { FilePreviewGallery } from "../../components/ui/FilePreviewGallery";
+import type { FilePreviewSource } from "../../components/ui/FilePreviewModal";
+import { useAppActive, useReduceMotionEnabled } from "../../lib/appState";
+import { cn } from "../../lib/cn";
+import { highlightCommand, type HighlightedLines } from "../../lib/highlights";
+import { THREAD_WORK_ROW_MIN_HEIGHT, type deriveThreadWorkLogSizing } from "../../lib/layout";
+import {
+  formatItemFullDetail,
+  type ThreadFeedActivity,
+  workEntryRowLabel,
+} from "../../lib/threadActivity";
+import type { MarkdownImageRenderer } from "../../native/SelectableMarkdownText";
 import { useAssetUrl } from "../../state/assets";
+import { useTurnItemDetail } from "../../state/queries";
+import { environmentThreadDetails, threadEnvironment } from "../../state/threads";
+import { useAtomCommand } from "../../state/use-atom-command";
 import { PullRequestGlyph } from "../pull-requests/pullRequestGlyphs";
+import { BrowserAppIcon } from "./BrowserAppIcon";
+import { useMarkdownCodeHighlight } from "./markdownCodeHighlightState";
+import { ProposedPlanCard } from "./ProposedPlanCard";
+import { QuestionAnswerHistory } from "./QuestionAnswerHistory";
+import { ThreadCommandOutput, useCommandOutputStreaming } from "./thread-command-output";
+import {
+  resolveThreadWorkGroupInitialScroll,
+  type ThreadWorkGroupScrollPosition,
+} from "./thread-feed-scroll-position";
+import { ThreadSubagentGroup } from "./thread-subagent-group";
+import { ThreadMarkdownImage } from "./ThreadMarkdownImage";
 import { useOpenLinkedThread } from "./useOpenLinkedThread";
+import {
+  WorkLogLabel,
+  WorkLogBlock,
+  WorkLogRows,
+  WorkLogIconSlot,
+  WorkLogPressable,
+} from "./work-log-layout";
 import { startShimmerSteps } from "./work-shimmer-steps";
 
 const SHIMMER_WIDTH = 72;

@@ -1,4 +1,5 @@
 import { assert, it } from "@effect/vitest";
+
 import { classifyCodexManagedError } from "./CodexManagedErrors.ts";
 it("maps streamed failures to safe actionable messages and reconnect decisions", () => {
   assert.deepEqual(

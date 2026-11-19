@@ -1,13 +1,8 @@
 import { AuthSettingsWriteScope } from "@t3tools/contracts";
-import { useEnvironmentsWithScope } from "../../state/session";
 import {
   requiredScopesForServerSettingsPatch,
   EnvironmentAuthorizationError,
 } from "@t3tools/contracts";
-import { readEnvironmentScope } from "../../state/session";
-import * as Cause from "effect/Cause";
-import { AsyncResult } from "effect/reactivity";
-import { msg } from "gt-react";
 import {
   DEFAULT_SERVER_SETTINGS,
   type EnvironmentId,
@@ -15,15 +10,19 @@ import {
   type ServerSettings,
   type UnifiedSettings,
 } from "@t3tools/contracts";
+import * as Cause from "effect/Cause";
+import { AsyncResult } from "effect/reactivity";
+import { msg } from "gt-react";
 
 import { persistClientSettingsPatch, useMergedSettings } from "../../hooks/useSettings";
 import { m } from "../../i18n/messages";
 import { appAtomRegistry } from "../../rpc/atomRegistry";
 import { readEnvironment } from "../../state/environments";
 import { serverEnvironment } from "../../state/server";
+import { useEnvironmentsWithScope } from "../../state/session";
+import { readEnvironmentScope } from "../../state/session";
 import { useAtomCommand } from "../../state/use-atom-command";
 import { toastManager } from "../ui/toast";
-import { useOptionalSettingsScope, useSettingsScope } from "./SettingsScopeContext";
 import {
   createScopedSettingsWriter,
   pendingScopedWritesAtom,
@@ -36,6 +35,7 @@ import {
   type ProjectOverrideEntry,
   type ScopedSettingsPatch,
 } from "./scopedSettings";
+import { useOptionalSettingsScope, useSettingsScope } from "./SettingsScopeContext";
 
 const readSettings = (environmentId: EnvironmentId) =>
   readEnvironment(environmentId)?.serverConfig?.settings ?? null;

@@ -1,6 +1,5 @@
 import * as Effect from "effect/Effect";
 import type * as Fiber from "effect/Fiber";
-
 import * as Electron from "electron";
 
 const MIN_DURATION_MS = 280;

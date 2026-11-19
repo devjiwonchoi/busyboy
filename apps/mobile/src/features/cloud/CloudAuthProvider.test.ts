@@ -2,14 +2,14 @@ import { managedRelaySessionAtom } from "@t3tools/client-runtime/relay";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 
 import { appAtomRegistry } from "../../state/atom-registry";
+import { restoreCloudComposerDrafts } from "../../state/use-composer-drafts";
+import { setAgentAwarenessRelayTokenProvider } from "../agent-awareness/remoteRegistration";
 import {
   activateCloudRelayAccount,
   cloudAccountService,
   deactivateCloudRelayAccount,
 } from "./cloudAccountService";
-import { setAgentAwarenessRelayTokenProvider } from "../agent-awareness/remoteRegistration";
 import { requestConnectOnboarding } from "./connectOnboarding";
-import { restoreCloudComposerDrafts } from "../../state/use-composer-drafts";
 
 vi.mock("@clerk/expo", () => ({
   ClerkProvider: vi.fn(),

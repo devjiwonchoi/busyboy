@@ -1,5 +1,7 @@
-import { memo, useRef, useState, type ReactNode, type KeyboardEvent } from "react";
-import { flushSync } from "react-dom";
+import { useAtomValue } from "@effect/atom-react";
+import { mediaReferenceFileName } from "@t3tools/client-runtime/media-reference";
+import { mediaMimeType, mediaMimeTypeFromExtension } from "@t3tools/shared/mediaPreview";
+import { Atom } from "effect/reactivity";
 import { T, useGT } from "gt-react";
 import {
   ArrowLeftIcon,
@@ -8,31 +10,31 @@ import {
   ImageIcon,
   TextIcon,
 } from "lucide-react";
-import { Button } from "../ui/button";
-import { Dialog, DialogPopup, DialogTitle } from "../ui/dialog";
-import type { ExpandedImageItem, ExpandedImagePreview } from "./ExpandedImagePreview";
-import { resolveExternalWebLinkHost } from "./externalLinkContextMenu";
+import { memo, useRef, useState, type ReactNode, type KeyboardEvent } from "react";
+import { flushSync } from "react-dom";
+
+import { appAtomRegistry } from "~/rpc/atomRegistry";
+
 import { useAssetUrlRefresh, useAssetUrlState } from "../../assets/assetUrls";
-import { OpenMediaLink } from "../media/OpenMediaLink";
+import { isContextMenuOpen } from "../../contextMenuFallback";
 import { MediaActions, type MediaActionSource } from "../media/MediaActions";
 import { MediaVideoPlayer } from "../media/MediaVideoPlayer";
-import { isContextMenuOpen } from "../../contextMenuFallback";
+import { OpenMediaLink } from "../media/OpenMediaLink";
+import { Button } from "../ui/button";
+import { Dialog, DialogPopup, DialogTitle } from "../ui/dialog";
+import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
+import { composerFloatingLayerProps } from "./composerEventScope";
+import type { ExpandedImageItem, ExpandedImagePreview } from "./ExpandedImagePreview";
+import { expandedImageKey } from "./ExpandedImagePreview";
+import { resolveExternalWebLinkHost } from "./externalLinkContextMenu";
 import {
   SnapShotAccessibilityData,
   SnapShotCopyButton,
   SnapShotContentsButton,
   snapShotAccessibilityDetails,
 } from "./SnapShotAttachmentDetails";
-import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
-import { ZoomableImage, type ZoomableImageHandle } from "./ZoomableImage";
-import { composerFloatingLayerProps } from "./composerEventScope";
-import { useAtomValue } from "@effect/atom-react";
-import { Atom } from "effect/reactivity";
-import { appAtomRegistry } from "~/rpc/atomRegistry";
-import { expandedImageKey } from "./ExpandedImagePreview";
 import { registerThreadOverlay } from "./threadOverlayRetention";
-import { mediaReferenceFileName } from "@t3tools/client-runtime/media-reference";
-import { mediaMimeType, mediaMimeTypeFromExtension } from "@t3tools/shared/mediaPreview";
+import { ZoomableImage, type ZoomableImageHandle } from "./ZoomableImage";
 
 interface ExpandedImageDialogProps {
   preview: ExpandedImagePreview;

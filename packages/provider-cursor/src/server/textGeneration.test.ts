@@ -1,7 +1,7 @@
 import type { RunResult } from "@cursor/sdk";
-import { ProviderInstanceId, TextGenerationError } from "@t3tools/contracts";
-import { CursorSettings } from "../settings.ts";
 import { describe, expect, it } from "@effect/vitest";
+import { ProviderInstanceId, TextGenerationError } from "@t3tools/contracts";
+import { createModelSelection } from "@t3tools/shared/model";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as FileSystem from "effect/FileSystem";
@@ -9,11 +9,11 @@ import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 import * as TestClock from "effect/testing/TestClock";
-import { createModelSelection } from "@t3tools/shared/model";
 import { beforeEach, vi } from "vite-plus/test";
 
-import { makeCursorTextGeneration } from "./textGeneration.ts";
+import { CursorSettings } from "../settings.ts";
 import * as CursorSdk from "./CursorSdk.ts";
+import { makeCursorTextGeneration } from "./textGeneration.ts";
 
 const cursorSdkMock = vi.hoisted(() => ({
   create: vi.fn<(options: unknown) => Promise<unknown>>(),

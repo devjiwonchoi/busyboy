@@ -24,13 +24,13 @@ import {
   supportsNativeTerminalOutput,
   type NativeTerminalSurfaceHandle,
 } from "./nativeTerminalModule";
+import { createTerminalOutputWriter } from "./terminalOutputWriter";
 import {
   buildGhosttyThemeConfig,
   getMobileTerminalTheme,
   type TerminalTheme,
 } from "./terminalTheme";
 import { useTerminalSurfaceBuffer } from "./useTerminalSurfaceBuffer";
-import { createTerminalOutputWriter } from "./terminalOutputWriter";
 
 interface TerminalInputEvent {
   readonly data: string;

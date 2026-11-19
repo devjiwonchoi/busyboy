@@ -1,27 +1,28 @@
-import { msg } from "gt-i18n";
-import { detailFromError, translatableDetail } from "../errors/translatable.ts";
 import type { DesktopSshEnvironmentTarget, EnvironmentId } from "@t3tools/contracts";
 import { resolveRemotePairingTarget } from "@t3tools/shared/remote";
 import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as SubscriptionRef from "effect/SubscriptionRef";
-import * as HttpClient from "effect/http/HttpClient";
+import { msg } from "gt-i18n";
 
 import {
   bootstrapRemoteBearerSession,
   exchangeRemoteDpopAccessToken,
 } from "../authorization/remote.ts";
+import { fetchRemoteEnvironmentDescriptor } from "../environment/descriptor.ts";
 import {
   deriveWsBaseUrl,
   environmentEndpointUrl,
   normalizeHttpBaseUrl,
 } from "../environment/endpoint.ts";
-import { fetchRemoteEnvironmentDescriptor } from "../environment/descriptor.ts";
+import { detailFromError, translatableDetail } from "../errors/translatable.ts";
 import * as ClientCapabilities from "../platform/capabilities.ts";
+import * as Persistence from "../platform/persistence.ts";
 import * as ManagedRelay from "../relay/managedRelay.ts";
 import {
   BearerConnectionCredential,
@@ -33,6 +34,7 @@ import {
   SshConnectionProfile,
   SshConnectionRegistration,
 } from "./catalog.ts";
+import { orchestrationProtocolCompatibilityError } from "./compatibility.ts";
 import * as ConnectionCredentialStore from "./credentialStore.ts";
 import { mapRemoteEnvironmentError } from "./errors.ts";
 import {
@@ -41,9 +43,7 @@ import {
   SshConnectionTarget,
   type ConnectionAttemptError,
 } from "./model.ts";
-import * as Persistence from "../platform/persistence.ts";
 import * as EnvironmentRegistry from "./registry.ts";
-import { orchestrationProtocolCompatibilityError } from "./compatibility.ts";
 import { connectionRoutes, routeEntry, sshTargetKey } from "./routes.ts";
 
 export interface PairingConnectionInput {

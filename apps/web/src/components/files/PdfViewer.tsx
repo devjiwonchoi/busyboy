@@ -1,4 +1,7 @@
 import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
+import { msg, useGT } from "gt-react";
+import { ChevronDownIcon, ChevronUpIcon, MinusIcon, PlusIcon, ScanIcon } from "lucide-react";
+import { TextLayer, type PDFDocumentProxy } from "pdfjs-dist";
 import {
   useEffect,
   useEffectEvent,
@@ -8,15 +11,12 @@ import {
   type CSSProperties,
   type ReactNode,
 } from "react";
-import { TextLayer, type PDFDocumentProxy } from "pdfjs-dist";
-import { msg, useGT } from "gt-react";
-import { m } from "~/i18n/messages";
-import { ChevronDownIcon, ChevronUpIcon, MinusIcon, PlusIcon, ScanIcon } from "lucide-react";
+
 import { Input } from "~/components/ui/input";
+import { m } from "~/i18n/messages";
 import { observeResize } from "~/lib/observeResize";
+
 import { FileSurfaceAction, FileSurfaceFailure, FileSurfaceLoading } from "./fileSurfaceChrome";
-import { readBoundedDocument } from "./readBoundedDocument";
-import { previewErrorText } from "./previewFailureMessages";
 import { openPdf } from "./pdfDocument";
 import {
   currentPdfPage,
@@ -32,6 +32,9 @@ import {
   stepPdfZoom,
   visiblePdfPages,
 } from "./pdfLayout";
+import { previewErrorText } from "./previewFailureMessages";
+import { readBoundedDocument } from "./readBoundedDocument";
+
 import "./pdfViewer.css";
 
 const MAX_PAGES = 2000;

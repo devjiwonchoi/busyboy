@@ -4,15 +4,6 @@ import {
 } from "@t3tools/client-runtime/composer-model-mentions";
 import { isProviderSkillUserInvocable } from "@t3tools/client-runtime/providerSkills";
 import { sourceControlClients } from "@t3tools/client-runtime/source-control-clients";
-import { filePreviewKind } from "@t3tools/shared/filePreview";
-import { videoMimeType } from "@t3tools/shared/video";
-import { msg } from "gt-react-native";
-import { m } from "../i18n/messages";
-import {
-  assistantCitationLabel,
-  collectAssistantCitations,
-  expandAssistantCitationsForProvider,
-} from "@t3tools/shared/assistantCitations";
 import {
   PROVIDER_SEND_TURN_MAX_INPUT_CHARS,
   COMPOSER_CONTEXT_MAX_RECORDS,
@@ -26,7 +17,11 @@ import {
   type EnvironmentContextRecord,
   type EnvironmentId,
 } from "@t3tools/contracts";
-import * as Schema from "effect/Schema";
+import {
+  assistantCitationLabel,
+  collectAssistantCitations,
+  expandAssistantCitationsForProvider,
+} from "@t3tools/shared/assistantCitations";
 import {
   ATTACHMENT_ONLY_BOOTSTRAP_PROMPT,
   collectComposerContextReferences,
@@ -40,6 +35,12 @@ import {
   composerMathRanges,
   type ComposerInlineToken,
 } from "@t3tools/shared/composerInlineTokens";
+import { filePreviewKind } from "@t3tools/shared/filePreview";
+import { videoMimeType } from "@t3tools/shared/video";
+import * as Schema from "effect/Schema";
+import { msg } from "gt-react-native";
+
+import { m } from "../i18n/messages";
 
 const isMessageContext = Schema.is(OrchestrationMessageContext);
 const decodeMessageContext = Schema.decodeUnknownOption(OrchestrationMessageContext);

@@ -1,16 +1,16 @@
+import { useNavigation } from "@react-navigation/native";
 import { errorDisplayMessage } from "@t3tools/client-runtime/errors";
-import { pipe } from "effect/Function";
 import {
   isAtomCommandInterrupted,
   squashAtomCommandFailure,
 } from "@t3tools/client-runtime/state/runtime";
 import type { EnvironmentId } from "@t3tools/contracts";
-import { useNavigation } from "@react-navigation/native";
+import { pipe } from "effect/Function";
 import * as Clipboard from "expo-clipboard";
 import { useGT } from "gt-react-native";
-import { m } from "../../i18n/messages";
 
 import * as Dialog from "../../components/ui/Dialog";
+import { m } from "../../i18n/messages";
 import { projectEnvironment } from "../../state/projects";
 import { useAtomCommand } from "../../state/use-atom-command";
 import {

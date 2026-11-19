@@ -1,17 +1,17 @@
+import { scopeThreadRef } from "@t3tools/client-runtime/environment";
+import { EMPTY_ENVIRONMENT_THREAD_STATE } from "@t3tools/client-runtime/state/threads";
+import { ThreadId } from "@t3tools/contracts";
 import {
   createMemoryHistory,
   createRootRoute,
   createRoute,
   createRouter,
 } from "@tanstack/react-router";
-import { describe, expect, it } from "vite-plus/test";
-import { scopeThreadRef } from "@t3tools/client-runtime/environment";
-import { EMPTY_ENVIRONMENT_THREAD_STATE } from "@t3tools/client-runtime/state/threads";
-import { ThreadId } from "@t3tools/contracts";
 import * as DateTime from "effect/DateTime";
 import * as Option from "effect/Option";
-import { makeThreadProjectionFixture } from "./test-fixtures";
+import { describe, expect, it } from "vite-plus/test";
 
+import { makeThreadProjectionFixture } from "./test-fixtures";
 import {
   isThreadRoutePathname,
   isThreadRouteSnapshotAuthoritative,

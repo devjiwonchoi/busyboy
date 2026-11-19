@@ -1,8 +1,8 @@
 import { EnvironmentId, ProjectId, SourceControlProviderKind } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
-import type { EnvironmentProject } from "./models.ts";
 import { chooseLoadBalancedEnvironment } from "../load-balancing.ts";
+import type { EnvironmentProject } from "./models.ts";
 import {
   buildProjectGroups,
   deriveLogicalProjectKeyFromSettings,

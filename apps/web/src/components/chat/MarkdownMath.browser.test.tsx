@@ -2,6 +2,7 @@ import { expect, it } from "vite-plus/test";
 import { userEvent } from "vite-plus/test/browser";
 
 import { render } from "../../../test/render";
+
 import "../../index.css";
 
 import { MarkdownMath } from "./MarkdownMath";

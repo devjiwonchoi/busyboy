@@ -1,8 +1,10 @@
 // @effect-diagnostics nodeBuiltinImport:off - Applies real file modes in a temporary app folder.
-import * as HostProcess from "@t3tools/shared/HostProcess";
+
 import * as NodeFSP from "node:fs/promises";
 import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
+
+import * as HostProcess from "@t3tools/shared/HostProcess";
 import { describe, expect, it } from "vite-plus/test";
 
 import { removeSharedWriteAccess } from "./linux-after-pack.ts";

@@ -1,8 +1,8 @@
-import { createFileRoute, redirect, useLocation, useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
 import { EnvironmentId } from "@t3tools/contracts";
-import * as Schema from "effect/Schema";
+import { createFileRoute, redirect, useLocation, useNavigate } from "@tanstack/react-router";
 import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
+import { useState } from "react";
 
 import { NoProjectsHero } from "../components/NoProjectsHero";
 import { WelcomePage } from "../components/onboarding/WelcomePage";

@@ -8,6 +8,7 @@ import {
   Texture,
 } from "three";
 import { expect, it, vi } from "vite-plus/test";
+
 import { createImportedPhoneScene, disposeDeviceModel } from "./modelScene.ts";
 import { phoneDisplayLayout } from "./phoneScene.ts";
 

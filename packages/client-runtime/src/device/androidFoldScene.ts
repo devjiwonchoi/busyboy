@@ -17,6 +17,7 @@ import {
   type Camera,
   type Texture,
 } from "three";
+
 import type { PhoneDisplayLayout } from "./phoneScene.ts";
 
 const HEIGHT = 2.2;

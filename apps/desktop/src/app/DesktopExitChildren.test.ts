@@ -1,6 +1,7 @@
 // @effect-diagnostics nodeBuiltinImport:off - Spawns a real process tree for /proc.
 import * as NodeChildProcess from "node:child_process";
 import * as NodeFS from "node:fs";
+
 import { assert, describe, it } from "@effect/vitest";
 
 import { stopChildProcessesBeforeExit, stopZygotesBeforeExit } from "./DesktopExitChildren.ts";

@@ -1,3 +1,5 @@
+import { LegendList } from "@legendapp/list/react-native";
+import { useNavigation, usePreventRemove } from "@react-navigation/native";
 import { errorDisplayMessage } from "@t3tools/client-runtime/errors";
 import { formatAttachmentSize } from "@t3tools/client-runtime/state/attachments";
 import {
@@ -14,37 +16,35 @@ import {
   filePreviewKind,
   hostPreviewMimeTypeFromExtension,
 } from "@t3tools/shared/filePreview";
-import { LegendList } from "@legendapp/list/react-native";
 import * as Schema from "effect/Schema";
-import { fetch } from "expo/fetch";
 import { File } from "expo-file-system";
-import { useNavigation, usePreventRemove } from "@react-navigation/native";
+import { fetch } from "expo/fetch";
 import { msg, T, useGT, useMessages, Var } from "gt-react-native";
 import { useEffect, useEffectEvent, useRef, useState } from "react";
 import { Keyboard, Pressable, ScrollView, TextInput, View } from "react-native";
 
 import { PierreEntryIcon } from "../../components/PierreEntryIcon";
 import { AppBar } from "../../components/ui/AppBar";
-import { useContentBottomInset, useContentTopInset } from "../../components/ui/useBarInset";
 import { SymbolView } from "../../components/ui/AppSymbol";
 import { AppText as Text } from "../../components/ui/AppText";
 import { Button } from "../../components/ui/Button";
-import { EmptyState } from "../../components/ui/EmptyState";
-import { Progress } from "../../components/ui/Progress";
-import { NativeScrollView } from "../../native/NativeScrollViewMarker";
 import * as Dialog from "../../components/ui/Dialog";
+import { EmptyState } from "../../components/ui/EmptyState";
 import { FilePreviewModal } from "../../components/ui/FilePreviewModal";
+import { Progress } from "../../components/ui/Progress";
+import { useContentBottomInset, useContentTopInset } from "../../components/ui/useBarInset";
 import { m } from "../../i18n/messages";
+import { attachmentDocumentPresentation } from "../../lib/attachmentDocumentPresentation";
 import {
   nativeViewerErrorMessage,
   shareGeneratedAttachment,
   writeGeneratedAttachmentFile,
 } from "../../lib/attachmentDownload";
-import { attachmentDocumentPresentation } from "../../lib/attachmentDocumentPresentation";
 import {
   createComposerFileAttachment,
   removePersistedComposerAttachmentFile,
 } from "../../lib/composerImages";
+import { NativeScrollView } from "../../native/NativeScrollViewMarker";
 import { appendComposerDraftAttachments } from "../../state/use-composer-drafts";
 import { AttachmentDocumentBody, nativeViewerKind } from "./AttachmentDocumentBody";
 import { FilePreviewLoading } from "./FilePreviewFeedback";

@@ -1,18 +1,18 @@
-import { sanitizeFeatureBranchName } from "@t3tools/shared/git";
 import { useNavigation, type StaticScreenProps } from "@react-navigation/native";
+import { sanitizeFeatureBranchName } from "@t3tools/shared/git";
 import { useGT } from "gt-react-native";
 import { useState } from "react";
 
-import { SheetHeader } from "../../../components/ui/SheetHeader";
 import { FitSheet } from "../../../components/ui/FitSheet";
 import { FormField, FormSection } from "../../../components/ui/FormSection";
 import { ListChoiceRow } from "../../../components/ui/ListChoiceRow";
 import { ListSection } from "../../../components/ui/ListSection";
+import { SheetHeader } from "../../../components/ui/SheetHeader";
 import { useEnvironmentQuery } from "../../../state/query";
-import { useThreadSelection } from "../../../state/use-thread-selection";
 import { useSelectedThreadGitActions } from "../../../state/use-selected-thread-git-actions";
 import { useSelectedThreadGitState } from "../../../state/use-selected-thread-git-state";
 import { useSelectedThreadWorktree } from "../../../state/use-selected-thread-worktree";
+import { useThreadSelection } from "../../../state/use-thread-selection";
 import { vcsEnvironment } from "../../../state/vcs";
 import { SheetActionButton } from "./gitSheetComponents";
 

@@ -1,15 +1,16 @@
-import type { DiscoveredLocalServer, ScopedThreadRef } from "@t3tools/contracts";
 import {
   mapAtomCommandResult,
   type AtomCommandResult,
 } from "@t3tools/client-runtime/state/runtime";
+import type { DiscoveredLocalServer, ScopedThreadRef } from "@t3tools/contracts";
 
 import { resolveDiscoveredServerUrl } from "~/browser/browserTargetResolver";
 import type { BrowserSettingsReadError, OpenPreviewMutation } from "~/browser/openFileInPreview";
+import { previewRuntimeFor } from "~/browser/previewRuntime";
 import { recordVisitForThread } from "~/browserHistoryStore";
 import { useRightPanelStore } from "~/rightPanelStore";
+
 import { openPreviewSession } from "./openPreviewSession";
-import { previewRuntimeFor } from "~/browser/previewRuntime";
 
 export async function openDiscoveredPort<E>(input: {
   readonly threadRef: ScopedThreadRef;

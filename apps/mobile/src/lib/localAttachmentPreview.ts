@@ -2,18 +2,18 @@ import { useAtomValue } from "@effect/atom-react";
 import { errorDisplayMessage } from "@t3tools/client-runtime/errors";
 import { videoMimeType } from "@t3tools/shared/video";
 import * as Effect from "effect/Effect";
-import { msg } from "gt-react-native";
-import { m } from "../i18n/messages";
 import * as Equal from "effect/Equal";
 import * as Hash from "effect/Hash";
 import * as Option from "effect/Option";
-import * as Schema from "effect/Schema";
 import { Atom, AsyncResult } from "effect/reactivity";
+import * as Schema from "effect/Schema";
+import { msg } from "gt-react-native";
 
-import type { FileBackedComposerAttachment } from "./composerImages";
-import { resolveOwnedComposerAttachmentFileUri } from "./composerAttachmentFiles";
+import { m } from "../i18n/messages";
 import { shareLocalAttachment, type AttachmentPreviewFile } from "./attachmentDownload";
+import { resolveOwnedComposerAttachmentFileUri } from "./composerAttachmentFiles";
 import { retainComposerAttachmentFileForPreview } from "./composerAttachmentPreviewRetention";
+import type { FileBackedComposerAttachment } from "./composerImages";
 
 export async function loadLocalAttachmentPreview(
   attachment: FileBackedComposerAttachment,

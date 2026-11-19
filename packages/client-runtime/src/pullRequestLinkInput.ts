@@ -1,9 +1,9 @@
 import type { RepositoryIdentity } from "@t3tools/contracts";
 import { canonicalizeGitCafePullRequestUrl } from "@t3tools/source-control-definitions/registry";
-
-import { sourceControlClients, type ChangeRequestTerminology } from "./sourceControlClients.ts";
 import { mFallback, msg } from "gt-i18n";
 import type { MFunctionType } from "gt-i18n/types";
+
+import { sourceControlClients, type ChangeRequestTerminology } from "./sourceControlClients.ts";
 
 const PULL_REQUEST_NUMBER_PATTERN = /^#?(\d+)$/;
 

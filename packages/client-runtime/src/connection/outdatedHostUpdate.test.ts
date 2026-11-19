@@ -1,26 +1,26 @@
+import { describe, expect, it } from "@effect/vitest";
 import {
   EnvironmentId,
   ORCHESTRATION_PROTOCOL_VERSION,
   ExecutionEnvironmentDescriptor,
   WS_METHODS,
 } from "@t3tools/contracts";
-import { describe, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientResponse from "effect/http/HttpClientResponse";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
-import * as SubscriptionRef from "effect/SubscriptionRef";
-import * as HttpClient from "effect/http/HttpClient";
-import * as HttpClientResponse from "effect/http/HttpClientResponse";
 import * as Socket from "effect/socket/Socket";
+import * as SubscriptionRef from "effect/SubscriptionRef";
 
+import * as RelayEnvironmentDiscovery from "../relay/discovery.ts";
 import type { ConnectionCatalogEntry } from "./catalog.ts";
 import { orchestrationProtocolCompatibilityError } from "./compatibility.ts";
 import { PrimaryConnectionTarget } from "./model.ts";
 import { describeOutdatedHost, updateOutdatedHost } from "./outdatedHostUpdate.ts";
 import * as EnvironmentRegistry from "./registry.ts";
 import * as ConnectionResolver from "./resolver.ts";
-import * as RelayEnvironmentDiscovery from "../relay/discovery.ts";
 
 const TARGET = new PrimaryConnectionTarget({
   environmentId: EnvironmentId.make("environment-old"),

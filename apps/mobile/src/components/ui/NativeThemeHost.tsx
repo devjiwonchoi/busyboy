@@ -1,5 +1,6 @@
 import { Host } from "@expo/ui/swift-ui";
 import type { ComponentProps } from "react";
+
 import { useControlTheme } from "./useControlTheme";
 
 export function NativeThemeHost(

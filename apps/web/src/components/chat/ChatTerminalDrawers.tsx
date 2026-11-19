@@ -1,11 +1,12 @@
-import type { ResolvedKeybindingsConfig } from "@t3tools/contracts";
 import {
   parseScopedThreadKey,
   scopedThreadKey,
   scopeThreadRef,
 } from "@t3tools/client-runtime/environment";
+import type { ResolvedKeybindingsConfig } from "@t3tools/contracts";
 import { useState } from "react";
 import { useShallow } from "zustand/react/shallow";
+
 import { useComposerDraftStore } from "../../composerDraftStore";
 import type { TerminalContextSelection } from "../../lib/terminalContext";
 import { usePanelAnimationSettings, usePanelPresence } from "../../panelAnimations";

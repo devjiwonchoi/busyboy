@@ -1,7 +1,9 @@
 /* oxlint-disable react/no-array-index-key -- Positions identify source rows and columns. */
 import { useEffect, useEffectEvent, useLayoutEffect, useRef, useState } from "react";
-import { observeResize } from "~/lib/observeResize";
+
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
+import { observeResize } from "~/lib/observeResize";
+
 import { PREVIEW_PAGE_ROWS } from "./largeTextProtocol";
 
 export default function VirtualTablePreview(props: {

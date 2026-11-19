@@ -2,19 +2,15 @@ import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as ErrorReporter from "effect/ErrorReporter";
 import * as Layer from "effect/Layer";
-import * as Schema from "effect/Schema";
-import * as Scope from "effect/Scope";
-import * as Stream from "effect/Stream";
-import * as Stdio from "effect/Stdio";
 import * as RpcClient from "effect/rpc/RpcClient";
 import * as RpcMessage from "effect/rpc/RpcMessage";
 import * as RpcServer from "effect/rpc/RpcServer";
+import * as Schema from "effect/Schema";
+import * as Scope from "effect/Scope";
+import * as Stdio from "effect/Stdio";
+import * as Stream from "effect/Stream";
 
-import * as AcpSchema from "./schema.ts";
 import { AGENT_METHODS, CLIENT_METHODS } from "./_generated/meta.gen.ts";
-import * as AcpError from "./errors.ts";
-import * as AcpProtocol from "./protocol.ts";
-import * as AcpRpcs from "./rpc.ts";
 import {
   callRpc,
   decodeExtNotificationRegistration,
@@ -22,6 +18,10 @@ import {
   isolateNotificationHandler,
   runHandler,
 } from "./_internal/shared.ts";
+import * as AcpError from "./errors.ts";
+import * as AcpProtocol from "./protocol.ts";
+import * as AcpRpcs from "./rpc.ts";
+import * as AcpSchema from "./schema.ts";
 
 export interface AcpAgentOptions {
   readonly logIncoming?: boolean;

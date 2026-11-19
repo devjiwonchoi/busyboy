@@ -1,15 +1,14 @@
+import { canResolvePullRequestThread } from "@t3tools/client-runtime/pull-request-editing";
 import type {
   EnvironmentId,
   PullRequestDetailView,
   PullRequestRef,
   PullRequestConversationThread,
 } from "@t3tools/contracts";
-import { canResolvePullRequestThread } from "@t3tools/client-runtime/pull-request-editing";
 import { msg, useGT } from "gt-react";
 import { useState } from "react";
 
 import { m } from "~/i18n/messages";
-
 import { pullRequestEnvironment } from "~/state/pullRequests";
 import { useAtomCommand } from "~/state/use-atom-command";
 

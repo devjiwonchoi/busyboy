@@ -1,17 +1,15 @@
 import {
+  type EnvironmentConnectionPhase,
+  type NetworkStatus,
+} from "@t3tools/client-runtime/connection";
+import type { MarkedText } from "@t3tools/client-runtime/errors";
+import type { EnvironmentConnectionSummary as WorkspaceEnvironment } from "@t3tools/client-runtime/state/presentation";
+import {
   EMPTY_SHELL_STATE,
   type EnvironmentShellState,
   type EnvironmentShellSummary,
 } from "@t3tools/client-runtime/state/shell";
-import type { MarkedText } from "@t3tools/client-runtime/errors";
 import type { EnvironmentId, ServerConfig } from "@t3tools/contracts";
-
-import {
-  type EnvironmentConnectionPhase,
-  type NetworkStatus,
-} from "@t3tools/client-runtime/connection";
-
-import type { EnvironmentConnectionSummary as WorkspaceEnvironment } from "@t3tools/client-runtime/state/presentation";
 
 export type { EnvironmentConnectionSummary as WorkspaceEnvironment } from "@t3tools/client-runtime/state/presentation";
 

@@ -1,6 +1,3 @@
-import { msg } from "gt-react";
-import { m } from "~/i18n/messages";
-import type { ChatComposerProps } from "./ChatComposer";
 import {
   type ComposerContextRecord,
   type EnvironmentId,
@@ -8,6 +5,31 @@ import {
   type PreviewAnnotationPayload,
   type ThreadContextRecord,
 } from "@t3tools/contracts";
+import { replaceComposerContextReferences } from "@t3tools/shared/composerContextReferences";
+import { msg } from "gt-react";
+import {
+  type Dispatch,
+  type RefObject,
+  type SetStateAction,
+  use,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
+
+import { m } from "~/i18n/messages";
+import {
+  isResponseContextRecord,
+  previewAnnotationContextRecord,
+  reviewCommentContextRecord,
+  terminalContextRecord,
+} from "~/lib/composerContextRecords";
+import { formatInlineContextReference } from "~/lib/composerContextReferences";
+import { randomUUID } from "~/lib/utils";
+
+import { isCommandPaletteOpen } from "../../commandPaletteBus";
+import { collectComposerPromptInlineTokens } from "../../composer-editor-mentions";
+import { collapseExpandedComposerCursor } from "../../composer-logic";
 import {
   type ComposerFileAttachment,
   type ComposerThreadDraftState,
@@ -20,56 +42,36 @@ import {
   hydrateImagesFromPersisted,
   useComposerDraftStore,
 } from "../../composerDraftStore";
-import { type ComposerPromptEditorHandle } from "../ComposerPromptEditorTiptap";
-import {
-  MAX_STASH_ENTRIES,
-  type PromptStashEntry,
-  partitionStashAttachments,
-  usePromptStashStore,
-} from "../../promptStashStore";
-import type { PendingUserInputProgress } from "../../pendingUserInput";
-import { type PendingUserInput } from "../../session-logic";
-import { type ReviewCommentContext } from "../../reviewCommentContext";
-import { collapseExpandedComposerCursor } from "../../composer-logic";
-import { collectComposerPromptInlineTokens } from "../../composer-editor-mentions";
-import { compressImageForStash } from "../../lib/imageCompression";
-import { formatInlineContextReference } from "~/lib/composerContextReferences";
-import { isCommandPaletteOpen } from "../../commandPaletteBus";
-import { pendingDraftWork } from "./pendingDraftWork";
-import { countPreparingComposerImages } from "./preparingComposerImages";
-import {
-  isResponseContextRecord,
-  previewAnnotationContextRecord,
-  reviewCommentContextRecord,
-  terminalContextRecord,
-} from "~/lib/composerContextRecords";
-import { randomUUID } from "~/lib/utils";
+import { useStableCallback } from "../../hooks/useStableCallback";
 import {
   readAttachmentUpload,
   releaseAttachmentUpload,
   releasePersistedAttachmentUpload,
   verifyStashedAttachmentUpload,
 } from "../../lib/attachmentUploadQueue";
-import { remainingComposerAttachmentSlots } from "./composerThreadImport";
-import { composerImageDedupKey } from "./composerAttachmentFiles";
-import { replaceComposerContextReferences } from "@t3tools/shared/composerContextReferences";
+import { compressImageForStash } from "../../lib/imageCompression";
+import { isInSideChatPane } from "../../lib/sideChatPane";
 import { resizeSnapShotSource } from "../../lib/snapShotSource";
+import type { PendingUserInputProgress } from "../../pendingUserInput";
+import {
+  MAX_STASH_ENTRIES,
+  type PromptStashEntry,
+  partitionStashAttachments,
+  usePromptStashStore,
+} from "../../promptStashStore";
+import { type ReviewCommentContext } from "../../reviewCommentContext";
+import { type PendingUserInput } from "../../session-logic";
 import { registerCommands } from "../../shortcuts/dispatcher";
 import { selectThreadTerminalUiState, useTerminalUiStateStore } from "../../terminalUiStateStore";
+import { type ComposerPromptEditorHandle } from "../ComposerPromptEditorTiptap";
 import { toastManager } from "../ui/toast";
-import type { useComposerTriggerState } from "./useComposerTriggerState";
-import {
-  type Dispatch,
-  type RefObject,
-  type SetStateAction,
-  use,
-  useEffect,
-  useRef,
-  useState,
-} from "react";
 import { BackgroundThreadContext } from "./backgroundThread";
-import { isInSideChatPane } from "../../lib/sideChatPane";
-import { useStableCallback } from "../../hooks/useStableCallback";
+import type { ChatComposerProps } from "./ChatComposer";
+import { composerImageDedupKey } from "./composerAttachmentFiles";
+import { remainingComposerAttachmentSlots } from "./composerThreadImport";
+import { pendingDraftWork } from "./pendingDraftWork";
+import { countPreparingComposerImages } from "./preparingComposerImages";
+import type { useComposerTriggerState } from "./useComposerTriggerState";
 
 /**
  * The prompt stash: saving the draft aside, restoring or deleting an entry, the badge pulse,

@@ -1,9 +1,10 @@
 import type { ChatGptHandoffInput, ChatGptHandoffState } from "@t3tools/contracts";
 import { ProviderSetupError } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
+import { FetchHttpClient } from "effect/http";
 import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
-import { FetchHttpClient } from "effect/http";
+
 import * as ServerSecretStore from "../auth/ServerSecretStore.ts";
 import * as ServerEnvironment from "../environment/ServerEnvironment.ts";
 import { makeCodexChatGptAuth } from "./CodexChatGptAuth.ts";

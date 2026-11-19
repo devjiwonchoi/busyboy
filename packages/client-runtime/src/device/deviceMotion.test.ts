@@ -1,5 +1,6 @@
-import { expect, it, vi } from "vite-plus/test";
 import { Quaternion, Vector3 } from "three";
+import { expect, it, vi } from "vite-plus/test";
+
 import { createDeviceMotion } from "./deviceMotion.ts";
 import { nearestDeviceView } from "./deviceViewSnap.ts";
 

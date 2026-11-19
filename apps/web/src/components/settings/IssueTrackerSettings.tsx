@@ -1,23 +1,23 @@
 import { useAtomValue } from "@effect/atom-react";
 import { issueTrackerSummary } from "@t3tools/client-runtime/state/issue-trackers";
 import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
-import { T, useGT, useMessages } from "gt-react";
-import { ChevronDownIcon, ExternalLinkIcon, XIcon } from "lucide-react";
-import { useState, type ElementType } from "react";
 import type {
   EnvironmentId,
   IssueTrackerConnection,
   IssueTrackerConnectionList,
   ProjectId,
 } from "@t3tools/contracts";
+import { T, useGT, useMessages } from "gt-react";
+import { ChevronDownIcon, ExternalLinkIcon, XIcon } from "lucide-react";
+import { useState, type ElementType } from "react";
 
-import { useEnvironmentQuery } from "../../state/query";
-import { issueTrackerEnvironment } from "../../state/issueTrackers";
-import { useProjects } from "../../state/entities";
-import { useAtomCommand } from "../../state/use-atom-command";
-import { LinearIcon } from "../Icons";
 import { cn } from "~/lib/utils";
 
+import { useProjects } from "../../state/entities";
+import { issueTrackerEnvironment } from "../../state/issueTrackers";
+import { useEnvironmentQuery } from "../../state/query";
+import { useAtomCommand } from "../../state/use-atom-command";
+import { LinearIcon } from "../Icons";
 import { Badge } from "../ui/badge";
 import { Button, InlineButton } from "../ui/button";
 import { Collapsible, CollapsibleContent } from "../ui/collapsible";

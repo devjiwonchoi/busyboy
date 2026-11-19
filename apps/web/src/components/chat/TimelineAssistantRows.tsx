@@ -1,20 +1,19 @@
-import { shouldPreserveAssistantLineBreaks } from "@t3tools/shared/markdownPipeline";
-import { MessageId, type RunId, type TurnItemId } from "@t3tools/contracts";
+import { useAtomValue } from "@effect/atom-react";
+import { checkpointFileTotals } from "@t3tools/client-runtime/state/thread-checkpoints";
 import { canForkProjectedAssistantItem } from "@t3tools/client-runtime/state/thread-workflows";
 import { agentWorkingDirectories } from "@t3tools/client-runtime/workspace-basename-lookup";
+import { MessageId, type RunId, type TurnItemId } from "@t3tools/contracts";
+import { shouldPreserveAssistantLineBreaks } from "@t3tools/shared/markdownPipeline";
+import { AsyncResult, Atom } from "effect/reactivity";
 import { T, useGT, useMessages } from "gt-react";
-import { memo, use, useState } from "react";
-import { type ChatMessage, type TurnDiffSummary } from "../../types";
-import ChatMarkdown from "../ChatMarkdown";
 import { GitForkIcon, ReplyIcon } from "lucide-react";
+import { memo, use, useState } from "react";
+
 import { captureAssistantMessageOpening } from "~/lib/assistantTextSelection";
 import { responseContextRecord } from "~/lib/composerContextRecords";
-import { Button } from "../ui/button";
-import { ProposedPlanCard } from "./ProposedPlanCard";
-import { HtmlRenderFrame } from "./HtmlRenderFrame";
-import { McpAppFrame } from "./McpAppFrame";
-import { checkpointFileTotals } from "@t3tools/client-runtime/state/thread-checkpoints";
-import { ChangedFilesCard } from "./ChangedFilesTree";
+import { cn } from "~/lib/utils";
+import { useUiStateStore } from "~/uiStateStore";
+
 import { useFileContextMenuHandler } from "../../fileContextMenu";
 import {
   readResponseSubagents,
@@ -22,20 +21,23 @@ import {
   useProject,
   useQuietThreadShell,
 } from "../../state/entities";
-import { MessageCopyButton } from "./MessageCopyButton";
-import { AssistantCitationSource } from "./AssistantCitationSource";
-import { resolveAssistantMessageCopyState } from "./MessagesTimeline.logic";
-import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
-import { cn } from "~/lib/utils";
-import { useUiStateStore } from "~/uiStateStore";
-import { formatChatTimestampTooltip, formatDayAwareTimestamp } from "../../timestampFormat";
 import { readThreadTurnItems } from "../../state/entities";
 import { useV2ItemSupport } from "../../state/v2ItemSupport";
+import { vcsEnvironment } from "../../state/vcs";
+import { formatChatTimestampTooltip, formatDayAwareTimestamp } from "../../timestampFormat";
+import { type ChatMessage, type TurnDiffSummary } from "../../types";
+import ChatMarkdown from "../ChatMarkdown";
+import { Button } from "../ui/button";
+import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
+import { AssistantCitationSource } from "./AssistantCitationSource";
+import { ChangedFilesCard } from "./ChangedFilesTree";
+import { HtmlRenderFrame } from "./HtmlRenderFrame";
+import { McpAppFrame } from "./McpAppFrame";
+import { MessageCopyButton } from "./MessageCopyButton";
+import { resolveAssistantMessageCopyState } from "./MessagesTimeline.logic";
+import { ProposedPlanCard } from "./ProposedPlanCard";
 import { TimelineRowCtx, TimelineRowActivityCtx, type TimelineRow } from "./timelineRowContext";
 import { MESSAGE_HEADING_LEVEL, MessageAuthorHeading } from "./TimelineRowParts";
-import { useAtomValue } from "@effect/atom-react";
-import { AsyncResult, Atom } from "effect/reactivity";
-import { vcsEnvironment } from "../../state/vcs";
 
 const NO_VCS_STATUS = Atom.make(AsyncResult.initial());
 

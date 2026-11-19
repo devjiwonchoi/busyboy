@@ -1,8 +1,8 @@
 import { useGT } from "gt-react-native";
 import { View } from "react-native";
 
-import { Button } from "../../../components/ui/Button";
 import { AppText as Text } from "../../../components/ui/AppText";
+import { Button } from "../../../components/ui/Button";
 import { SettingsSection } from "./SettingsSection";
 
 export function SettingsProjectOverridesSection(props: {

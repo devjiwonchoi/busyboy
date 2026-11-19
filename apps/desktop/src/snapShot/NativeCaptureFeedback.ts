@@ -1,7 +1,9 @@
 // @effect-diagnostics nodeBuiltinImport:off -- Short-lived native helper with private stdio, no shell.
 // @effect-diagnostics globalTimers:off -- Deadlines bound a native child/overlay; progress is receipt-driven.
 import * as NodeChildProcess from "node:child_process";
+
 import * as Schema from "effect/Schema";
+
 import type { LinuxCaptureFeedback, LinuxWindowMetadata } from "./LinuxSnapShot.ts";
 
 const decodeEvent = Schema.decodeUnknownSync(

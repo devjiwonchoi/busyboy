@@ -6,22 +6,7 @@ import type {
   OrchestrationV2ThreadHistoryPage,
   ProjectId,
 } from "@t3tools/contracts";
-import {
-  latestExecutedRun,
-  latestRootProviderFailure,
-  orchestrationV2WorktreePending,
-  runRanAfter,
-  usageLimitBlockedRun,
-} from "@t3tools/shared/orchestrationV2ThreadError";
 import { threadIssueKeysEqual } from "@t3tools/contracts";
-import { canonicalizeGitCafePullRequestUrl } from "@t3tools/source-control-definitions/registry";
-import { threadPullRequestsOf } from "../sourceControl/threadPullRequests.ts";
-import {
-  normalizeThreadPullRequestKey,
-  visibleThreadPullRequests,
-  threadPullRequestKeysEqual,
-  legacyThreadPullRequestKey,
-} from "../sourceControl/threadPullRequests.ts";
 import {
   ORCHESTRATION_V2_WORKSPACE_PREPARATION_FAILURE_CODE,
   type ChatAttachment,
@@ -82,33 +67,59 @@ import {
   TrimmedNonEmptyString,
   managedRuntimeModeCeilingMessage,
 } from "@t3tools/contracts";
+import { makeProviderFailure } from "@t3tools/provider-core/server/failure";
+import * as IdAllocator from "@t3tools/provider-core/server/IdAllocator";
+import { notificationTurnItem } from "@t3tools/provider-core/server/notification";
+import type * as ProviderAdapter from "@t3tools/provider-core/server/ProviderAdapter";
+import * as ProviderContinuationRequests from "@t3tools/provider-core/server/ProviderContinuationRequests";
+import {
+  endOrphanedNativeSubagent,
+  endRunlessRootTurns,
+  makeSubagentChildThread,
+  subagentResultForRun,
+  delegatedTaskProgress,
+  delegatedTaskReportRuns,
+  subagentThreadTitle,
+} from "@t3tools/provider-core/server/subagentProjection";
+import { expandAssistantCitationsForProvider } from "@t3tools/shared/assistantCitations";
 import * as KeyedLock from "@t3tools/shared/KeyedLock";
 import { modelSelectionsEqual } from "@t3tools/shared/model";
-import { expandAssistantCitationsForProvider } from "@t3tools/shared/assistantCitations";
-import { modelSwitchSince } from "./modelSwitch.ts";
-import { contextBoundaryOrdinal, isScheduledFreshRun } from "./contextBoundary.ts";
-import { isPlaceholderThreadTitle } from "./placeholderThreadTitle.ts";
-import { combinePullRequestWatchWakes, type PullRequestWatchWake } from "./pullRequestWatch.ts";
-import { recordThreadOpen } from "@t3tools/shared/paletteSearch";
 import {
   backgroundWorkHoldsCompletion,
   derivePendingBackgroundWork,
   pendingBackgroundTurnItems,
 } from "@t3tools/shared/orchestrationV2PendingBackgroundWork";
+import {
+  latestExecutedRun,
+  latestRootProviderFailure,
+  orchestrationV2WorktreePending,
+  runRanAfter,
+  usageLimitBlockedRun,
+} from "@t3tools/shared/orchestrationV2ThreadError";
+import { recordThreadOpen } from "@t3tools/shared/paletteSearch";
+import { canonicalizeGitCafePullRequestUrl } from "@t3tools/source-control-definitions/registry";
 import * as Context from "effect/Context";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as FileSystem from "effect/FileSystem";
-import * as Path from "effect/Path";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as Path from "effect/Path";
 import * as Ref from "effect/Ref";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 
-import * as ProjectStore from "./ProjectStore.ts";
+import { withCommandMetrics } from "../observability/Metrics.ts";
+import * as ServerSettings from "../serverSettings.ts";
+import { threadPullRequestsOf } from "../sourceControl/threadPullRequests.ts";
+import {
+  normalizeThreadPullRequestKey,
+  visibleThreadPullRequests,
+  threadPullRequestKeysEqual,
+  legacyThreadPullRequestKey,
+} from "../sourceControl/threadPullRequests.ts";
 import {
   isCheckpointRestoreIsolated,
   SHARED_WORKSPACE_RESTORE_MESSAGE,
@@ -125,6 +136,7 @@ import {
   resolveMessageDispatchIntent,
 } from "./CommandPolicy.ts";
 import { CommandReceiptStoreV2, type CommandReceiptV2 } from "./CommandReceiptStore.ts";
+import { contextBoundaryOrdinal, isScheduledFreshRun } from "./contextBoundary.ts";
 import {
   ContextHandoffServiceV2,
   readForkHistoryItems,
@@ -132,21 +144,16 @@ import {
   visibleConversationItems,
   visibleDeltaRunOrdinals,
 } from "./ContextHandoffService.ts";
-import { notificationTurnItem } from "@t3tools/provider-core/server/notification";
 import {
-  cancelledBeforeStart,
-  continuationFailedBeforePrompt,
-  continuationStartRetryDelayMs,
-  delegatedTaskAwaitsWork,
-  delegatedTaskResultRun,
-  delegatedTaskRuns,
-  isRestartContinuationSource,
-  runOutcome,
-} from "./RestartBackgroundNote.ts";
-import {
-  isBufferedProviderNotification,
-  isUndeliveredMailboxSteer,
-} from "./NotificationMailbox.ts";
+  DispatchModeLimit,
+  exceededDispatchModeLimit,
+  narrowToCeiling,
+  type RuntimeModeCeiling,
+  runtimeModeCeilingRefusal,
+  threadsStartingWork,
+} from "./DispatchModeLimit.ts";
+import * as EffectOutbox from "./EffectOutbox.ts";
+import type { OrchestrationEffectRequestV2, PendingOrchestrationEffectV2 } from "./EffectOutbox.ts";
 import { EventSinkV2 } from "./EventSink.ts";
 import {
   decideGuestMessageSend,
@@ -156,19 +163,12 @@ import {
   decideGuestShareCommand,
   type GuestShareCommand,
 } from "./GuestShareDecider.ts";
-import * as EffectOutbox from "./EffectOutbox.ts";
-import { withCommandMetrics } from "../observability/Metrics.ts";
-import type { OrchestrationEffectRequestV2, PendingOrchestrationEffectV2 } from "./EffectOutbox.ts";
-import * as IdAllocator from "@t3tools/provider-core/server/IdAllocator";
-import * as ThreadCommandExecutor from "./ThreadCommandExecutor.ts";
+import { modelSwitchSince } from "./modelSwitch.ts";
 import {
-  DispatchModeLimit,
-  exceededDispatchModeLimit,
-  narrowToCeiling,
-  type RuntimeModeCeiling,
-  runtimeModeCeilingRefusal,
-  threadsStartingWork,
-} from "./DispatchModeLimit.ts";
+  isBufferedProviderNotification,
+  isUndeliveredMailboxSteer,
+} from "./NotificationMailbox.ts";
+import { isPlaceholderThreadTitle } from "./placeholderThreadTitle.ts";
 import {
   applyToProjection,
   emptyProjection,
@@ -186,31 +186,31 @@ import {
   type OlderSettledThreadsQuery,
   type ShellSnapshotOptions,
 } from "./ProjectionStore.ts";
+import * as ProjectStore from "./ProjectStore.ts";
 import { ProviderAdapterRegistryV2 } from "./ProviderAdapterRegistry.ts";
-import * as ProviderContinuationRequests from "@t3tools/provider-core/server/ProviderContinuationRequests";
-import { makeProviderFailure } from "@t3tools/provider-core/server/failure";
-import * as RunExecutionService from "./RunExecutionService.ts";
 import { ProviderSessionManagerV2 } from "./ProviderSessionManager.ts";
 import { ProviderSwitchServiceV2 } from "./ProviderSwitchService.ts";
+import { combinePullRequestWatchWakes, type PullRequestWatchWake } from "./pullRequestWatch.ts";
 import { isAutomaticCompletionRun, queuedRunsInDeliveryOrder } from "./QueuedRunOrder.ts";
-import { isRuntimePolicyAboveCeilingError, RuntimePolicyV2 } from "./RuntimePolicy.ts";
 import {
-  endOrphanedNativeSubagent,
-  endRunlessRootTurns,
-  makeSubagentChildThread,
-  subagentResultForRun,
-  delegatedTaskProgress,
-  delegatedTaskReportRuns,
-  subagentThreadTitle,
-} from "@t3tools/provider-core/server/subagentProjection";
+  cancelledBeforeStart,
+  continuationFailedBeforePrompt,
+  continuationStartRetryDelayMs,
+  delegatedTaskAwaitsWork,
+  delegatedTaskResultRun,
+  delegatedTaskRuns,
+  isRestartContinuationSource,
+  runOutcome,
+} from "./RestartBackgroundNote.ts";
+import * as RunExecutionService from "./RunExecutionService.ts";
+import { isRuntimePolicyAboveCeilingError, RuntimePolicyV2 } from "./RuntimePolicy.ts";
+import * as ThreadCommandExecutor from "./ThreadCommandExecutor.ts";
+import { planThreadDeletion } from "./ThreadDeletion.ts";
 import {
   forkableSourceRunStatusError,
   isForkableSourceRunStatus,
   ThreadForkServiceV2,
 } from "./ThreadForkService.ts";
-import { planThreadDeletion } from "./ThreadDeletion.ts";
-import type * as ProviderAdapter from "@t3tools/provider-core/server/ProviderAdapter";
-import * as ServerSettings from "../serverSettings.ts";
 
 const isMessageQuestionAnswer = Schema.is(
   Schema.Union([TrimmedNonEmptyString, Schema.NonEmptyArray(TrimmedNonEmptyString)]),

@@ -1,4 +1,3 @@
-import { describe, expect, it } from "vite-plus/test";
 import {
   EnvironmentId,
   ProviderDriverKind,
@@ -7,6 +6,7 @@ import {
 } from "@t3tools/contracts";
 import * as Cause from "effect/Cause";
 import { AsyncResult } from "effect/reactivity";
+import { describe, expect, it } from "vite-plus/test";
 
 import {
   canOneClickUpdateProviderCandidate,

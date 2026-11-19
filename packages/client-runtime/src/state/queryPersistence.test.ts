@@ -3,9 +3,9 @@ import { EnvironmentId, ProjectId } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
-import { EnvironmentQueryStore, persistQuery } from "./queryPersistence.ts";
 
 import { persistPullRequestStats } from "./pullRequestStatsPersistence.ts";
+import { EnvironmentQueryStore, persistQuery } from "./queryPersistence.ts";
 
 const env = EnvironmentId.make("one");
 const other = EnvironmentId.make("two");

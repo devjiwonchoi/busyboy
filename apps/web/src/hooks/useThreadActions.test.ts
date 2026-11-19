@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 
-import { navigateAfterThreadDeletion } from "./useThreadActions";
 import { toastManager } from "../components/ui/toast";
+import { navigateAfterThreadDeletion } from "./useThreadActions";
 
 describe("navigateAfterThreadDeletion", () => {
   afterEach(() => vi.restoreAllMocks());

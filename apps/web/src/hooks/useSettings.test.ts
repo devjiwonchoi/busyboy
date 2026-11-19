@@ -11,6 +11,8 @@ vi.mock("~/localApi", () => ({
   ensureLocalApi: () => ({ persistence: persistenceMocks }),
 }));
 
+import { applyServerSettingsPatch } from "@t3tools/shared/serverSettings";
+
 import {
   __resetClientSettingsPersistenceForTests,
   __setClientSettingsForTests,
@@ -21,7 +23,6 @@ import {
   persistClientSettingsUpdate,
   prepareModelPreferencesPatch,
 } from "./useSettings";
-import { applyServerSettingsPatch } from "@t3tools/shared/serverSettings";
 
 beforeEach(() => {
   persistenceMocks.getClientSettings.mockReset().mockResolvedValue(null);

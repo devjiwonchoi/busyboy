@@ -1,8 +1,115 @@
-import { msg } from "gt-react";
+import {
+  scopedThreadKey,
+  scopeProjectRef,
+  scopeThreadRef,
+} from "@t3tools/client-runtime/environment";
 import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
-import { m } from "~/i18n/messages";
+import { wasBootstrapThreadDeleted } from "@t3tools/client-runtime/errors";
+import { deriveThreadTitleSeed } from "@t3tools/client-runtime/operations";
+import { type ComposerDispatchMode } from "@t3tools/client-runtime/state/composer-dispatch";
+import {
+  isAtomCommandInterrupted,
+  settlePromise,
+  squashAtomCommandFailure,
+  type AtomCommandResult,
+} from "@t3tools/client-runtime/state/runtime";
+import type {
+  EnvironmentProject,
+  EnvironmentThreadShell,
+} from "@t3tools/client-runtime/state/shell";
+import {
+  declinePendingApprovals,
+  sendApprovalFeedback,
+} from "@t3tools/client-runtime/state/thread-requests";
+import {
+  parseCodexFeedbackCommand,
+  submitCodexFeedback,
+  type CodexFeedbackSubmission,
+} from "@t3tools/client-runtime/state/threads";
+import {
+  AuthOrchestrationOperateScope,
+  DEFAULT_MODEL,
+  type EnvironmentId,
+  type ModelSelection,
+  type PreviewAnnotationPayload,
+  type ResponseContextRecord,
+  type ScopedThreadRef,
+  type ThreadContextRecord,
+  type ThreadId,
+  ProviderInteractionMode,
+  RuntimeMode,
+} from "@t3tools/contracts";
+import {
+  ATTACHMENT_ONLY_BOOTSTRAP_PROMPT,
+  threadContextsOutsideEnvironment,
+} from "@t3tools/shared/composerContextReferences";
 import { isClearComposerCommand, parseSideChatCommand } from "@t3tools/shared/composerTrigger";
-import { armFreshSession, disarmFreshSession, readFreshSessionArm } from "./freshSessionArms";
+import { createModelSelection } from "@t3tools/shared/model";
+import { isUsageLimitsCommand } from "@t3tools/shared/usageLimits";
+import { useNavigate } from "@tanstack/react-router";
+import { msg } from "gt-react";
+import { type SetStateAction, useLayoutEffect, useRef } from "react";
+import type { Dispatch } from "react";
+
+import { writeTextToClipboard } from "~/hooks/useCopyToClipboard";
+import { m } from "~/i18n/messages";
+import { newMessageId, newThreadId } from "~/lib/utils";
+
+import {
+  type ComposerSubmissionIntent,
+  collapseExpandedComposerCursor,
+} from "../../composer-logic";
+import {
+  beginBackgroundDraftSubmissionByRef,
+  clearBackgroundDraftSubmissionByRef,
+  finalizePromotedDraftThreadByRef,
+  markPromotedDraftThreadByRef,
+  restoreFailedDraftThread,
+  checkoutPullRequestUrlToLink,
+  composerDraftHasUserContent,
+  type ComposerFileAttachment,
+  type ComposerImageAttachment,
+  type DraftThreadEnvMode,
+  useComposerDraftStore,
+  DraftId,
+} from "../../composerDraftStore";
+import type { ComposerThreadTarget } from "../../composerDraftStore";
+import type { DraftSessionState } from "../../composerDraftStore";
+import type { ComposerHandleRef } from "../../composerHandleContext";
+import { useNewThreadHandler } from "../../hooks/useHandleNewThread";
+import type { useLogicalProjectEnvironments } from "../../hooks/useLogicalProjectEnvironments";
+import { useClientSettingsHydrated } from "../../hooks/useSettings";
+import { useStableCallback } from "../../hooks/useStableCallback";
+import {
+  getUploadedAttachments,
+  refreshExpiredAttachmentUploads,
+  readAttachmentUpload,
+  releaseDraftAttachments,
+  retryAttachmentUpload,
+  startAttachmentUpload,
+} from "../../lib/attachmentUploadQueue";
+import {
+  buildMessageContext,
+  previewAnnotationContextReference,
+  responseContextReference,
+} from "../../lib/composerContextRecords";
+import {
+  collectInlineContextIds,
+  ensureInlineContextReferences,
+  formatInlineContextReference,
+} from "../../lib/composerContextReferences";
+import type { TerminalContextDraft } from "../../lib/terminalContext";
+import type { ProviderInstanceEntry } from "../../providerInstances";
+import { appAtomRegistry } from "../../rpc/atomRegistry";
+import { useLinkedEnvironments } from "../../state/peerLinks";
+import { environmentPresentations } from "../../state/presentation";
+import { environmentServerConfigsAtom } from "../../state/server";
+import { readEnvironmentScope } from "../../state/session";
+import { threadEnvironment } from "../../state/threads";
+import { useOrchestrationCommand } from "../../state/use-orchestration-command";
+import { buildThreadRouteParams } from "../../threadRoutes";
+import { type ChatMessage, DEFAULT_INTERACTION_MODE } from "../../types";
+import type { SessionPhase } from "../../types";
 import {
   mergeDirectPreviewAnnotation,
   resolveBackgroundDraftWorkspaceOptions,
@@ -18,114 +125,8 @@ import {
   withMessageContext,
   makeThreadErrorSetter,
 } from "../ChatView.logic";
-import { isUsageLimitsCommand } from "@t3tools/shared/usageLimits";
-import {
-  AuthOrchestrationOperateScope,
-  DEFAULT_MODEL,
-  type EnvironmentId,
-  type ModelSelection,
-  type PreviewAnnotationPayload,
-  type ResponseContextRecord,
-  type ScopedThreadRef,
-  type ThreadContextRecord,
-  type ThreadId,
-  ProviderInteractionMode,
-  RuntimeMode,
-} from "@t3tools/contracts";
-import { deriveThreadTitleSeed } from "@t3tools/client-runtime/operations";
-import { wasBootstrapThreadDeleted } from "@t3tools/client-runtime/errors";
-import {
-  declinePendingApprovals,
-  sendApprovalFeedback,
-} from "@t3tools/client-runtime/state/thread-requests";
-import {
-  parseCodexFeedbackCommand,
-  submitCodexFeedback,
-  type CodexFeedbackSubmission,
-} from "@t3tools/client-runtime/state/threads";
-import {
-  scopedThreadKey,
-  scopeProjectRef,
-  scopeThreadRef,
-} from "@t3tools/client-runtime/environment";
-import { createModelSelection } from "@t3tools/shared/model";
-import { type SetStateAction, useLayoutEffect, useRef } from "react";
-import { useNavigate } from "@tanstack/react-router";
-import {
-  isAtomCommandInterrupted,
-  settlePromise,
-  squashAtomCommandFailure,
-  type AtomCommandResult,
-} from "@t3tools/client-runtime/state/runtime";
-import {
-  type ComposerSubmissionIntent,
-  collapseExpandedComposerCursor,
-} from "../../composer-logic";
-import { type ChatMessage, DEFAULT_INTERACTION_MODE } from "../../types";
 import { recordPromptSent } from "../GitHubStarPrompt";
 import { stackedThreadToast, toastManager } from "../ui/toast";
-import { writeTextToClipboard } from "~/hooks/useCopyToClipboard";
-import { newMessageId, newThreadId } from "~/lib/utils";
-import { useNewThreadHandler } from "../../hooks/useHandleNewThread";
-import { buildThreadRouteParams } from "../../threadRoutes";
-import {
-  beginBackgroundDraftSubmissionByRef,
-  clearBackgroundDraftSubmissionByRef,
-  finalizePromotedDraftThreadByRef,
-  markPromotedDraftThreadByRef,
-  restoreFailedDraftThread,
-  checkoutPullRequestUrlToLink,
-  composerDraftHasUserContent,
-  type ComposerFileAttachment,
-  type ComposerImageAttachment,
-  type DraftThreadEnvMode,
-  useComposerDraftStore,
-  DraftId,
-} from "../../composerDraftStore";
-import type { TerminalContextDraft } from "../../lib/terminalContext";
-import {
-  collectInlineContextIds,
-  ensureInlineContextReferences,
-  formatInlineContextReference,
-} from "../../lib/composerContextReferences";
-import {
-  buildMessageContext,
-  previewAnnotationContextReference,
-  responseContextReference,
-} from "../../lib/composerContextRecords";
-import { environmentServerConfigsAtom } from "../../state/server";
-import { threadEnvironment } from "../../state/threads";
-import { runMobileComposerTransition } from "./draftHeroTransition";
-import { useClientSettingsHydrated } from "../../hooks/useSettings";
-import { useStableCallback } from "../../hooks/useStableCallback";
-import { environmentPresentations } from "../../state/presentation";
-import {
-  approvalRedirectNotice,
-  composerDraftContentChanged,
-  loadBalancingSendWarning,
-  multipleModelSendBlock,
-  referencedThreadContexts,
-} from "./composerSend.logic";
-import { useMultipleModelSend } from "./useMultipleModelSend";
-import type { SideChatMessage } from "./useSideChat";
-import { type ComposerDispatchMode } from "@t3tools/client-runtime/state/composer-dispatch";
-import {
-  getUploadedAttachments,
-  refreshExpiredAttachmentUploads,
-  readAttachmentUpload,
-  releaseDraftAttachments,
-  retryAttachmentUpload,
-  startAttachmentUpload,
-} from "../../lib/attachmentUploadQueue";
-import { appAtomRegistry } from "../../rpc/atomRegistry";
-import { fileAttachmentCapabilityBlockReason } from "./composerAttachmentFiles";
-import { useLinkedEnvironments } from "../../state/peerLinks";
-import { readEnvironmentScope } from "../../state/session";
-import { useOrchestrationCommand } from "../../state/use-orchestration-command";
-import {
-  ATTACHMENT_ONLY_BOOTSTRAP_PROMPT,
-  threadContextsOutsideEnvironment,
-} from "@t3tools/shared/composerContextReferences";
 import {
   draftSendState,
   type MultipleModelTarget,
@@ -133,21 +134,22 @@ import {
   prepareTurnAttachments,
   restoreComposerDraft,
 } from "./chatViewSend";
-import type {
-  EnvironmentProject,
-  EnvironmentThreadShell,
-} from "@t3tools/client-runtime/state/shell";
-import type { Dispatch } from "react";
-import type { ComposerThreadTarget } from "../../composerDraftStore";
-import type { ProviderInstanceEntry } from "../../providerInstances";
-import type { SessionPhase } from "../../types";
-import type { DraftSessionState } from "../../composerDraftStore";
-import type { ComposerHandleRef } from "../../composerHandleContext";
-import type { useLogicalProjectEnvironments } from "../../hooks/useLogicalProjectEnvironments";
+import { fileAttachmentCapabilityBlockReason } from "./composerAttachmentFiles";
+import {
+  approvalRedirectNotice,
+  composerDraftContentChanged,
+  loadBalancingSendWarning,
+  multipleModelSendBlock,
+  referencedThreadContexts,
+} from "./composerSend.logic";
+import { runMobileComposerTransition } from "./draftHeroTransition";
+import { armFreshSession, disarmFreshSession, readFreshSessionArm } from "./freshSessionArms";
 import type { useDraftEnvironmentRouting } from "./useDraftEnvironmentRouting";
 import type { useLocalDispatchState } from "./useLocalDispatchState";
+import { useMultipleModelSend } from "./useMultipleModelSend";
 import type { usePendingThreadRequests } from "./usePendingThreadRequests";
 import type { useQueuedRunEdit } from "./useQueuedRunEdit";
+import type { SideChatMessage } from "./useSideChat";
 import type { useTimelineFollow } from "./useTimelineFollow";
 import type { useUsageLimitsPanel } from "./useUsageLimitsPanel";
 import type { useWorktreeSetup } from "./useWorktreeSetup";

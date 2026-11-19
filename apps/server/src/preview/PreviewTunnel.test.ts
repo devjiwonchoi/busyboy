@@ -1,3 +1,5 @@
+import * as NodeNet from "node:net";
+
 import * as NodeHttpServer from "@effect/platform-node/NodeHttpServer";
 import * as NodeWS from "@effect/platform-node/NodeWS";
 import { expect, it } from "@effect/vitest";
@@ -6,12 +8,11 @@ import {
   AuthSessionId,
   AuthTerminalOperateScope,
 } from "@t3tools/contracts";
-import * as NodeNet from "node:net";
 import * as Context from "effect/Context";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 import { HttpRouter, HttpServer } from "effect/http";
+import * as Layer from "effect/Layer";
 
 import * as EnvironmentAuth from "../auth/EnvironmentAuth.ts";
 import * as SessionStore from "../auth/SessionStore.ts";

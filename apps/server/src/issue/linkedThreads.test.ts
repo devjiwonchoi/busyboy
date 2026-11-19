@@ -1,5 +1,5 @@
-import { IssueTrackerKind } from "@t3tools/contracts";
 import { expect, it } from "@effect/vitest";
+import { IssueTrackerKind } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import * as SqlClient from "effect/sql/SqlClient";

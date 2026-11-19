@@ -1,4 +1,3 @@
-import { describe, expect, it } from "vite-plus/test";
 import {
   DEFAULT_SERVER_SETTINGS,
   type ServerConfig,
@@ -6,6 +5,8 @@ import {
   ProviderInstanceId,
   ProjectId,
 } from "@t3tools/contracts";
+import { describe, expect, it } from "vite-plus/test";
+
 import {
   scheduledTaskDefaultModel,
   DEFAULT_SCHEDULE,

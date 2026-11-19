@@ -2,11 +2,12 @@
 import * as NodeFS from "node:fs";
 import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
-import { afterEach, describe, expect, it } from "vite-plus/test";
+
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { it as effectIt } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import { afterEach, describe, expect, it } from "vite-plus/test";
 
 import { RotatingFileSink, makeAsyncRotatingFileSink } from "./logging.ts";
 

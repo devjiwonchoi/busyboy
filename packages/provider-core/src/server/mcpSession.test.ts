@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
+
 import { withAgentDeviceEnvironment } from "./mcpSession.ts";
 
 describe("device CLI environment", () => {

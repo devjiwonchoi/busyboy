@@ -1,5 +1,6 @@
-import * as Effect from "effect/Effect";
 import { Argument, Command } from "effect/cli";
+import * as Effect from "effect/Effect";
+
 import { runNativeSpeechWorker } from "../speech/native.ts";
 
 export const speechWorkerCommand = Command.make("__speech-worker", {

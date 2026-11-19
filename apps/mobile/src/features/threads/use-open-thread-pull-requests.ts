@@ -1,9 +1,9 @@
-import type { EnvironmentThreadShell } from "@t3tools/client-runtime/state/shell";
 import { useNavigation } from "@react-navigation/native";
+import type { EnvironmentThreadShell } from "@t3tools/client-runtime/state/shell";
 import { useGT } from "gt-react-native";
-import { changeRequestTermKind } from "../../lib/changeRequestTerm";
 
 import * as Dialog from "../../components/ui/Dialog";
+import { changeRequestTermKind } from "../../lib/changeRequestTerm";
 import { useNavigateToPullRequest } from "../../native/useOpenPullRequest";
 import {
   resolveThreadPrBadgeAction,

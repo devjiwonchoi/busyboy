@@ -1,7 +1,20 @@
-import { msg } from "gt-react";
 import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
-import { m } from "~/i18n/messages";
+import {
+  buildPendingUserInputAnswers,
+  setPendingUserInputCustomAnswer,
+  togglePendingUserInputOptionSelection,
+  type PendingUserInputDraftAnswer,
+} from "@t3tools/client-runtime/state/pending-user-input";
+import {
+  isAtomCommandInterrupted,
+  squashAtomCommandFailure,
+} from "@t3tools/client-runtime/state/runtime";
 import type { ThreadStructure } from "@t3tools/client-runtime/state/shell";
+import {
+  derivePendingThreadRequests,
+  seedUserInputDraftAnswers,
+  userInputDraftKey,
+} from "@t3tools/client-runtime/state/thread-requests";
 import {
   AuthOrchestrationOperateScope,
   type EnvironmentId,
@@ -11,17 +24,12 @@ import {
   type ThreadId,
   type UserInputAttachments,
 } from "@t3tools/contracts";
-import {
-  derivePendingThreadRequests,
-  seedUserInputDraftAnswers,
-  userInputDraftKey,
-} from "@t3tools/client-runtime/state/thread-requests";
-import {
-  isAtomCommandInterrupted,
-  squashAtomCommandFailure,
-} from "@t3tools/client-runtime/state/runtime";
+import { msg } from "gt-react";
 import { useRef, useState, type RefObject, type SetStateAction } from "react";
 import { useShallow } from "zustand/react/shallow";
+
+import { m } from "~/i18n/messages";
+
 import {
   type ComposerThreadDraftState,
   type DraftId,
@@ -33,13 +41,6 @@ import {
   refreshExpiredAttachmentUploads,
   useAttachmentUploadStore,
 } from "../../lib/attachmentUploadQueue";
-import { composerDraftContentChanged } from "./composerSend.logic";
-import {
-  buildPendingUserInputAnswers,
-  setPendingUserInputCustomAnswer,
-  togglePendingUserInputOptionSelection,
-  type PendingUserInputDraftAnswer,
-} from "@t3tools/client-runtime/state/pending-user-input";
 import {
   carryDisplacedCustomAnswerIntoPrompt,
   withdrawDisplacedCustomAnswerFromPrompt,
@@ -64,8 +65,8 @@ import { threadEnvironment } from "../../state/threads";
 import { useAtomCommand } from "../../state/use-atom-command";
 import { useOrchestrationCommand } from "../../state/use-orchestration-command";
 import { toastManager } from "../ui/toast";
-
 import type { ChatComposerHandle } from "./ChatComposer";
+import { composerDraftContentChanged } from "./composerSend.logic";
 
 const EMPTY_PENDING_USER_INPUT_ANSWERS: Record<string, PendingUserInputDraftAnswer> = {};
 const NO_PENDING_REQUESTS = { approvals: [], userInputs: [] } as const;

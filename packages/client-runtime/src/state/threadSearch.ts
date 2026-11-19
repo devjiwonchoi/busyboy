@@ -7,9 +7,6 @@ import {
   type OrchestrationV2SearchThreadsResult,
   type OrchestrationV2ThreadFamily,
 } from "@t3tools/contracts";
-import * as Option from "effect/Option";
-import * as Schema from "effect/Schema";
-import { AsyncResult, Atom } from "effect/reactivity";
 import {
   foldSearchQuery,
   messageSearchTokens,
@@ -17,6 +14,9 @@ import {
   type ThreadSearchSubject,
 } from "@t3tools/shared/paletteSearch";
 import { threadSearchPullRequests } from "@t3tools/shared/threadPullRequests";
+import * as Option from "effect/Option";
+import { AsyncResult, Atom } from "effect/reactivity";
+import * as Schema from "effect/Schema";
 
 import type { EnvironmentThreadShell } from "./models.ts";
 import { getThreadSortTimestamp } from "./threadSort.ts";

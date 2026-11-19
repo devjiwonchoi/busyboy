@@ -1,11 +1,11 @@
 import { T, useGT } from "gt-react-native";
-import { SymbolView } from "../../components/ui/AppSymbol";
 import { Platform, Pressable, View } from "react-native";
 
-import { AppText as Text } from "../../components/ui/AppText";
 import { NewThreadButton } from "../../components/NewThreadButton";
-import { FloatingActionButton } from "../../components/ui/FloatingActionButton";
+import { SymbolView } from "../../components/ui/AppSymbol";
+import { AppText as Text } from "../../components/ui/AppText";
 import { EmptyState } from "../../components/ui/EmptyState";
+import { FloatingActionButton } from "../../components/ui/FloatingActionButton";
 import { ScreenContent } from "../../components/ui/ScreenContent";
 import type { WorkspaceTab } from "./workspace/workspace-tabs-state";
 

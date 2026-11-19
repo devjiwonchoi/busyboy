@@ -6,6 +6,7 @@ import type {
   Router,
   StackNavigationState,
 } from "@react-navigation/native";
+
 import { workspaceRoutesOf } from "../workspace-overlay-routes";
 
 type RootParams = ReactNavigation.RootParamList;

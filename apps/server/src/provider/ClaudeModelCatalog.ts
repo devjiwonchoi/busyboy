@@ -1,3 +1,4 @@
+import type { ModelInfo as ClaudeModelInfo } from "@anthropic-ai/claude-agent-sdk";
 import {
   type CustomModelSetting,
   type ModelCapabilities,
@@ -6,8 +7,7 @@ import {
   type ServerProviderModel,
   type ServerProviderUpdateRequiredModel,
 } from "@t3tools/contracts";
-import type { ModelInfo as ClaudeModelInfo } from "@anthropic-ai/claude-agent-sdk";
-import * as Option from "effect/Option";
+import * as ModelCatalog from "@t3tools/provider-core/server/ModelCatalog";
 import {
   getModelSelectionStringOptionValue,
   getProviderOptionCurrentValue,
@@ -15,6 +15,7 @@ import {
   readCustomModelEntries,
 } from "@t3tools/shared/model";
 import { compareSemverVersions } from "@t3tools/shared/semver";
+import * as Option from "effect/Option";
 
 import {
   type ClaudeCodeCompatibility,
@@ -22,7 +23,6 @@ import {
   decodeClaudeModelAdapter,
   decodeClaudeProfileAdapter,
 } from "./ClaudeModelManifest.ts";
-import * as ModelCatalog from "@t3tools/provider-core/server/ModelCatalog";
 import { BUNDLED_MODEL_MANIFEST, resolveProviderCatalog } from "./ModelManifest.ts";
 
 const CLAUDE = ProviderDriverKind.make("claudeAgent");

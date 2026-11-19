@@ -1,12 +1,19 @@
 import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
-import { m as resolveMessage } from "~/i18n/messages";
-import { ProcessSignalActions } from "./ProcessSignalActions";
+import {
+  isAtomCommandInterrupted,
+  squashAtomCommandFailure,
+} from "@t3tools/client-runtime/state/runtime";
 import { resolveUsageAccess } from "@t3tools/client-runtime/state/usage-access";
-import { environmentSession } from "../../state/session";
 import { AuthOrchestrationOperateScope } from "@t3tools/contracts";
-import { readEnvironmentScope, useEnvironmentScope } from "../../state/session";
 import { AuthEnvironmentMaintainScope } from "@t3tools/contracts";
-import { RefreshIcon } from "~/components/ui/refresh-icon";
+import type {
+  ServerProcessDiagnosticsEntry,
+  ServerProcessResourceHistorySummary,
+  ServerProcessSignal,
+} from "@t3tools/contracts";
+import * as DateTime from "effect/DateTime";
+import * as Option from "effect/Option";
+import { msg, T, useGT, useMessages, Var } from "gt-react";
 import {
   AlertTriangleIcon,
   CopyIcon,
@@ -15,40 +22,34 @@ import {
   ChevronDownIcon,
   ChevronRightIcon,
 } from "lucide-react";
-import {
-  isAtomCommandInterrupted,
-  squashAtomCommandFailure,
-} from "@t3tools/client-runtime/state/runtime";
 import { useRef, useState, type ReactNode } from "react";
-import { msg, T, useGT, useMessages, Var } from "gt-react";
-import type { MessageResolver } from "../../i18n/messages";
-import type {
-  ServerProcessDiagnosticsEntry,
-  ServerProcessResourceHistorySummary,
-  ServerProcessSignal,
-} from "@t3tools/contracts";
-import * as DateTime from "effect/DateTime";
-import * as Option from "effect/Option";
 
+import { RefreshIcon } from "~/components/ui/refresh-icon";
+import { m as resolveMessage } from "~/i18n/messages";
+
+import { useOpenInPreferredEditor } from "../../editorPreferences";
+import { useCopyToClipboard } from "../../hooks/useCopyToClipboard";
+import { useRelativeTimeState } from "../../hooks/useRelativeTimeState";
+import type { MessageResolver } from "../../i18n/messages";
 import { formatBytes } from "../../lib/formatBytes";
 import { cn } from "../../lib/utils";
 import { ensureLocalApi } from "../../localApi";
-import { useOpenInPreferredEditor } from "../../editorPreferences";
-import { useRelativeTimeState } from "../../hooks/useRelativeTimeState";
 import { useEnvironmentQuery } from "../../state/query";
 import { serverEnvironment } from "../../state/server";
-import { useCopyToClipboard } from "../../hooks/useCopyToClipboard";
+import { environmentSession } from "../../state/session";
+import { readEnvironmentScope, useEnvironmentScope } from "../../state/session";
+import { useAtomCommand } from "../../state/use-atom-command";
 import { Button } from "../ui/button";
 import { ScrollArea } from "../ui/scroll-area";
+import { toastManager } from "../ui/toast";
 import { Toggle, ToggleGroup } from "../ui/toggle-group";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
-import { toastManager } from "../ui/toast";
 import { formatDiagnosticsDuration } from "./DiagnosticsSettings.logic";
 import { ExpandableText } from "./ExpandableText";
+import { ProcessSignalActions } from "./ProcessSignalActions";
 import { ResourceTelemetryDiagnostics } from "./ResourceTelemetryDiagnostics";
 import { formatCpuTime } from "./ResourceTelemetryDiagnostics.logic";
 import { SettingsPageContainer, SettingsSection } from "./settingsLayout";
-import { useAtomCommand } from "../../state/use-atom-command";
 import { useSettingsScope } from "./SettingsScopeContext";
 import { TelemetryExportSettings } from "./TelemetryExportSettings";
 

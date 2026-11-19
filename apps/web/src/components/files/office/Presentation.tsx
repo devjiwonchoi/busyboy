@@ -1,17 +1,19 @@
 /* oxlint-disable react/no-unstable-nested-components -- These callbacks return overlays, and are invoked as render functions. */
 import { msg, T, useGT } from "gt-react";
-import { useEffect, useRef, useState } from "react";
 import { ChevronLeftIcon, ChevronRightIcon } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+
+import { m } from "~/i18n/messages";
+
 import {
   FileSurfaceAction,
   FileSurfaceLoading,
   FILE_SURFACE_SUBHEADER_CLASS,
 } from "../fileSurfaceChrome";
 import { OfficePages, type PaintPage } from "./OfficePages";
-import { createWorkerClient } from "./worker-rpc";
 import type { SlideMethods, SlideSummary } from "./slide-protocol";
 import { rasterize } from "./vector-pictures";
-import { m } from "~/i18n/messages";
+import { createWorkerClient } from "./worker-rpc";
 
 type Opened = { slides: readonly SlideSummary[]; paint: PaintPage };
 export default function Presentation(props: {

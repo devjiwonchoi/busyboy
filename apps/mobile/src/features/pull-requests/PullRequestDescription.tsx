@@ -1,23 +1,24 @@
 import { splitPullRequestBody } from "@t3tools/client-runtime/pull-request-markdown";
+import { T, useGT, useMessages } from "gt-react-native";
+import { useContext, useMemo, useState, type ComponentProps, type ReactNode } from "react";
+import { Platform, Pressable, ScrollView, StyleSheet, View } from "react-native";
+import Svg, { Defs, LinearGradient, Rect, Stop } from "react-native-svg";
+
+import { SymbolView } from "../../components/ui/AppSymbol";
+import { AppText as Text } from "../../components/ui/AppText";
+import type { FilePreviewItem } from "../../components/ui/FilePreviewModal";
+import { parseMarkdownDocument } from "../../lib/markdownDocument";
+import { useAppearancePreferences } from "../settings/appearance/AppearancePreferencesProvider";
+import { isBotBadgeImage } from "./botBadgeImages";
+import { pullRequestDescriptionContent } from "./pullRequestDescriptionContent";
+import { PullRequestMarkdown } from "./PullRequestMarkdown";
 import {
   PullRequestImageAttachment,
   PullRequestMedia,
   PullRequestMediaContext,
 } from "./PullRequestMedia";
-import { PullRequestSectionHeading } from "./PullRequestSectionHeading";
-import { T, useGT, useMessages } from "gt-react-native";
-import { useContext, useMemo, useState, type ComponentProps, type ReactNode } from "react";
-import { Platform, Pressable, ScrollView, StyleSheet, View } from "react-native";
-import Svg, { Defs, LinearGradient, Rect, Stop } from "react-native-svg";
 import { pullRequestImageSource } from "./pullRequestMediaSource";
-import { parseMarkdownDocument } from "../../lib/markdownDocument";
-import { SymbolView } from "../../components/ui/AppSymbol";
-import { AppText as Text } from "../../components/ui/AppText";
-import { useAppearancePreferences } from "../settings/appearance/AppearancePreferencesProvider";
-import type { FilePreviewItem } from "../../components/ui/FilePreviewModal";
-import { isBotBadgeImage } from "./botBadgeImages";
-import { PullRequestMarkdown } from "./PullRequestMarkdown";
-import { pullRequestDescriptionContent } from "./pullRequestDescriptionContent";
+import { PullRequestSectionHeading } from "./PullRequestSectionHeading";
 
 const COLLAPSED_HEIGHT = 240;
 

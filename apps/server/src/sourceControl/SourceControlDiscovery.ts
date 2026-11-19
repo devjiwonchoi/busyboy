@@ -3,6 +3,11 @@ import {
   type VcsDiscoveryItem,
   type VcsDriverKind,
 } from "@t3tools/contracts";
+import {
+  detailFromCause,
+  failedProbeHint,
+  firstNonEmptyLine,
+} from "@t3tools/source-control-core/server/discovery";
 import * as Context from "effect/Context";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -13,11 +18,6 @@ import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as ServerConfig from "../config.ts";
 import { refreshPathFromLoginShell } from "../os-jank.ts";
 import * as VcsProcess from "../vcs/VcsProcess.ts";
-import {
-  detailFromCause,
-  failedProbeHint,
-  firstNonEmptyLine,
-} from "@t3tools/source-control-core/server/discovery";
 import * as SourceControlProviderRegistry from "./SourceControlProviderRegistry.ts";
 
 interface DiscoveryProbe {

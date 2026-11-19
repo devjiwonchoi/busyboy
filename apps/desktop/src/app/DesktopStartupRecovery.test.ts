@@ -1,5 +1,5 @@
-import type { DesktopUpdateState } from "@t3tools/contracts";
 import { describe, expect, it } from "@effect/vitest";
+import type { DesktopUpdateState } from "@t3tools/contracts";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -8,16 +8,16 @@ import * as Option from "effect/Option";
 import * as Ref from "effect/Ref";
 import * as Stream from "effect/Stream";
 import * as SubscriptionRef from "effect/SubscriptionRef";
-import * as DesktopEnvironment from "./DesktopEnvironment.ts";
-import * as DesktopState from "./DesktopState.ts";
+
 import * as ElectronApp from "../electron/ElectronApp.ts";
 import * as ElectronShell from "../electron/ElectronShell.ts";
 import * as ElectronTheme from "../electron/ElectronTheme.ts";
 import * as ElectronWindow from "../electron/ElectronWindow.ts";
 import * as DesktopUpdates from "../updates/DesktopUpdates.ts";
-
 import { createInitialDesktopUpdateState } from "../updates/updateMachine.ts";
+import * as DesktopEnvironment from "./DesktopEnvironment.ts";
 import { listen, resolveStartupRecoveryOffer } from "./DesktopStartupRecovery.ts";
+import * as DesktopState from "./DesktopState.ts";
 
 const updateState = (patch: Partial<DesktopUpdateState>): DesktopUpdateState => ({
   ...createInitialDesktopUpdateState(

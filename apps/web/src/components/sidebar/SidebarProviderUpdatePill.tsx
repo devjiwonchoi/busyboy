@@ -1,10 +1,11 @@
-import { Spinner } from "~/components/ui/spinner";
-import { useNavigate } from "@tanstack/react-router";
 import { useAtomValue } from "@effect/atom-react";
 import type { ServerProvider } from "@t3tools/contracts";
-import { CircleCheckIcon, DownloadIcon, TriangleAlertIcon, XIcon } from "lucide-react";
+import { useNavigate } from "@tanstack/react-router";
 import { T, useGT, useMessages } from "gt-react";
+import { CircleCheckIcon, DownloadIcon, TriangleAlertIcon, XIcon } from "lucide-react";
 import { useEffect, useEffectEvent, useState, type CSSProperties } from "react";
+
+import { Spinner } from "~/components/ui/spinner";
 
 import { primaryServerProvidersAtom } from "../../state/server";
 import {

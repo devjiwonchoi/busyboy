@@ -5,9 +5,9 @@ import { Atom } from "effect/reactivity";
 import { findLinkedRoute, updateLinkedRoute } from "../../lib/appLinking";
 import { rootNavigationRef, whenRootNavigationReady } from "../../lib/rootNavigation";
 import { appAtomRegistry } from "../../state/atom-registry";
-import { leaveSettingsPage } from "../settings/settings-navigation";
-import { workspaceHasColumns } from "../layout/workspace/workspace-selection-store";
 import { pairEnvironment } from "../../state/use-remote-environment-registry";
+import { workspaceHasColumns } from "../layout/workspace/workspace-selection-store";
+import { leaveSettingsPage } from "../settings/settings-navigation";
 
 export type DevAutoConnectAttempt =
   | { readonly pairingUrl: string; readonly status: "connecting" }

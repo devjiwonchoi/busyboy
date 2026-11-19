@@ -1,9 +1,10 @@
-import { RefreshIcon } from "~/components/ui/refresh-icon";
 import { useAtomValue } from "@effect/atom-react";
 import { useLocation, useNavigate } from "@tanstack/react-router";
 import { Atom } from "effect/reactivity";
 import { useGT } from "gt-react";
 import { useEffect, useState } from "react";
+
+import { RefreshIcon } from "~/components/ui/refresh-icon";
 
 import {
   ensureClientSettingsHydrated,

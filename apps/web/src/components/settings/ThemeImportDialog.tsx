@@ -1,8 +1,11 @@
 import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
+import { settlePromise } from "@t3tools/client-runtime/state/runtime";
+import { msg, T, useGT } from "gt-react";
 import { DownloadIcon, PlusIcon } from "lucide-react";
 import type { ChangeEvent, DragEvent, UIEvent } from "react";
-import { settlePromise } from "@t3tools/client-runtime/state/runtime";
 import { useEffect, useRef, useState } from "react";
+
+import { m } from "../../i18n/messages";
 import { formatBytes } from "../../lib/formatBytes";
 import { cn } from "../../lib/utils";
 import {
@@ -23,8 +26,6 @@ import { Alert } from "../ui/alert";
 import { Button } from "../ui/button";
 import { Dialog, DialogHeader, DialogPanel, DialogPopup, DialogTitle } from "../ui/dialog";
 import { ThemeSearchSection } from "./ThemeSearchSection";
-import { msg, T, useGT } from "gt-react";
-import { m } from "../../i18n/messages";
 
 /**
  * The guard runs on the size before the bytes are ever read: a large file

@@ -1,15 +1,17 @@
-import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { T, useGT } from "gt-react";
 import { ChevronDownIcon, ChevronUpIcon, XIcon } from "lucide-react";
+import { useEffect, useRef, useState, type KeyboardEvent } from "react";
+
+import { cn } from "~/lib/utils";
+
 import { Button } from "../ui/button";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "../ui/input-group";
-import { cn } from "~/lib/utils";
+import { THREAD_DETAILS_CARD_GAP } from "./threadDetailsCardLayout";
 import {
   formatThreadFindCount,
   nextThreadFindAnnouncement,
   type ThreadFindAnnouncement,
 } from "./threadFind";
-import { THREAD_DETAILS_CARD_GAP } from "./threadDetailsCardLayout";
 
 interface ThreadFindBarProps {
   readonly open: boolean;

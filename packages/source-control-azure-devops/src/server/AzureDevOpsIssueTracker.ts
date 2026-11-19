@@ -1,15 +1,3 @@
-/**
- * Azure DevOps work items as an issue tracker, over `az`. Work items belong to a project, so the
- * scope is `organization/project` and every call names the organization. Listing is a WIQL
- * query paged by a `(changedDate, id)` keyset cursor, because WIQL has no offset.
- */
-import * as Cache from "effect/Cache";
-import * as Duration from "effect/Duration";
-import * as Effect from "effect/Effect";
-import * as Exit from "effect/Exit";
-import * as FileSystem from "effect/FileSystem";
-import * as Result from "effect/Result";
-import * as Schema from "effect/Schema";
 import {
   IssueTrackerKind,
   type IssueCapabilities,
@@ -22,6 +10,18 @@ import {
   IssueTrackerError,
   type IssueTrackerApi,
 } from "@t3tools/source-control-core/server/IssueTracker";
+/**
+ * Azure DevOps work items as an issue tracker, over `az`. Work items belong to a project, so the
+ * scope is `organization/project` and every call names the organization. Listing is a WIQL
+ * query paged by a `(changedDate, id)` keyset cursor, because WIQL has no offset.
+ */
+import * as Cache from "effect/Cache";
+import * as Duration from "effect/Duration";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as FileSystem from "effect/FileSystem";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
 
 import * as AzureDevOpsCli from "./AzureDevOpsCli.ts";
 import {

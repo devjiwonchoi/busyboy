@@ -1,11 +1,8 @@
 // @effect-diagnostics nodeBuiltinImport:off
 import * as NodeFS from "node:fs";
+
 import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import * as Layer from "effect/Layer";
-import * as Effect from "effect/Effect";
-import * as Schema from "effect/Schema";
-import { FetchHttpClient } from "effect/http";
 import { assert, expect, it } from "@effect/vitest";
 import {
   ComposerContextId,
@@ -14,7 +11,13 @@ import {
   ThreadId,
 } from "@t3tools/contracts";
 import { projectComposerContextForProvider } from "@t3tools/shared/composerContextReferences";
+import * as Effect from "effect/Effect";
+import { FetchHttpClient } from "effect/http";
+import * as Layer from "effect/Layer";
+import * as Schema from "effect/Schema";
 
+import { taskPrompt } from "../../apps/server/src/mcp/delegatedTaskModes.ts";
+import { briefRoute, gradeDevice, shellInvocations } from "./device-grading.ts";
 import {
   answerToolCall,
   buildBase,
@@ -42,8 +45,6 @@ import {
   withBackgroundWait,
   withDevices,
 } from "./run.ts";
-import { briefRoute, gradeDevice, shellInvocations } from "./device-grading.ts";
-import { taskPrompt } from "../../apps/server/src/mcp/delegatedTaskModes.ts";
 
 it("grades Codex shell and subagent calls with the shared rules", () => {
   const calls = [

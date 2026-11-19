@@ -59,8 +59,9 @@ vi.mock(import("~/state/use-atom-command"), () => ({
 }));
 
 import { appAtomRegistry } from "~/rpc/atomRegistry";
-import { toastManager } from "./ui/toast";
+
 import { useCheckProviderUpdates, useProviderUpdates } from "./ProviderUpdatesAction";
+import { toastManager } from "./ui/toast";
 
 const provider: ServerProvider = {
   instanceId: ProviderInstanceId.make("codex"),

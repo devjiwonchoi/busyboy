@@ -1,6 +1,3 @@
-import * as Effect from "effect/Effect";
-import * as Result from "effect/Result";
-import { GraphQLClient, GraphQLClientError, GraphQLGroup } from "effect/graphql";
 import {
   IssueTrackerKind,
   type IssueCapabilities,
@@ -14,14 +11,11 @@ import {
   type IssueInvolvementFilter,
   type IssueTrackerApi,
 } from "@t3tools/source-control-core/server/IssueTracker";
+import * as Effect from "effect/Effect";
+import { GraphQLClient, GraphQLClientError, GraphQLGroup } from "effect/graphql";
+import * as Result from "effect/Result";
 
-import * as GitHubRest from "./GitHubRest.ts";
-import { readIssueTemplates } from "./gitHubIssueTemplates.ts";
-import * as GitHubRequestPolicy from "./GitHubRequestPolicy.ts";
 import * as GitHubGraphQlClient from "./gitHubGraphQlClient.ts";
-import { IssuesGraphQLGroup } from "./issues.graphql.ts";
-import { AddReaction, RemoveReaction } from "./pullRequestMutations.graphql.ts";
-import { gitHubReactionContent } from "./gitHubPullRequestJson.ts";
 import {
   ISSUE_STATES,
   decodeCreatedIssueJson,
@@ -31,6 +25,12 @@ import {
   toIssueDetail,
   toIssueSearch,
 } from "./gitHubIssueJson.ts";
+import { readIssueTemplates } from "./gitHubIssueTemplates.ts";
+import { gitHubReactionContent } from "./gitHubPullRequestJson.ts";
+import * as GitHubRequestPolicy from "./GitHubRequestPolicy.ts";
+import * as GitHubRest from "./GitHubRest.ts";
+import { IssuesGraphQLGroup } from "./issues.graphql.ts";
+import { AddReaction, RemoveReaction } from "./pullRequestMutations.graphql.ts";
 
 const KIND = IssueTrackerKind.make("github");
 

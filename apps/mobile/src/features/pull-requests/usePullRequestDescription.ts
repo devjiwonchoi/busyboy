@@ -1,5 +1,5 @@
-import { errorDisplayMessage } from "@t3tools/client-runtime/errors";
 import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
+import { errorDisplayMessage } from "@t3tools/client-runtime/errors";
 import {
   descriptionDraftInForce,
   settleDescriptionSave,
@@ -12,11 +12,12 @@ import { setMarkdownTaskChecked } from "@t3tools/shared/markdownTaskList";
 import { AsyncResult } from "effect/reactivity";
 import { useGT } from "gt-react-native";
 import { useRef, useState } from "react";
+
 import * as Dialog from "../../components/ui/Dialog";
+import { m } from "../../i18n/messages";
 import { composerPullRequests } from "../../state/pull-requests";
 import { useAtomCommand } from "../../state/use-atom-command";
 import { pullRequestTarget, type PullRequestParams } from "./usePullRequestDiff";
-import { m } from "../../i18n/messages";
 
 /** The description with checkbox ticks shown before the host confirms them. */
 export function usePullRequestDescription(

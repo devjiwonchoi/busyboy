@@ -2,7 +2,6 @@ import { foldSearchQuery, rankSearchItems, scoreSearchTerms } from "@t3tools/sha
 import { msg } from "gt-react-native";
 
 import { m, type MessageResolver } from "../../i18n/messages";
-
 import type { SettingsPageTarget } from "./components/settings-page-targets";
 
 /** What each page holds besides its row's label, so search finds a setting by its own name. */

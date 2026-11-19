@@ -1,8 +1,8 @@
 import { T, useGT } from "gt-react";
 import { useState } from "react";
 
-import { MermaidDiagram } from "../chat/MermaidDiagram";
 import { ExpandedImageDialog } from "../chat/ExpandedImageDialog";
+import { MermaidDiagram } from "../chat/MermaidDiagram";
 
 export default function MermaidViewer(props: { readonly text: string }) {
   const gt = useGT();

@@ -1,5 +1,5 @@
 import type { ProviderInstanceEnvironment, ProviderInstanceId } from "@t3tools/contracts";
-import type { AcpRegistrySettings } from "../settings.ts";
+import { writeFileStringAtomically } from "@t3tools/shared/atomicWrite";
 import * as Digest from "effect/crypto/Digest";
 import * as Effect from "effect/Effect";
 import * as Hex from "effect/encoding/Hex";
@@ -9,7 +9,7 @@ import * as Ref from "effect/Ref";
 import * as Schema from "effect/Schema";
 import * as Semaphore from "effect/Semaphore";
 
-import { writeFileStringAtomically } from "@t3tools/shared/atomicWrite";
+import type { AcpRegistrySettings } from "../settings.ts";
 
 const decodeState = Schema.decodeUnknownEffect(
   Schema.fromJsonString(Schema.Struct({ binding: Schema.String, authenticated: Schema.Boolean })),

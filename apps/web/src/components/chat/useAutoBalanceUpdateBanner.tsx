@@ -1,6 +1,6 @@
-import { T, useGT, useMessages } from "gt-react";
 import { useAtomValue } from "@effect/atom-react";
 import type { ServerUpdateState } from "@t3tools/client-runtime/state/server";
+import { T, useGT, useMessages } from "gt-react";
 import { useState } from "react";
 
 import { environmentIdsKey } from "~/state/environmentAtomList";
@@ -16,6 +16,7 @@ import {
   resolveServerSelfUpdateCapability,
   supportsDesktopAppUpdate,
 } from "~/versionSkew";
+
 import {
   ServerUpdateAction,
   ServerUpdateProgress,

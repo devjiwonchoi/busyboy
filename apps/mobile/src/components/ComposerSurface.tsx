@@ -9,21 +9,20 @@ import Animated, {
   useSharedValue,
   withTiming,
 } from "react-native-reanimated";
-
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useAdaptiveWorkspaceLayout } from "../features/layout/AdaptiveWorkspaceLayout";
 import { useSidebarWorkspaceTabs } from "../features/layout/workspace/useSystemWorkspaceTabBar";
 import { useAndroidFloatingTabs } from "../features/settings/appearance/AppearancePreferencesProvider";
+import type { ScaledTextRole } from "../features/settings/appearance/useScaledTextRole";
 import { compactEditorInsets } from "../features/threads/compactEditorInsets";
+import { MOBILE_TYPOGRAPHY } from "../lib/typography";
+import { useUniwindTheme } from "../lib/useUniwindTheme";
 import {
   useDeviceType,
   useDuoBottomBarInset,
   useNativeLayoutMetrics,
 } from "../native/native-layout-metrics";
-import type { ScaledTextRole } from "../features/settings/appearance/useScaledTextRole";
-import { MOBILE_TYPOGRAPHY } from "../lib/typography";
-import { useUniwindTheme } from "../lib/useUniwindTheme";
 import { GlassSurface } from "./ui/GlassSurface";
 
 const COLLAPSED_EDITOR_DEFAULT_INSET = 6;

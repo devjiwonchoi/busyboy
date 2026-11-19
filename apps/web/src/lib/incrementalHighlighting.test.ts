@@ -1,5 +1,5 @@
-import { toHtml } from "hast-util-to-html";
 import { disposeHighlighter, getSharedHighlighter } from "@pierre/diffs";
+import { toHtml } from "hast-util-to-html";
 import { afterAll, beforeAll, describe, expect, it } from "vite-plus/test";
 
 import { createIncrementalHighlightedDocument } from "./incrementalHighlighting";

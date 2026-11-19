@@ -1,4 +1,3 @@
-import { pipe } from "effect/Function";
 import {
   type AuthEnvironmentScope,
   AuthSessionState,
@@ -11,17 +10,19 @@ import {
 } from "@t3tools/contracts";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
+import { pipe } from "effect/Function";
+import { HttpClient } from "effect/http";
 import * as Option from "effect/Option";
+import { AsyncResult, Atom } from "effect/reactivity";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import * as SubscriptionRef from "effect/SubscriptionRef";
-import { HttpClient } from "effect/http";
-import { AsyncResult, Atom } from "effect/reactivity";
 
 import * as RemoteEnvironmentAuthorization from "../authorization/service.ts";
-import * as EnvironmentRegistry from "../connection/registry.ts";
 import type { PreparedConnection } from "../connection/model.ts";
+import * as EnvironmentRegistry from "../connection/registry.ts";
 import * as EnvironmentSupervisor from "../connection/supervisor.ts";
+import { safeErrorLogAttributes } from "../errors/safeLog.ts";
 import * as ManagedRelay from "../relay/managedRelay.ts";
 import {
   RemoteEnvironmentAuthFetchError,
@@ -29,7 +30,6 @@ import {
   type RemoteEnvironmentRequestError,
 } from "../rpc/http.ts";
 import type { RpcSession } from "../rpc/session.ts";
-import { safeErrorLogAttributes } from "../errors/safeLog.ts";
 import { executeAuthenticatedEnvironmentHttpRequest } from "./environmentHttpAuth.ts";
 import { followStreamInEnvironment } from "./environmentStreams.ts";
 

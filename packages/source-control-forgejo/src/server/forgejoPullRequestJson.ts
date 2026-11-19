@@ -1,5 +1,3 @@
-import { toIsoUtc } from "@t3tools/source-control-core/server/pullRequestUtils";
-import * as Schema from "effect/Schema";
 import type {
   PullRequestActor,
   PullRequestCheck,
@@ -10,8 +8,11 @@ import type {
   PullRequestReactionContent,
   PullRequestReviewThread,
 } from "@t3tools/contracts";
-import type { ProviderChangeRequest } from "@t3tools/source-control-core/server/PullRequestProvider";
 import { dedupeChecks } from "@t3tools/source-control-core/server/pullRequestChecks";
+import type { ProviderChangeRequest } from "@t3tools/source-control-core/server/PullRequestProvider";
+import { toIsoUtc } from "@t3tools/source-control-core/server/pullRequestUtils";
+import * as Schema from "effect/Schema";
+
 import { forgejoHeadBranch } from "./forgejoPullRequests.ts";
 
 export const ForgejoUser = Schema.Struct({

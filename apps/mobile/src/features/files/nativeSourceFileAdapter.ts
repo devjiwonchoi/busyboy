@@ -1,11 +1,11 @@
+import type { ResolvedMobileCodeSurface } from "../../lib/appearancePreferences";
+import type { HighlightedLines } from "../../lib/highlights";
+import { MOBILE_CODE_SURFACE, MOBILE_TYPOGRAPHY } from "../../lib/typography";
 import type {
   NativeReviewDiffRow,
   NativeReviewDiffStyle,
   NativeReviewDiffToken,
 } from "../diffs/nativeReviewDiffSurface";
-import type { ResolvedMobileCodeSurface } from "../../lib/appearancePreferences";
-import { MOBILE_CODE_SURFACE, MOBILE_TYPOGRAPHY } from "../../lib/typography";
-import type { HighlightedLines } from "../../lib/highlights";
 
 export const NATIVE_SOURCE_CONTENT_WIDTH = 32_000;
 

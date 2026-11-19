@@ -1,5 +1,3 @@
-import { msg, useGT, useMessages } from "gt-react";
-import { useState } from "react";
 import {
   duoFoldState,
   duoHoldOrientation,
@@ -7,9 +5,13 @@ import {
   type DuoControlState,
 } from "@t3tools/client-runtime/device/duo-control";
 import type { DeviceScreenSize } from "@t3tools/client-runtime/device/stream";
-import { DeviceDuoGlyph } from "./DeviceDuoGlyph";
+import { msg, useGT, useMessages } from "gt-react";
+import { useState } from "react";
+
 import { Button } from "~/components/ui/button";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
+
+import { DeviceDuoGlyph } from "./DeviceDuoGlyph";
 
 const FOLDS = [
   { id: "closed", angle: 0 },

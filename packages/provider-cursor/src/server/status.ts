@@ -1,4 +1,3 @@
-import { resolveProviderProbeTimeoutMs } from "@t3tools/provider-core/server/snapshotProbe";
 import type { SDKModel, SDKUser } from "@cursor/sdk";
 import type {
   ModelCapabilities,
@@ -7,14 +6,7 @@ import type {
   ServerProviderModel,
   ServerProviderState,
 } from "@t3tools/contracts";
-import type { CursorSettings } from "../settings.ts";
-import { createModelCapabilities } from "@t3tools/shared/model";
-import * as DateTime from "effect/DateTime";
-import * as Effect from "effect/Effect";
-import * as Option from "effect/Option";
-import * as Result from "effect/Result";
-
-import { cursorSdkParameterPriority, cursorSdkProviderOptionId } from "./sdkModel.ts";
+import { resolveProviderProbeTimeoutMs } from "@t3tools/provider-core/server/snapshotProbe";
 import {
   buildBooleanOptionDescriptor,
   buildSelectOptionDescriptor,
@@ -23,7 +15,15 @@ import {
   providerModelsFromSettings,
   type ServerProviderDraft,
 } from "@t3tools/provider-core/server/snapshotProbe";
+import { createModelCapabilities } from "@t3tools/shared/model";
+import * as DateTime from "effect/DateTime";
+import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
+import * as Result from "effect/Result";
+
+import type { CursorSettings } from "../settings.ts";
 import * as CursorSdkCatalog from "./CursorSdkCatalog.ts";
+import { cursorSdkParameterPriority, cursorSdkProviderOptionId } from "./sdkModel.ts";
 
 const CURSOR_PRESENTATION = {
   displayName: "Cursor",

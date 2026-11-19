@@ -1,10 +1,5 @@
 import { useGT, useMessages } from "gt-react-native";
 import {
-  WORKSPACE_TAB_LABELS,
-  NAVIGATION_TAB_ICONS,
-  useEnabledNavigationTabs,
-} from "./navigation-tabs";
-import {
   useEffect,
   useLayoutEffect,
   useRef,
@@ -16,30 +11,35 @@ import {
 import { View, useWindowDimensions, type NativeSyntheticEvent } from "react-native";
 import { Tabs, type TabSelectedEvent, type TabSelectionRejectedEvent } from "react-native-screens";
 
-import { WorkspaceTabsContext, useWorkspaceTabs } from "./WorkspaceTabsContext";
-import type { NavigationTab } from "./navigation-tab-order";
-import {
-  NATIVE_WORKSPACE_TAB_SLOTS,
-  workspaceTabForNativeSlot,
-  workspaceUsesColumns,
-} from "./workspace-tabs-state";
+import { useControlTheme } from "../../../components/ui/useControlTheme";
+import type { NativeLayoutMetrics } from "../../../lib/reserved-regions";
+import { useDeviceType } from "../../../native/native-layout-metrics";
 import {
   NativeWorkspaceTabActivityContext,
   WorkspaceColumnMetricsContext,
   WorkspaceSlotOptionsContext,
 } from "../../../native/v5-workspace-context";
-import type { NativeLayoutMetrics } from "../../../lib/reserved-regions";
+import { useAdaptiveWorkspaceLayout, useWorkspacePaneState } from "../AdaptiveWorkspaceLayout";
+import type { NavigationTab } from "./navigation-tab-order";
+import {
+  WORKSPACE_TAB_LABELS,
+  NAVIGATION_TAB_ICONS,
+  useEnabledNavigationTabs,
+} from "./navigation-tabs";
+import { useSelectWorkspaceTab } from "./useSelectWorkspaceTab";
 import {
   useCompactWorkspaceTabs,
   useFloatingWorkspaceTabs,
   useSystemWorkspaceTabBar,
 } from "./useSystemWorkspaceTabBar";
-import { useControlTheme } from "../../../components/ui/useControlTheme";
-import { useDeviceType } from "../../../native/native-layout-metrics";
-import { WorkspaceSidebarTabs } from "./WorkspaceSidebarTabs";
-import { useAdaptiveWorkspaceLayout, useWorkspacePaneState } from "../AdaptiveWorkspaceLayout";
-import { useSelectWorkspaceTab } from "./useSelectWorkspaceTab";
 import { useWorkspaceCompose } from "./useWorkspaceCompose";
+import {
+  NATIVE_WORKSPACE_TAB_SLOTS,
+  workspaceTabForNativeSlot,
+  workspaceUsesColumns,
+} from "./workspace-tabs-state";
+import { WorkspaceSidebarTabs } from "./WorkspaceSidebarTabs";
+import { WorkspaceTabsContext, useWorkspaceTabs } from "./WorkspaceTabsContext";
 
 const PULL_REQUEST_ICON = require("../../../../assets/icons/pull-request.png");
 const ISSUE_ICON = require("../../../../assets/icons/issue.png");

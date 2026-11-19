@@ -10,8 +10,9 @@ import * as NodeCrypto from "node:crypto";
 import * as NodeUtil from "node:util";
 import * as NodeVM from "node:vm";
 import * as NodeZlib from "node:zlib";
-import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
+
 import * as PlatformNodeCrypto from "@effect/platform-node/NodeCrypto";
+import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import {
   ComposerContextRecord,
@@ -22,24 +23,6 @@ import {
   PreviewAutomationUnavailableError,
   ProviderInstanceId,
 } from "@t3tools/contracts";
-import * as Cause from "effect/Cause";
-import * as Context from "effect/Context";
-import * as Config from "effect/Config";
-import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
-import * as Layer from "effect/Layer";
-import * as Option from "effect/Option";
-import * as Path from "effect/Path";
-import * as Schedule from "effect/Schedule";
-import * as Schema from "effect/Schema";
-import * as Semaphore from "effect/Semaphore";
-import { Tool } from "effect/ai";
-import * as McpSchema from "effect/ai/McpSchema";
-import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/http";
-
-import { taskPrompt } from "../../apps/server/src/mcp/delegatedTaskModes.ts";
-import * as McpInvocationContext from "../../apps/server/src/mcp/McpInvocationContext.ts";
-import { advertisedJsonSchema } from "../../apps/server/src/mcp/advertisedJsonSchema.ts";
 import * as Contracts from "@t3tools/contracts";
 import {
   EnvironmentId,
@@ -50,9 +33,24 @@ import {
 import { projectComposerContextForProvider } from "@t3tools/shared/composerContextReferences";
 import { THEME_GUIDE } from "@t3tools/shared/themeCss";
 import { formatThreadLink } from "@t3tools/shared/threadLinks";
-import { buildCodexAdditionalContext } from "../../apps/server/src/provider/CodexDeveloperInstructions.ts";
-import { makeSideChatContext } from "../../apps/server/src/orchestration-v2/ContextHandoffService.ts";
-import { withInlineContext } from "../../apps/server/src/orchestration-v2/ContextHandoffDelivery.ts";
+import { Tool } from "effect/ai";
+import * as McpSchema from "effect/ai/McpSchema";
+import * as Cause from "effect/Cause";
+import * as Config from "effect/Config";
+import * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/http";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as Path from "effect/Path";
+import * as Schedule from "effect/Schedule";
+import * as Schema from "effect/Schema";
+import * as Semaphore from "effect/Semaphore";
+
+import { advertisedJsonSchema } from "../../apps/server/src/mcp/advertisedJsonSchema.ts";
+import { taskPrompt } from "../../apps/server/src/mcp/delegatedTaskModes.ts";
+import * as McpInvocationContext from "../../apps/server/src/mcp/McpInvocationContext.ts";
 import { AttachmentToolkit } from "../../apps/server/src/mcp/toolkits/attachment/tools.ts";
 import { DeviceToolkit } from "../../apps/server/src/mcp/toolkits/device/tools.ts";
 import { EnvironmentToolkit } from "../../apps/server/src/mcp/toolkits/environment/tools.ts";
@@ -74,11 +72,13 @@ import {
   CLAUDE_PROVIDER,
   makeClaudeQueryOptions,
 } from "../../apps/server/src/orchestration-v2/Adapters/ClaudeAdapterV2.ts";
-import { proxyConfig } from "../shared/proxy.ts";
+import { withInlineContext } from "../../apps/server/src/orchestration-v2/ContextHandoffDelivery.ts";
+import { makeSideChatContext } from "../../apps/server/src/orchestration-v2/ContextHandoffService.ts";
 import { changeRequestsCreatedBy } from "../../apps/server/src/orchestration-v2/PullRequestSyncReactor.ts";
+import { buildCodexAdditionalContext } from "../../apps/server/src/provider/CodexDeveloperInstructions.ts";
+import { proxyConfig } from "../shared/proxy.ts";
 import { type BackgroundWait, makeBackgroundWait } from "./backgroundWait.ts";
 import { DeviceExpect, gradeDevice } from "./device-grading.ts";
-import { FileLinksExpect, gradeFileLinks } from "./file-link-grading.ts";
 import {
   AGENT_DEVICE_SHELL,
   deviceFailure,
@@ -87,6 +87,7 @@ import {
   launcherHelp,
   makeDeviceTools,
 } from "./devices.ts";
+import { FileLinksExpect, gradeFileLinks } from "./file-link-grading.ts";
 import {
   argvForm,
   gradeSecret,

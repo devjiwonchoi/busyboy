@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vite-plus/test";
 import { userEvent } from "vite-plus/test/browser";
+
 import { installSidebarTree } from "./sidebarTree";
 
 function setup() {

@@ -1,7 +1,7 @@
-import { fakeTimers, render } from "../../../test/render";
 import { expect, it, vi } from "vite-plus/test";
 import { userEvent } from "vite-plus/test/browser";
 
+import { fakeTimers, render } from "../../../test/render";
 import { useInlineActionConfirm } from "./useInlineActionConfirm";
 
 function MergeButton({ scopeKey, onConfirm }: { scopeKey: string; onConfirm: () => void }) {

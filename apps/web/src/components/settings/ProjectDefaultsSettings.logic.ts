@@ -2,13 +2,13 @@ import type { ModelSelection, ProjectId, ServerProvider } from "@t3tools/contrac
 import type { UnifiedSettings } from "@t3tools/contracts/settings";
 import { msg } from "gt-react";
 
+import { m, type MessageResolver } from "../../i18n/messages";
 import { resolveEffectiveDefaultModelSelection } from "../../modelSelection";
 import {
   resolveDefaultProviderModelSelection,
   resolveProjectDefaultProviderModelSelection,
   type ProviderInstanceEntry,
 } from "../../providerInstances";
-import { m, type MessageResolver } from "../../i18n/messages";
 
 export interface DefaultModelSettingsPresentation {
   readonly selection: ModelSelection | null;

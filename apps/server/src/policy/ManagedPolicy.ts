@@ -7,15 +7,6 @@
 import * as NodeModule from "node:module";
 
 import { ManagedPolicyDocument, type ManagedPolicySummary } from "@t3tools/contracts";
-import * as Config from "effect/Config";
-import * as Context from "effect/Context";
-import * as Digest from "effect/crypto/Digest";
-import * as Effect from "effect/Effect";
-import * as Hex from "effect/encoding/Hex";
-import * as Layer from "effect/Layer";
-import * as Option from "effect/Option";
-import * as Schema from "effect/Schema";
-
 import * as HostProcess from "@t3tools/shared/HostProcess";
 import {
   ManagedPolicyFileError,
@@ -24,6 +15,14 @@ import {
   readManagedPolicy,
   readManagedPolicyFile,
 } from "@t3tools/shared/managedPolicyFile";
+import * as Config from "effect/Config";
+import * as Context from "effect/Context";
+import * as Digest from "effect/crypto/Digest";
+import * as Effect from "effect/Effect";
+import * as Hex from "effect/encoding/Hex";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
 
 import { telemetryChannel } from "../config.ts";
 import * as ManagedLimits from "./managedLimits.ts";

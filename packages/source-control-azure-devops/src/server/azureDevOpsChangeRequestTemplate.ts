@@ -1,7 +1,6 @@
+import type * as SourceControlHost from "@t3tools/source-control-core/server/SourceControlHost";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
-
-import type * as SourceControlHost from "@t3tools/source-control-core/server/SourceControlHost";
 
 const TEMPLATE_DIRECTORIES = [".azuredevops", ".vsts", "docs", ""];
 const TEMPLATE_MAX_BYTES = 8_000;

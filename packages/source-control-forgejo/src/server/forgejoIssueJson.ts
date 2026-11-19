@@ -1,3 +1,5 @@
+import type { IssueComment, IssueEvent, IssueState, IssueTemplate } from "@t3tools/contracts";
+import type { TrackerIssueSummary } from "@t3tools/source-control-core/server/IssueTracker";
 /**
  * Forgejo's issue shapes, beside the pull request ones they share users, labels and comments
  * with. Gitea answers the same API, so a Gitea server reads through this too.
@@ -7,8 +9,6 @@
 import * as DateTime from "effect/DateTime";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
-import type { IssueComment, IssueEvent, IssueState, IssueTemplate } from "@t3tools/contracts";
-import type { TrackerIssueSummary } from "@t3tools/source-control-core/server/IssueTracker";
 
 import {
   ForgejoComment,

@@ -3,21 +3,18 @@ import { parseScopedThreadKey, scopedThreadKey } from "@t3tools/client-runtime/e
 import { parseThreadKey, threadKey } from "@t3tools/client-runtime/state/entities";
 import { visibilityParentKey } from "@t3tools/client-runtime/state/threads";
 import type { ScopedThreadRef } from "@t3tools/contracts";
-import * as Option from "effect/Option";
 import { Navigate, useNavigate } from "@tanstack/react-router";
+import * as Option from "effect/Option";
 import { useEffect, useState } from "react";
 
-import ChatView from "./ChatView";
-import { BackgroundThreadContext, HiddenThreadContext } from "./chat/backgroundThread";
-import { SidebarInset } from "./ui/sidebar";
 import { useComposerDraftStore } from "../composerDraftStore";
+import { appAtomRegistry } from "../rpc/atomRegistry";
 import { useSidebarPendingFileDropStore } from "../sidebarPendingFileDropStore";
 import {
   useEnvironmentThreadRefs,
   useAnyEnvironmentHiding,
   useQuietThreadShell,
 } from "../state/entities";
-import { appAtomRegistry } from "../rpc/atomRegistry";
 import { useEnvironmentShellStatus } from "../state/shell";
 import { environmentThreadShells, threadFamilies, useEnvironmentThread } from "../state/threads";
 import {
@@ -26,6 +23,9 @@ import {
   resolveThreadRouteRenderState,
   type ThreadRouteTarget,
 } from "../threadRoutes";
+import { BackgroundThreadContext, HiddenThreadContext } from "./chat/backgroundThread";
+import ChatView from "./ChatView";
+import { SidebarInset } from "./ui/sidebar";
 
 /**
  * Keeps the family of an open thread the shell leaves out (an older settled thread) in the shell

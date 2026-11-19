@@ -1,7 +1,8 @@
-import { msg } from "gt-react";
 import type { KeybindingCommand, ResolvedKeybindingsConfig } from "@t3tools/contracts";
-import type { UsageChartMetric } from "./UsageProviderChart";
+import { msg } from "gt-react";
+
 import { resolveShortcutCommand, type ShortcutEventLike } from "../../keybindings";
+import type { UsageChartMetric } from "./UsageProviderChart";
 
 export type UsageMetric = UsageChartMetric | "limits";
 export const METRIC_OPTIONS = [

@@ -2,8 +2,8 @@
 // fixed fixtures, counts React commits and component renders while it drives them,
 // and writes the counts through the writeRenderReport browser command. They mount the
 // components ChatView composes, not ChatView, which needs a live environment connection.
-import { EnvironmentId, MessageId } from "@t3tools/contracts";
 import type { LegendListRef } from "@legendapp/list/react";
+import { EnvironmentId, MessageId } from "@t3tools/contracts";
 import { createRef, useRef, useState, type ComponentProps, type ReactNode } from "react";
 import { expect, it, vi } from "vite-plus/test";
 import { commands, userEvent } from "vite-plus/test/browser";
@@ -15,8 +15,9 @@ import {
   ComposerPromptEditorTiptap as ComposerPromptEditor,
   type ComposerPromptEditorHandle,
 } from "~/components/ComposerPromptEditorTiptap";
-import { commitsSoFar, startCounting, stopCounting } from "./renderCounter";
+
 import { render } from "./render";
+import { commitsSoFar, startCounting, stopCounting } from "./renderCounter";
 
 declare module "vite-plus/test/browser" {
   interface BrowserCommands {

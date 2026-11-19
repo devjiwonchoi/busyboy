@@ -1,6 +1,6 @@
-import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
-import { m } from "~/i18n/messages";
 import { RegistryContext, useAtomValue } from "@effect/atom-react";
+import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
+import { settlePromise } from "@t3tools/client-runtime/state/runtime";
 import {
   isModifierPairShortcut,
   type ClientSettingsPatch,
@@ -8,11 +8,12 @@ import {
   type DesktopSnapShotSetupAction,
   type SnapShotShortcut,
 } from "@t3tools/contracts";
-import { PlayIcon } from "lucide-react";
-import { settlePromise } from "@t3tools/client-runtime/state/runtime";
 import * as Cause from "effect/Cause";
-import { useContext, useRef, useState } from "react";
 import { T, useGT, useMessages } from "gt-react";
+import { PlayIcon } from "lucide-react";
+import { useContext, useRef, useState } from "react";
+
+import { m } from "~/i18n/messages";
 
 import { useClientSettings, updateClientSettings } from "../../hooks/useSettings";
 import { getDesktopSnapShotBridge } from "../../lib/desktopSnapShot";
@@ -29,9 +30,20 @@ import {
   snapShotSetupError,
   type SnapShotSetupError,
 } from "../../state/desktopSnapShot";
-import { toastManager } from "../ui/toast";
 import { primaryServerKeybindingsAtom } from "../../state/server";
+import { Button } from "../ui/button";
+import { Menu, MenuItem, MenuPopup, MenuRadioGroup, MenuRadioItem, MenuTrigger } from "../ui/menu";
+import { SelectButton } from "../ui/select";
+import { Switch } from "../ui/switch";
+import { toastManager } from "../ui/toast";
 import { commandLabel } from "./KeybindingsSettings.logic";
+import {
+  SettingsUnavailableGroup,
+  SettingsPageContainer,
+  SettingsRow,
+  SettingsSection,
+} from "./settingsLayout";
+import { useSearchableSetting } from "./settingsSearch";
 import {
   snapShotStatus,
   snapShotShortcutStatus,
@@ -44,25 +56,14 @@ import {
   snapShotSetupComplete,
   type SnapShotSoundSelection,
 } from "./SnapShotSettings.logic";
-import {
-  SettingsUnavailableGroup,
-  SettingsPageContainer,
-  SettingsRow,
-  SettingsSection,
-} from "./settingsLayout";
-import { useSearchableSetting } from "./settingsSearch";
-import { Button } from "../ui/button";
-import { Menu, MenuItem, MenuPopup, MenuRadioGroup, MenuRadioItem, MenuTrigger } from "../ui/menu";
-import { SelectButton } from "../ui/select";
-import { Switch } from "../ui/switch";
 import { SnapShotSetupDialog } from "./SnapShotSetupDialog";
-import { useSnapShotShortcutRecorder } from "./useSnapShotShortcutRecorder";
 import {
   captureSetupAccessReady,
   captureSetupInitialStep,
   captureSetupShouldDisableOnClose,
   type CaptureSetupStep,
 } from "./SnapShotSetupDialog.logic";
+import { useSnapShotShortcutRecorder } from "./useSnapShotShortcutRecorder";
 
 const soundOptionRowClassName = "grid grid-cols-[1fr_auto]";
 

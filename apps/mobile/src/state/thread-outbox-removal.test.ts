@@ -39,8 +39,8 @@ vi.mock("./use-composer-drafts", async (importOriginal) => {
 });
 
 import { appAtomRegistry } from "./atom-registry";
-import { clearThreadOutboxEnvironment, removeThreadOutboxMessage } from "./thread-outbox-removal";
 import type { QueuedThreadMessage } from "./thread-outbox-model";
+import { clearThreadOutboxEnvironment, removeThreadOutboxMessage } from "./thread-outbox-removal";
 import { composerDraftsAtom } from "./use-composer-drafts";
 
 function queuedMessage(input: {

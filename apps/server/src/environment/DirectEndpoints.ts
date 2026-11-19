@@ -1,4 +1,13 @@
+import * as NodeNet from "node:net";
+import * as NodeOS from "node:os";
+
 import type { ServerDirectEndpoint } from "@t3tools/contracts";
+import {
+  formatHostForUrl,
+  isTailnetHost,
+  isWildcardHost,
+} from "@t3tools/shared/hostClassification";
+import * as HostProcess from "@t3tools/shared/HostProcess";
 import {
   buildTailscaleHttpsBaseUrl,
   probeTailscaleHttpsEndpoint,
@@ -7,24 +16,15 @@ import {
 import * as Context from "effect/Context";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import { HttpClient } from "effect/http";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
-import * as Ref from "effect/Ref";
-import { HttpClient } from "effect/http";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
-import * as NodeNet from "node:net";
-import * as NodeOS from "node:os";
-
-import * as HostProcess from "@t3tools/shared/HostProcess";
-import {
-  formatHostForUrl,
-  isTailnetHost,
-  isWildcardHost,
-} from "@t3tools/shared/hostClassification";
+import * as Ref from "effect/Ref";
 
 import * as ServerConfig from "../config.ts";
-import * as ServerEnvironment from "./ServerEnvironment.ts";
 import { isLoopbackHost, isPrivateNetworkAddress, isVirtualInterface } from "../startupAccess.ts";
+import * as ServerEnvironment from "./ServerEnvironment.ts";
 
 type NetworkInterfacesMap = ReturnType<typeof NodeOS.networkInterfaces>;
 

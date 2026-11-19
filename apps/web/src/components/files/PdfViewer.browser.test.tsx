@@ -1,5 +1,7 @@
 import { expect, it, vi } from "vite-plus/test";
+
 import { render } from "../../../test/render";
+
 import "~/index.css";
 
 // Vite serves the worker module through its transform with an inline source map (6.8 MB for

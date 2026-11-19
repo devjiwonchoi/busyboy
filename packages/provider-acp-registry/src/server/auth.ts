@@ -3,27 +3,27 @@ import {
   type ProviderAuthMethod,
   type ProviderInstanceId,
 } from "@t3tools/contracts";
-import type { AcpRegistrySettings } from "../settings.ts";
-import * as SecureRandom from "effect/crypto/SecureRandom";
+import * as AcpSessionRuntime from "@t3tools/provider-acp/server/AcpSessionRuntime";
+import * as ProviderAuthFlow from "@t3tools/provider-core/server/providerAuthFlow";
+import * as PtyAdapter from "@t3tools/shared/PtyAdapter";
+import type * as AcpSchema from "effect-acp/compat";
+import * as EffectAcpErrors from "effect-acp/errors";
 import * as Cause from "effect/Cause";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
-import * as Queue from "effect/Queue";
-import * as Scope from "effect/Scope";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
+import * as Queue from "effect/Queue";
 import * as Schema from "effect/Schema";
-import type * as AcpSchema from "effect-acp/compat";
-import * as EffectAcpErrors from "effect-acp/errors";
+import * as Scope from "effect/Scope";
 
-import * as PtyAdapter from "@t3tools/shared/PtyAdapter";
-import * as ProviderAuthFlow from "@t3tools/provider-core/server/providerAuthFlow";
-import { normalizeAcpRegistryAuthMethods, normalizeAcpRegistryWebUrl } from "./probe.ts";
-import * as AcpRegistrySupport from "./AcpRegistrySupport.ts";
+import type { AcpRegistrySettings } from "../settings.ts";
 import * as AcpRegistryRuntimeCoordinator from "./AcpRegistryRuntimeCoordinator.ts";
-import * as AcpSessionRuntime from "@t3tools/provider-acp/server/AcpSessionRuntime";
+import * as AcpRegistrySupport from "./AcpRegistrySupport.ts";
+import { normalizeAcpRegistryAuthMethods, normalizeAcpRegistryWebUrl } from "./probe.ts";
 
 const isAcpRequestError = Schema.is(EffectAcpErrors.AcpRequestError);
 

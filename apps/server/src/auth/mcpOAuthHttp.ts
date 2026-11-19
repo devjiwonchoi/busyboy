@@ -7,15 +7,14 @@ import {
   EnvironmentHttpApi,
   mcpClientScopes,
 } from "@t3tools/contracts";
+import { DEFAULT_HOSTED_APP_URL } from "@t3tools/shared/connectAuth";
 import * as Effect from "effect/Effect";
+import { HttpServerRequest, HttpServerResponse } from "effect/http";
+import * as HttpApiBuilder from "effect/http-api/HttpApiBuilder";
+import * as HttpEffect from "effect/http/HttpEffect";
 import * as Option from "effect/Option";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
-import { HttpServerRequest, HttpServerResponse } from "effect/http";
-import * as HttpEffect from "effect/http/HttpEffect";
-import * as HttpApiBuilder from "effect/http-api/HttpApiBuilder";
-
-import { DEFAULT_HOSTED_APP_URL } from "@t3tools/shared/connectAuth";
 
 import * as CloudLink from "../cloud/CloudLink.ts";
 import { agentApprovalAppUrlConfig } from "../cloud/publicConfig.ts";

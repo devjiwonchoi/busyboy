@@ -1,7 +1,7 @@
 import type { EnvironmentId, SecretProviderConfig, SecretProviderId } from "@t3tools/contracts";
+import { T, useGT, useMessages, Var } from "gt-react";
 import { PlusIcon } from "lucide-react";
 import { useState } from "react";
-import { T, useGT, useMessages, Var } from "gt-react";
 
 import { useEnvironmentSettings, useUpdateEnvironmentSettings } from "../../hooks/useSettings";
 import type { EnvironmentPresentation } from "../../state/environments";
@@ -17,17 +17,17 @@ import {
   AlertDialogTitle,
 } from "../ui/alert-dialog";
 import { Button } from "../ui/button";
-import { SecretProviderDialog } from "./SecretProviderDialog";
-import { classifySecretProvider } from "./SecretProviderDialog.logic";
-import { secretProviderUses } from "./SecretsSettings.logic";
 import {
   classifyProviderEnvironmentAccess,
   resolveRemoteOperateAccess,
 } from "./ProviderSettingsPanel.logic";
-import { useSettingsScope } from "./SettingsScopeContext";
 import { RedactedSensitiveText } from "./RedactedSensitiveText";
-import { useSearchableSetting } from "./settingsSearch";
+import { SecretProviderDialog } from "./SecretProviderDialog";
+import { classifySecretProvider } from "./SecretProviderDialog.logic";
+import { secretProviderUses } from "./SecretsSettings.logic";
 import { SettingsPageContainer, SettingsRow, SettingsSection } from "./settingsLayout";
+import { useSettingsScope } from "./SettingsScopeContext";
+import { useSearchableSetting } from "./settingsSearch";
 
 const SECRET_PROVIDER_KINDS: Readonly<
   Record<string, { readonly name: string; readonly icon: Icon }>

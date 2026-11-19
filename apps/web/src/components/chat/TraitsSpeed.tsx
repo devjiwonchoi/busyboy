@@ -2,9 +2,11 @@ import type { ProviderDriverKind, ProviderOptionDescriptor } from "@t3tools/cont
 import { getProviderOptionCurrentValue } from "@t3tools/shared/model";
 import { msg, T } from "gt-react";
 import { ZapIcon } from "lucide-react";
+
 import { m, type MessageResolver } from "~/i18n/messages";
-import { UltrafastIcon } from "../Icons";
 import { cn } from "~/lib/utils";
+
+import { UltrafastIcon } from "../Icons";
 import { ComposerControlIcon, type ComposerControlSize } from "./ComposerControl";
 
 export function getTraitsSpeedDisplay(

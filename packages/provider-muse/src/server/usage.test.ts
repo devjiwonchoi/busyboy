@@ -1,19 +1,20 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
+import { it } from "@effect/vitest";
 import { ProviderInstanceId } from "@t3tools/contracts";
 import { totalTokens } from "@t3tools/provider-core/server/usage";
 import * as HostProcess from "@t3tools/shared/HostProcess";
 import { SpawnExecutableResolution } from "@t3tools/shared/shell";
-import * as Effect from "effect/Effect";
 import * as Deferred from "effect/Deferred";
+import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
-import * as TestClock from "effect/testing/TestClock";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
-import { it } from "@effect/vitest";
+import * as TestClock from "effect/testing/TestClock";
 import { describe, expect, vi } from "vite-plus/test";
+
 import { MuseSettings } from "../settings.ts";
-import * as MuseSdk from "./sdk.ts";
 import * as MuseUsageHome from "./MuseUsageHome.ts";
+import * as MuseSdk from "./sdk.ts";
 import { museUsageFormat, museUsageReader } from "./usage.ts";
 
 vi.mock("./sdk.ts", { spy: true });

@@ -1,5 +1,6 @@
-import { describe, expect, it } from "vite-plus/test";
 import { FILE_TEXT_PREVIEW_MAX_BYTES } from "@t3tools/shared/filePreview";
+import { describe, expect, it } from "vite-plus/test";
+
 import { readFilePreviewResponse } from "./filePreview.ts";
 
 describe("readFilePreviewResponse", () => {

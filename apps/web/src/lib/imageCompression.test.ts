@@ -1,5 +1,7 @@
+import type { SnapShotSource } from "@t3tools/contracts";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
+import { hydrateImagesFromPersisted } from "../composerDraftStore";
 import {
   compressImageForStash,
   compressImageToByteLimit,
@@ -10,9 +12,6 @@ import {
   prepareImageForAttachment,
   readComposerImageThumbnail,
 } from "./imageCompression";
-
-import type { SnapShotSource } from "@t3tools/contracts";
-import { hydrateImagesFromPersisted } from "../composerDraftStore";
 import { resizeSnapShotSource } from "./snapShotSource";
 
 const mocks = vi.hoisted(() => ({

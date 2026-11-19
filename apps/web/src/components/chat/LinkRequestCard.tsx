@@ -1,4 +1,3 @@
-import { pipe } from "effect/Function";
 import { useAtomValue } from "@effect/atom-react";
 import {
   ANOTHER_ADDRESS,
@@ -23,15 +22,16 @@ import {
   type EnvironmentId,
   type OrchestrationV2ProjectedTurnItem,
 } from "@t3tools/contracts";
+import { pipe } from "effect/Function";
 import * as Option from "effect/Option";
 import * as Result from "effect/Result";
 import { T, useGT, useMessages, Var } from "gt-react";
 import { CheckIcon, LinkIcon, MinusIcon, XIcon } from "lucide-react";
 import { useId, useRef, useState } from "react";
 
-import { useEnvironmentScope, usePreparedConnection } from "../../state/session";
-import { mintPairingCodeOn } from "../../state/peerPairingCode";
 import { peerLinkEnvironment, useLinkableMachines } from "../../state/peerLinks";
+import { mintPairingCodeOn } from "../../state/peerPairingCode";
+import { useEnvironmentScope, usePreparedConnection } from "../../state/session";
 import { useAtomCommand } from "../../state/use-atom-command";
 import { accessConfig } from "../auth/ConnectAgentSurface";
 import { EnvironmentMachineIcon } from "../EnvironmentMachineIcon";

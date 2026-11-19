@@ -1,4 +1,5 @@
 import { useState } from "react";
+
 import { observeResize } from "../../lib/observeResize";
 
 function measureComposerMultilinePrompt(body: HTMLElement): boolean | null {

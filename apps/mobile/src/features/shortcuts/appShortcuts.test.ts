@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vite-plus/test";
 import type { NavigationState } from "@react-navigation/native";
+import { describe, expect, it } from "vite-plus/test";
 
 import type { RecentThreadShortcut } from "../../persistence/imperative";
 import {

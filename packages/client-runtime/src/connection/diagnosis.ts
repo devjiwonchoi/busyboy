@@ -4,6 +4,8 @@ import {
 } from "@t3tools/contracts";
 import type { RelayEnvironmentStatusResponse } from "@t3tools/contracts/relay";
 import * as DateTime from "effect/DateTime";
+import { mFallback, msg } from "gt-i18n";
+import type { MFunctionType } from "gt-i18n/types";
 
 import type {
   ConnectionAttemptError,
@@ -11,8 +13,6 @@ import type {
   ConnectionHop,
   SupervisorConnectionState,
 } from "./model.ts";
-import { mFallback, msg } from "gt-i18n";
-import type { MFunctionType } from "gt-i18n/types";
 
 export type ConnectionHopResult = "ok" | "failed" | "unchecked";
 

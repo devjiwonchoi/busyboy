@@ -1,23 +1,25 @@
-import { expect, it } from "@effect/vitest";
-import * as NodeWS from "@effect/platform-node/NodeWS";
 import * as NodeNet from "node:net";
-import * as Context from "effect/Context";
-import * as Deferred from "effect/Deferred";
-import * as Effect from "effect/Effect";
-import * as Fiber from "effect/Fiber";
-import * as Layer from "effect/Layer";
-import { HttpRouter, HttpServer } from "effect/http";
-import * as Socket from "effect/socket/Socket";
+
 import * as NodeHttpServer from "@effect/platform-node/NodeHttpServer";
+import * as NodeWS from "@effect/platform-node/NodeWS";
+import { expect, it } from "@effect/vitest";
 import {
   AuthOrchestrationOperateScope,
   AuthSessionId,
   LOCAL_DEVICE_HOST_ID,
 } from "@t3tools/contracts";
+import * as Context from "effect/Context";
+import * as Deferred from "effect/Deferred";
+import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
+import { HttpRouter, HttpServer } from "effect/http";
+import * as Layer from "effect/Layer";
+import * as Socket from "effect/socket/Socket";
+
 import * as EnvironmentAuth from "../auth/EnvironmentAuth.ts";
 import * as SessionStore from "../auth/SessionStore.ts";
-import * as DeviceService from "./DeviceService.ts";
 import * as DeviceHubProxy from "./DeviceHubProxy.ts";
+import * as DeviceService from "./DeviceService.ts";
 
 it.effect("preserves binary input and admission frames through the real socket proxy", () =>
   Effect.gen(function* () {

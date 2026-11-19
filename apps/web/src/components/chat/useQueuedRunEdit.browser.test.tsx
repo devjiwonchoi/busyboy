@@ -7,28 +7,28 @@ import {
   ThreadId,
   type ScopedThreadRef,
 } from "@t3tools/contracts";
-import { useImperativeHandle, type RefObject } from "react";
-import { describe, expect, it, vi } from "vite-plus/test";
 import {
   ATTACHMENT_ONLY_BOOTSTRAP_PROMPT,
   threadContextRecord,
 } from "@t3tools/shared/composerContextReferences";
-import { toastManager } from "../ui/toast";
+import { useImperativeHandle, type RefObject } from "react";
+import { describe, expect, it, vi } from "vite-plus/test";
 
 import { act, render } from "../../../test/render";
 import { useComposerDraftStore, useComposerThreadDraft } from "../../composerDraftStore";
-import { formatInlineContextReference } from "../../lib/composerContextReferences";
-import { INLINE_TERMINAL_CONTEXT_PLACEHOLDER } from "../../lib/terminalContext";
+import { readAttachmentUpload, useAttachmentUploadStore } from "../../lib/attachmentUploadQueue";
 import {
   environmentContextRecord,
   environmentContextReference,
   threadContextReference,
 } from "../../lib/composerContextRecords";
-import { deriveComposerSendState } from "../ChatView.logic";
-import { ComposerPrimaryActions } from "./ComposerPrimaryActions";
+import { formatInlineContextReference } from "../../lib/composerContextReferences";
+import { INLINE_TERMINAL_CONTEXT_PLACEHOLDER } from "../../lib/terminalContext";
 import { AppAtomRegistryProvider, appAtomRegistry } from "../../rpc/atomRegistry";
+import { deriveComposerSendState } from "../ChatView.logic";
+import { toastManager } from "../ui/toast";
+import { ComposerPrimaryActions } from "./ComposerPrimaryActions";
 import { useQueuedRunEdit } from "./useQueuedRunEdit";
-import { readAttachmentUpload, useAttachmentUploadStore } from "../../lib/attachmentUploadQueue";
 
 interface RunStatus {
   readonly id: RunId;

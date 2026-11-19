@@ -1,18 +1,19 @@
 import type { ServerProviderUsageWindow } from "@t3tools/contracts";
-import type { CursorSettings } from "../settings.ts";
-import { CURSOR_USAGE_WINDOWS } from "@t3tools/shared/usageLimits";
-import * as DateTime from "effect/DateTime";
-import * as Effect from "effect/Effect";
-import * as Option from "effect/Option";
-import * as Schema from "effect/Schema";
-import * as HttpClient from "effect/http/HttpClient";
-import * as HttpClientRequest from "effect/http/HttpClientRequest";
-import * as HttpClientResponse from "effect/http/HttpClientResponse";
 import {
   clampPercent,
   makeUnavailableUsageLimits,
   makeUsageLimits,
 } from "@t3tools/provider-core/server/usageLimits";
+import { CURSOR_USAGE_WINDOWS } from "@t3tools/shared/usageLimits";
+import * as DateTime from "effect/DateTime";
+import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
+import * as HttpClientResponse from "effect/http/HttpClientResponse";
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
+
+import type { CursorSettings } from "../settings.ts";
 import { DEFAULT_CURSOR_API_ENDPOINT, exchangeCursorApiKey } from "./apiKey.ts";
 
 const CursorUsageResponse = Schema.Struct({

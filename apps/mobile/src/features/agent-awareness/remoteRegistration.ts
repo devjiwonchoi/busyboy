@@ -1,22 +1,3 @@
-import { type LiveActivity } from "expo-widgets";
-import {
-  configureAndroidAgentNotifications,
-  clearAndroidAgentNotifications,
-} from "./androidNotifications";
-import Constants from "expo-constants";
-import * as Notifications from "expo-notifications";
-import * as Clock from "effect/Clock";
-import * as Effect from "effect/Effect";
-import * as Schema from "effect/Schema";
-import * as Semaphore from "effect/Semaphore";
-import { AppState, Platform } from "react-native";
-import { msg } from "gt-react-native";
-import type { EnvironmentId } from "@t3tools/contracts";
-import {
-  type RelayDeviceRegistrationRequest,
-  type RelayAgentActivitySnapshotResponse,
-  type RelayLiveActivityRegistrationRequest,
-} from "@t3tools/contracts/relay";
 import { findErrorTraceId } from "@t3tools/client-runtime/errors";
 import { ManagedRelay } from "@t3tools/client-runtime/relay";
 import {
@@ -24,12 +5,24 @@ import {
   settleAsyncResult,
   squashAtomCommandFailure,
 } from "@t3tools/client-runtime/state/runtime";
+import type { EnvironmentId } from "@t3tools/contracts";
+import {
+  type RelayDeviceRegistrationRequest,
+  type RelayAgentActivitySnapshotResponse,
+  type RelayLiveActivityRegistrationRequest,
+} from "@t3tools/contracts/relay";
+import * as Clock from "effect/Clock";
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
+import * as Semaphore from "effect/Semaphore";
+import Constants from "expo-constants";
+import * as Notifications from "expo-notifications";
+import { type LiveActivity } from "expo-widgets";
+import { msg } from "gt-react-native";
+import { AppState, Platform } from "react-native";
 
 import { m } from "../../i18n/messages";
 import { runtime } from "../../lib/runtime";
-import { appAtomRegistry } from "../../state/atom-registry";
-import { environmentServerConfigsAtom } from "../../state/server";
-import type { Preferences } from "../../persistence/mobile-preferences";
 import {
   clearAgentAwarenessRegistrationRecord,
   loadAgentAwarenessDeviceId,
@@ -38,18 +31,25 @@ import {
   loadPreferences,
   saveAgentAwarenessRegistrationRecord,
 } from "../../persistence/imperative";
+import type { Preferences } from "../../persistence/mobile-preferences";
+import { appAtomRegistry } from "../../state/atom-registry";
+import { environmentServerConfigsAtom } from "../../state/server";
 import type { AgentActivityProps } from "../../widgets/AgentActivity";
 import {
   agentActivityText,
   type AgentActivityWidgetSource,
 } from "../../widgets/agentActivityWidgetTimeline";
 import { publishAgentActivityWidget } from "../../widgets/publishAgentActivityWidget";
+import { resolveCloudPublicConfig } from "../cloud/publicConfig";
 import {
   dismissEndedAgentLiveActivities,
   getAgentLiveActivities,
   startAgentLiveActivity,
 } from "./agentLiveActivity";
-import { resolveCloudPublicConfig } from "../cloud/publicConfig";
+import {
+  configureAndroidAgentNotifications,
+  clearAndroidAgentNotifications,
+} from "./androidNotifications";
 import { supportsAgentAwarenessPush } from "./capabilities";
 import { makeRelayDeviceRegistrationRequest, resolveApsEnvironment } from "./registrationPayload";
 

@@ -2,8 +2,8 @@ import type { SecretProviderKind } from "@t3tools/contracts";
 import type * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import type * as FileSystem from "effect/FileSystem";
-import * as Schema from "effect/Schema";
 import type { ChildProcessSpawner } from "effect/process";
+import * as Schema from "effect/Schema";
 
 import type { SecretProviderDefinition } from "../shared/definition.ts";
 

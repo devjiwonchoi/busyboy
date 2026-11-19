@@ -1,8 +1,8 @@
+import { useAtomValue } from "@effect/atom-react";
 import type { DeviceHubAccess } from "@t3tools/client-runtime/state/deviceHubAccess";
 import type { DevicePermission, DeviceSummary, DeviceTextSize } from "@t3tools/contracts";
-import { ChevronDown, X } from "lucide-react";
-import { useAtomValue } from "@effect/atom-react";
 import { msg, T, useGT, useMessages } from "gt-react";
+import { ChevronDown, X } from "lucide-react";
 import { useState } from "react";
 
 import { Button } from "~/components/ui/button";
@@ -19,8 +19,9 @@ import { Spinner } from "~/components/ui/spinner";
 import { Switch } from "~/components/ui/switch";
 import { Toggle, ToggleGroup } from "~/components/ui/toggle-group";
 import { cn } from "~/lib/utils";
-import type { DeviceControls } from "./useDeviceControls";
+
 import { deviceEventLogAtom } from "./deviceHubAtoms";
+import type { DeviceControls } from "./useDeviceControls";
 
 const TEXT_SIZES: ReadonlyArray<{ value: DeviceTextSize; label: string }> = [
   { value: "small", label: msg("Small") },

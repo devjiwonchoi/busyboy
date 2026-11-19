@@ -1,4 +1,5 @@
 import { decodeJwt, type JWTVerifyGetKey } from "jose";
+
 import { authorize } from "../vendor/vite-plus-remote-cache-cloudflare/src/auth.ts";
 import type { Scope } from "../vendor/vite-plus-remote-cache-cloudflare/src/database.ts";
 import { HttpError } from "../vendor/vite-plus-remote-cache-cloudflare/src/errors.ts";

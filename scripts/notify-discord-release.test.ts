@@ -1,16 +1,16 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, it } from "@effect/vitest";
 import * as Cause from "effect/Cause";
+import { Command } from "effect/cli";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import { HttpClient, HttpClientError, HttpClientResponse, UrlParams } from "effect/http";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
 import * as Path from "effect/Path";
-import * as Schema from "effect/Schema";
-import { Command } from "effect/cli";
-import { HttpClient, HttpClientError, HttpClientResponse, UrlParams } from "effect/http";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
+import * as Schema from "effect/Schema";
 
 import {
   buildDiscordReleaseAnnouncement,

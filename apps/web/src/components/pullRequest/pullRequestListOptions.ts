@@ -1,4 +1,5 @@
 import type { PullRequestInvolvement, PullRequestListState } from "@t3tools/contracts";
+import { msg } from "gt-react";
 import {
   CalendarArrowDownIcon,
   CalendarArrowUpIcon,
@@ -11,13 +12,12 @@ import {
   PenLineIcon,
   UserLockIcon,
 } from "lucide-react";
-import { msg } from "gt-react";
 
 import type { MessageResolver } from "~/i18n/messages";
 
+import { PullRequestGlyph } from "./pullRequestIcons";
 import type { PullRequestFilterOption } from "./PullRequestListFilters";
 import type { PullRequestListSort } from "./pullRequestListPreferences";
-import { PullRequestGlyph } from "./pullRequestIcons";
 
 export const INVOLVEMENT_TABS = [
   { value: "all", label: msg("All", { $context: "pull request filter" }), Icon: LayersIcon },

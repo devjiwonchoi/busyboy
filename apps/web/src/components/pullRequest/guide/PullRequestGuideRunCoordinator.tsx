@@ -1,10 +1,11 @@
-import { msg } from "gt-react";
-import type { AnyRouter } from "@tanstack/react-router";
 import type { PullRequestReviewGuideResult } from "@t3tools/contracts";
-import { CircleAlertIcon, CircleCheckIcon } from "lucide-react";
+import type { AnyRouter } from "@tanstack/react-router";
 import { AsyncResult, type AtomRegistry } from "effect/reactivity";
+import { msg } from "gt-react";
+import { CircleAlertIcon, CircleCheckIcon } from "lucide-react";
 
 import { getClientSettings } from "~/hooks/useSettings";
+import { m } from "~/i18n/messages";
 import { observedPullRequestTitle, pullRequestEnvironment } from "~/state/pullRequests";
 import {
   hasDesktopNotifications,
@@ -15,7 +16,6 @@ import {
 import { toastManager } from "../../ui/toast";
 import { readPullRequestListPreferences } from "../pullRequestListPreferences";
 import { useGuideRunStore, type GuideRunWatch } from "./guideRunStore";
-import { m } from "~/i18n/messages";
 
 const RUN_POLL_MS = 5_000;
 const UNSEEN_RUN_MS = 60_000;

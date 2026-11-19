@@ -8,10 +8,10 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as PlatformError from "effect/PlatformError";
-import * as Redacted from "effect/Redacted";
 import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as CommandLine from "effect/process/CommandLine";
+import * as Redacted from "effect/Redacted";
 
 // libuv's _PATH_DEFPATH, searched when the child environment has no PATH.
 const DEFAULT_PATH = "/usr/bin:/bin";

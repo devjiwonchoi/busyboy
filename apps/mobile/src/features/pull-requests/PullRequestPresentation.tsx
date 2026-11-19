@@ -1,4 +1,3 @@
-import { AppActivityIndicator } from "../../components/ui/AppActivityIndicator";
 import type { ChangeRequestTerminology } from "@t3tools/client-runtime/source-control-clients";
 import type { PullRequestActor } from "@t3tools/contracts";
 import IconAlertTriangle from "@tabler/icons-react-native/IconAlertTriangle";
@@ -7,10 +6,11 @@ import { useGT } from "gt-react-native";
 import { View } from "react-native";
 import { useResolveClassNames } from "uniwind";
 
+import { AppActivityIndicator } from "../../components/ui/AppActivityIndicator";
 import { AppText as Text } from "../../components/ui/AppText";
-import { cn } from "../../lib/cn";
-import { changeRequestTermKind } from "../../lib/changeRequestTerm";
 import { EmptyState } from "../../components/ui/EmptyState";
+import { changeRequestTermKind } from "../../lib/changeRequestTerm";
+import { cn } from "../../lib/cn";
 
 export function PullRequestReadStatus(props: {
   readonly pending: boolean;

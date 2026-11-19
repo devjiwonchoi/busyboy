@@ -1,7 +1,9 @@
 import { SourceControlProviderKind } from "@t3tools/contracts";
-import { describe, expect, it } from "vite-plus/test";
 import { EnvironmentId, ProjectId } from "@t3tools/contracts";
+import { describe, expect, it } from "vite-plus/test";
 
+import type { EnvironmentProject } from "../state/models.ts";
+import { isFilesystemBrowseQuery } from "../state/projects.ts";
 import {
   findExistingAddProject,
   getCloneDestinationForPickedFolder,
@@ -15,8 +17,6 @@ import {
   normalizePastedCloneUrl,
   sortAddProjectProviderSources,
 } from "./projects.ts";
-import type { EnvironmentProject } from "../state/models.ts";
-import { isFilesystemBrowseQuery } from "../state/projects.ts";
 
 describe("add project shared logic", () => {
   it("starts the Add Project picker on a browsable path for a relative base directory", () => {

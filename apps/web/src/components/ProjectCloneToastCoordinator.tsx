@@ -1,6 +1,6 @@
-import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
-import { useParams } from "@tanstack/react-router";
+import { projectCloneProgressSummary } from "@t3tools/client-runtime/contract-labels";
 import { scopeProjectRef } from "@t3tools/client-runtime/environment";
+import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
 import {
   type AtomCommandResult,
   isAtomCommandInterrupted,
@@ -12,13 +12,14 @@ import {
   type ProjectCloneSnapshot,
   type ProjectId,
 } from "@t3tools/contracts";
-import { projectCloneProgressSummary } from "@t3tools/client-runtime/contract-labels";
-import { useEffect, useRef } from "react";
+import { useParams } from "@tanstack/react-router";
 import { msg } from "gt-react";
+import { useEffect, useRef } from "react";
 
-import { m } from "../i18n/messages";
+import { type DraftId, useComposerDraftStore } from "../composerDraftStore";
 import { useNewThreadHandler } from "../hooks/useHandleNewThread";
 import { useRemoveClonedProject } from "../hooks/useRemoveClonedProject";
+import { m } from "../i18n/messages";
 import { useEnvironments } from "../state/environments";
 import {
   isProjectCloneToastSilenced,
@@ -27,7 +28,6 @@ import {
 } from "../state/projectClones";
 import { sourceControlEnvironment } from "../state/sourceControl";
 import { useAtomCommand } from "../state/use-atom-command";
-import { type DraftId, useComposerDraftStore } from "../composerDraftStore";
 import { toastManager } from "./ui/toast";
 import { stackedThreadToast } from "./ui/toastHelpers";
 

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
+
 import { isBotBadgeImage } from "./botBadgeImages";
 
 describe("bot badge images", () => {

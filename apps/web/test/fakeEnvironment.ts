@@ -1,6 +1,13 @@
 // An in-process environment for app render scenarios: a fetch stub for its HTTP API and a
 // session that answers the shell, thread and config subscriptions from fixtures. Other RPCs
 // stay pending so nothing retries on timers. Everything above the wire is the app's own.
+import type {
+  ConnectionAttemptError,
+  ConnectionCatalogEntry,
+  EnvironmentConnectionLease,
+  RouteCheck,
+} from "@t3tools/client-runtime/connection";
+import type { WsRpcProtocolClient } from "@t3tools/client-runtime/rpc";
 import {
   type AssetCreateUrlResult,
   AuthStandardClientScopes,
@@ -36,23 +43,17 @@ import {
   type TerminalMetadataStreamEvent,
   type ResolvedKeybindingsConfig,
 } from "@t3tools/contracts";
-import type {
-  ConnectionAttemptError,
-  ConnectionCatalogEntry,
-  EnvironmentConnectionLease,
-  RouteCheck,
-} from "@t3tools/client-runtime/connection";
-import type { WsRpcProtocolClient } from "@t3tools/client-runtime/rpc";
 import { DEFAULT_RESOLVED_KEYBINDINGS } from "@t3tools/shared/keybindings";
-import { APP_VERSION } from "~/branding";
 import * as DateTime from "effect/DateTime";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Queue from "effect/Queue";
-import type * as Scope from "effect/Scope";
-import * as Schema from "effect/Schema";
-import * as Stream from "effect/Stream";
 import { RpcSchema } from "effect/rpc";
+import * as Schema from "effect/Schema";
+import type * as Scope from "effect/Scope";
+import * as Stream from "effect/Stream";
+
+import { APP_VERSION } from "~/branding";
 
 export const ENVIRONMENT_ID = EnvironmentId.make("environment-render");
 export const PROJECT_ID = ProjectId.make("project-render");

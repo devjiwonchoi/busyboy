@@ -1,5 +1,5 @@
-import { AuthSessionId, ThreadId, type AuthEnvironmentScope } from "@t3tools/contracts";
 import { assert, describe, it } from "@effect/vitest";
+import { AuthSessionId, ThreadId, type AuthEnvironmentScope } from "@t3tools/contracts";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -8,8 +8,8 @@ import * as SqlClient from "effect/sql/SqlClient";
 import * as AuthPairingLinks from "./AuthPairingLinks.ts";
 import * as AuthSessions from "./AuthSessions.ts";
 import * as PersistenceErrors from "./Errors.ts";
-import * as SqlitePersistence from "./Sqlite.ts";
 import * as ProviderSessionRuntime from "./ProviderSessionRuntime.ts";
+import * as SqlitePersistence from "./Sqlite.ts";
 
 const issuedAt = DateTime.makeUnsafe("2026-06-20T00:00:00.000Z");
 const expiresAt = DateTime.makeUnsafe("2027-06-20T00:00:00.000Z");

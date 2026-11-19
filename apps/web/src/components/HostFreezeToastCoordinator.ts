@@ -1,6 +1,6 @@
 import { hostFreezeNotice } from "@t3tools/client-runtime/connection";
-import { m } from "../i18n/messages";
 
+import { m } from "../i18n/messages";
 import { appAtomRegistry } from "../rpc/atomRegistry";
 import { environmentSummaries } from "../state/presentation";
 import { environmentServerConfigsAtom } from "../state/server";

@@ -1,11 +1,8 @@
-import { pipe } from "effect/Function";
-import { ThreadDetailsControl } from "./ThreadDetailsControl";
-import type {
-  EnvironmentId,
-  ScopedThreadRef,
-  ThreadPullRequestLink,
-  VcsStatusResult,
-} from "@t3tools/contracts";
+import {
+  findProjectForChangeRequest,
+  findProjectOnChangeRequestHost,
+} from "@t3tools/client-runtime/change-request-links";
+import { sourceControlClients } from "@t3tools/client-runtime/source-control-clients";
 import type { EnvironmentProject } from "@t3tools/client-runtime/state/shell";
 import {
   pullRequestListLines,
@@ -13,15 +10,16 @@ import {
   threadPullRequestKeyOf,
   visibleThreadPullRequests,
 } from "@t3tools/client-runtime/thread-pull-requests";
+import type {
+  EnvironmentId,
+  ScopedThreadRef,
+  ThreadPullRequestLink,
+  VcsStatusResult,
+} from "@t3tools/contracts";
+import { pipe } from "effect/Function";
 import { T, useMessages, Var } from "gt-react";
 import { ChevronDownIcon, ChevronUpIcon } from "lucide-react";
 import { useState, type ComponentProps, type MouseEvent as ReactMouseEvent } from "react";
-
-import { sourceControlClients } from "@t3tools/client-runtime/source-control-clients";
-import {
-  findProjectForChangeRequest,
-  findProjectOnChangeRequestHost,
-} from "@t3tools/client-runtime/change-request-links";
 
 import type { ComposerThreadTarget } from "~/composerDraftStore";
 import { useProjects, useQuietThreadShell } from "~/state/entities";
@@ -34,7 +32,7 @@ import {
   prStatusIndicator,
   useThreadDisplayedPullRequest,
 } from "../ThreadStatusIndicators";
-
+import { ThreadDetailsControl } from "./ThreadDetailsControl";
 import { ThreadDetailsPrRow } from "./ThreadDetailsPrRow";
 
 function ThreadDetailsPrLinkRow({

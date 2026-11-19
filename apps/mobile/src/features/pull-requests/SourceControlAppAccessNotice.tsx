@@ -1,8 +1,8 @@
-import { EnvironmentId } from "@t3tools/contracts";
 import {
   readHostCredentialSettings,
   sourceControlClients,
 } from "@t3tools/client-runtime/source-control-clients";
+import { EnvironmentId } from "@t3tools/contracts";
 import { T, Var } from "gt-react-native";
 import { Linking, Pressable, View } from "react-native";
 

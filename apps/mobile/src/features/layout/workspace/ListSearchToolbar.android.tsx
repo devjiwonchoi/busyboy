@@ -2,15 +2,16 @@ import { useNavigation } from "@react-navigation/native";
 import { useGT } from "gt-react-native";
 import { useEffect } from "react";
 import { BackHandler, Keyboard } from "react-native";
+
 import { AppBar } from "../../../components/ui/AppBar";
 import { appBarMenuItemsFromActions } from "../../../components/ui/menuActionItems";
-import { useHardwareKeyboardCommand } from "../../keyboard/hardwareKeyboardCommands";
 import { WorkspaceConnectionTitle } from "../../home/WorkspaceConnectionTitle";
+import { useHardwareKeyboardCommand } from "../../keyboard/hardwareKeyboardCommands";
+import type { PullRequestFilterMenu } from "../../pull-requests/PullRequestListFilters";
+import { openSettings } from "../../settings/settings-navigation";
 import type { SharedSlotTab } from "./navigation-tab-order";
 import { SharedSlotTitle } from "./SharedSlotTitle";
 import { useWorkspaceTabs } from "./WorkspaceTabsContext";
-import type { PullRequestFilterMenu } from "../../pull-requests/PullRequestListFilters";
-import { openSettings } from "../../settings/settings-navigation";
 
 /** Pull request and issue search share the thread list's Android header. */
 export function ListSearchToolbar(props: {

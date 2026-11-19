@@ -1,19 +1,17 @@
-import { sourceControlClients } from "@t3tools/client-runtime/source-control-clients";
-import { changeRequestTermKind } from "../lib/changeRequestTerm";
+import { managedRuntimeModeDenial } from "@t3tools/client-runtime/contract-labels";
 import { errorDisplayMessage } from "@t3tools/client-runtime/errors";
-import * as Dialog from "../components/ui/Dialog";
-import {
-  type EnvironmentProject,
-  type EnvironmentThreadShell,
-} from "@t3tools/client-runtime/state/shell";
+import { deriveThreadTitleSeed } from "@t3tools/client-runtime/operations";
+import { sourceControlClients } from "@t3tools/client-runtime/source-control-clients";
 import {
   type AtomCommand,
   type AtomCommandResult,
   runAtomCommand,
 } from "@t3tools/client-runtime/state/runtime";
+import {
+  type EnvironmentProject,
+  type EnvironmentThreadShell,
+} from "@t3tools/client-runtime/state/shell";
 import { threadFamilyRead, type ThreadFamilyRead } from "@t3tools/client-runtime/state/threads";
-import { deriveThreadTitleSeed } from "@t3tools/client-runtime/operations";
-import { managedRuntimeModeDenial } from "@t3tools/client-runtime/contract-labels";
 import {
   AuthOrchestrationOperateScope,
   CommandId,
@@ -30,27 +28,31 @@ import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
 import * as Latch from "effect/Latch";
-import * as Schema from "effect/Schema";
 import { AsyncResult, Atom } from "effect/reactivity";
+import * as Schema from "effect/Schema";
 import { msg } from "gt-react-native";
-import { m } from "../i18n/messages";
 
-import { createDebugLogger } from "../lib/debugLog";
-import type { DraftComposerAttachment } from "../lib/composerImages";
-import { scopedThreadKey } from "../lib/scopedEntities";
-import { buildProjectThreadStartTurnInput } from "../lib/projectThreadStartTurn";
-import { serializeComposerMessageForServer, uploadedComposerContext } from "../lib/composerContext";
+import * as Dialog from "../components/ui/Dialog";
+import { m } from "../i18n/messages";
 import { prepareTurnAttachments } from "../lib/attachmentUpload";
-import { randomHex } from "../lib/uuid";
+import { changeRequestTermKind } from "../lib/changeRequestTerm";
+import { serializeComposerMessageForServer, uploadedComposerContext } from "../lib/composerContext";
+import type { DraftComposerAttachment } from "../lib/composerImages";
+import { createDebugLogger } from "../lib/debugLog";
 import {
   describeUnavailableModelSelection,
   isModelSelectionUnavailable,
 } from "../lib/modelOptions";
+import { buildProjectThreadStartTurnInput } from "../lib/projectThreadStartTurn";
+import { scopedThreadKey } from "../lib/scopedEntities";
+import { randomHex } from "../lib/uuid";
 import {
   retainAcknowledgedThreadMessage,
   forgetAcknowledgedThreadMessage,
 } from "./acknowledged-thread-messages";
 import { appAtomRegistry } from "./atom-registry";
+import { uploadComposerAttachmentShared } from "./composer-attachment-uploads";
+import { gitEnvironment } from "./git";
 import { restoredNewTaskDraftKey } from "./new-task-draft-key";
 import {
   clearPendingThreadCreationOutcome,
@@ -59,16 +61,14 @@ import {
 } from "./pending-thread-creation";
 import { environmentProjects } from "./projects";
 import { environmentServerConfigsAtom, serverEnvironment } from "./server";
-import { uploadComposerAttachmentShared } from "./composer-attachment-uploads";
-import { gitEnvironment } from "./git";
 import { environmentSession, readEnvironmentScope, sessionHasScope } from "./session";
+import { clearThreadComposerError, setThreadComposerError } from "./thread-composer-error";
 import {
   confirmThreadOutboxMessageQueued,
   threadOutboxManager,
   threadOutboxRevision,
   updateThreadOutboxMessage,
 } from "./thread-outbox";
-import { removeThreadOutboxMessage } from "./thread-outbox-removal";
 import {
   isQueuedThreadCreationSendable,
   resolveThreadOutboxDeliveryAction,
@@ -82,6 +82,7 @@ import {
   type ThreadOutboxCommandStage,
   type ThreadOutboxFailureAction,
 } from "./thread-outbox-model";
+import { removeThreadOutboxMessage } from "./thread-outbox-removal";
 import { environmentThreadShells, threadEnvironment, threadFamilies } from "./threads";
 import {
   appendComposerDraftAttachments,
@@ -102,7 +103,6 @@ import {
   retryingQueuedMessageIdsAtom,
   threadOutboxShellStatusesAtom,
 } from "./use-thread-outbox";
-import { clearThreadComposerError, setThreadComposerError } from "./thread-composer-error";
 import { workspaceConnections } from "./workspace";
 
 const threadOutboxDebug = createDebugLogger("thread-outbox");

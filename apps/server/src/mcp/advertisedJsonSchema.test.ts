@@ -1,6 +1,6 @@
 import { expect, it } from "@effect/vitest";
-import * as Schema from "effect/Schema";
 import { Tool } from "effect/ai";
+import * as Schema from "effect/Schema";
 
 import { advertisedJsonSchema } from "./advertisedJsonSchema.ts";
 import { ThemeToolkit } from "./toolkits/theme/tools.ts";

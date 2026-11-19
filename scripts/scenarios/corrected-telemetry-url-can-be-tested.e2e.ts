@@ -1,5 +1,6 @@
 // @effect-diagnostics-next-line nodeBuiltinImport:off -- The test runs a loopback OTLP receiver.
 import * as NodeHttp from "node:http";
+
 import { expect } from "e2e";
 
 import { environmentId, runPromise, test, WEB } from "./t3.ts";

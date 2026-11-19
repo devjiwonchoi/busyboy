@@ -9,6 +9,7 @@ import {
   type GlyphRunPrimitive,
   type TextRunPrimitive,
 } from "@betteroffice/docx/layout/render";
+
 import { wordLink } from "./links";
 import { lineHeight, type WordSpan } from "./word-protocol";
 

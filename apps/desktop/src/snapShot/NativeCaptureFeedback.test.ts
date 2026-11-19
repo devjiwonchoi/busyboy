@@ -1,6 +1,7 @@
 // @effect-diagnostics nodeBuiltinImport:off -- Isolated child-process streams; no desktop session is touched.
 import * as NodeEvents from "node:events";
 import * as NodeStream from "node:stream";
+
 import { afterEach, beforeEach, expect, it, vi } from "vite-plus/test";
 
 const spawn = vi.hoisted(() => vi.fn());

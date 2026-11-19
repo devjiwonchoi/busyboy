@@ -1,3 +1,4 @@
+import { assert, expect, it } from "@effect/vitest";
 import {
   ProjectId,
   ThreadId,
@@ -5,7 +6,6 @@ import {
   type OrchestrationV2DomainEvent,
   type ThreadPullRequestLink,
 } from "@t3tools/contracts";
-import { assert, expect, it } from "@effect/vitest";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";

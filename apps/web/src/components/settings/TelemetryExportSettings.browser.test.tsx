@@ -1,7 +1,8 @@
-import { render } from "../../../test/render";
 import { DEFAULT_SERVER_SETTINGS, type ServerObservability } from "@t3tools/contracts";
 import { describe, expect, it, vi } from "vite-plus/test";
 import { userEvent } from "vite-plus/test/browser";
+
+import { render } from "../../../test/render";
 
 const { state, updateSettings, checkOtlpEndpoint, checkOtlpEndpointCommand } = vi.hoisted(() => ({
   state: {

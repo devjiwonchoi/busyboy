@@ -1,8 +1,60 @@
-import { m } from "../i18n/messages";
+import { useAtomValue } from "@effect/atom-react";
+import { resolvePullRequestPreviewTarget } from "@t3tools/client-runtime/change-request-links";
+import { scopedThreadKey } from "@t3tools/client-runtime/environment";
 import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
-import { msg, T, useGT, useMessages } from "gt-react";
+import {
+  mayContainStandaloneIssueLink,
+  resolveIssueLinkTarget,
+} from "@t3tools/client-runtime/issue-links";
+import {
+  classifyMarkdownImageSource,
+  markdownImageSourceFragment,
+} from "@t3tools/client-runtime/markdown-images";
+import { mediaUrlReference } from "@t3tools/client-runtime/media-reference";
+import { sourceControlClients } from "@t3tools/client-runtime/source-control-clients";
+import {
+  isAtomCommandInterrupted,
+  squashAtomCommandFailure,
+} from "@t3tools/client-runtime/state/runtime";
+import {
+  findAgentDirectoryMatch,
+  needsWorkspaceBasenameLookup,
+  pickProjectLinkMatch,
+  pickWorkspaceLinkMatch,
+  WORKSPACE_BASENAME_LOOKUP_LIMIT,
+  workspaceLinkLookupQuery,
+} from "@t3tools/client-runtime/workspace-basename-lookup";
+import {
+  AuthFilesystemReadScope,
+  AuthOrchestrationOperateScope,
+  SOURCE_CONTROL_MEDIA_ASSET,
+} from "@t3tools/contracts";
+import {
+  AssetWorkspaceAssetNotFoundError,
+  AuthPreviewOperateScope,
+  type EditorId,
+  type EnvironmentId,
+  type ServerConfig,
+  type ScopedThreadRef,
+  type ServerProviderSkill,
+  type ThreadPullRequestKey,
+} from "@t3tools/contracts";
+import { parseAssistantCitationHref } from "@t3tools/shared/assistantCitations";
+import type {
+  CodexArtifactTemplate,
+  CodexArtifactTemplateKind,
+} from "@t3tools/shared/codexArtifactTemplates";
+import { codexArtifactTemplatePresentationLabel } from "@t3tools/shared/codexArtifactTemplatesCopy";
+import {
+  artifactTemplateFromHastProperties,
+  renderCodexInlineDirectivesAsMarkdown,
+} from "@t3tools/shared/codexMarkdownDirectives";
+import {
+  COMPOSER_CONTEXT_CLIPBOARD_MIME,
+  encodeComposerContextClipboardHtml,
+} from "@t3tools/shared/composerContextClipboard";
+import { parseComposerContextHref } from "@t3tools/shared/composerContextReferences";
 import { resolvePathLinkTarget } from "@t3tools/shared/fileLinks";
-import { clientHostEnvironmentAtom } from "../state/clientHostEnvironment";
 import { buildFileLinkParentSuffixByPath, fileLinkLabel } from "@t3tools/shared/fileLinks";
 import {
   isWindowsDrivePathHref,
@@ -11,14 +63,8 @@ import {
   extractMarkdownLinkHrefs,
   inlineCodeFilePathCandidate,
 } from "@t3tools/shared/markdownLinks";
-import { taskListMarkerOffset } from "@t3tools/shared/markdownTaskList";
-import { isHostPath, resolveWorkspaceFilePath } from "@t3tools/shared/path";
-import { usePullRequestLinking } from "~/hooks/usePullRequestLinking";
-import {
-  AuthFilesystemReadScope,
-  AuthOrchestrationOperateScope,
-  SOURCE_CONTROL_MEDIA_ASSET,
-} from "@t3tools/contracts";
+import { isMarkdownFileLinkLabel } from "@t3tools/shared/markdownLinks";
+import { mathKind } from "@t3tools/shared/markdownMath";
 import {
   CHAT_MARKDOWN_REMARK_PLUGINS,
   CHAT_MARKDOWN_REMARK_PLUGINS_WITH_BREAKS,
@@ -26,11 +72,15 @@ import {
   decodeMarkdownLinkEscapes,
   remarkAssistantInsights,
 } from "@t3tools/shared/markdownPipeline";
-import { useAtomValue } from "@effect/atom-react";
-import {
-  COMPOSER_CONTEXT_CLIPBOARD_MIME,
-  encodeComposerContextClipboardHtml,
-} from "@t3tools/shared/composerContextClipboard";
+import { taskListMarkerOffset } from "@t3tools/shared/markdownTaskList";
+import { mediaKindFromPath, mediaMimeTypeFromExtension } from "@t3tools/shared/mediaPreview";
+import { isHostPath, resolveWorkspaceFilePath } from "@t3tools/shared/path";
+import { parseThreadLinkHref } from "@t3tools/shared/threadLinks";
+import * as Cause from "effect/Cause";
+import * as Option from "effect/Option";
+import { AsyncResult, Atom } from "effect/reactivity";
+import * as Schema from "effect/Schema";
+import { msg, T, useGT, useMessages } from "gt-react";
 import {
   FileSpreadsheetIcon,
   FileTextIcon,
@@ -47,38 +97,6 @@ import {
   TriangleAlertIcon,
   type LucideIcon,
 } from "lucide-react";
-import {
-  AssetWorkspaceAssetNotFoundError,
-  AuthPreviewOperateScope,
-  type EditorId,
-  type EnvironmentId,
-  type ServerConfig,
-  type ScopedThreadRef,
-  type ServerProviderSkill,
-  type ThreadPullRequestKey,
-} from "@t3tools/contracts";
-import {
-  isAtomCommandInterrupted,
-  squashAtomCommandFailure,
-} from "@t3tools/client-runtime/state/runtime";
-import { scopedThreadKey } from "@t3tools/client-runtime/environment";
-import type {
-  CodexArtifactTemplate,
-  CodexArtifactTemplateKind,
-} from "@t3tools/shared/codexArtifactTemplates";
-import { codexArtifactTemplatePresentationLabel } from "@t3tools/shared/codexArtifactTemplatesCopy";
-import {
-  classifyMarkdownImageSource,
-  markdownImageSourceFragment,
-} from "@t3tools/client-runtime/markdown-images";
-import { mediaUrlReference } from "@t3tools/client-runtime/media-reference";
-import { mediaKindFromPath, mediaMimeTypeFromExtension } from "@t3tools/shared/mediaPreview";
-import { InlineAudioPreview } from "./files/InlineAudioPreview";
-import { HostImageUrlContext } from "./chat/hostImageUrl";
-import * as Cause from "effect/Cause";
-import * as Option from "effect/Option";
-import * as Schema from "effect/Schema";
-import { AsyncResult, Atom } from "effect/reactivity";
 import React, {
   Suspense,
   type ComponentProps,
@@ -96,54 +114,43 @@ import type {
   ExtraProps as ReactMarkdownExtraProps,
   Options as ReactMarkdownOptions,
 } from "react-markdown";
-import { createIncrementalMarkdownPlugin } from "../markdown-incremental";
-import type { Pluggable, PluggableList } from "unified";
 import { defaultUrlTransform } from "react-markdown";
-import { parseAssistantCitationHref } from "@t3tools/shared/assistantCitations";
-import { parseComposerContextHref } from "@t3tools/shared/composerContextReferences";
-import { parseThreadLinkHref } from "@t3tools/shared/threadLinks";
-import { AssistantCitationEmbed } from "./chat/AssistantCitationChip";
-import { MarkdownThreadLink } from "./chat/MarkdownThreadLink";
-import { mathKind } from "@t3tools/shared/markdownMath";
 import remarkMath from "remark-math";
+import type { Pluggable, PluggableList } from "unified";
+
+import { usePullRequestLinking } from "~/hooks/usePullRequestLinking";
+import { useOpenChangeRequestLink } from "~/lib/openPullRequestLink";
+import { textDirection } from "~/textDirection";
+
+import { resolveLinkTarget } from "../browser/browserLinkTarget";
 import {
-  artifactTemplateFromHastProperties,
-  renderCodexInlineDirectivesAsMarkdown,
-} from "@t3tools/shared/codexMarkdownDirectives";
-import { renderSkillInlineMarkdownChildren } from "./chat/SkillInlineText";
-import { MarkdownMath } from "./chat/MarkdownMath";
-import {
-  resolveMarkdownMediaPreview,
-  type ExpandedImagePreview,
-} from "./chat/ExpandedImagePreview";
-import { ExpandedImageDialog } from "./chat/ExpandedImageDialog";
-import { markdownImageGallery } from "./chat/markdownImageGallery";
-import { type MediaActionSource } from "./media/MediaActions";
-import { resolveProtocolRelativeMediaUrl } from "./media/mediaContent";
-import {
-  revealInFileExplorerLabelForKind,
-  revealInFileExplorerLabelForOs,
-} from "./preview/fileExplorerLabel";
-import {
-  resolveExternalWebLinkHost,
-  showExternalLinkContextMenu,
-} from "./chat/externalLinkContextMenu";
-import { Tooltip, TooltipPopup, TooltipTrigger } from "./ui/tooltip";
-import { Button } from "./ui/button";
-import { stackedThreadToast, toastManager } from "./ui/toast";
+  isBrowserPreviewFile,
+  openFileInPreview,
+  openUrlInPreview,
+  BrowserPreviewUnavailableError,
+  isBrowserSettingsReadError,
+} from "../browser/openFileInPreview";
+import { isPreviewAvailableFor } from "../browser/previewRuntime";
+import { useOpenLink } from "../browser/useOpenLink";
 import { recordVisitForThread } from "../browserHistoryStore";
 import { contextMenuSourceOf } from "../contextMenuSource";
+import { openInEditorMenuLabel } from "../editorLabels";
 import {
   PreferredEditorEnvironmentRequiredError,
   useOpenInPreferredEditor,
   usePreferredEditor,
 } from "../editorPreferences";
-import { openInEditorMenuLabel } from "../editorLabels";
-import { resolveDiffThemeName } from "../lib/diffRendering";
-import { RenderErrorBoundary } from "./RenderErrorBoundary";
-import { useRenderedAppearance } from "../hooks/useTheme";
+import { isElectron } from "../env";
+import { writeTextToClipboard } from "../hooks/useCopyToClipboard";
 import { useClientSettings } from "../hooks/useSettings";
+import { useRenderedAppearance } from "../hooks/useTheme";
+import { m } from "../i18n/messages";
+import { resolveDiffThemeName } from "../lib/diffRendering";
+import { useOpenIssueLink } from "../lib/openIssueLink";
+import { cn } from "../lib/utils";
+import { readLocalApi } from "../localApi";
 import { chatMarkdownClipboardPayload } from "../markdown-clipboard";
+import { createIncrementalMarkdownPlugin } from "../markdown-incremental";
 import {
   isLocalEditorFileHref,
   resolveInlineCodeFileLinkMeta,
@@ -156,66 +163,28 @@ import {
   markdownFileEditorTarget,
   resolveMarkdownFileHostPath,
 } from "../markdownFileHostPath";
-import { isMarkdownFileLinkLabel } from "@t3tools/shared/markdownLinks";
-import { isElectron } from "../env";
-import { readLocalApi } from "../localApi";
-import { appAtomRegistry } from "../rpc/atomRegistry";
-import { hostEnvironmentIdAtom } from "../state/primaryEnvironment";
-import { cn } from "../lib/utils";
 import { resolveRemoteOpenState, useRemoteOpenResolution } from "../remoteOpen";
 import { rightPanelHostRef, useRightPanelStore } from "../rightPanelStore";
-import { useOpenIssueLink } from "../lib/openIssueLink";
-import { issueTrackerEnvironment } from "../state/issueTrackers";
-import { useEnvironmentQuery } from "../state/query";
-import { readThreadShell, useProjects } from "../state/entities";
-import { serverEnvironment } from "../state/server";
-import { shellEnvironment } from "../state/shell";
+import { appAtomRegistry } from "../rpc/atomRegistry";
 import { assetEnvironment } from "../state/assets";
+import { clientHostEnvironmentAtom } from "../state/clientHostEnvironment";
+import { readThreadShell, useProjects } from "../state/entities";
+import { filesystemEnvironment } from "../state/filesystem";
+import { issueTrackerEnvironment } from "../state/issueTrackers";
+import { previewEnvironment } from "../state/preview";
+import { hostEnvironmentIdAtom } from "../state/primaryEnvironment";
+import { projectEnvironment } from "../state/projects";
+import { useEnvironmentQuery } from "../state/query";
+import { serverEnvironment } from "../state/server";
 import {
   readEnvironmentScope,
   readPreparedConnection,
   useEnvironmentScope,
 } from "../state/session";
-import { previewEnvironment } from "../state/preview";
+import { shellEnvironment } from "../state/shell";
 import { useAtomCommand } from "../state/use-atom-command";
 import { useAtomQueryRunner } from "../state/use-atom-query-runner";
-import { projectEnvironment } from "../state/projects";
-import { filesystemEnvironment } from "../state/filesystem";
-import {
-  findAgentDirectoryMatch,
-  needsWorkspaceBasenameLookup,
-  pickProjectLinkMatch,
-  pickWorkspaceLinkMatch,
-  WORKSPACE_BASENAME_LOOKUP_LIMIT,
-  workspaceLinkLookupQuery,
-} from "@t3tools/client-runtime/workspace-basename-lookup";
-import { resolvePullRequestPreviewTarget } from "@t3tools/client-runtime/change-request-links";
-import {
-  mayContainStandaloneIssueLink,
-  resolveIssueLinkTarget,
-} from "@t3tools/client-runtime/issue-links";
-import { sourceControlClients } from "@t3tools/client-runtime/source-control-clients";
-import { useOpenChangeRequestLink } from "~/lib/openPullRequestLink";
-import { textDirection } from "~/textDirection";
-import { useOpenLink } from "../browser/useOpenLink";
-import { writeTextToClipboard } from "../hooks/useCopyToClipboard";
-import { isPreviewAvailableFor } from "../browser/previewRuntime";
-import {
-  isBrowserPreviewFile,
-  openFileInPreview,
-  openUrlInPreview,
-  BrowserPreviewUnavailableError,
-  isBrowserSettingsReadError,
-} from "../browser/openFileInPreview";
-import { resolveLinkTarget } from "../browser/browserLinkTarget";
-import { PullRequestLinkPreview } from "./pullRequest/PullRequestLinkPreview";
-import { IssueLinkPreview, IssueLinkPreviewFallback } from "./issue/IssueLinkPreview";
-import { MarkdownCodeBlock, SuspenseShikiCodeBlock } from "./chat/MarkdownCodeBlock";
-import { createMarkdownRenderer } from "./chat/markdownRenderer";
-import { splitMarkdownBlocks } from "./chat/markdownStreamBlocks";
-import { MarkdownMermaidCodeBlock } from "./chat/MarkdownMermaidCodeBlock";
-import { MarkdownTable } from "./chat/MarkdownTable";
-import { MarkdownDetails } from "./chat/MarkdownDetails";
+import { AssistantCitationEmbed } from "./chat/AssistantCitationChip";
 import {
   authoredImageSizeStyle,
   ChatMarkdownAssetImage,
@@ -225,13 +194,19 @@ import {
   MarkdownLinkContext,
   markdownImageCopy,
 } from "./chat/ChatMarkdownMedia";
-import { MarkdownExternalLinkContent } from "./chat/MarkdownExternalLink";
-import { MarkdownFileLink } from "./chat/MarkdownFileLink";
-import { canUseMarkdownFileShellActions } from "./chat/MarkdownFileLink.logic";
+import { ExpandedImageDialog } from "./chat/ExpandedImageDialog";
+import {
+  resolveMarkdownMediaPreview,
+  type ExpandedImagePreview,
+} from "./chat/ExpandedImagePreview";
+import {
+  resolveExternalWebLinkHost,
+  showExternalLinkContextMenu,
+} from "./chat/externalLinkContextMenu";
+import { HostImageUrlContext } from "./chat/hostImageUrl";
+import { reportMarkdownActionFailure } from "./chat/markdownActionFailure";
 import { rehypeChipPunctuation } from "./chat/markdownChipPunctuation";
-import { handleMarkdownFragmentClick, rehypeHeadingIds } from "./chat/markdownFragments";
-import { rehypeTextDirection } from "./chat/markdownTextDirection";
-import { hastHasText, hastPlainTextDeep, plainHastText } from "./chat/markdownHast.logic";
+import { MarkdownCodeBlock, SuspenseShikiCodeBlock } from "./chat/MarkdownCodeBlock";
 import {
   extractCodeBlock,
   extractFenceLanguage,
@@ -240,7 +215,34 @@ import {
   isClosedCodeFence,
   nodeToPlainText,
 } from "./chat/MarkdownCodeBlock.logic";
-import { reportMarkdownActionFailure } from "./chat/markdownActionFailure";
+import { MarkdownDetails } from "./chat/MarkdownDetails";
+import { MarkdownExternalLinkContent } from "./chat/MarkdownExternalLink";
+import { MarkdownFileLink } from "./chat/MarkdownFileLink";
+import { canUseMarkdownFileShellActions } from "./chat/MarkdownFileLink.logic";
+import { handleMarkdownFragmentClick, rehypeHeadingIds } from "./chat/markdownFragments";
+import { hastHasText, hastPlainTextDeep, plainHastText } from "./chat/markdownHast.logic";
+import { markdownImageGallery } from "./chat/markdownImageGallery";
+import { MarkdownMath } from "./chat/MarkdownMath";
+import { MarkdownMermaidCodeBlock } from "./chat/MarkdownMermaidCodeBlock";
+import { createMarkdownRenderer } from "./chat/markdownRenderer";
+import { splitMarkdownBlocks } from "./chat/markdownStreamBlocks";
+import { MarkdownTable } from "./chat/MarkdownTable";
+import { rehypeTextDirection } from "./chat/markdownTextDirection";
+import { MarkdownThreadLink } from "./chat/MarkdownThreadLink";
+import { renderSkillInlineMarkdownChildren } from "./chat/SkillInlineText";
+import { InlineAudioPreview } from "./files/InlineAudioPreview";
+import { IssueLinkPreview, IssueLinkPreviewFallback } from "./issue/IssueLinkPreview";
+import { type MediaActionSource } from "./media/MediaActions";
+import { resolveProtocolRelativeMediaUrl } from "./media/mediaContent";
+import {
+  revealInFileExplorerLabelForKind,
+  revealInFileExplorerLabelForOs,
+} from "./preview/fileExplorerLabel";
+import { PullRequestLinkPreview } from "./pullRequest/PullRequestLinkPreview";
+import { RenderErrorBoundary } from "./RenderErrorBoundary";
+import { Button } from "./ui/button";
+import { stackedThreadToast, toastManager } from "./ui/toast";
+import { Tooltip, TooltipPopup, TooltipTrigger } from "./ui/tooltip";
 
 const isAssetNotFoundError = Schema.is(AssetWorkspaceAssetNotFoundError);
 

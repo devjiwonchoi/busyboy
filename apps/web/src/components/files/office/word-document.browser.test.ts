@@ -1,6 +1,7 @@
+import type { DisplayPage, GlyphRunPrimitive } from "@betteroffice/docx/layout/render";
 import JSZip from "jszip";
 import { expect, it, vi } from "vite-plus/test";
-import type { DisplayPage, GlyphRunPrimitive } from "@betteroffice/docx/layout/render";
+
 import { openWordDocument } from "./word-document";
 import { withWholeMissingGlyphs } from "./word-glyphs";
 

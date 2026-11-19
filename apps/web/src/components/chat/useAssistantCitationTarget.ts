@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+
 import type { AssistantCitationRequest, AssistantCitationTarget } from "./AssistantCitationSource";
 import type { CitationPhase } from "./citationProcedure";
 

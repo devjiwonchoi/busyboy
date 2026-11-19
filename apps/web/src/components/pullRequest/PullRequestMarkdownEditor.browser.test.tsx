@@ -1,7 +1,8 @@
-import { act, render, type Screen } from "../../../test/render";
 import { AuthSourceControlWriteScope, EnvironmentId, ProjectId } from "@t3tools/contracts";
 import { expect, it, vi } from "vite-plus/test";
 import { page, userEvent } from "vite-plus/test/browser";
+
+import { act, render, type Screen } from "../../../test/render";
 
 const permissions = vi.hoisted(() => ({
   allowed: new Set<string>(),

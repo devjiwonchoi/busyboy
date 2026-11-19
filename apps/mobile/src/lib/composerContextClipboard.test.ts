@@ -1,4 +1,3 @@
-import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import {
   COMPOSER_CONTEXT_MAX_RECORDS,
   ComposerContextId,
@@ -10,6 +9,7 @@ import {
   collectComposerContextReferences,
   formatComposerContextReference,
 } from "@t3tools/shared/composerContextReferences";
+import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 const mocks = vi.hoisted(() => ({
   execute: vi.fn(),
@@ -61,8 +61,8 @@ vi.mock("./composerImages", () => ({
 }));
 vi.mock("./uuid", () => ({ uuidv4: () => `import-${++mocks.sequence}` }));
 
-import { importComposerContextClipboard } from "./composerContextClipboard";
 import { createComposerContextHistory } from "./composerContext";
+import { importComposerContextClipboard } from "./composerContextClipboard";
 
 const image = {
   version: 1 as const,

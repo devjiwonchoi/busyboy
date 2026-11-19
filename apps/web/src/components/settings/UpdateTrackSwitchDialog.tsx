@@ -1,32 +1,28 @@
-import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
-import { m as resolveMessage } from "~/i18n/messages";
 import { useAtomValue } from "@effect/atom-react";
+import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
 import { settlePromise, squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
 import type { DesktopUpdateChannel } from "@t3tools/contracts";
 import { acceptsTrackSwitchRelease, desktopUpdateChannelOf } from "@t3tools/shared/cliRelease";
 import { isMacPlatform } from "@t3tools/shared/keybindings";
+import { AsyncResult } from "effect/reactivity";
 import { T, useGT, useMessages, Var } from "gt-react";
 import { useState } from "react";
-import { AsyncResult } from "effect/reactivity";
 
 import { APP_VERSION } from "~/branding";
+import { m as resolveMessage } from "~/i18n/messages";
 import { isLocalEnvironmentDisabled } from "~/localEnvironment";
 import { useDesktopUpdateState } from "~/state/desktopUpdate";
 import { useEnvironments } from "~/state/environments";
 import { npmReleaseAtom, npmReleaseFailureMessage } from "~/state/npmRelease";
+
 import { downloadLocalUpdate, installLocalUpdate } from "../sidebar/SidebarUpdatePill";
-import { UpdateEverythingDialog } from "../sidebar/UpdateEverythingDialog";
 import {
   channelSwitchLabel,
   localSwitchBlockReason,
   type ChannelSwitchRelease,
 } from "../sidebar/updateEverything.logic";
+import { UpdateEverythingDialog } from "../sidebar/UpdateEverythingDialog";
 import { isHostedByThisApp, useUpdateEverything } from "../sidebar/useUpdateEverything";
-import {
-  localUpdaterStaysPut,
-  nothingToMove,
-  prepareLocalTrackSwitch,
-} from "./updateTrackSwitch.logic";
 import {
   AlertDialog,
   AlertDialogClose,
@@ -38,6 +34,11 @@ import {
 } from "../ui/alert-dialog";
 import { Button } from "../ui/button";
 import { stackedThreadToast, toastManager } from "../ui/toast";
+import {
+  localUpdaterStaysPut,
+  nothingToMove,
+  prepareLocalTrackSwitch,
+} from "./updateTrackSwitch.logic";
 
 /** Moves this app and every connected machine to `channel`. */
 export function UpdateTrackSwitchDialog({

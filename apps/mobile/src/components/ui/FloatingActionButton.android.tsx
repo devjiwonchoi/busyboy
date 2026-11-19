@@ -1,5 +1,3 @@
-import type { FloatingActionButtonProps } from "./FloatingActionButton.types";
-import { NativeThemeHost } from "./NativeThemeHost.android";
 import {
   Box,
   ExtendedFloatingActionButton,
@@ -9,10 +7,13 @@ import {
 } from "@expo/ui/jetpack-compose";
 import { defaultMinSize, height, size, width } from "@expo/ui/jetpack-compose/modifiers";
 import { View } from "react-native";
-import { useAndroidControlSizing } from "./useAndroidControlSizing";
+
 import { useAppearancePreferences } from "../../features/settings/appearance/AppearancePreferencesProvider";
 import { useScaledTextRole } from "../../features/settings/appearance/useScaledTextRole";
 import { SymbolView } from "./AppSymbol";
+import type { FloatingActionButtonProps } from "./FloatingActionButton.types";
+import { NativeThemeHost } from "./NativeThemeHost.android";
+import { useAndroidControlSizing } from "./useAndroidControlSizing";
 
 export function FloatingActionButton(props: FloatingActionButtonProps) {
   const { themeVariables: colors } = useAppearancePreferences();

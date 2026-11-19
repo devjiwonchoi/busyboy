@@ -1,5 +1,6 @@
 import { useGT } from "gt-react-native";
 import { View } from "react-native";
+
 import { Notice } from "../../components/ui/Notice";
 
 export function ComposerErrorNotice(props: {

@@ -1,8 +1,9 @@
 import { threadKey } from "@t3tools/client-runtime/state/entities";
-import { describe, expect, it, vi } from "vite-plus/test";
 import { EnvironmentId, ProjectId, ProviderInstanceId, ThreadId } from "@t3tools/contracts";
-import type { Thread } from "../types";
+import { describe, expect, it, vi } from "vite-plus/test";
+
 import { makeThreadFixture } from "../test-fixtures";
+import type { Thread } from "../types";
 import {
   newThreadNoProjectIndex,
   buildNestedSearchItems,

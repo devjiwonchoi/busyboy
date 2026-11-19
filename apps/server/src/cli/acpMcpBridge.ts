@@ -1,5 +1,5 @@
-import * as Effect from "effect/Effect";
 import { Argument, Command } from "effect/cli";
+import * as Effect from "effect/Effect";
 
 import { runAcpMcpCliFastPath } from "../mcp/AcpMcpStdioBridge.ts";
 

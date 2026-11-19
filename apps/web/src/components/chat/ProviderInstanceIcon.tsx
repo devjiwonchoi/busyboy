@@ -1,12 +1,13 @@
-import { type CSSProperties, memo } from "react";
-
 import {
   normalizeProviderAccentColor,
   providerAccentForegroundColor,
   providerInstanceInitials,
 } from "@t3tools/client-runtime/state/provider-instance-display";
-
 import { ProviderDriverKind } from "@t3tools/contracts";
+import { type CSSProperties, memo } from "react";
+
+import { cn } from "~/lib/utils";
+
 import {
   AnthropicIcon,
   AntigravityIcon,
@@ -16,15 +17,13 @@ import {
   OpenAI,
   OpenRouterIcon,
 } from "../Icons";
-
-import { cn } from "~/lib/utils";
-import { providerClients } from "../settings/providerDriverMeta";
-import { ProviderPackageIcon } from "./ProviderPackageIcon";
 import {
   AcpRegistryAgentIcon,
   officialAcpRegistryIconUrlForAgentId,
   resolveOfficialAcpRegistryIconUrl,
 } from "../settings/AcpRegistryIcon";
+import { providerClients } from "../settings/providerDriverMeta";
+import { ProviderPackageIcon } from "./ProviderPackageIcon";
 
 const PROVIDER_ICON_BY_PROVIDER: Partial<Record<ProviderDriverKind, Icon>> = {
   [ProviderDriverKind.make("codex")]: OpenAI,

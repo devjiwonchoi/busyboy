@@ -13,9 +13,9 @@ import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
 
+import { defineSecretProvider } from "../shared/definition.ts";
 import { defineSecretProviderDriver } from "./driver.ts";
 import * as SecretResolver from "./SecretResolver.ts";
-import { defineSecretProvider } from "../shared/definition.ts";
 
 const FAKE_KIND = SecretProviderKind.make("fake");
 const FakeConfig = Schema.Struct({ account: Schema.String });

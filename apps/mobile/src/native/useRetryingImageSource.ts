@@ -1,5 +1,6 @@
 import { useLayoutEffect, useMemo, useRef } from "react";
 import type { MarkdownImageOccurrence, MarkdownImageSource } from "react-native-enriched-markdown";
+
 import type { MarkdownImageSourceResolver } from "./SelectableMarkdownText.types";
 
 /**

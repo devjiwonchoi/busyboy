@@ -1,8 +1,8 @@
-import { useEffect } from "react";
-import { EnvironmentId, ProjectId, ThreadId } from "@t3tools/contracts";
 import { scopeProjectRef, scopeThreadRef } from "@t3tools/client-runtime/environment";
-import { expect, it, vi } from "vite-plus/test";
+import { EnvironmentId, ProjectId, ThreadId } from "@t3tools/contracts";
 import { AsyncResult } from "effect/reactivity";
+import { useEffect } from "react";
+import { expect, it, vi } from "vite-plus/test";
 
 import { act, render } from "../../../test/render";
 import {

@@ -25,7 +25,6 @@ import {
   type RelayManagedEndpointRuntimeConfig,
   RelayOkResponse,
 } from "@t3tools/contracts/relay";
-import { withRelayClientTracing } from "@t3tools/shared/relayTracing";
 import {
   decodeRelayJwt,
   normalizeRelayIssuer,
@@ -37,16 +36,20 @@ import {
   RELAY_MINT_RESPONSE_TYP,
   verifyRelayJwt,
 } from "@t3tools/shared/relayJwt";
+import { withRelayClientTracing } from "@t3tools/shared/relayTracing";
 import { isSecureRelayUrl, normalizeSecureRelayUrl } from "@t3tools/shared/relayUrl";
 import * as Context from "effect/Context";
 import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Signature from "effect/crypto/Signature";
-import * as Jwk from "effect/jose/Jwk";
 import * as DateTime from "effect/DateTime";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
-import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as FileSystem from "effect/FileSystem";
+import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import type * as HttpClientError from "effect/http/HttpClientError";
+import * as HttpServer from "effect/http/HttpServer";
+import * as Jwk from "effect/jose/Jwk";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
@@ -54,16 +57,16 @@ import type * as PlatformError from "effect/PlatformError";
 import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
 import * as Semaphore from "effect/Semaphore";
-import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http";
-import type * as HttpClientError from "effect/http/HttpClientError";
-import * as HttpServer from "effect/http/HttpServer";
 
 import * as EnvironmentAuth from "../auth/EnvironmentAuth.ts";
 import * as ServerSecretStore from "../auth/ServerSecretStore.ts";
 import * as ServerConfig from "../config.ts";
 import * as ServerEnvironment from "../environment/ServerEnvironment.ts";
+import * as ManagedLimits from "../policy/managedLimits.ts";
+import * as ManagedPolicy from "../policy/ManagedPolicy.ts";
 import * as AgentAwarenessRelay from "../relay/AgentAwarenessRelay.ts";
 import { makeRelayEnvironmentClient } from "../relay/relayEnvironmentClient.ts";
+import * as ServerSettings from "../serverSettings.ts";
 import { loopbackUrlHostForAddress } from "../startupAccess.ts";
 import {
   type CliDesiredLinkMode,
@@ -90,19 +93,8 @@ import {
   RELAY_ISSUER_SECRET,
   RELAY_URL_SECRET,
 } from "./config.ts";
-import { EnvironmentSigningKey } from "./environmentKeys.ts";
 import * as ConnectReachability from "./ConnectReachability.ts";
-import * as ManagedEndpointRuntime from "./ManagedEndpointRuntime.ts";
-import * as ManagedLimits from "../policy/managedLimits.ts";
-import * as ManagedPolicy from "../policy/ManagedPolicy.ts";
-import * as ServerSettings from "../serverSettings.ts";
-import { relayUrlConfig } from "./publicConfig.ts";
-import {
-  filterRelayResponse,
-  relayRequestError,
-  type RelayRequestError,
-  shouldRetryRelayRequest,
-} from "./relayResponse.ts";
+import { EnvironmentSigningKey } from "./environmentKeys.ts";
 import {
   hasBoundedCloudProofLifetime,
   hasExactScope,
@@ -112,6 +104,14 @@ import {
   managedEndpointRuntimeConfigsMatch,
   parseManagedEndpointLocalOrigin,
 } from "./linkChecks.ts";
+import * as ManagedEndpointRuntime from "./ManagedEndpointRuntime.ts";
+import { relayUrlConfig } from "./publicConfig.ts";
+import {
+  filterRelayResponse,
+  relayRequestError,
+  type RelayRequestError,
+  shouldRetryRelayRequest,
+} from "./relayResponse.ts";
 import { desktopUpdateRestartPending, pendingUpdateHandoffExists } from "./updateHandoff.ts";
 
 const CLOUD_MINT_NONCE_PREFIX = "cloud-mint-nonce-";

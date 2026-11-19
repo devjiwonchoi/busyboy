@@ -1,6 +1,5 @@
-import { describe, expect, it } from "vite-plus/test";
-
 import type * as EffectAcpSchema from "effect-acp/compat";
+import { describe, expect, it } from "vite-plus/test";
 
 import {
   decideToolCallUpdateEmission,

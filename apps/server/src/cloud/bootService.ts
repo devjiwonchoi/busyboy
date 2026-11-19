@@ -1,4 +1,6 @@
+import { CLI_RELEASE_BASE_URL_ENV } from "@t3tools/shared/cliRelease";
 import * as HostProcess from "@t3tools/shared/HostProcess";
+import { CliError } from "effect/cli";
 import * as Config from "effect/Config";
 import * as Context from "effect/Context";
 import * as DateTime from "effect/DateTime";
@@ -6,18 +8,14 @@ import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as FileSystem from "effect/FileSystem";
+import { HttpClient } from "effect/http";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Schedule from "effect/Schedule";
-import { CliError } from "effect/cli";
-import { HttpClient } from "effect/http";
 import * as Schema from "effect/Schema";
 
-import { CLI_RELEASE_BASE_URL_ENV } from "@t3tools/shared/cliRelease";
-
 import * as ProcessRunner from "../processRunner.ts";
-import { acquireServiceSelectionLock } from "./serviceSelectionLock.ts";
 import {
   serviceLauncherIsRunning,
   serviceLauncherLockPath,
@@ -50,6 +48,7 @@ import {
   systemdUnitDirectoryOf,
   type ServiceState,
 } from "./serviceProtocol.ts";
+import { acquireServiceSelectionLock } from "./serviceSelectionLock.ts";
 
 export {
   serviceUnitBaseDirOf as bootServiceBaseDirOf,

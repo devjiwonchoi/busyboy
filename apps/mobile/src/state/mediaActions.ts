@@ -1,29 +1,23 @@
-import { settlePromise, squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
-import { errorDisplayMessage } from "@t3tools/client-runtime/errors";
-import * as Dialog from "../components/ui/Dialog";
-import type { MediaActionsSource } from "../lib/mediaActionsSource";
 import { useNavigation } from "@react-navigation/native";
-import { msg, useGT } from "gt-react-native";
-import { m } from "../i18n/messages";
+import { errorDisplayMessage } from "@t3tools/client-runtime/errors";
 import {
   formatFilePathForClipboard,
   type MediaActionId,
 } from "@t3tools/client-runtime/media-actions";
+import { settlePromise, squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
 import {
   AuthFilesystemReadScope,
   type EnvironmentId,
   sessionGrantsScope,
   type SessionGrantInput,
 } from "@t3tools/contracts";
-import { normalizeNativeMarkdownUrl } from "../lib/markdownLinks";
 import { AsyncResult } from "effect/reactivity";
 import * as Haptics from "expo-haptics";
+import { msg, useGT } from "gt-react-native";
 import { useEffect, useRef, useState } from "react";
 
-import { useRefreshAssetUrl } from "./assets";
-import { appAtomRegistry } from "./atom-registry";
-import { useEnvironmentQuery } from "./query";
-import { environmentSession } from "./session";
+import * as Dialog from "../components/ui/Dialog";
+import { m } from "../i18n/messages";
 import {
   downloadAndShareAttachment,
   downloadAttachmentForPreview,
@@ -31,7 +25,13 @@ import {
 } from "../lib/attachmentDownload";
 import { copyTextWithHaptic } from "../lib/copyTextWithHaptic";
 import { loadLocalAttachmentPreview } from "../lib/localAttachmentPreview";
+import { normalizeNativeMarkdownUrl } from "../lib/markdownLinks";
+import type { MediaActionsSource } from "../lib/mediaActionsSource";
 import { canSaveImageToLibrary, saveImageToLibrary } from "../lib/saveImageToLibrary";
+import { useRefreshAssetUrl } from "./assets";
+import { appAtomRegistry } from "./atom-registry";
+import { useEnvironmentQuery } from "./query";
+import { environmentSession } from "./session";
 
 function allowsHostMedia(session: SessionGrantInput | null) {
   return session === null || sessionGrantsScope(session, AuthFilesystemReadScope);

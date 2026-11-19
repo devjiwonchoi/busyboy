@@ -1,4 +1,5 @@
 import { describe, expect, it } from "@effect/vitest";
+
 import { splitTransferredFiles } from "./workspaceFileDrop";
 
 describe("splitTransferredFiles", () => {

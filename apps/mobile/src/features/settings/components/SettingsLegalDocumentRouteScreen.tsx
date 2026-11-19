@@ -1,17 +1,17 @@
-import { T, useGT } from "gt-react-native";
-import { SheetHeader } from "../../../components/ui/SheetHeader";
 import { useNavigation } from "@react-navigation/native";
+import { T, useGT } from "gt-react-native";
 import { useState } from "react";
 import { Linking, Pressable, View } from "react-native";
 import { WebView } from "react-native-webview";
 
-import { Button } from "../../../components/ui/Button";
 import { AppActivityIndicator } from "../../../components/ui/AppActivityIndicator";
-import { AppText as Text } from "../../../components/ui/AppText";
-import { LoadingStrip } from "../../../components/ui/LoadingStrip";
 import { SymbolView } from "../../../components/ui/AppSymbol";
-import { isLegalDocumentUrl, LEGAL_URL } from "../lib/legal-document-url";
+import { AppText as Text } from "../../../components/ui/AppText";
+import { Button } from "../../../components/ui/Button";
+import { LoadingStrip } from "../../../components/ui/LoadingStrip";
+import { SheetHeader } from "../../../components/ui/SheetHeader";
 import { webViewDecelerationRate } from "../../../lib/webViewDecelerationRate";
+import { isLegalDocumentUrl, LEGAL_URL } from "../lib/legal-document-url";
 
 interface SettingsLegalDocumentRouteScreenProps {
   readonly documentName: string;

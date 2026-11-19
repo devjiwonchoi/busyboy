@@ -1,41 +1,3 @@
-import * as DocumentText from "../../provider/DocumentText.ts";
-import {
-  compactDynamicToolOutput,
-  mcpToolResultOutput,
-  toolOutputImages,
-} from "@t3tools/shared/toolOutput";
-import { makeProviderTextDeltaCoalescer } from "./ProviderTextDeltaCoalescer.ts";
-import { claudeTaskOutputRoot, tailClaudeTaskOutput } from "./ClaudeTaskOutputTail.ts";
-import {
-  dynamicToolTitle,
-  formatReadToolLabel,
-  formatSearchToolLabel,
-} from "@t3tools/shared/toolActivity";
-import { field, text } from "../unknownField.ts";
-import { mergeWorkflowAgentMetadata, type WorkflowAgentMetadata } from "../workflowAgentAnswers.ts";
-import {
-  initialWorkflowAgentTranscriptCursor,
-  readWorkflowAgentTranscript,
-  type WorkflowAgentTranscriptCursor,
-} from "../workflowAgentTranscript.ts";
-import {
-  CLAUDE_WORKFLOW_TASK_TYPE,
-  hasClaudeWorkflowSnapshot,
-  mergeClaudeWorkflowProgress,
-  parseClaudeWorkflowRunHandles,
-} from "./claudeWorkflowProgress.ts";
-
-import { isWorkspaceImagePreviewPath } from "@t3tools/shared/filePreview";
-import {
-  addClaudeLedgerUsage,
-  claudeLedgerDelta,
-  claudeModelLedger,
-  claudeReportedContextWindows,
-  normalizeClaudeTurnTokenUsage,
-  type ClaudeLedgerUsage,
-  type ClaudeModelLedger,
-} from "../../provider/ClaudeTurnTokenUsage.ts";
-import { toMcpElicitationResponse } from "../../provider/CodexMcpElicitation.ts";
 import {
   type CanUseTool,
   type ElicitationRequest,
@@ -69,29 +31,48 @@ import type {
   AskUserQuestionInput,
   WebSearchOutput,
 } from "@anthropic-ai/claude-agent-sdk/sdk-tools";
+import { isWorkspaceImagePreviewPath } from "@t3tools/shared/filePreview";
+import {
+  dynamicToolTitle,
+  formatReadToolLabel,
+  formatSearchToolLabel,
+} from "@t3tools/shared/toolActivity";
+import {
+  compactDynamicToolOutput,
+  mcpToolResultOutput,
+  toolOutputImages,
+} from "@t3tools/shared/toolOutput";
+
+import {
+  addClaudeLedgerUsage,
+  claudeLedgerDelta,
+  claudeModelLedger,
+  claudeReportedContextWindows,
+  normalizeClaudeTurnTokenUsage,
+  type ClaudeLedgerUsage,
+  type ClaudeModelLedger,
+} from "../../provider/ClaudeTurnTokenUsage.ts";
+import { toMcpElicitationResponse } from "../../provider/CodexMcpElicitation.ts";
+import * as DocumentText from "../../provider/DocumentText.ts";
+import { field, text } from "../unknownField.ts";
+import { mergeWorkflowAgentMetadata, type WorkflowAgentMetadata } from "../workflowAgentAnswers.ts";
+import {
+  initialWorkflowAgentTranscriptCursor,
+  readWorkflowAgentTranscript,
+  type WorkflowAgentTranscriptCursor,
+} from "../workflowAgentTranscript.ts";
+import { claudeTaskOutputRoot, tailClaudeTaskOutput } from "./ClaudeTaskOutputTail.ts";
+import {
+  CLAUDE_WORKFLOW_TASK_TYPE,
+  hasClaudeWorkflowSnapshot,
+  mergeClaudeWorkflowProgress,
+  parseClaudeWorkflowRunHandles,
+} from "./claudeWorkflowProgress.ts";
+import { makeProviderTextDeltaCoalescer } from "./ProviderTextDeltaCoalescer.ts";
 // @effect-diagnostics-next-line nodeBuiltinImport:off -- the SDK takes a Node ChildProcess for the CLI.
 import * as NodeChildProcess from "node:child_process";
 import * as NodeUtil from "node:util";
-import { parseCliArgs } from "@t3tools/shared/cliArgs";
-import { fromLenientJson } from "@t3tools/shared/schemaJson";
-import {
-  claudeMcpToolName,
-  claudeMcpToolNamePart,
-  claudeMcpToolPrefix,
-  MCP_APP_OUTPUT_KEY,
-  mcpAppToolResourceUri,
-} from "@t3tools/shared/mcpApp";
-import { AgentScope } from "@t3tools/shared/AgentScope";
-import * as ProviderProcesses from "../../process/providerProcesses.ts";
-import * as SpawnWorker from "../../process/SpawnWorker.ts";
-import * as HostProcess from "@t3tools/shared/HostProcess";
-import { applyClaudePromptEffortPrefix } from "@t3tools/shared/model";
-import { compareSemverVersions } from "@t3tools/shared/semver";
-import {
-  CLAUDE_RESUME_COMPACTION_COMPACT_ANSWER,
-  CLAUDE_RESUME_COMPACTION_NEVER_ANSWER,
-  formatClaudeResumeCompactionQuestion,
-} from "@t3tools/shared/claudeCompaction";
+
 import {
   type ChatAttachment,
   PROVIDER_SEND_TURN_MAX_FILE_BYTES,
@@ -135,10 +116,65 @@ import {
   resolveIdleCompaction,
   isDelegatedAppThread,
 } from "@t3tools/contracts";
-
+import {
+  ProviderAdapterDriverCreateError,
+  type ProviderAdapterDriverCreateInput,
+} from "@t3tools/provider-core/server/adapterDriver";
+import { providerMessageTextWithAttachmentPaths } from "@t3tools/provider-core/server/attachmentPrompt";
+import {
+  makeProviderFailure,
+  makeProviderRetryTurnItem,
+  PROVIDER_RETRY_BUDGET_MS,
+} from "@t3tools/provider-core/server/failure";
+import * as IdAllocator from "@t3tools/provider-core/server/IdAllocator";
+import * as McpProviderSessions from "@t3tools/provider-core/server/McpProviderSessions";
+import * as McpProviderSession from "@t3tools/provider-core/server/mcpSession";
+import {
+  mcpToolPresentation,
+  normalizeMcpText,
+} from "@t3tools/provider-core/server/mcpToolPresentation";
+import {
+  type BackgroundWorkReport,
+  backgroundWorkNotification,
+} from "@t3tools/provider-core/server/notification";
+import {
+  T3_CODE_DEVICE_TOOL_INSTRUCTIONS_WITH_TOOL_SEARCH,
+  T3_CODE_ORCHESTRATION_INSTRUCTIONS,
+} from "@t3tools/provider-core/server/orchestrationInstructions";
+import { expandHomePath } from "@t3tools/provider-core/server/pathExpansion";
+import { signalProcessGroup } from "@t3tools/provider-core/server/processGroup";
+import * as ProviderAdapter from "@t3tools/provider-core/server/ProviderAdapter";
+import * as ProviderContinuationRequests from "@t3tools/provider-core/server/ProviderContinuationRequests";
+import * as ProviderEventLoggers from "@t3tools/provider-core/server/ProviderEventLoggers";
+import { buildRuntimeInstructions } from "@t3tools/provider-core/server/runtimeInstructions";
+import { turnScopedSelectionTransition } from "@t3tools/provider-core/server/selectionTransition";
+import type { ManagedServerProvider } from "@t3tools/provider-core/server/snapshot";
+import { spawnAndCollect } from "@t3tools/provider-core/server/snapshotProbe";
+import {
+  makeSubagentChildThread,
+  makeSubagentConversationArtifacts,
+  subagentThreadTitle,
+} from "@t3tools/provider-core/server/subagentProjection";
+import { AgentScope } from "@t3tools/shared/AgentScope";
+import {
+  CLAUDE_RESUME_COMPACTION_COMPACT_ANSWER,
+  CLAUDE_RESUME_COMPACTION_NEVER_ANSWER,
+  formatClaudeResumeCompactionQuestion,
+} from "@t3tools/shared/claudeCompaction";
+import { parseCliArgs } from "@t3tools/shared/cliArgs";
+import * as HostProcess from "@t3tools/shared/HostProcess";
+import {
+  claudeMcpToolName,
+  claudeMcpToolNamePart,
+  claudeMcpToolPrefix,
+  MCP_APP_OUTPUT_KEY,
+  mcpAppToolResourceUri,
+} from "@t3tools/shared/mcpApp";
+import { applyClaudePromptEffortPrefix } from "@t3tools/shared/model";
+import { fromLenientJson } from "@t3tools/shared/schemaJson";
+import { compareSemverVersions } from "@t3tools/shared/semver";
 import { FILE_HEADERS_ONLY, formatPatch, structuredPatch } from "diff";
 import * as Cause from "effect/Cause";
-import * as Predicate from "effect/Predicate";
 import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
 import * as SecureRandom from "effect/crypto/SecureRandom";
@@ -149,23 +185,52 @@ import * as Effect from "effect/Effect";
 import * as Equal from "effect/Equal";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
-import * as Schedule from "effect/Schedule";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
+import * as Predicate from "effect/Predicate";
+import * as ChildProcess from "effect/process/ChildProcess";
+import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Queue from "effect/Queue";
 import * as Ref from "effect/Ref";
+import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
 import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
-import * as ChildProcess from "effect/process/ChildProcess";
-import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 
 import { resolveAttachmentPath } from "../../attachmentStore.ts";
+import {
+  compileClaudeModelSelection,
+  type CompiledClaudeModelSelection,
+} from "../../claudeModelOptions.ts";
+import * as ServerConfig from "../../config.ts";
 import { snapshotMcpApp } from "../../mcpApps/McpAppSnapshot.ts";
+import * as PortScanner from "../../preview/PortScanner.ts";
+import * as ProviderProcesses from "../../process/providerProcesses.ts";
+import * as SpawnWorker from "../../process/SpawnWorker.ts";
+import * as ProcessRunner from "../../processRunner.ts";
+import {
+  BUNDLED_CLAUDE_MODEL_CATALOG,
+  resolveClaudeCatalogContextWindowTokens,
+  type ClaudeModelCatalog,
+  getClaudeCatalogModelCapabilities,
+  resolveClaudeModelSlug,
+  resolveClaudeReportedModelSlug,
+  scopeClaudeModelCatalog,
+} from "../../provider/ClaudeModelCatalog.ts";
+import {
+  claudeRateLimitEventToUpdate,
+  type ClaudeScopedLimitNames,
+} from "../../provider/claudeUsageLimits.ts";
 import { resolveClaudeSdkExecutablePath } from "../../provider/Drivers/ClaudeExecutable.ts";
-import * as ProviderInstallationGate from "../../provider/ProviderInstallationGate.ts";
+import {
+  claudeLocalSettingsDirectory,
+  claudeSignedOutMessage,
+  makeClaudeEnvironment,
+  mergeClaudeProcessEnvironment,
+  resolveClaudeHomePath,
+} from "../../provider/Drivers/ClaudeHome.ts";
 import {
   planClaudeSkillDispatch,
   type ClaudeSkillTarget,
@@ -177,76 +242,11 @@ import {
   readClaudeSettingsEnv,
 } from "../../provider/Drivers/ClaudeSkills.ts";
 import {
-  compileClaudeModelSelection,
-  type CompiledClaudeModelSelection,
-} from "../../claudeModelOptions.ts";
-import * as ServerConfig from "../../config.ts";
-import * as PortScanner from "../../preview/PortScanner.ts";
-import * as ProcessRunner from "../../processRunner.ts";
-import * as ServerSettings from "../../serverSettings.ts";
-import { expandHomePath } from "@t3tools/provider-core/server/pathExpansion";
-import { spawnAndCollect } from "@t3tools/provider-core/server/snapshotProbe";
-import { signalProcessGroup } from "@t3tools/provider-core/server/processGroup";
-import {
-  claudeLocalSettingsDirectory,
-  claudeSignedOutMessage,
-  makeClaudeEnvironment,
-  mergeClaudeProcessEnvironment,
-  resolveClaudeHomePath,
-} from "../../provider/Drivers/ClaudeHome.ts";
-import {
-  BUNDLED_CLAUDE_MODEL_CATALOG,
-  resolveClaudeCatalogContextWindowTokens,
-  type ClaudeModelCatalog,
-  getClaudeCatalogModelCapabilities,
-  resolveClaudeModelSlug,
-  resolveClaudeReportedModelSlug,
-  scopeClaudeModelCatalog,
-} from "../../provider/ClaudeModelCatalog.ts";
-import {
   boundProviderEventForLogging,
   shouldPersistProviderEvent,
 } from "../../provider/EventNdjsonLogger.ts";
-import * as ProviderEventLoggers from "@t3tools/provider-core/server/ProviderEventLoggers";
-import {
-  claudeRateLimitEventToUpdate,
-  type ClaudeScopedLimitNames,
-} from "../../provider/claudeUsageLimits.ts";
-import type { ManagedServerProvider } from "@t3tools/provider-core/server/snapshot";
-import {
-  T3_CODE_DEVICE_TOOL_INSTRUCTIONS_WITH_TOOL_SEARCH,
-  T3_CODE_ORCHESTRATION_INSTRUCTIONS,
-} from "@t3tools/provider-core/server/orchestrationInstructions";
-import { buildRuntimeInstructions } from "@t3tools/provider-core/server/runtimeInstructions";
-import {
-  mcpToolPresentation,
-  normalizeMcpText,
-} from "@t3tools/provider-core/server/mcpToolPresentation";
-import * as McpProviderSession from "@t3tools/provider-core/server/mcpSession";
-import * as McpProviderSessions from "@t3tools/provider-core/server/McpProviderSessions";
-import * as IdAllocator from "@t3tools/provider-core/server/IdAllocator";
-import {
-  makeProviderFailure,
-  makeProviderRetryTurnItem,
-  PROVIDER_RETRY_BUDGET_MS,
-} from "@t3tools/provider-core/server/failure";
-import { turnScopedSelectionTransition } from "@t3tools/provider-core/server/selectionTransition";
-import { providerMessageTextWithAttachmentPaths } from "@t3tools/provider-core/server/attachmentPrompt";
-import * as ProviderAdapter from "@t3tools/provider-core/server/ProviderAdapter";
-import {
-  ProviderAdapterDriverCreateError,
-  type ProviderAdapterDriverCreateInput,
-} from "@t3tools/provider-core/server/adapterDriver";
-import {
-  type BackgroundWorkReport,
-  backgroundWorkNotification,
-} from "@t3tools/provider-core/server/notification";
-import * as ProviderContinuationRequests from "@t3tools/provider-core/server/ProviderContinuationRequests";
-import {
-  makeSubagentChildThread,
-  makeSubagentConversationArtifacts,
-  subagentThreadTitle,
-} from "@t3tools/provider-core/server/subagentProjection";
+import * as ProviderInstallationGate from "../../provider/ProviderInstallationGate.ts";
+import * as ServerSettings from "../../serverSettings.ts";
 
 export const CLAUDE_PROVIDER = ProviderDriverKind.make("claudeAgent");
 /** The query exited before the turn attached, so the prompt was never offered. */

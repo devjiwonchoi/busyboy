@@ -1,18 +1,18 @@
 import { resolveFilesystemReadAccess } from "@t3tools/client-runtime/state/filesystem";
-import { environmentSession } from "../../state/session";
 import type { EnvironmentId } from "@t3tools/contracts";
-import { AppBar } from "../../components/ui/AppBar";
-import { ScreenContent } from "../../components/ui/ScreenContent";
 import { useGT, useMessages } from "gt-react-native";
 import { useState } from "react";
-import { SheetPane } from "../../components/ui/SheetPane";
 
-import { useEnvironmentQuery } from "../../state/query";
+import { AppBar } from "../../components/ui/AppBar";
+import { ScreenContent } from "../../components/ui/ScreenContent";
+import { SheetPane } from "../../components/ui/SheetPane";
 import { useEnvironmentPresentation } from "../../state/presentation";
+import { useEnvironmentQuery } from "../../state/query";
+import { environmentSession } from "../../state/session";
 import { useAppearancePreferences } from "../settings/appearance/AppearancePreferencesProvider";
 import { FileTreeBrowser } from "./FileTreeBrowser";
-import { useFileTreeEntries } from "./useFileTreeEntries";
 import { preloadWorkspaceFileContents } from "./preload-workspace-file";
+import { useFileTreeEntries } from "./useFileTreeEntries";
 
 export function ThreadFileNavigatorPane(props: {
   readonly cwd: string;

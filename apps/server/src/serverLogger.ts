@@ -4,10 +4,10 @@ import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
-import * as Redactable from "effect/Redactable";
-import * as References from "effect/References";
 import * as OtlpExporter from "effect/observability/OtlpExporter";
 import * as OtlpLogger from "effect/observability/OtlpLogger";
+import * as Redactable from "effect/Redactable";
+import * as References from "effect/References";
 
 import * as ServerConfig from "./config.ts";
 import * as OtlpExportFailures from "./observability/OtlpExportFailures.ts";

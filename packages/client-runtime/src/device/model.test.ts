@@ -1,4 +1,5 @@
 import { expect, it, vi } from "vite-plus/test";
+
 import { createDeviceModelSlot, type DeviceModelSource } from "./model.ts";
 
 const pro: DeviceModelSource = { id: "iphone-18-pro", url: "/pro.glb" };

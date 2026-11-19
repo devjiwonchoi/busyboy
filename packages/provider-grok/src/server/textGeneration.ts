@@ -1,16 +1,15 @@
+import { TextGenerationError } from "@t3tools/contracts";
+import * as TextGenerationOperations from "@t3tools/provider-core/server/textGenerationOperations";
+import { getModelSelectionStringOptionValue } from "@t3tools/shared/model";
+import type * as EffectAcpErrors from "effect-acp/errors";
 import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
+import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Ref from "effect/Ref";
 import * as Schema from "effect/Schema";
-import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
-import type * as EffectAcpErrors from "effect-acp/errors";
 
-import { TextGenerationError } from "@t3tools/contracts";
 import type { GrokSettings } from "../settings.ts";
-import { getModelSelectionStringOptionValue } from "@t3tools/shared/model";
-
-import * as TextGenerationOperations from "@t3tools/provider-core/server/textGenerationOperations";
 import {
   applyGrokAcpModelSelection,
   currentGrokModelIdFromSessionSetup,

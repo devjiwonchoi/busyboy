@@ -3,13 +3,13 @@ import { Pressable, View } from "react-native";
 
 import { NativeStackScreenOptions } from "../../native/StackHeader";
 import { AppActivityIndicator } from "./AppActivityIndicator";
-import { AppText } from "./AppText";
 import { SymbolView } from "./AppSymbol";
+import { AppText } from "./AppText";
 import { IconButton } from "./IconButton";
-import { Toolbar } from "./Toolbar";
 import { createNativeHeaderMenu } from "./nativeHeaderMenu.ios";
-import { useControlTheme } from "./useControlTheme";
 import type { SheetCloseButtonProps, SheetHeaderProps } from "./SheetHeader.types";
+import { Toolbar } from "./Toolbar";
+import { useControlTheme } from "./useControlTheme";
 
 export function SheetCloseButton(props: SheetCloseButtonProps) {
   const gt = useGT();

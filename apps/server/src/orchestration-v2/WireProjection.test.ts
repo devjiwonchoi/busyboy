@@ -1,3 +1,4 @@
+import { describe, expect, it } from "@effect/vitest";
 import {
   CheckpointId,
   CheckpointRef,
@@ -20,10 +21,11 @@ import {
   OrchestrationV2TurnItem,
   OrchestrationV2TurnItemJson,
 } from "@t3tools/contracts";
-import { describe, expect, it } from "@effect/vitest";
+import { MAX_TOOL_OUTPUT_IMAGES, toolOutputImages } from "@t3tools/shared/toolOutput";
 import * as DateTime from "effect/DateTime";
 import * as Schema from "effect/Schema";
 
+import { threadShellFromProjection } from "./ProjectionStore.ts";
 import { coalesceLiveUpdatedEvents } from "./ThreadLiveEventCoalescer.ts";
 import {
   makeLiveBodyDeduper,
@@ -32,8 +34,6 @@ import {
   projectDomainEventForWire,
   projectStoredEventForWire,
 } from "./WireProjection.ts";
-import { threadShellFromProjection } from "./ProjectionStore.ts";
-import { MAX_TOOL_OUTPUT_IMAGES, toolOutputImages } from "@t3tools/shared/toolOutput";
 
 const decodeTurnItem = Schema.decodeUnknownSync(OrchestrationV2TurnItem);
 const encodeTurnItemJson = Schema.encodeSync(OrchestrationV2TurnItemJson);

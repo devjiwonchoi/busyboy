@@ -1,6 +1,6 @@
-import type * as CodexSchema from "effect-codex-app-server/schema";
 import type * as CodexClient from "effect-codex-app-server/client";
 import * as CodexErrors from "effect-codex-app-server/errors";
+import type * as CodexSchema from "effect-codex-app-server/schema";
 import * as Effect from "effect/Effect";
 
 export const revertCodexThread = Effect.fn("revertCodexThread")(function* (

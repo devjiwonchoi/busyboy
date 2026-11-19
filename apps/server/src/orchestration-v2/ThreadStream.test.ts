@@ -12,10 +12,10 @@ import {
   type OrchestrationV2ThreadProjection,
   type OrchestrationV2TurnItem,
 } from "@t3tools/contracts";
-import { describe, expect, it } from "vite-plus/test";
+import { boundedSnapshotProjection } from "@t3tools/shared/orchestrationV2BoundedSnapshot";
 import * as DateTime from "effect/DateTime";
 import * as Schema from "effect/Schema";
-import { boundedSnapshotProjection } from "@t3tools/shared/orchestrationV2BoundedSnapshot";
+import { describe, expect, it } from "vite-plus/test";
 
 import {
   buildBoundedThreadStreamSnapshot,

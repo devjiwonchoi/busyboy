@@ -7,10 +7,6 @@ import { useGT } from "gt-react-native";
 import { isValidElement, useEffect, useRef } from "react";
 import { StyleSheet } from "react-native";
 import { KeyboardController, useKeyboardState } from "react-native-keyboard-controller";
-import { isDuoDevice } from "../lib/device-type";
-import { useMobileNavigationTheme } from "../lib/useMobileNavigationTheme";
-import { useDeviceType, useNativeLayoutMetrics } from "./native-layout-metrics";
-import { HeaderItemsWidthContext } from "./header-items-width";
 import {
   SearchBar,
   Stack,
@@ -23,6 +19,11 @@ import {
   type HeaderBarButtonItemWithMenu,
   type HeaderBarButtonSearchBarPlacementItem,
 } from "react-native-screens";
+
+import { isDuoDevice } from "../lib/device-type";
+import { useMobileNavigationTheme } from "../lib/useMobileNavigationTheme";
+import { HeaderItemsWidthContext } from "./header-items-width";
+import { useDeviceType, useNativeLayoutMetrics } from "./native-layout-metrics";
 
 // UIKit's bar margins, and the width of a glass bar button.
 const BAR_MARGINS = 32;

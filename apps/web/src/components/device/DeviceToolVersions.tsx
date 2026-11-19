@@ -1,6 +1,7 @@
+import type { DeviceToolVersions as ToolVersions } from "@t3tools/contracts";
 import { msg, T, useGT, useMessages } from "gt-react";
 import type { ReactNode } from "react";
-import type { DeviceToolVersions as ToolVersions } from "@t3tools/contracts";
+
 import { InlineButton } from "~/components/ui/button";
 import { Popover, PopoverPopup, PopoverTitle, PopoverTrigger } from "~/components/ui/popover";
 

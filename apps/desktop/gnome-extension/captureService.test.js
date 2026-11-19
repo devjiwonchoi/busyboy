@@ -1,4 +1,5 @@
 import { expect, it } from "vite-plus/test";
+
 import { CaptureService, CLIENT_NAMES, isWaylandSession } from "./captureService.js";
 
 it("supports GNOME 50 without the removed X11 API, rejecting older X11 sessions", () => {

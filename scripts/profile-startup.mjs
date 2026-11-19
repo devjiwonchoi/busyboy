@@ -1,12 +1,12 @@
 // Opt in with T3CODE_STARTUP_PROFILE_DIR=/absolute/path NODE_OPTIONS="--no-node-snapshot --import=/absolute/path/to/this/file".
+import * as NodeChildProcess from "node:child_process";
 import * as NodeFS from "node:fs";
 import * as NodeInspector from "node:inspector";
-import * as NodeChildProcess from "node:child_process";
 import * as NodeModule from "node:module";
 import * as NodePath from "node:path";
 import * as NodePerfHooks from "node:perf_hooks";
-import * as NodeWorkerThreads from "node:worker_threads";
 import * as NodeURL from "node:url";
+import * as NodeWorkerThreads from "node:worker_threads";
 
 import { profileStartupModules } from "./profile-startup-modules.mjs";
 

@@ -1,4 +1,3 @@
-import type { EnvironmentConnectionPhase } from "../connection/presentation.ts";
 import type {
   CommandId,
   EnvironmentId,
@@ -15,7 +14,14 @@ import { isAbsolutePath, isExplicitRelativePath, newProjectFolderName } from "@t
 import * as Arr from "effect/Array";
 import * as Option from "effect/Option";
 import * as Order from "effect/Order";
+import { mFallback, msg } from "gt-i18n";
+import type { MFunctionType } from "gt-i18n/types";
 
+import type { EnvironmentConnectionPhase } from "../connection/presentation.ts";
+import { sourceControlInstallHintText } from "../contractLabels.ts";
+import { sourceControlClients } from "../sourceControlClients.ts";
+import type { SourceControlDefinition } from "../sourceControlClients.ts";
+import type { EnvironmentProject } from "../state/models.ts";
 import {
   appendBrowsePathSegment,
   ensureBrowseDirectoryPath,
@@ -26,12 +32,6 @@ import {
   isUnsupportedWindowsProjectPath,
   resolveProjectPathForDispatch,
 } from "../state/projects.ts";
-import type { EnvironmentProject } from "../state/models.ts";
-import { sourceControlClients } from "../sourceControlClients.ts";
-import type { SourceControlDefinition } from "../sourceControlClients.ts";
-import { mFallback, msg } from "gt-i18n";
-import type { MFunctionType } from "gt-i18n/types";
-import { sourceControlInstallHintText } from "../contractLabels.ts";
 
 export type AddProjectRemoteSource = SourceControlProviderKind | "url";
 

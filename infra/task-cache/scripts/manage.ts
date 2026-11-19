@@ -1,15 +1,15 @@
 import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
 import * as NodeServices from "@effect/platform-node/NodeServices";
+import * as Argument from "effect/cli/Argument";
+import * as Command from "effect/cli/Command";
+import * as Flag from "effect/cli/Flag";
+import * as Console from "effect/Console";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Schema from "effect/Schema";
-import * as Console from "effect/Console";
-import * as Layer from "effect/Layer";
-import * as Effect from "effect/Effect";
-import * as Flag from "effect/cli/Flag";
-import * as Argument from "effect/cli/Argument";
-import * as Command from "effect/cli/Command";
 
 import * as WriterRegistry from "../src/WriterRegistry.ts";
 

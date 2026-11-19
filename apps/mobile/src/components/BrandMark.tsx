@@ -3,8 +3,8 @@ import { Image } from "expo-image";
 import { msg, T, useMessages } from "gt-react-native";
 import { View } from "react-native";
 
-import { AppText as Text } from "./ui/AppText";
 import { T3_CODE_BRAND_MARK_SOURCE } from "./brandAssets";
+import { AppText as Text } from "./ui/AppText";
 
 const appVariant = Constants.expoConfig?.extra?.appVariant;
 const DEFAULT_STAGE_LABEL =

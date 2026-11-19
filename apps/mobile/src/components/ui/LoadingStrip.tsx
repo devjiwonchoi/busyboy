@@ -1,4 +1,5 @@
 import { View } from "react-native";
+
 import { Progress } from "./Progress";
 
 export function LoadingStrip(props: { readonly progress?: number }) {

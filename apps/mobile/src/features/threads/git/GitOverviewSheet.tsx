@@ -1,5 +1,10 @@
-import * as Dialog from "../../../components/ui/Dialog";
-import { useOpenPullRequest } from "../../../native/useOpenPullRequest";
+import {
+  CommonActions,
+  StackActions,
+  useNavigation,
+  type StaticScreenProps,
+} from "@react-navigation/native";
+import { sourceControlClients } from "@t3tools/client-runtime/source-control-clients";
 import {
   type GitActionRequestInput,
   buildMenuItems,
@@ -7,41 +12,36 @@ import {
   requiresDefaultBranchConfirmation,
 } from "@t3tools/client-runtime/state/vcs";
 import { EnvironmentId, ThreadId } from "@t3tools/contracts";
-import { sourceControlClients } from "@t3tools/client-runtime/source-control-clients";
-import { changeRequestTermKind } from "../../../lib/changeRequestTerm";
-import {
-  CommonActions,
-  StackActions,
-  useNavigation,
-  type StaticScreenProps,
-} from "@react-navigation/native";
 import { useGT, useMessages } from "gt-react-native";
 import { use, useEffect, useState } from "react";
-import { RefreshControl } from "../../../components/ui/RefreshControl";
-import { NativeScrollView } from "../../../native/NativeScrollViewMarker";
-
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+
 import { AppBar } from "../../../components/ui/AppBar";
+import { AppText as Text } from "../../../components/ui/AppText";
+import * as Dialog from "../../../components/ui/Dialog";
+import { groupedListInsets } from "../../../components/ui/listMetrics";
 import { ListRow } from "../../../components/ui/ListRow";
 import { ListSection } from "../../../components/ui/ListSection";
-import { groupedListInsets } from "../../../components/ui/listMetrics";
+import { RefreshControl } from "../../../components/ui/RefreshControl";
 import { ScreenContent } from "../../../components/ui/ScreenContent";
 import { SheetPane } from "../../../components/ui/SheetPane";
-import { InspectorSheetContext } from "../../layout/workspace-inspector-sheet";
-import { AppText as Text } from "../../../components/ui/AppText";
+import { changeRequestTermKind } from "../../../lib/changeRequestTerm";
+import { NativeScrollView } from "../../../native/NativeScrollViewMarker";
+import { useOpenPullRequest } from "../../../native/useOpenPullRequest";
 import { useEnvironmentQuery } from "../../../state/query";
-import { useThreadSelection } from "../../../state/use-thread-selection";
 import { useSelectedThreadGitActions } from "../../../state/use-selected-thread-git-actions";
 import { useSelectedThreadGitState } from "../../../state/use-selected-thread-git-state";
 import { useSelectedThreadWorktree } from "../../../state/use-selected-thread-worktree";
+import { useThreadSelection } from "../../../state/use-thread-selection";
 import { vcsEnvironment } from "../../../state/vcs";
-import { menuItemIconName, statusSummary } from "./gitSheetComponents";
+import { InspectorSheetContext } from "../../layout/workspace-inspector-sheet";
 import {
   LinkedPullRequestRow,
   linkedPullRequestKey,
   useLinkedPullRequestLines,
 } from "../LinkedPullRequestList";
 import { useLinkedPullRequestActions } from "../useLinkedPullRequestActions";
+import { menuItemIconName, statusSummary } from "./gitSheetComponents";
 
 type GitOverviewSheetProps = StaticScreenProps<{
   readonly environmentId: string;

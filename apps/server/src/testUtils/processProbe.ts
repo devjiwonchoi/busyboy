@@ -1,5 +1,6 @@
 // @effect-diagnostics nodeBuiltinImport:off - a socket observes fixture processes after their parent exits.
 import * as NodeNet from "node:net";
+
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as TestClock from "effect/testing/TestClock";

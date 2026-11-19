@@ -1,9 +1,10 @@
+import { formatAttachmentSize } from "@t3tools/client-runtime/state/attachments";
 import type { ChatAttachment } from "@t3tools/contracts";
 import { useGT, useMessages } from "gt-react";
-import { formatAttachmentSize } from "@t3tools/client-runtime/state/attachments";
 
 import { useTheme } from "~/hooks/useTheme";
 import { cn } from "~/lib/utils";
+
 import { type ChatFileAttachment, isFileAttachment, isImageAttachment } from "../../types";
 import { AttachmentImage } from "../media/AttachmentImage";
 import { PierreEntryIcon } from "./PierreEntryIcon";

@@ -1,5 +1,5 @@
-import type { OrchestratorFixtureInput } from "../shared.ts";
 import { GROK_BACKGROUND_BASH_PROMPT } from "../grok_background_bash/input.ts";
+import type { OrchestratorFixtureInput } from "../shared.ts";
 
 export function grokBackgroundBashFastWakeInput(): OrchestratorFixtureInput {
   return {

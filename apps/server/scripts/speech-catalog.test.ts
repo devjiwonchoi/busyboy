@@ -3,9 +3,9 @@ import * as NodeFS from "node:fs";
 
 import { catalog } from "@handy-computer/models";
 import { recommendSpeechModels } from "@t3tools/shared/speech";
-import policy from "../../../packages/shared/src/speechRecommendationPolicy.json" with { type: "json" };
 import { expect, it } from "vite-plus/test";
 
+import policy from "../../../packages/shared/src/speechRecommendationPolicy.json" with { type: "json" };
 import manifest from "../package.json" with { type: "json" };
 import { generateSpeechCatalog, renderSpeechCatalog } from "./speech-catalog.ts";
 

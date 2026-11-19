@@ -1,5 +1,4 @@
 import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
-import { cloudSpeechDisclosure } from "@t3tools/shared/speechCopy";
 import type { PreparedConnection } from "@t3tools/client-runtime/connection";
 import {
   configuredSecretSources,
@@ -24,13 +23,15 @@ import {
   type SettingsSecretValue,
   type VoiceTranscriptionDestination,
 } from "@t3tools/contracts";
+import { cloudSpeechDisclosure } from "@t3tools/shared/speechCopy";
 import * as Effect from "effect/Effect";
-import * as Option from "effect/Option";
-import * as Schema from "effect/Schema";
 import type { HttpClient } from "effect/http";
+import * as Option from "effect/Option";
 import { Atom, AsyncResult } from "effect/reactivity";
-import { useId, useState } from "react";
+import * as Schema from "effect/Schema";
 import { T, useGT, useMessages, Var } from "gt-react";
+import { useId, useState } from "react";
+
 import { isSecretsFeatureEnabled } from "../../env";
 import {
   inEnvironmentSpeechRuntime,

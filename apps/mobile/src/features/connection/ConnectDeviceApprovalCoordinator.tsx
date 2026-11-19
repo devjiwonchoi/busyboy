@@ -1,5 +1,5 @@
-import { msg } from "gt-react-native";
 import { AuthAccessWriteScope, type AuthPairingLink, type EnvironmentId } from "@t3tools/contracts";
+import { msg } from "gt-react-native";
 import { useEffect, useEffectEvent } from "react";
 
 import * as Dialog from "../../components/ui/Dialog";

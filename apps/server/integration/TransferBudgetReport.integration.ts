@@ -1,9 +1,5 @@
 import type { ProviderDriverKind } from "@t3tools/contracts";
 
-import type {
-  HttpTransferMeasurement,
-  WebSocketTransferTotals,
-} from "./NetworkTransferMeasurement.integration.ts";
 import {
   TRANSFER_HISTORY_MCP_RESULT_BYTES,
   TRANSFER_HISTORY_TOOLS_PER_TURN,
@@ -11,6 +7,10 @@ import {
   TRANSFER_MEASURED_MCP_RESULT_BYTES,
   TRANSFER_MEASURED_TOOLS,
 } from "./fixtures/transferBudget.ts";
+import type {
+  HttpTransferMeasurement,
+  WebSocketTransferTotals,
+} from "./NetworkTransferMeasurement.integration.ts";
 import {
   LONG_TURN_WORK_ROWS,
   SHELL_IDLE_SUBAGENTS,

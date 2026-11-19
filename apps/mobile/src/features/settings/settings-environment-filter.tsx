@@ -1,5 +1,5 @@
-import type { EnvironmentId } from "@t3tools/contracts";
 import { buildProjectGroups } from "@t3tools/client-runtime/state/project-grouping";
+import type { EnvironmentId } from "@t3tools/contracts";
 import { useLocale, useMessages } from "gt-react-native";
 import {
   createContext,
@@ -13,8 +13,8 @@ import {
 } from "react";
 
 import type { MessageResolver } from "../../i18n/messages";
-import { useEnvironments, type EnvironmentPresentation } from "../../state/environments";
 import { useProjects } from "../../state/entities";
+import { useEnvironments, type EnvironmentPresentation } from "../../state/environments";
 import { useMobileProjectGroupingSettings } from "../../state/project-grouping";
 import { toggleSettingsEnvironment } from "./settings-environment-filter.logic";
 

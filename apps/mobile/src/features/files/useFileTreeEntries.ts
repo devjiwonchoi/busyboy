@@ -1,12 +1,12 @@
-import { errorDisplayMessage } from "@t3tools/client-runtime/errors";
 import { useAtomMount, useAtomSubscribe } from "@effect/atom-react";
+import { errorDisplayMessage } from "@t3tools/client-runtime/errors";
 import { executeAtomQuery } from "@t3tools/client-runtime/state/runtime";
 import { ProjectListEntriesError, type EnvironmentId, type ProjectEntry } from "@t3tools/contracts";
 import * as Cause from "effect/Cause";
-import * as Schema from "effect/Schema";
-import { useLayoutEffect, useRef, useState } from "react";
 import { Atom } from "effect/reactivity";
+import * as Schema from "effect/Schema";
 import { msg } from "gt-react-native";
+import { useLayoutEffect, useRef, useState } from "react";
 
 import { environmentCatalog } from "../../connection/catalog";
 import { m } from "../../i18n/messages";

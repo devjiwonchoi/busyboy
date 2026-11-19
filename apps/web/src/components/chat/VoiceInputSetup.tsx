@@ -1,21 +1,23 @@
-import { T, Var, msg, useGT, useLocale } from "gt-react";
-import { m } from "~/i18n/messages";
-import { useStableCallback } from "~/hooks/useStableCallback";
-import {
-  listBrowserMicrophones,
-  updateMicrophoneOrder,
-  type BrowserMicrophone,
-} from "../../speech/browserMicrophones";
 import type {
   EnvironmentId,
   EnvironmentSpeechModel,
   EnvironmentSpeechStatus,
 } from "@t3tools/contracts";
+import { AuthSettingsWriteScope } from "@t3tools/contracts";
 import { useNavigate } from "@tanstack/react-router";
+import { T, Var, msg, useGT, useLocale } from "gt-react";
 import { CircleAlertIcon, MicIcon, RefreshCwIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 
+import { useStableCallback } from "~/hooks/useStableCallback";
+import { m } from "~/i18n/messages";
+
 import { useClientSettings } from "../../hooks/useSettings";
+import {
+  listBrowserMicrophones,
+  updateMicrophoneOrder,
+  type BrowserMicrophone,
+} from "../../speech/browserMicrophones";
 import {
   isSystemDefaultDeviceId,
   microphoneOrder,
@@ -23,7 +25,6 @@ import {
   preferredMicrophoneId,
 } from "../../speech/microphoneOrder";
 import { useEnvironment } from "../../state/environments";
-import { AuthSettingsWriteScope } from "@t3tools/contracts";
 import { useEnvironmentScope } from "../../state/session";
 import { languageLabel } from "../settings/SpeechLanguageSelect";
 import { Button } from "../ui/button";

@@ -8,17 +8,17 @@ import {
   resolvePathLinkTarget,
   splitFilePathPosition,
 } from "@t3tools/shared/fileLinks";
+import { safeDecodeURIComponent } from "@t3tools/shared/markdownLinks";
 import {
   isAbsolutePath,
   isNetworkPath,
   normalizeProjectPathForComparison,
 } from "@t3tools/shared/path";
-import { safeDecodeURIComponent } from "@t3tools/shared/markdownLinks";
 import { useContext } from "react";
 
-import { useEnvironmentScope } from "../state/session";
 import { projectEnvironment } from "../state/projects";
 import { useEnvironmentQuery } from "../state/query";
+import { useEnvironmentScope } from "../state/session";
 import { FileMetadataThreadContext } from "./FileMetadataThreadProvider";
 
 export function getFileMetadataQueryAtom(

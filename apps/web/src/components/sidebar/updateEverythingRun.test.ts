@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { environmentCatalog } from "~/connection/catalog";
 import { appAtomRegistry } from "~/rpc/atomRegistry";
 import { serverEnvironment } from "~/state/server";
+
 import type { ServerUpdateOutcome, ServerUpdateTarget } from "../ServerUpdateAction";
 import type { UpdateEverythingRun } from "./updateEverything.logic";
 import {

@@ -1,5 +1,5 @@
-import { RelayAuthInvalidError } from "@t3tools/contracts/relay";
 import { describe, expect, it } from "@effect/vitest";
+import { RelayAuthInvalidError } from "@t3tools/contracts/relay";
 
 import {
   DPOP_CLOCK_HINT,

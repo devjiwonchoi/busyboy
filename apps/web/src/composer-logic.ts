@@ -1,10 +1,10 @@
-import type { ClientSettings } from "@t3tools/contracts/settings";
+import type { ComposerPathSearchTarget } from "@t3tools/client-runtime/state/threads";
 import type {
   AssistantCitation,
   EnvironmentId,
   ResolvedKeybindingsConfig,
 } from "@t3tools/contracts";
-import type { ComposerPathSearchTarget } from "@t3tools/client-runtime/state/threads";
+import type { ClientSettings } from "@t3tools/contracts/settings";
 import {
   serializeAssistantCitation,
   withAssistantCitationComment,
@@ -14,11 +14,11 @@ import {
   isCurrencyAmountQuery,
   isPathWord,
 } from "@t3tools/shared/composerTrigger";
+
 import {
   splitPromptIntoComposerSegments,
   type ComposerPromptSegment,
 } from "./composer-editor-mentions";
-
 import {
   resolveShortcutCommand,
   type ShortcutEventLike,

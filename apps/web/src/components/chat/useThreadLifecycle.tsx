@@ -1,22 +1,24 @@
-import { msg, useGT, useMessages } from "gt-react";
-import { errorDisplayMessage, thrownErrorMessage } from "@t3tools/client-runtime/errors";
-import { m } from "~/i18n/messages";
+import { useAtomValue } from "@effect/atom-react";
 import type { EnvironmentServerConfig } from "@t3tools/client-runtime/connection";
-import type { EnvironmentThreadShell } from "@t3tools/client-runtime/state/shell";
-import type { Dispatch } from "react";
-import type { ComposerThreadTarget } from "../../composerDraftStore";
-import type { ComposerHandleRef } from "../../composerHandleContext";
+import { scopedThreadKey, scopeThreadRef } from "@t3tools/client-runtime/environment";
+import { errorDisplayMessage, thrownErrorMessage } from "@t3tools/client-runtime/errors";
 import {
-  isThreadWokeUnseen,
-  branchMismatchKey,
-  isBranchMismatchDismissedForSession,
-  shouldShowBranchMismatchBanner,
-  chatActionErrorMessage,
-  makeThreadErrorSetter,
-} from "../ChatView.logic";
-import { useStableCallback } from "../../hooks/useStableCallback";
-import { useDeadlinePassed, useNowAfter } from "../../hooks/useDeadline";
-import type { usePendingThreadRequests } from "./usePendingThreadRequests";
+  isAtomCommandInterrupted,
+  squashAtomCommandFailure,
+  type AtomCommandResult,
+} from "@t3tools/client-runtime/state/runtime";
+import type { EnvironmentThreadShell } from "@t3tools/client-runtime/state/shell";
+import {
+  BACKGROUND_WORK_STOP_RETRY_AFTER_MS,
+  type BackgroundWorkStopRequest,
+  isBackgroundWorkStopPending,
+} from "@t3tools/client-runtime/state/thread-execution";
+import type { RunStopPresentation } from "@t3tools/client-runtime/state/thread-execution";
+import {
+  effectiveSnoozed,
+  snoozeWakeLabel,
+  threadWokeAt,
+} from "@t3tools/client-runtime/state/thread-settled";
 import {
   AuthOrchestrationOperateScope,
   AuthSourceControlWriteScope,
@@ -26,61 +28,61 @@ import {
   ProviderInteractionMode,
   RuntimeMode,
 } from "@t3tools/contracts";
-import {
-  effectiveSnoozed,
-  snoozeWakeLabel,
-  threadWokeAt,
-} from "@t3tools/client-runtime/state/thread-settled";
-import {
-  BACKGROUND_WORK_STOP_RETRY_AFTER_MS,
-  type BackgroundWorkStopRequest,
-  isBackgroundWorkStopPending,
-} from "@t3tools/client-runtime/state/thread-execution";
-import { useAcknowledgeThreadWoke, useThreadActions } from "../../hooks/useThreadActions";
-import { settleAndAdvance } from "../../settleAndAdvance";
-import type { ChatShortcutCommands } from "./useChatShortcuts";
-import { resolveThreadLastVisitedAt } from "../Sidebar.logic";
-import { scopedThreadKey, scopeThreadRef } from "@t3tools/client-runtime/environment";
-import { type SetStateAction, useRef, useState } from "react";
 import { useNavigate, useRouter } from "@tanstack/react-router";
-import {
-  isAtomCommandInterrupted,
-  squashAtomCommandFailure,
-  type AtomCommandResult,
-} from "@t3tools/client-runtime/state/runtime";
-import { useUiStateStore } from "../../uiStateStore";
-import { type ChatMessage, DEFAULT_INTERACTION_MODE } from "../../types";
+import { Atom } from "effect/reactivity";
+import { msg, useGT, useMessages } from "gt-react";
 import { AlarmClockIcon, CheckCircle2Icon } from "lucide-react";
-import { stackedThreadToast, toastManager } from "../ui/toast";
-import { titleRegenerationToast } from "../threadTitleRegenerationToast";
+import type { Dispatch } from "react";
+import { type SetStateAction, useRef, useState } from "react";
+
+import { m } from "~/i18n/messages";
 import { newMessageId } from "~/lib/utils";
-import { buildThreadRouteParams } from "../../threadRoutes";
-import { composerDraftHasUserContent, useComposerDraftStore } from "../../composerDraftStore";
 import { useEnvironmentScope } from "~/state/session";
-import { threadEnvironment } from "../../state/threads";
-import { vcsEnvironment } from "../../state/vcs";
+
+import type { ComposerThreadTarget } from "../../composerDraftStore";
+import { composerDraftHasUserContent, useComposerDraftStore } from "../../composerDraftStore";
+import type { ComposerHandleRef } from "../../composerHandleContext";
+import { useDeadlinePassed, useNowAfter } from "../../hooks/useDeadline";
+import { useStableCallback } from "../../hooks/useStableCallback";
+import { useAcknowledgeThreadWoke, useThreadActions } from "../../hooks/useThreadActions";
+import { resolveThreadOpenRoute } from "../../lib/sideChatPane";
+import { appAtomRegistry } from "../../rpc/atomRegistry";
+import { settleAndAdvance } from "../../settleAndAdvance";
 import { useChildThreadInputs, readThreadShell, waitForThreadShell } from "../../state/entities";
 import { serverEnvironment } from "../../state/server";
-import { environmentShell } from "../../state/shell";
-import { ThreadStatusLine } from "./ThreadStatusLine";
-import { formatRelativeTimeLabel } from "../../timestampFormat";
-import { appAtomRegistry } from "../../rpc/atomRegistry";
 import { readEnvironmentScope } from "../../state/session";
+import { environmentShell } from "../../state/shell";
+import { threadEnvironment } from "../../state/threads";
+import { environmentThreadDetails } from "../../state/threads";
 import { useAtomCommand } from "../../state/use-atom-command";
 import { useOrchestrationCommand } from "../../state/use-orchestration-command";
+import { vcsEnvironment } from "../../state/vcs";
+import { buildThreadRouteParams } from "../../threadRoutes";
+import { formatRelativeTimeLabel } from "../../timestampFormat";
+import { type ChatMessage, DEFAULT_INTERACTION_MODE } from "../../types";
+import { useUiStateStore } from "../../uiStateStore";
+import {
+  isThreadWokeUnseen,
+  branchMismatchKey,
+  isBranchMismatchDismissedForSession,
+  shouldShowBranchMismatchBanner,
+  chatActionErrorMessage,
+  makeThreadErrorSetter,
+} from "../ChatView.logic";
+import { resolveThreadLastVisitedAt } from "../Sidebar.logic";
+import { titleRegenerationToast } from "../threadTitleRegenerationToast";
+import { stackedThreadToast, toastManager } from "../ui/toast";
 import {
   backgroundWorkNowItem,
   childInputNowItem,
   goalNowItem,
   runStopNowItem,
 } from "./ThreadActivityBanners";
+import { ThreadStatusLine } from "./ThreadStatusLine";
+import type { ChatShortcutCommands } from "./useChatShortcuts";
 import { useForceStopThread } from "./useForceStopThread";
-import { useAtomValue } from "@effect/atom-react";
-import type { RunStopPresentation } from "@t3tools/client-runtime/state/thread-execution";
-import { Atom } from "effect/reactivity";
-import { environmentThreadDetails } from "../../state/threads";
-import { resolveThreadOpenRoute } from "../../lib/sideChatPane";
 import type { useLocalDispatchState } from "./useLocalDispatchState";
+import type { usePendingThreadRequests } from "./usePendingThreadRequests";
 const RELATED_THREAD_SHELL_WAIT_MS = 1_000;
 
 function actionErrorMessage(error: unknown): string {

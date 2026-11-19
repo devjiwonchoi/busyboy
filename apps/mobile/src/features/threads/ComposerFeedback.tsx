@@ -1,4 +1,3 @@
-import { Button } from "../../components/ui/Button";
 import {
   codexFeedbackNotice,
   type CodexFeedbackSubmission,
@@ -6,8 +5,9 @@ import {
 import { useGT, useMessages } from "gt-react-native";
 import { Pressable, View } from "react-native";
 
-import { AppText as Text } from "../../components/ui/AppText";
 import { SymbolView } from "../../components/ui/AppSymbol";
+import { AppText as Text } from "../../components/ui/AppText";
+import { Button } from "../../components/ui/Button";
 import { copyTextWithHaptic } from "../../lib/copyTextWithHaptic";
 
 export function ComposerFeedback({

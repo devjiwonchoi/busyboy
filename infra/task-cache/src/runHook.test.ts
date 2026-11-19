@@ -5,7 +5,9 @@ import * as NodeFSP from "node:fs/promises";
 import * as NodeHttp from "node:http";
 import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
+
 import { expect, it, vi } from "vite-plus/test";
+
 import startRunHook from "./runHook.ts";
 
 it("sends telemetry from a detached flusher that the task runner does not wait for", async () => {

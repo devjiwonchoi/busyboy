@@ -1,4 +1,5 @@
 import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
+
 import { observeResize } from "../lib/observeResize";
 
 const HEIGHT_TRANSITION_FALLBACK_MS = 250;

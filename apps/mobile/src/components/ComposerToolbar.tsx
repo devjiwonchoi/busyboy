@@ -11,12 +11,11 @@ import {
   type StyleProp,
   type ViewStyle,
 } from "react-native";
-
 import Animated, { FadeIn, useReducedMotion } from "react-native-reanimated";
 
 import { cn } from "../lib/cn";
-import { AppText as Text } from "./ui/AppText";
 import { SymbolView } from "./ui/AppSymbol";
+import { AppText as Text } from "./ui/AppText";
 import { useAndroidControlSizing } from "./ui/useAndroidControlSizing";
 
 const COMPOSER_TOOLBAR_GAP = 8;

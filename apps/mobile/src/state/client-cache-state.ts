@@ -2,9 +2,9 @@ import type { EnvironmentId } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import { Atom } from "effect/reactivity";
 
-import * as MobileDatabase from "../persistence/mobile-database";
 import { projectFaviconDatabaseCache } from "../lib/projectFaviconDatabaseCache";
 import * as Runtime from "../lib/runtime";
+import * as MobileDatabase from "../persistence/mobile-database";
 
 export interface EnvironmentClientCacheSummary {
   readonly environmentId: EnvironmentId;

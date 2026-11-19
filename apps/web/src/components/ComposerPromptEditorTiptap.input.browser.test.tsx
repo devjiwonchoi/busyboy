@@ -1,12 +1,3 @@
-import type { ComposerFileAttachment } from "../composerDraftStore";
-import { formatInlineContextReference } from "../lib/composerContextReferences";
-import { fileContextReference } from "../lib/composerContextRecords";
-import {
-  reconcileAttachmentContextReferences,
-  type RetainedContextPayloads,
-  useRetainedContextPayloads,
-} from "./chat/composerContextUndo";
-
 import {
   ComposerContextId,
   type ComposerContextRecord,
@@ -25,11 +16,19 @@ import { createElement, createRef, useEffect, useState } from "react";
 import { describe, expect, it, vi } from "vite-plus/test";
 import { userEvent } from "vite-plus/test/browser";
 
-import { act, fakeTimers, render } from "../../test/render";
-
 import { flatToMarkdown, pmToFlat, serializeEditorDoc } from "~/composer-rich-text-doc";
 import { isMacPlatform } from "~/lib/utils";
 import { registerCommands } from "~/shortcuts/dispatcher";
+
+import { act, fakeTimers, render } from "../../test/render";
+import type { ComposerFileAttachment } from "../composerDraftStore";
+import { fileContextReference } from "../lib/composerContextRecords";
+import { formatInlineContextReference } from "../lib/composerContextReferences";
+import {
+  reconcileAttachmentContextReferences,
+  type RetainedContextPayloads,
+  useRetainedContextPayloads,
+} from "./chat/composerContextUndo";
 import {
   ComposerPromptEditorTiptap as ComposerPromptEditor,
   type ComposerPromptEditorHandle,

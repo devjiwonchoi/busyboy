@@ -1,5 +1,3 @@
-import { SymbolView } from "./AppSymbol";
-import { NativeThemeHost } from "./NativeThemeHost.android";
 import {
   Box,
   Button as ComposeButton,
@@ -13,10 +11,12 @@ import {
 import { defaultMinSize, fillMaxWidth, size } from "@expo/ui/jetpack-compose/modifiers";
 import { View } from "react-native";
 
-import { useControlTheme } from "./useControlTheme";
 import { useScaledTextRole } from "../../features/settings/appearance/useScaledTextRole";
+import { SymbolView } from "./AppSymbol";
 import type { ButtonProps } from "./Button";
+import { NativeThemeHost } from "./NativeThemeHost.android";
 import { useAndroidControlSizing } from "./useAndroidControlSizing";
+import { useControlTheme } from "./useControlTheme";
 
 export function Button(props: ButtonProps) {
   const { colors } = useControlTheme();

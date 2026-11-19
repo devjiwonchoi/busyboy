@@ -1,9 +1,9 @@
 import { expect } from "e2e";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/http";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
-import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/http";
 
 import { T3_HOME } from "../e2e.config.ts";
 import { ScenarioError } from "./shell.ts";

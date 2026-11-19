@@ -1,8 +1,10 @@
-import { msg, useGT, useMessages } from "gt-react-native";
-
-import * as Dialog from "../../components/ui/Dialog";
-import { useOpenPullRequest } from "../../native/useOpenPullRequest";
-import type { AppBarMenu } from "../../components/ui/AppBar.types";
+import { useNavigation } from "@react-navigation/native";
+import { sourceControlClients } from "@t3tools/client-runtime/source-control-clients";
+import {
+  type GitActionRequestInput,
+  requiresDefaultBranchConfirmation,
+  resolveQuickAction,
+} from "@t3tools/client-runtime/state/vcs";
 import {
   AuthSourceControlWriteScope,
   EnvironmentId,
@@ -11,16 +13,14 @@ import {
   ThreadId,
   type VcsStatusResult,
 } from "@t3tools/contracts";
-import {
-  type GitActionRequestInput,
-  requiresDefaultBranchConfirmation,
-  resolveQuickAction,
-} from "@t3tools/client-runtime/state/vcs";
-import { useNavigation } from "@react-navigation/native";
-import { sourceControlClients } from "@t3tools/client-runtime/source-control-clients";
-import { changeRequestTermKind } from "../../lib/changeRequestTerm";
+import { projectScriptMenuLabel } from "@t3tools/shared/projectScriptsCopy";
+import { msg, useGT, useMessages } from "gt-react-native";
 
+import type { AppBarMenu } from "../../components/ui/AppBar.types";
+import * as Dialog from "../../components/ui/Dialog";
 import { m, type MessageResolver } from "../../i18n/messages";
+import { changeRequestTermKind } from "../../lib/changeRequestTerm";
+import { useOpenPullRequest } from "../../native/useOpenPullRequest";
 import { useEnvironmentScope } from "../../state/session";
 import { PullRequestGlyph } from "../pull-requests/pullRequestGlyphs";
 import {
@@ -29,7 +29,6 @@ import {
   projectScriptMenuIcon,
   type TerminalMenuSession,
 } from "../terminal/terminalMenu";
-import { projectScriptMenuLabel } from "@t3tools/shared/projectScriptsCopy";
 
 function truncateMiddle(value: string, maxLength: number): string {
   if (value.length <= maxLength) {

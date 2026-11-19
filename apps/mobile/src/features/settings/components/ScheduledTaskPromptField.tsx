@@ -1,8 +1,8 @@
 import { T, useGT, useMessages } from "gt-react-native";
 import { TextInput, View } from "react-native";
 
-import { AppText as Text } from "../../../components/ui/AppText";
 import type { ComposerEditorSelection } from "../../../components/ComposerEditor";
+import { AppText as Text } from "../../../components/ui/AppText";
 import {
   ComposerDictationCancelAction,
   ComposerDictationError,

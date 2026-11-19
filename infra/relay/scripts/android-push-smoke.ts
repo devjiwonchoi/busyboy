@@ -1,17 +1,18 @@
 // @effect-diagnostics nodeBuiltinImport:off - This developer command reads local credential files.
 import * as NodeFSP from "node:fs/promises";
+
 import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
-import * as Effect from "effect/Effect";
 import * as Clock from "effect/Clock";
+import * as Effect from "effect/Effect";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
-import * as FetchHttpClient from "effect/http/FetchHttpClient";
 
-import * as RelayConfiguration from "../src/Config.ts";
-import * as WebCrypto from "../src/WebCrypto.ts";
 import * as FcmAssertionSigner from "../src/agentActivity/FcmAssertionSigner.ts";
 import * as FcmClient from "../src/agentActivity/FcmClient.ts";
+import * as RelayConfiguration from "../src/Config.ts";
+import * as WebCrypto from "../src/WebCrypto.ts";
 
 const Device = Schema.Struct({
   token: Schema.NonEmptyString,

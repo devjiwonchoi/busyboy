@@ -1,4 +1,3 @@
-import { McpAttachmentInput } from "../attachment/input.ts";
 import {
   clampedPositiveInt,
   NonNegativeInt,
@@ -21,23 +20,25 @@ import {
   SourceControlCloneRepositoryInput,
   SourceControlCloneRepositoryResult,
 } from "@t3tools/contracts";
-import * as FileSystem from "effect/FileSystem";
-import * as DocumentText from "../../../provider/DocumentText.ts";
-import * as ServerConfig from "../../../config.ts";
-import * as ProviderRegistry from "../../../provider/ProviderRegistry.ts";
-import * as ServerSettings from "../../../serverSettings.ts";
-import * as ThreadLaunchService from "../../../orchestration-v2/ThreadLaunchService.ts";
+import { Tool, Toolkit } from "effect/ai";
 import * as Digest from "effect/crypto/Digest";
 import * as SecureRandom from "effect/crypto/SecureRandom";
+import * as FileSystem from "effect/FileSystem";
 import * as Schema from "effect/Schema";
-import { Tool, Toolkit } from "effect/ai";
-import * as ProjectService from "../../../project/ProjectService.ts";
-import * as ProjectCloneTracker from "../../../project/ProjectCloneTracker.ts";
-import * as ManagedProjectFolders from "../../../project/ManagedProjectFolders.ts";
+
+import * as ServerConfig from "../../../config.ts";
+import * as ThreadLaunchService from "../../../orchestration-v2/ThreadLaunchService.ts";
 import * as ThreadManagementService from "../../../orchestration-v2/ThreadManagementService.ts";
+import * as ManagedProjectFolders from "../../../project/ManagedProjectFolders.ts";
+import * as ProjectCloneTracker from "../../../project/ProjectCloneTracker.ts";
+import * as ProjectService from "../../../project/ProjectService.ts";
+import * as DocumentText from "../../../provider/DocumentText.ts";
+import * as ProviderRegistry from "../../../provider/ProviderRegistry.ts";
+import * as ServerSettings from "../../../serverSettings.ts";
 import * as SourceControlRepositoryService from "../../../sourceControl/SourceControlRepositoryService.ts";
 import * as GitVcsDriver from "../../../vcs/GitVcsDriver.ts";
 import * as McpInvocationContext from "../../McpInvocationContext.ts";
+import { McpAttachmentInput } from "../attachment/input.ts";
 
 const shared = {
   success: Project,

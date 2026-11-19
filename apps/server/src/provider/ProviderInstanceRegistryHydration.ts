@@ -1,3 +1,5 @@
+import * as NodeUtil from "node:util";
+
 import {
   defaultInstanceIdForDriver,
   ProviderDriverKind,
@@ -8,30 +10,28 @@ import {
   type ProviderInstanceConfigMap,
   ServerSettings,
 } from "@t3tools/contracts";
-import * as NodeUtil from "node:util";
-
+import * as AcpRegistrySupport from "@t3tools/provider-acp-registry/server/AcpRegistrySupport";
+import type * as ProviderHost from "@t3tools/provider-core/server/ProviderHost";
 import * as HostProcess from "@t3tools/shared/HostProcess";
 import type * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
-import type * as SqlClient from "effect/sql/SqlClient";
 import * as Path from "effect/Path";
+import type * as SqlClient from "effect/sql/SqlClient";
 import * as Stream from "effect/Stream";
 
+import type * as BackgroundPolicy from "../background/BackgroundPolicy.ts";
+import * as ServerConfig from "../config.ts";
 import * as ManagedProviders from "../policy/managedProviders.ts";
-import * as Settings from "../serverSettings.ts";
+import type * as PortScanner from "../preview/PortScanner.ts";
 import * as SecretResolver from "../secrets/SecretResolver.ts";
+import * as Settings from "../serverSettings.ts";
 import { BUILT_IN_DRIVERS, type BuiltInDriversEnv } from "./builtInDrivers.ts";
+import * as ProviderHostLive from "./ProviderHostLive.ts";
 import * as ProviderInstanceRegistry from "./ProviderInstanceRegistry.ts";
 import * as ProviderInstanceRegistryMutator from "./ProviderInstanceRegistryMutator.ts";
 import * as ProviderOrchestrationAdapterInfrastructure from "./ProviderOrchestrationAdapterInfrastructure.ts";
-import * as AcpRegistrySupport from "@t3tools/provider-acp-registry/server/AcpRegistrySupport";
-import * as ProviderHostLive from "./ProviderHostLive.ts";
-import type * as ProviderHost from "@t3tools/provider-core/server/ProviderHost";
-import type * as BackgroundPolicy from "../background/BackgroundPolicy.ts";
-import * as ServerConfig from "../config.ts";
-import type * as PortScanner from "../preview/PortScanner.ts";
 
 type ProviderInstanceRegistryHydrationEnv =
   | Exclude<

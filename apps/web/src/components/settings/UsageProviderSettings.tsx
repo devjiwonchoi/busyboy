@@ -15,8 +15,8 @@ import {
 } from "../ui/alert-dialog";
 import { Button } from "../ui/button";
 import { AddUsageLimitSourceDialog } from "./AddUsageLimitSourceDialog";
-import { useSearchableSetting } from "./settingsSearch";
 import { SettingsRow, SettingsSection } from "./settingsLayout";
+import { useSearchableSetting } from "./settingsSearch";
 
 const CLI_PROXY_NAME = "CLI Proxy";
 

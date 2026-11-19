@@ -1,4 +1,5 @@
 import * as NodeModule from "node:module";
+
 import { expect, it, vi } from "vite-plus/test";
 
 const requireFromNative = NodeModule.createRequire(

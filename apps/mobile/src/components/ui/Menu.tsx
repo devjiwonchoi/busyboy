@@ -9,6 +9,7 @@ import {
 } from "react";
 import type { ColorValue, PressableProps } from "react-native";
 import { withUniwind } from "uniwind";
+
 import { useAppearancePreferences } from "../../features/settings/appearance/AppearancePreferencesProvider";
 import { withMenuActionIconColors } from "../../lib/menu-action-colors";
 import type { MenuProps } from "./Menu.types";

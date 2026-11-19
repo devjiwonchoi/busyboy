@@ -11,7 +11,10 @@ import {
   type OrchestrationV2ProjectedTurnItem,
   type OrchestrationV2TurnItem,
 } from "@t3tools/contracts";
+import { MessageId, RunId } from "@t3tools/contracts";
 import * as DateTime from "effect/DateTime";
+import { describe, expect, it } from "vite-plus/test";
+
 import {
   deriveTimelineEntriesFromVisibleTurnItems,
   deriveTimelineEntriesFromVisibleTurnItemsWithState,
@@ -24,8 +27,6 @@ import {
   withStreamedText,
 } from "../../test-fixtures";
 import type { TurnDiffSummary } from "../../types";
-import { describe, expect, it } from "vite-plus/test";
-import { MessageId, RunId } from "@t3tools/contracts";
 import {
   computeStableMessagesTimelineRows,
   deriveMessagesTimelineRows,

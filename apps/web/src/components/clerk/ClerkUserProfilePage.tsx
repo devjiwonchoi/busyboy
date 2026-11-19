@@ -1,7 +1,7 @@
 import { T } from "gt-react";
-import { RefreshIcon } from "~/components/ui/refresh-icon";
-
 import type { ReactNode } from "react";
+
+import { RefreshIcon } from "~/components/ui/refresh-icon";
 
 import { cn } from "../../lib/utils";
 import { Button } from "../ui/button";

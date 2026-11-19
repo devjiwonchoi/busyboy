@@ -1,5 +1,6 @@
 import type { LegendListRef } from "@legendapp/list/react";
 import { useEffect, useEffectEvent, useRef, type RefObject } from "react";
+
 import type { ThreadFindMatch } from "./threadFind";
 import { useThreadFindHighlights } from "./threadFindHighlights";
 

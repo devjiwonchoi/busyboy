@@ -1,7 +1,7 @@
-import { describe, expect, it } from "@effect/vitest";
 import * as NodeV8 from "node:v8";
 import * as NodeVM from "node:vm";
-import { vi } from "vite-plus/test";
+
+import { describe, expect, it } from "@effect/vitest";
 import {
   DEFAULT_MAX_TERMINAL_BUFFER_BYTES,
   EnvironmentId,
@@ -26,16 +26,17 @@ import * as DateTime from "effect/DateTime";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import type { HttpClient } from "effect/http";
 import * as Latch from "effect/Latch";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Queue from "effect/Queue";
+import { AsyncResult, Atom, AtomRegistry } from "effect/reactivity";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import * as SubscriptionRef from "effect/SubscriptionRef";
 import * as TestClock from "effect/testing/TestClock";
-import type { HttpClient } from "effect/http";
-import { AsyncResult, Atom, AtomRegistry } from "effect/reactivity";
+import { vi } from "vite-plus/test";
 
 import {
   AVAILABLE_CONNECTION_STATE,
@@ -50,15 +51,13 @@ import * as EnvironmentSupervisor from "../connection/supervisor.ts";
 import { EnvironmentRpcUnavailableError } from "../rpc/client.ts";
 import type { WsRpcProtocolClient } from "../rpc/protocol.ts";
 import type * as RpcSession from "../rpc/session.ts";
-import { createOrchestrationEnvironmentAtoms } from "./orchestration.ts";
-import { createReviewEnvironmentAtoms } from "./review.ts";
-import { createPreviewEnvironmentAtoms } from "./preview.ts";
 import { createFilesystemEnvironmentAtoms } from "./filesystem.ts";
 import { createIssueEnvironmentAtoms, createMergedIssueListAtoms } from "./issues.ts";
-import type { QueryPersistence } from "./queryPersistence.ts";
-import type { EnvironmentShellState } from "./shell.ts";
+import { createOrchestrationEnvironmentAtoms } from "./orchestration.ts";
 import { v2Now, v2Project, v2ThreadId, v2ThreadShell } from "./orchestrationV2TestFixtures.ts";
-import { createTerminalEnvironmentAtoms } from "./terminal.ts";
+import { createPreviewEnvironmentAtoms } from "./preview.ts";
+import type { QueryPersistence } from "./queryPersistence.ts";
+import { createReviewEnvironmentAtoms } from "./review.ts";
 import {
   createAtomCommandScheduler,
   createEnvironmentQueryAtomFamily,
@@ -71,6 +70,8 @@ import {
   executeAtomQuery,
   type QueryAnswerHandler,
 } from "./runtime.ts";
+import type { EnvironmentShellState } from "./shell.ts";
+import { createTerminalEnvironmentAtoms } from "./terminal.ts";
 
 const QUERY_ENVIRONMENT = new PrimaryConnectionTarget({
   environmentId: EnvironmentId.make("query-environment"),

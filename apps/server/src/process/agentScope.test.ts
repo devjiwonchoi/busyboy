@@ -17,8 +17,8 @@ import { vi } from "vite-plus/test";
 import * as ServerConfig from "../config.ts";
 import { makeCodexAppServerSpawnCommand } from "../orchestration-v2/Adapters/CodexAdapterV2.ts";
 import * as ProcessRunner from "../processRunner.ts";
-import * as ProviderProcesses from "./providerProcesses.ts";
 import { classifyScope, make, ownedAgentSlice, type ScopeState } from "./agentScope.ts";
+import * as ProviderProcesses from "./providerProcesses.ts";
 
 const GiB = 1024 ** 3;
 const memory = vi.hoisted(() => ({ total: 16 * 1024 ** 3 }));

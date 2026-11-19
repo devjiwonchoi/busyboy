@@ -1,7 +1,6 @@
 import { EnvironmentId, ProjectId } from "@t3tools/contracts";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import { Atom, AsyncResult } from "effect/reactivity";
-import { appAtomRegistry } from "../rpc/atomRegistry";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 import {
   composerFileNeedsReattach,
@@ -10,6 +9,7 @@ import {
   type ComposerFileAttachment,
   type ComposerImageAttachment,
 } from "../composerDraftStore";
+import { appAtomRegistry } from "../rpc/atomRegistry";
 
 const mocks = vi.hoisted(() => ({
   connectionStateAtom: vi.fn(),

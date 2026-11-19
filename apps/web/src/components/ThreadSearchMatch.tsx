@@ -1,11 +1,11 @@
-import { T, useGT, useMessages } from "gt-react";
-import { searchMatchHintLabel } from "@t3tools/shared/paletteSearchCopy";
 import {
   findSearchTokenRanges,
   splitSearchText,
   type SearchMatchHint,
   type SearchRange,
 } from "@t3tools/shared/paletteSearch";
+import { searchMatchHintLabel } from "@t3tools/shared/paletteSearchCopy";
+import { T, useGT, useMessages } from "gt-react";
 
 /** `text` with each range in semibold foreground. */
 function HighlightedSearchText(props: { text: string; ranges: ReadonlyArray<SearchRange> }) {

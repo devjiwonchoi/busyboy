@@ -1,3 +1,4 @@
+import { useNavigation } from "@react-navigation/native";
 import { issueTrackerSummary } from "@t3tools/client-runtime/state/issue-trackers";
 import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
 import type {
@@ -7,7 +8,6 @@ import type {
   ProjectId,
 } from "@t3tools/contracts";
 import { AsyncResult } from "effect/reactivity";
-import { useNavigation } from "@react-navigation/native";
 import { useGT, useMessages } from "gt-react-native";
 import { useState } from "react";
 import { Linking, Platform, View } from "react-native";

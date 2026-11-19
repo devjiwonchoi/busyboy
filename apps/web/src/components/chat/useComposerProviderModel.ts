@@ -1,24 +1,25 @@
 import {
-  type DraftId,
-  deriveEffectiveComposerModelState,
-  useComposerDraftModelState,
-} from "../../composerDraftStore";
-import { draftModelSelectionApplies } from "../../lib/chatThreadActions";
-import {
   type ModelSelection,
   type ProjectId,
   ProviderDriverKind,
   type ScopedThreadRef,
   type ServerProvider,
 } from "@t3tools/contracts";
+import { type UnifiedSettings } from "@t3tools/contracts/settings";
+
+import {
+  type DraftId,
+  deriveEffectiveComposerModelState,
+  useComposerDraftModelState,
+} from "../../composerDraftStore";
+import { draftModelSelectionApplies } from "../../lib/chatThreadActions";
 import {
   NO_PROVIDER_MODEL_SELECTION,
   providerInstanceEntriesFor,
   type ProviderInstanceEntry,
 } from "../../providerInstances";
-import { type UnifiedSettings } from "@t3tools/contracts/settings";
-import { getComposerPromptInjectionState, getComposerProviderState } from "./composerProviderState";
 import { resolveComposerProviderSelection } from "../ChatView.logic";
+import { getComposerPromptInjectionState, getComposerProviderState } from "./composerProviderState";
 
 const NO_PROVIDER_MODELS: ServerProvider["models"] = [];
 

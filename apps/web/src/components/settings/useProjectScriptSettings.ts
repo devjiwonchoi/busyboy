@@ -1,12 +1,11 @@
 import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
-import { AuthSettingsWriteScope, EnvironmentAuthorizationError } from "@t3tools/contracts";
-import { readEnvironmentScope } from "../../state/session";
 import {
   isAtomCommandInterrupted,
   mapAtomCommandResult,
   squashAtomCommandFailure,
   type AtomCommandResult,
 } from "@t3tools/client-runtime/state/runtime";
+import { AuthSettingsWriteScope, EnvironmentAuthorizationError } from "@t3tools/contracts";
 import {
   type EnvironmentId,
   type ProjectId,
@@ -21,6 +20,7 @@ import { AsyncResult } from "effect/reactivity";
 import { msg } from "gt-react";
 import { useRef, useState } from "react";
 
+import { m } from "../../i18n/messages";
 import {
   decodeProjectScriptKeybindingRule,
   keybindingValueForCommand,
@@ -33,9 +33,9 @@ import {
 } from "../../projectScripts";
 import { useProjects } from "../../state/entities";
 import { serverEnvironment } from "../../state/server";
+import { readEnvironmentScope } from "../../state/session";
 import { useAtomCommand } from "../../state/use-atom-command";
 import type { NewProjectScriptInput } from "../projectScriptEditor";
-import { m } from "../../i18n/messages";
 import { toastManager } from "../ui/toast";
 
 function reportScriptFailure(result: AtomCommandResult<unknown, unknown>) {

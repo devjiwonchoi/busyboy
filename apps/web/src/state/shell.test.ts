@@ -10,13 +10,13 @@ import * as Option from "effect/Option";
 import { AsyncResult, Atom, AtomRegistry } from "effect/reactivity";
 import { describe, expect, it, vi } from "vite-plus/test";
 
+import { environmentCatalog } from "../connection/catalog";
+import { defaultProjectFallbackReadyAtom } from "./projects";
 import {
   createAllEnvironmentProjectSnapshotsReadyAtom,
   expectsPrimaryEnvironment,
   environmentShell,
 } from "./shell";
-import { environmentCatalog } from "../connection/catalog";
-import { defaultProjectFallbackReadyAtom } from "./projects";
 
 const LOCAL = EnvironmentId.make("local");
 const REMOTE = EnvironmentId.make("remote");

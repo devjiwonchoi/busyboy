@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+
 import {
   COMPOSER_TYPING_IDLE_MS,
   createComposerTypingGuardState,

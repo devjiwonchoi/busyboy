@@ -1,10 +1,12 @@
+import { describe, expect, it } from "@effect/vitest";
 import { EnvironmentAuthInvalidError } from "@t3tools/contracts";
 import {
   RelayEnvironmentEndpointUnavailableError,
   type RelayProtectedError,
 } from "@t3tools/contracts/relay";
-import { describe, expect, it } from "@effect/vitest";
 
+import { ManagedRelayRequestFailedError } from "../relay/managedRelay.ts";
+import { RemoteEnvironmentAuthFetchError } from "../rpc/http.ts";
 import { presentConnectionDiagnosis } from "./diagnosis.ts";
 import { mapManagedRelayError, mapRemoteEnvironmentError } from "./errors.ts";
 import {
@@ -14,8 +16,6 @@ import {
   type ConnectionAttemptError,
   type SupervisorConnectionState,
 } from "./model.ts";
-import { ManagedRelayRequestFailedError } from "../relay/managedRelay.ts";
-import { RemoteEnvironmentAuthFetchError } from "../rpc/http.ts";
 
 const backoff = (lastFailure: ConnectionAttemptError): SupervisorConnectionState => ({
   ...AVAILABLE_CONNECTION_STATE,

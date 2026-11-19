@@ -1,8 +1,9 @@
-import { SymbolView, type AppSymbolName } from "./AppSymbol";
 import { Pressable } from "react-native";
-import { AppActivityIndicator } from "./AppActivityIndicator";
-import { AppText } from "./AppText";
+
 import { cn } from "../../lib/cn";
+import { AppActivityIndicator } from "./AppActivityIndicator";
+import { SymbolView, type AppSymbolName } from "./AppSymbol";
+import { AppText } from "./AppText";
 
 export interface ButtonProps {
   readonly label: string;

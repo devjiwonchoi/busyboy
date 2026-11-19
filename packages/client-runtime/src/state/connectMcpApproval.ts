@@ -1,9 +1,3 @@
-/**
- * The hosted app's side of an agent sign-in on a T3 Connect environment: it reads the request
- * and sends the decision with the owner's own Connect session there, so no code is needed.
- */
-import { msg } from "gt-i18n";
-import { type MarkedText, markedTextEnglish } from "../errors/translatable.ts";
 import type {
   AuthMcpApprovalDecisionRequest,
   AuthMcpApprovalDetails,
@@ -11,13 +5,19 @@ import type {
   EnvironmentId,
 } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
-import * as Option from "effect/Option";
 import type * as HttpClient from "effect/http/HttpClient";
+import * as Option from "effect/Option";
 import type { Atom } from "effect/reactivity";
 import * as Schema from "effect/Schema";
+/**
+ * The hosted app's side of an agent sign-in on a T3 Connect environment: it reads the request
+ * and sends the decision with the owner's own Connect session there, so no code is needed.
+ */
+import { msg } from "gt-i18n";
 
 import * as RemoteEnvironmentAuthorization from "../authorization/service.ts";
 import { RelayConnectionTarget } from "../connection/model.ts";
+import { type MarkedText, markedTextEnglish } from "../errors/translatable.ts";
 import * as ManagedRelay from "../relay/managedRelay.ts";
 import { executeAuthenticatedEnvironmentHttpRequest } from "./environmentHttpAuth.ts";
 import { createRuntimeCommand } from "./runtime.ts";

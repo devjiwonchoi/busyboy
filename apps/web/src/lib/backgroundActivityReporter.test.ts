@@ -1,6 +1,6 @@
+import { afterEach, beforeEach, describe, expect, it } from "@effect/vitest";
 import { EnvironmentRegistry } from "@t3tools/client-runtime/connection";
 import { EnvironmentId, WS_METHODS } from "@t3tools/contracts";
-import { afterEach, beforeEach, describe, expect, it } from "@effect/vitest";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";

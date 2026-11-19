@@ -6,6 +6,7 @@ import { expect, it } from "vite-plus/test";
 
 import { createGitDiffFileContentsLoader } from "~/lib/diffFileContents";
 import { getRenderablePatch } from "~/lib/diffRendering";
+
 import { excerptLoader } from "./GuideExcerpt.logic";
 
 function parse(patch: string): FileDiffMetadata {

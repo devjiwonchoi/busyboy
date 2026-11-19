@@ -1,7 +1,5 @@
-import type { WorkspaceTab } from "./workspace/workspace-tabs-state";
 import { createContext, use } from "react";
-import type { InspectorContent } from "./inspector-panes";
-import type { WorkspaceDetail, WorkspaceDetailSheet } from "./workspace/workspace-detail-selection";
+
 import {
   deriveFileInspectorPaneLayout,
   deriveLayout,
@@ -10,6 +8,9 @@ import {
   type Layout,
   type WorkspacePaneLayout,
 } from "../../lib/layout";
+import type { InspectorContent } from "./inspector-panes";
+import type { WorkspaceDetail, WorkspaceDetailSheet } from "./workspace/workspace-detail-selection";
+import type { WorkspaceTab } from "./workspace/workspace-tabs-state";
 
 /** The workspace's actions; their identities never change. */
 export interface AdaptiveWorkspaceActions {

@@ -1,16 +1,18 @@
 import { useAtomValue } from "@effect/atom-react";
+import type { ChangeRequestTerminology } from "@t3tools/client-runtime/source-control-clients";
 import type { PullRequestAction, PullRequestSummary } from "@t3tools/contracts";
 import { msg, useGT, useMessages } from "gt-react";
 import { createContext, use, type ReactNode } from "react";
-import type { ChangeRequestTerminology } from "@t3tools/client-runtime/source-control-clients";
 
 import { m } from "~/i18n/messages";
 import { useShortcutModifierState } from "~/shortcutModifierState";
 import { pullRequestEnvironment } from "~/state/pullRequests";
 import { useUiStateStore } from "~/uiStateStore";
+
 import { Button } from "../ui/button";
 import { Spinner } from "../ui/spinner";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
+import { changeRequestTermKind } from "./changeRequestTerm";
 import { resolvePullRequestMergeMethod } from "./pullRequestDetail.logic";
 import { PullRequestGlyph } from "./pullRequestIcons";
 import { pullRequestQuickActions, type EnvironmentPullRequestEntry } from "./pullRequestList.logic";
@@ -18,8 +20,6 @@ import {
   usePullRequestActionRunner,
   usePullRequestDefaultMergeMethodResolver,
 } from "./usePullRequestActions";
-
-import { changeRequestTermKind } from "./changeRequestTerm";
 
 type PullRequestSpeedActionEntry = Pick<
   EnvironmentPullRequestEntry,

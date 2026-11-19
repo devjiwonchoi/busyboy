@@ -1,10 +1,9 @@
 // `test` for web scenarios: e2e's web test plus `t3`, which seeds state and opens the signed-in
 // app. `t3-mobile.ts` is the same for the iOS app.
+import { test as base } from "@e2e-dev/web";
 import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as NodeWS from "@effect/platform-node/NodeWS";
-import { test as base } from "@e2e-dev/web";
-import { expect } from "e2e";
 import {
   CommandId,
   EnvironmentHttpApi,
@@ -14,16 +13,17 @@ import {
   WsRpcGroup,
 } from "@t3tools/contracts";
 import * as HostProcess from "@t3tools/shared/HostProcess";
+import { expect } from "e2e";
 import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import { FetchHttpClient, HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http";
 import * as HttpApiClient from "effect/http-api/HttpApiClient";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
+import { RpcClient, RpcSerialization } from "effect/rpc";
 import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
-import { FetchHttpClient, HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http";
-import { RpcClient, RpcSerialization } from "effect/rpc";
 import { Socket } from "effect/socket";
 
 import { APP_DIR, T3_HOME } from "../e2e.config.ts";

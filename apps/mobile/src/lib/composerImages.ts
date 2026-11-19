@@ -1,8 +1,9 @@
+import { errorDisplayMessage } from "@t3tools/client-runtime/errors";
+import type { AttachmentUploadStatus } from "@t3tools/client-runtime/state/attachment-uploads";
 import {
   clampFileAttachmentUploadBytes,
   fileAttachmentTooLargeMessage,
 } from "@t3tools/client-runtime/state/attachments";
-import { errorDisplayMessage } from "@t3tools/client-runtime/errors";
 import {
   isProviderSendTurnSupportedImageMimeType,
   PROVIDER_SEND_TURN_MAX_ATTACHMENTS,
@@ -12,22 +13,22 @@ import {
   type PastedTextAttachmentSource,
   type UploadChatImageAttachment,
 } from "@t3tools/contracts";
-import type { AttachmentUploadStatus } from "@t3tools/client-runtime/state/attachment-uploads";
+import { imageMimeType } from "@t3tools/shared/image";
+import { videoMimeType } from "@t3tools/shared/video";
 import type { DocumentPickerResult } from "expo-document-picker";
 import { msg } from "gt-react-native";
+
 import { m } from "../i18n/messages";
+import { writeFileAtomically } from "./atomic-file";
 import { estimateBase64ByteSize } from "./base64";
 import {
   COMPOSER_ATTACHMENT_DIRECTORY,
   isComposerAttachmentFileRetained,
   resolveOwnedComposerAttachmentFileUri,
 } from "./composerAttachmentFiles";
-import { imageMimeType } from "@t3tools/shared/image";
-import { videoMimeType } from "@t3tools/shared/video";
 import { fitComposerImage, renderPhoto } from "./composerImageFit";
 import { beginForegroundHandoff } from "./foreground-handoff";
 import { uuidv4 } from "./uuid";
-import { writeFileAtomically } from "./atomic-file";
 
 export interface DraftComposerImageAttachment extends Omit<UploadChatImageAttachment, "dataUrl"> {
   readonly id: string;

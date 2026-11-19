@@ -1,11 +1,11 @@
-import * as Electron from "electron";
+import * as HostProcess from "@t3tools/shared/HostProcess";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
-import * as HostProcess from "@t3tools/shared/HostProcess";
+import * as Electron from "electron";
 
 import * as ElectronApp from "../../electron/ElectronApp.ts";
-import * as DesktopIpc from "../DesktopIpc.ts";
 import { SET_NOTIFICATION_BADGE_CHANNEL } from "../channels.ts";
+import * as DesktopIpc from "../DesktopIpc.ts";
 
 const NotificationBadge = Schema.Struct({
   count: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 2_147_483_647 })),

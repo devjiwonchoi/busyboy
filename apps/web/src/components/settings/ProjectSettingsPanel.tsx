@@ -1,39 +1,40 @@
-import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
-import { useComposerMenuState } from "../chat/useComposerMenuState";
-import { m as resolveMessage } from "../../i18n/messages";
-import { useOrchestrationCommand } from "../../state/use-orchestration-command";
-import { AuthOrchestrationOperateScope } from "@t3tools/contracts";
-import { useEnvironmentsWithScope } from "../../state/session";
-import { mapAtomCommandResult, settlePromise } from "@t3tools/client-runtime/state/runtime";
 import { scopeProjectRef, scopeThreadRef } from "@t3tools/client-runtime/environment";
+import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
+import { derivePhysicalProjectKey } from "@t3tools/client-runtime/state/project-grouping";
 import { planProjectRemoval } from "@t3tools/client-runtime/state/projects";
+import { mapAtomCommandResult, settlePromise } from "@t3tools/client-runtime/state/runtime";
+import { AuthOrchestrationOperateScope } from "@t3tools/contracts";
 import { type EnvironmentId, type SidebarProjectGroupingMode } from "@t3tools/contracts";
+import { Navigate, useLocation, useNavigate } from "@tanstack/react-router";
+import { T, useGT, useMessages } from "gt-react";
+import { InfoIcon, Trash2Icon } from "lucide-react";
+import { lazy, Suspense, useRef, useState, type ReactNode } from "react";
+
+import { useComposerDraftStore } from "../../composerDraftStore";
 import {
   checkProjectAccess,
   reportProjectFailure,
   useProjectGroupUpdate,
   type ProjectGroupUpdate,
 } from "../../hooks/useProjectGroupUpdate";
-import { Navigate, useLocation, useNavigate } from "@tanstack/react-router";
-import { InfoIcon, Trash2Icon } from "lucide-react";
-import { lazy, Suspense, useRef, useState, type ReactNode } from "react";
-import { T, useGT, useMessages } from "gt-react";
-
-import { useComposerDraftStore } from "../../composerDraftStore";
-import { releaseProjectDraftUploads } from "../../lib/composerDraftUploads";
 import { persistClientSettingsUpdate, useClientSettings } from "../../hooks/useSettings";
+import { m as resolveMessage } from "../../i18n/messages";
+import { releaseProjectDraftUploads } from "../../lib/composerDraftUploads";
 import { readLocalApi } from "../../localApi";
-import { derivePhysicalProjectKey } from "@t3tools/client-runtime/state/project-grouping";
 import {
   PROJECT_GROUPING_MODE_LABELS,
   withProjectGroupingOverride,
   type SidebarProjectGroupMember,
   type SidebarProjectSnapshot,
 } from "../../sidebarProjectGrouping";
-import { useEnvironments, usePrimaryEnvironmentId } from "../../state/environments";
-import { useThreadShells, waitForProjectRemoval } from "../../state/entities";
 import { refreshProjectFaviconUrl } from "../../state/assets";
+import { useThreadShells, waitForProjectRemoval } from "../../state/entities";
+import { useEnvironments, usePrimaryEnvironmentId } from "../../state/environments";
+import { readUnloadedThreadCount } from "../../state/olderSettledShelf";
 import { projectEnvironment } from "../../state/projects";
+import { useEnvironmentsWithScope } from "../../state/session";
+import { useOrchestrationCommand } from "../../state/use-orchestration-command";
+import { useComposerMenuState } from "../chat/useComposerMenuState";
 import { ProjectFavicon } from "../ProjectFavicon";
 import { Alert, AlertDescription } from "../ui/alert";
 import { Button } from "../ui/button";
@@ -42,18 +43,12 @@ import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../
 import { Switch } from "../ui/switch";
 import { stackedThreadToast, toastManager } from "../ui/toast";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
-import {
-  SettingResetButton,
-  SettingsPageContainer,
-  SettingsRow,
-  SettingsSection,
-} from "./settingsLayout";
+import { ProjectActionsSettings } from "./ProjectActionsSettings";
+import { ProjectDefaultsSettings } from "./ProjectDefaultsSettings";
 import {
   canPickExternalProjectFavicon,
   ProjectFaviconPickerDialog,
 } from "./ProjectFaviconPickerDialog";
-import { ProjectActionsSettings } from "./ProjectActionsSettings";
-import { ProjectDefaultsSettings } from "./ProjectDefaultsSettings";
 import {
   defaultProjectIcon,
   hasDefaultProjectIcon,
@@ -61,9 +56,14 @@ import {
   SCRATCH_PROJECT_TITLE,
   scopeProjectSettingsGroup,
 } from "./ProjectSettingsPanel.logic";
-import { useSettingsProjectGroups } from "./useSettingsProjectGroups";
-import { readUnloadedThreadCount } from "../../state/olderSettledShelf";
+import {
+  SettingResetButton,
+  SettingsPageContainer,
+  SettingsRow,
+  SettingsSection,
+} from "./settingsLayout";
 import { settingsScopeEnvironmentLabels } from "./settingsScopeAxis";
+import { useSettingsProjectGroups } from "./useSettingsProjectGroups";
 
 const ProjectIconPickerDialog = lazy(() =>
   import("./ProjectIconPickerDialog").then((module) => ({

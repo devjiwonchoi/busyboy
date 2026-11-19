@@ -1,15 +1,17 @@
-import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
-import { m } from "~/i18n/messages";
-import * as Schema from "effect/Schema";
-import type { DeviceHubAccess } from "@t3tools/client-runtime/state/deviceHubAccess";
 import { useAtomMount, useAtomSet, useAtomValue } from "@effect/atom-react";
+import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
+import type { DeviceHubAccess } from "@t3tools/client-runtime/state/deviceHubAccess";
+import * as Schema from "effect/Schema";
 import { T, useGT } from "gt-react";
 import { useRef, useState } from "react";
+
 import { Button } from "~/components/ui/button";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
+import { m } from "~/i18n/messages";
+
+import { DeviceDuoGlyph } from "./DeviceDuoGlyph";
 import { AndroidFoldError, setAndroidFold, type AndroidFoldPosture } from "./deviceFold";
 import { androidFoldReadAtom, androidFoldViewAtom, foldAngle, NOOP_ATOM } from "./deviceHubAtoms";
-import { DeviceDuoGlyph } from "./DeviceDuoGlyph";
 
 const isAndroidFoldError = Schema.is(AndroidFoldError);
 

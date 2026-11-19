@@ -1,4 +1,3 @@
-import { NativeThemeHost } from "./ui/NativeThemeHost.android";
 import { Box, ExtendedFloatingActionButton, Icon, Text } from "@expo/ui/jetpack-compose";
 import {
   defaultMinSize,
@@ -10,9 +9,11 @@ import {
 import { useGT } from "gt-react-native";
 import { useState } from "react";
 import { I18nManager, Pressable, View, type StyleProp, type ViewStyle } from "react-native";
-import { useAndroidControlSizing } from "./ui/useAndroidControlSizing";
+
 import { useAppearancePreferences } from "../features/settings/appearance/AppearancePreferencesProvider";
 import { resolveScaledTextRole } from "../lib/appearancePreferences";
+import { NativeThemeHost } from "./ui/NativeThemeHost.android";
+import { useAndroidControlSizing } from "./ui/useAndroidControlSizing";
 
 /** Keep the animated width and icon positioning entirely inside Compose, not Yoga. */
 export function ScrollComposeButton(props: {

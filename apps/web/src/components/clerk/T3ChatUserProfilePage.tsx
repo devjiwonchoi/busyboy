@@ -1,6 +1,6 @@
 import { T3CHAT_PLAN_TUNNEL_LIMITS, type RelayT3ChatLink } from "@t3tools/contracts/relay";
-import { MessageSquareIcon } from "lucide-react";
 import { T, useGT, Var } from "gt-react";
+import { MessageSquareIcon } from "lucide-react";
 import type { ReactNode } from "react";
 
 import { useManagedTunnelUsage } from "../../cloud/managedRelayState";

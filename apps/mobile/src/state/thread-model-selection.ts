@@ -1,16 +1,16 @@
-import { runAtomCommand, squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
 import { errorDisplayMessage } from "@t3tools/client-runtime/errors";
+import { runAtomCommand, squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
 import {
   AuthOrchestrationOperateScope,
   type EnvironmentId,
   type ModelSelection,
   type ThreadId,
 } from "@t3tools/contracts";
-
-import { scopedThreadKey } from "../lib/scopedEntities";
-import * as Dialog from "../components/ui/Dialog";
 import { msg } from "gt-react-native";
+
+import * as Dialog from "../components/ui/Dialog";
 import { m } from "../i18n/messages";
+import { scopedThreadKey } from "../lib/scopedEntities";
 import { appAtomRegistry } from "./atom-registry";
 import { readEnvironmentScope } from "./session";
 import { environmentThreadShells, threadEnvironment } from "./threads";

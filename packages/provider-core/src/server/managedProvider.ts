@@ -12,16 +12,16 @@ import * as PubSub from "effect/PubSub";
 import * as Queue from "effect/Queue";
 import * as Ref from "effect/Ref";
 import * as Scope from "effect/Scope";
-import * as Stream from "effect/Stream";
 import * as Semaphore from "effect/Semaphore";
+import * as Stream from "effect/Stream";
 
 import * as ProviderHost from "./ProviderHost.ts";
+import type { ManagedServerProvider } from "./snapshot.ts";
 import {
   applyUsageLimitsUpdate,
   makeUsageLimits,
   resolveUsageLimitsAfterProbe,
 } from "./usageLimits.ts";
-import type { ManagedServerProvider } from "./snapshot.ts";
 
 interface ProviderSnapshotState {
   readonly snapshot: ServerProvider;

@@ -3,11 +3,12 @@
 // Node issue: https://github.com/nodejs/node/issues/67048
 // Workaround PR: https://github.com/pingdotgg/t3code/pull/25825
 import * as NodeModule from "node:module";
+
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
-import * as Schema from "effect/Schema";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
+import * as Schema from "effect/Schema";
 
 class LinuxArm64SeaError extends Schema.TaggedError<LinuxArm64SeaError>()("LinuxArm64SeaError", {
   message: Schema.String,

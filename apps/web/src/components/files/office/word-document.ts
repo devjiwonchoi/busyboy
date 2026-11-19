@@ -1,5 +1,4 @@
 // Adapted from opencode (MIT). Copyright (c) 2025 opencode. See LICENSE.opencode.
-import * as Schema from "effect/Schema";
 import {
   buildResidentRegionLayoutRequest,
   getLayoutKernelInputs,
@@ -20,13 +19,15 @@ import {
   createYrsSession,
   type YrsPositionProjection,
 } from "@betteroffice/docx/yrs";
+import * as Schema from "effect/Schema";
+
+import { PreviewError } from "../previewFailure";
 import { loadFace, sheetFace, wordFonts } from "./fonts";
 import { maxImageSide, type VectorBitmap } from "./vector-pictures";
 import { withWholeMissingGlyphs } from "./word-glyphs";
 import { createBitmapImageResolver } from "./word-images";
 import { layerFont, type WordPageSize, type WordSpan } from "./word-protocol";
 import { pageText, positionTarget, type TextMeasure } from "./word-text";
-import { PreviewError } from "../previewFailure";
 
 // An open Word document: its engine session, fonts, layout, built pages and painting. The document worker holds one.
 

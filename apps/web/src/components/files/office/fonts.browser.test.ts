@@ -1,5 +1,6 @@
 import { BUNDLED_FONTS } from "@betteroffice/fonts";
 import { describe, expect, it } from "vite-plus/test";
+
 import { sheetFace, wordFonts } from "./fonts";
 
 const notoSansJp = BUNDLED_FONTS.find((face) => face.file === "NotoSansJP-Regular.otf")!;

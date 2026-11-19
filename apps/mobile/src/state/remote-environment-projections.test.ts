@@ -1,3 +1,4 @@
+import { describe, expect, it } from "@effect/vitest";
 import type {
   EnvironmentPresentation,
   PreparedConnection,
@@ -5,7 +6,6 @@ import type {
 import { PrimaryConnectionTarget } from "@t3tools/client-runtime/connection";
 import type { ServerConfig } from "@t3tools/contracts";
 import { EnvironmentId } from "@t3tools/contracts";
-import { describe, expect, it } from "@effect/vitest";
 import * as Option from "effect/Option";
 import { Atom, AtomRegistry } from "effect/reactivity";
 

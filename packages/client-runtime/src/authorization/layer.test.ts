@@ -1,3 +1,4 @@
+import { describe, expect, it } from "@effect/vitest";
 import {
   AuthStandardClientScopes,
   EnvironmentId,
@@ -5,7 +6,6 @@ import {
   type ExecutionEnvironmentDescriptor,
 } from "@t3tools/contracts";
 import { type RelayEnvironmentConnectResponse } from "@t3tools/contracts/relay";
-import { describe, expect, it } from "@effect/vitest";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
@@ -15,11 +15,6 @@ import * as Queue from "effect/Queue";
 import * as Ref from "effect/Ref";
 import * as TestClock from "effect/testing/TestClock";
 
-import * as ManagedRelay from "../relay/managedRelay.ts";
-import * as RpcHttp from "../rpc/http.ts";
-import * as ClientCapabilities from "../platform/capabilities.ts";
-import * as RemoteEnvironmentAuthorization from "./service.ts";
-import * as TokenStore from "./tokenStore.ts";
 import {
   BearerConnectionCredential,
   BearerConnectionProfile,
@@ -30,6 +25,11 @@ import * as ConnectionCredentialStore from "../connection/credentialStore.ts";
 import { BearerConnectionTarget } from "../connection/model.ts";
 import * as ConnectionProfileStore from "../connection/profileStore.ts";
 import * as ConnectionResolver from "../connection/resolver.ts";
+import * as ClientCapabilities from "../platform/capabilities.ts";
+import * as ManagedRelay from "../relay/managedRelay.ts";
+import * as RpcHttp from "../rpc/http.ts";
+import * as RemoteEnvironmentAuthorization from "./service.ts";
+import * as TokenStore from "./tokenStore.ts";
 
 const ENVIRONMENT_ID = EnvironmentId.make("environment-1");
 const ENDPOINT = {

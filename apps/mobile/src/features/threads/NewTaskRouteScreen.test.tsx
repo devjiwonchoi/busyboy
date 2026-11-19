@@ -1,10 +1,11 @@
+import type { EnvironmentProject } from "@t3tools/client-runtime/state/shell";
+import { EnvironmentId, ProjectId } from "@t3tools/contracts";
 import type { ReactNode } from "react";
 import { act } from "react";
 import * as React from "react";
 import { createRoot } from "react-dom/client";
-import type { EnvironmentProject } from "@t3tools/client-runtime/state/shell";
-import { EnvironmentId, ProjectId } from "@t3tools/contracts";
 import { expect, it, vi } from "vite-plus/test";
+
 import { retargetSavedNewTaskDraft } from "../../state/use-composer-drafts";
 
 const environmentId = EnvironmentId.make("env-1");

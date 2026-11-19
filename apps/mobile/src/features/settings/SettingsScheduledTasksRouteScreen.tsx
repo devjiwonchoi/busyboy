@@ -1,13 +1,30 @@
-import { msg, T, useGT, useLocale, useMessages, Var } from "gt-react-native";
-import { managedCapabilityDenial } from "@t3tools/client-runtime/contract-labels";
-import * as Dialog from "../../components/ui/Dialog";
 import { useAtomValue } from "@effect/atom-react";
+import { DateTimePicker } from "@expo/ui/community/datetime-picker";
+import type { MenuAction } from "@react-native-menu/menu";
+import { useFocusEffect, useNavigation, usePreventRemove } from "@react-navigation/native";
+import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import { managedCapabilityDenial } from "@t3tools/client-runtime/contract-labels";
+import { scheduleTimeZoneLabel } from "@t3tools/client-runtime/scheduled-task-time-zone";
+import {
+  DEFAULT_WEBHOOK_PROMPT,
+  emptyWebhookFilterDraft,
+  parseMaxDeliveryAge,
+  parseWebhookFilterDrafts,
+  removeWebhookFilterDraft,
+  WEBHOOK_FILTER_OPS,
+  type WebhookFilterDraft,
+} from "@t3tools/client-runtime/scheduled-task-webhook";
+import {
+  isAtomCommandInterrupted,
+  squashAtomCommandFailure,
+  type AtomCommandResult,
+} from "@t3tools/client-runtime/state/runtime";
+import { webhookAddress } from "@t3tools/client-runtime/webhook-address";
 import {
   AuthOrchestrationOperateScope,
   clampManagedRuntimeMode,
   resolveProjectProviderInstanceEnabled,
 } from "@t3tools/contracts";
-import { readEnvironmentScope } from "../../state/session";
 import type {
   EnvironmentId,
   ProjectId,
@@ -21,70 +38,42 @@ import {
   resolveEnvironmentMachineKind,
   scheduledTaskThreadMode,
 } from "@t3tools/contracts";
-import { useSelectWorkspaceDetail } from "../layout/workspace/useSelectWorkspaceDetail";
-import type { MenuAction } from "@react-native-menu/menu";
-import { DateTimePicker } from "@expo/ui/community/datetime-picker";
-import {
-  isAtomCommandInterrupted,
-  squashAtomCommandFailure,
-  type AtomCommandResult,
-} from "@t3tools/client-runtime/state/runtime";
 import { resolvePastedPath } from "@t3tools/shared/path";
-import {
-  DEFAULT_WEBHOOK_PROMPT,
-  emptyWebhookFilterDraft,
-  parseMaxDeliveryAge,
-  parseWebhookFilterDrafts,
-  removeWebhookFilterDraft,
-  WEBHOOK_FILTER_OPS,
-  type WebhookFilterDraft,
-} from "@t3tools/client-runtime/scheduled-task-webhook";
-import { scheduleTimeZoneLabel } from "@t3tools/client-runtime/scheduled-task-time-zone";
-import type { MessageResolver } from "../../i18n/messages";
+import { msg, T, useGT, useLocale, useMessages, Var } from "gt-react-native";
 import { useRef, useState, type ReactNode } from "react";
-import { useFocusEffect, useNavigation, usePreventRemove } from "@react-navigation/native";
-import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { AppState, Platform, Pressable, TextInput as RNTextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { Button } from "../../components/ui/Button";
-import { AppText as Text } from "../../components/ui/AppText";
-import { SymbolView } from "../../components/ui/AppSymbol";
+import type { ComposerEditorSelection } from "../../components/ComposerEditor";
 import {
   EnvironmentMachineSymbol,
   ENVIRONMENT_MACHINE_SYMBOLS,
 } from "../../components/EnvironmentMachineSymbol";
+import { SymbolView } from "../../components/ui/AppSymbol";
+import { AppText as Text } from "../../components/ui/AppText";
+import { Button } from "../../components/ui/Button";
+import * as Dialog from "../../components/ui/Dialog";
 import { Menu } from "../../components/ui/Menu";
-import type { ComposerEditorSelection } from "../../components/ComposerEditor";
 import { ScreenScrollView as ScrollView } from "../../components/ui/ScreenScrollView";
 import { SegmentedControl } from "../../components/ui/SegmentedControl";
 import { ThemedSwitch } from "../../components/ui/ThemedSwitch";
-import { webhookAddress } from "@t3tools/client-runtime/webhook-address";
+import type { MessageResolver } from "../../i18n/messages";
 import { tryCopyTextWithHaptic } from "../../lib/copyTextWithHaptic";
-import { usePreparedConnection } from "../../state/session";
 import { buildModelOptions } from "../../lib/modelOptions";
 import { withImplicitFastModeSelection } from "../../lib/providerOptions";
 import { useProjects, useEnvironmentServerConfig } from "../../state/entities";
 import { useEnvironmentQuery } from "../../state/query";
 import { serverEnvironment } from "../../state/server";
+import { readEnvironmentScope } from "../../state/session";
+import { usePreparedConnection } from "../../state/session";
 import { useAtomCommand } from "../../state/use-atom-command";
+import { useSelectWorkspaceDetail } from "../layout/workspace/useSelectWorkspaceDetail";
 import { resolveNewTaskBranchLabel } from "../threads/new-task-context-presentation";
 import { useVoiceInputController } from "../voice-input/useVoiceInputController";
 import { ScheduledTaskPromptField } from "./components/ScheduledTaskPromptField";
 import { useSettingsEnvironmentMenu } from "./components/SettingsEnvironmentFilterHeader";
 import { SettingsScreen } from "./components/SettingsScreen";
 import { SettingsSection } from "./components/SettingsSection";
-import { useSettingsEnvironmentFilter, type SettingsTarget } from "./settings-environment-filter";
-import {
-  changeDraftProject,
-  editDraft,
-  parseIntervalMinutes,
-  scheduledTaskDefaultModel,
-  scheduleFromDraft,
-  unbindDraftFromThread,
-  type ScheduledTaskDraft as Draft,
-} from "./scheduledTaskDraft";
-import { settingsTargetsForProject } from "./settings-environment-filter.logic";
 import {
   useScheduledTaskDestinationLabel,
   useScheduledTaskEditor,
@@ -95,9 +84,20 @@ import {
   markScheduledTaskEditorSaved,
 } from "./scheduled-task-editor-state";
 import {
+  changeDraftProject,
+  editDraft,
+  parseIntervalMinutes,
+  scheduledTaskDefaultModel,
+  scheduleFromDraft,
+  unbindDraftFromThread,
+  type ScheduledTaskDraft as Draft,
+} from "./scheduledTaskDraft";
+import {
   formatNextScheduledTaskRun,
   formatScheduledTaskInterval,
 } from "./scheduledTaskPresentation";
+import { useSettingsEnvironmentFilter, type SettingsTarget } from "./settings-environment-filter";
+import { settingsTargetsForProject } from "./settings-environment-filter.logic";
 
 type ScheduledTaskRoutes = {
   SettingsScheduledTaskNew: undefined;

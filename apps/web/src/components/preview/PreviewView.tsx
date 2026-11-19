@@ -1,14 +1,13 @@
-import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
-import { m } from "~/i18n/messages";
 import { useAtomValue } from "@effect/atom-react";
 import { scopedThreadKey } from "@t3tools/client-runtime/environment";
-import { settlePromise } from "@t3tools/client-runtime/state/runtime";
-import type { DesktopPreviewAnnotationVoiceConfig } from "@t3tools/contracts";
+import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
 import { previewStreamDownloadUrl } from "@t3tools/client-runtime/preview/server-browser-stream";
+import { settlePromise } from "@t3tools/client-runtime/state/runtime";
 import {
   isAtomCommandInterrupted,
   squashAtomCommandFailure,
 } from "@t3tools/client-runtime/state/runtime";
+import type { DesktopPreviewAnnotationVoiceConfig } from "@t3tools/contracts";
 import {
   AuthOrchestrationOperateScope,
   DEFAULT_BROWSER_PROFILE_ID,
@@ -30,26 +29,58 @@ import {
 import { msg, T, useGT, useMessages } from "gt-react";
 import { useEffect, useEffectEvent, useRef, useState } from "react";
 
+import { browserResponsiveViewportForToggle, useBrowserDefaults } from "~/browser/browserDefaults";
+import { BrowserDeviceToolbar } from "~/browser/BrowserDeviceToolbar";
+import {
+  findActiveBrowserRecordingRuntimeTabId,
+  isBrowserRecordingStartCancelledError,
+  startBrowserRecording,
+  stopBrowserRecording,
+  useActiveBrowserRecordingTabIds,
+} from "~/browser/browserRecording";
+import { BrowserSurfaceSlot } from "~/browser/BrowserSurfaceSlot";
+import { useBrowserSurfaceStore } from "~/browser/browserSurfaceStore";
+import {
+  resolveDiscoveredServerUrl,
+  resolveExternalServerUrl,
+} from "~/browser/browserTargetResolver";
+import { commitBrowserViewportChange } from "~/browser/browserViewportActions";
+import { BROWSER_DEVICE_TOOLBAR_HEIGHT } from "~/browser/browserViewportLayout";
+import { isBrowserSettingsReadError } from "~/browser/openFileInPreview";
+import { alternatePreviewRuntime, useRendersServerTabNatively } from "~/browser/previewRuntime";
+import { previewRuntimeTabId } from "~/browser/previewRuntimeTabId";
+import { ServerBrowserSurface, type ServerBrowserHandle } from "~/browser/ServerBrowserSurface";
+import { useBrowserLayoutZoomFactor } from "~/browser/useBrowserLayoutZoomFactor";
 import {
   BROWSER_HISTORY_MAX_ENTRIES_PER_PROJECT,
   recordVisitForThread,
   removeUrlForThread,
   useThreadRecentHistory,
 } from "~/browserHistoryStore";
+import { Badge } from "~/components/ui/badge";
+import { stackedThreadToast, toastManager } from "~/components/ui/toast";
+import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { type ComposerImageAttachment, useComposerDraftStore } from "~/composerDraftStore";
-import { capturePreviewAnnotationScreenshot } from "~/lib/previewAnnotation";
-import { readComposerImageBytes } from "../chat/composerAttachmentFiles";
-import { ensureLocalApi } from "~/localApi";
 import { getClientSettings } from "~/hooks/useSettings";
+import { m } from "~/i18n/messages";
+import type { MessageResolver } from "~/i18n/messages";
+import { effectiveShortcutsForCommand, shortcutLabelForCommand } from "~/keybindings";
+import { observeResize } from "~/lib/observeResize";
+import { capturePreviewAnnotationScreenshot } from "~/lib/previewAnnotation";
+import { randomUUID } from "~/lib/utils";
+import { cn } from "~/lib/utils";
+import { ensureLocalApi } from "~/localApi";
+import {
+  browserMiniPlayerSource,
+  selectThreadPreviewMiniPlayerTabId,
+  usePreviewMiniPlayerStore,
+} from "~/previewMiniPlayerStore";
 import {
   rememberPreviewUrl,
   updatePreviewServerSnapshot,
   useThreadPreviewState,
 } from "~/previewStateStore";
-import {
-  resolveDiscoveredServerUrl,
-  resolveExternalServerUrl,
-} from "~/browser/browserTargetResolver";
+import { useRightPanelStore } from "~/rightPanelStore";
 import { useEnvironmentSupportsServerBrowser } from "~/state/entities";
 import {
   useEnvironment,
@@ -58,57 +89,26 @@ import {
 } from "~/state/environments";
 import { previewEnvironment } from "~/state/preview";
 import { usePreviewStreamAccess } from "~/state/previewStream";
-import { useAtomCommand } from "~/state/use-atom-command";
-import {
-  browserMiniPlayerSource,
-  selectThreadPreviewMiniPlayerTabId,
-  usePreviewMiniPlayerStore,
-} from "~/previewMiniPlayerStore";
-import { readEnvironmentScope, useEnvironmentScope } from "~/state/session";
-import { useRightPanelStore } from "~/rightPanelStore";
-
-import { effectiveShortcutsForCommand, shortcutLabelForCommand } from "~/keybindings";
-import { randomUUID } from "~/lib/utils";
 import { primaryServerKeybindingsAtom } from "~/state/server";
+import { readEnvironmentScope, useEnvironmentScope } from "~/state/session";
+import { useAtomCommand } from "~/state/use-atom-command";
+
+import { readComposerImageBytes } from "../chat/composerAttachmentFiles";
+import { AgentBrowserCursor } from "./AgentBrowserCursor";
+import { closePreviewSession } from "./closePreviewSession";
+import { revealInFileExplorerLabel } from "./fileExplorerLabel";
+import { openPreviewSession } from "./openPreviewSession";
+import { subscribePreviewAction } from "./previewActionBus";
 import { PreviewAnnotationSpeech } from "./PreviewAnnotationSpeech";
 import { previewBridge } from "./previewBridge";
-import { subscribePreviewAction } from "./previewActionBus";
-import { closePreviewSession } from "./closePreviewSession";
-import { openPreviewSession } from "./openPreviewSession";
-import { showPreviewPopup } from "./showPreviewPopup";
 import { PreviewChromeRow } from "./PreviewChromeRow";
 import { PreviewEmptyState } from "./PreviewEmptyState";
+import { PreviewFindBar } from "./PreviewFindBar";
 import { PreviewMoreMenu, type PreviewMoreMenuActions } from "./PreviewMoreMenu";
-import { commitBrowserViewportChange } from "~/browser/browserViewportActions";
-import { browserResponsiveViewportForToggle, useBrowserDefaults } from "~/browser/browserDefaults";
-import { BrowserDeviceToolbar } from "~/browser/BrowserDeviceToolbar";
-import { BROWSER_DEVICE_TOOLBAR_HEIGHT } from "~/browser/browserViewportLayout";
-import { useBrowserLayoutZoomFactor } from "~/browser/useBrowserLayoutZoomFactor";
-import { previewRuntimeTabId } from "~/browser/previewRuntimeTabId";
-import { isBrowserSettingsReadError } from "~/browser/openFileInPreview";
 import { PreviewFileNotShown, PreviewUnreachable } from "./PreviewUnreachable";
-import type { MessageResolver } from "~/i18n/messages";
-import { revealInFileExplorerLabel } from "./fileExplorerLabel";
-import { Badge } from "~/components/ui/badge";
-import { BrowserSurfaceSlot } from "~/browser/BrowserSurfaceSlot";
-import { alternatePreviewRuntime, useRendersServerTabNatively } from "~/browser/previewRuntime";
-import { ServerBrowserSurface, type ServerBrowserHandle } from "~/browser/ServerBrowserSurface";
-import { cn } from "~/lib/utils";
-import { useBrowserSurfaceStore } from "~/browser/browserSurfaceStore";
+import { showPreviewPopup } from "./showPreviewPopup";
 import { usePreviewSession } from "./usePreviewSession";
 import { ZoomIndicator } from "./ZoomIndicator";
-import { AgentBrowserCursor } from "./AgentBrowserCursor";
-import { PreviewFindBar } from "./PreviewFindBar";
-import {
-  findActiveBrowserRecordingRuntimeTabId,
-  isBrowserRecordingStartCancelledError,
-  startBrowserRecording,
-  stopBrowserRecording,
-  useActiveBrowserRecordingTabIds,
-} from "~/browser/browserRecording";
-import { stackedThreadToast, toastManager } from "~/components/ui/toast";
-import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
-import { observeResize } from "~/lib/observeResize";
 
 interface Props {
   threadRef: ScopedThreadRef;

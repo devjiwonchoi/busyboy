@@ -5,20 +5,25 @@ import {
   type OrchestrationV2ProviderCapabilities,
   type ProviderSetupError,
 } from "@t3tools/contracts";
-import type { SelfInvocation } from "@t3tools/shared/nodeRuntime";
-import * as SecureRandom from "effect/crypto/SecureRandom";
-import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
-import * as Path from "effect/Path";
-import * as Exit from "effect/Exit";
-import * as Semaphore from "effect/Semaphore";
-import * as Scope from "effect/Scope";
-import * as EffectAcpErrors from "effect-acp/errors";
-
+import type * as AcpSessionRuntime from "@t3tools/provider-acp/server/AcpSessionRuntime";
+import {
+  AcpProviderCapabilitiesV2,
+  makeAcpAdapterV2,
+  type AcpAdapterV2Flavor,
+  type AcpAdapterV2RuntimeInput,
+} from "@t3tools/provider-acp/server/adapter";
 import * as ProviderHost from "@t3tools/provider-core/server/ProviderHost";
 import { PULL_REQUEST_LINKING_INSTRUCTIONS } from "@t3tools/provider-core/server/runtimeInstructions";
-import type { AntigravityAuth } from "../../provider/AntigravityAuth.ts";
-import type * as AcpSessionRuntime from "@t3tools/provider-acp/server/AcpSessionRuntime";
+import type { SelfInvocation } from "@t3tools/shared/nodeRuntime";
+import * as EffectAcpErrors from "effect-acp/errors";
+import * as SecureRandom from "effect/crypto/SecureRandom";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
+import * as Scope from "effect/Scope";
+import * as Semaphore from "effect/Semaphore";
+
 import {
   antigravityAppendsSystemPrompt,
   antigravityPermissionMode,
@@ -34,7 +39,6 @@ import {
   readAntigravityChildrenAtWork,
 } from "../../provider/acp/AntigravityChildWork.ts";
 import { readAntigravityClientTextFile } from "../../provider/acp/AntigravityClientFiles.ts";
-import { watchAntigravityPromptOutcome } from "../../provider/acp/AntigravityTurnOutcome.ts";
 import {
   antigravityApprovalOptions,
   antigravityCommandOutlivesPrompt,
@@ -45,13 +49,9 @@ import {
   makeAntigravityUserInputResponse,
   normalizeAntigravityToolCall,
 } from "../../provider/acp/AntigravityProtocol.ts";
+import { watchAntigravityPromptOutcome } from "../../provider/acp/AntigravityTurnOutcome.ts";
+import type { AntigravityAuth } from "../../provider/AntigravityAuth.ts";
 import { isAntigravitySignInRequiredError } from "../../provider/antigravityAuthSupport.ts";
-import {
-  AcpProviderCapabilitiesV2,
-  makeAcpAdapterV2,
-  type AcpAdapterV2Flavor,
-  type AcpAdapterV2RuntimeInput,
-} from "@t3tools/provider-acp/server/adapter";
 
 const ANTIGRAVITY_PROVIDER = ProviderDriverKind.make("antigravity");
 

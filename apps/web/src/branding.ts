@@ -1,4 +1,5 @@
 import type { DesktopAppBranding } from "@t3tools/contracts";
+
 import {
   formatAppDisplayName,
   resolveHostedAppChannelLabel,

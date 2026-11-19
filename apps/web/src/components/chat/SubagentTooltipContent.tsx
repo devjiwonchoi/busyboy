@@ -1,3 +1,8 @@
+import {
+  resolveSubagentMetadata,
+  subagentDetailPreview,
+} from "@t3tools/client-runtime/state/subagent-display";
+import { REASONING_EFFORT_OPTION_IDS } from "@t3tools/client-runtime/state/thread-execution";
 import type {
   OrchestrationV2ThreadShell,
   OrchestrationV2TurnItemStatus,
@@ -7,15 +12,8 @@ import type {
   ProviderInstanceId,
   OrchestrationV2Subagent,
 } from "@t3tools/contracts";
-import {
-  resolveSubagentMetadata,
-  subagentDetailPreview,
-} from "@t3tools/client-runtime/state/subagent-display";
-import { REASONING_EFFORT_OPTION_IDS } from "@t3tools/client-runtime/state/thread-execution";
 import { getModelSelectionStringOptionValue, resolveSelectableModel } from "@t3tools/shared/model";
-import { getTraitsSpeedDisplay, TraitsSpeedIcon } from "./TraitsSpeed";
 import { useGT, useMessages } from "gt-react";
-import type { ReactNode } from "react";
 import {
   BotIcon,
   CheckIcon,
@@ -25,11 +23,15 @@ import {
   GitBranchIcon,
   TerminalIcon,
 } from "lucide-react";
+import type { ReactNode } from "react";
+
+import { cn } from "~/lib/utils";
+
+import { deriveProviderInstanceEntries, shouldShowInstanceBadge } from "../../providerInstances";
 import { ThreadHoverCard } from "../ThreadHoverCard";
 import { MiddleTruncate } from "../ui/middle-truncate";
 import { ProviderInstanceIcon } from "./ProviderInstanceIcon";
-import { cn } from "~/lib/utils";
-import { deriveProviderInstanceEntries, shouldShowInstanceBadge } from "../../providerInstances";
+import { getTraitsSpeedDisplay, TraitsSpeedIcon } from "./TraitsSpeed";
 
 export function SubagentTooltipContent(props: {
   title: string;

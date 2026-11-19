@@ -2,8 +2,8 @@ import { assert } from "@effect/vitest";
 import type { ProviderReplayTranscript } from "@t3tools/contracts";
 
 import type { OrchestratorV2ScenarioResult } from "../../OrchestratorScenario.ts";
-import { assertPlanQuestionsOutputBase } from "./codex_output.ts";
 import { projectionFor } from "../shared.ts";
+import { assertPlanQuestionsOutputBase } from "./codex_output.ts";
 
 export function assertOpenCodePlanQuestionsOutput(
   result: OrchestratorV2ScenarioResult,

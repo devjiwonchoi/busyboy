@@ -1,5 +1,6 @@
 import { requireNativeView } from "expo";
 import type { NativeSyntheticEvent, ViewProps } from "react-native";
+
 import type { VerticalHinge } from "../lib/layout";
 
 interface ObserverProps extends ViewProps {

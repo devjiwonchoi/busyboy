@@ -1,10 +1,10 @@
-import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
 import { useAuth } from "@clerk/react";
 import { useAtomValue } from "@effect/atom-react";
 import {
   managedCapabilityDenial,
   managedRuntimeModeDenial,
 } from "@t3tools/client-runtime/contract-labels";
+import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
 import { offersLinkedEnvironments } from "@t3tools/client-runtime/link-request";
 import {
   AuthAccessWriteScope,
@@ -16,28 +16,28 @@ import {
   sessionGrantsScope,
 } from "@t3tools/contracts";
 import { useNavigate } from "@tanstack/react-router";
-import { CheckIcon, CopyIcon } from "lucide-react";
 import * as Option from "effect/Option";
 import { Atom } from "effect/reactivity";
 import * as Result from "effect/Result";
 import { msg, T, useGT, useMessages, Var } from "gt-react";
-import { m } from "~/i18n/messages";
+import { CheckIcon, CopyIcon } from "lucide-react";
 import { type ReactNode, useEffect, useEffectEvent, useState } from "react";
 
-import { checkReachability, readLinkState } from "~/cloud/linkEnvironmentAtoms";
-import { isManagedTunnelActive } from "~/cloud/t3ConnectState";
-import { hasCloudPublicConfig } from "~/cloud/publicConfig";
 import { readCachedCloudLinkState } from "~/cloud/cloudLinkState";
+import { checkReachability, readLinkState } from "~/cloud/linkEnvironmentAtoms";
+import { hasCloudPublicConfig } from "~/cloud/publicConfig";
+import { isManagedTunnelActive } from "~/cloud/t3ConnectState";
 import { useCloudLinkController } from "~/cloud/useCloudLinkController";
+import { useT3ConnectTurnOn } from "~/cloud/useT3ConnectTurnOn";
 import { isDesktopLocalConnectionTarget } from "~/connection/desktopLocal";
 import { isElectron } from "~/env";
-import { useT3ConnectTurnOn } from "~/cloud/useT3ConnectTurnOn";
 import {
   namedClipboardTarget,
   useCopyToClipboard,
   writeTextToClipboard,
 } from "~/hooks/useCopyToClipboard";
 import { useNowSecond } from "~/hooks/useNowSecond";
+import { m } from "~/i18n/messages";
 import { readLocalApi } from "~/localApi";
 import { appAtomRegistry } from "~/rpc/atomRegistry";
 import {
@@ -46,15 +46,16 @@ import {
   usePrimaryEnvironmentId,
 } from "~/state/environments";
 import { useManagedPolicy } from "~/state/managedPolicy";
-import { mintMcpApprovalCodeOn } from "~/state/peerPairingCode";
 import { peerLinkEnvironment } from "~/state/peerLinks";
+import { mintMcpApprovalCodeOn } from "~/state/peerPairingCode";
 import { useEnvironmentQuery } from "~/state/query";
 import { relayEnvironmentDiscovery } from "~/state/relay";
 import { useEnvironmentScope, useEnvironmentSessionState } from "~/state/session";
 import { useAtomCommand } from "~/state/use-atom-command";
+
+import { AccessOption, accessConfig } from "../auth/ConnectAgentSurface";
 import { useT3ConnectAuthPrompt } from "../clerk/useT3ConnectAuthPrompt";
 import { CommandBlock } from "../CommandBlock";
-import { AccessOption, accessConfig } from "../auth/ConnectAgentSurface";
 import { useAccessEnvironment } from "../settings/useAccessEnvironment";
 import { Button } from "../ui/button";
 import { Dialog } from "../ui/dialog";
@@ -62,8 +63,8 @@ import { RadioGroup } from "../ui/radio-group";
 import { Spinner } from "../ui/spinner";
 import { toastManager } from "../ui/toast";
 import { WizardFooter, WizardHeader, WizardPanel, WizardPopup, WizardSteps } from "../ui/wizard";
-import { afterFailedCheck, resolveMcpGate } from "./mcpGate";
 import { MCP_APPS, type McpApp, mcpHandoffAction, OTHER_MCP_APP_STEPS } from "./mcpApps";
+import { afterFailedCheck, resolveMcpGate } from "./mcpGate";
 
 const requestAtom = Atom.make<{ readonly environmentId: EnvironmentId | null } | null>(null).pipe(
   Atom.keepAlive,

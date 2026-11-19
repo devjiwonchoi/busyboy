@@ -2,9 +2,10 @@
 // @effect-diagnostics globalTimers:off -- Bound calls into the user's desktop session.
 import * as NodeFSP from "node:fs/promises";
 import * as NodePath from "node:path";
+
+import type { DesktopCaptureExtensionState } from "@t3tools/contracts";
 import { Message, sessionBus, type MessageBus, type MessageLike } from "dbus-next";
 import * as Schema from "effect/Schema";
-import type { DesktopCaptureExtensionState } from "@t3tools/contracts";
 
 import { GNOME_CAPTURE_FILES, GNOME_CAPTURE_UUID } from "./gnomeCaptureBundle.ts";
 

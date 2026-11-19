@@ -1,6 +1,5 @@
-import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
 import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
-import { msg } from "gt-react";
+import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
 import {
   type EnvironmentId,
   type ProjectListEntriesResult,
@@ -10,8 +9,9 @@ import {
 } from "@t3tools/contracts";
 import * as Cause from "effect/Cause";
 import * as Option from "effect/Option";
-import * as Schema from "effect/Schema";
 import { AsyncResult, Atom } from "effect/reactivity";
+import * as Schema from "effect/Schema";
+import { msg } from "gt-react";
 
 import { m, type MessageResolver } from "~/i18n/messages";
 import { appAtomRegistry } from "~/rpc/atomRegistry";

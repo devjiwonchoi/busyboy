@@ -1,4 +1,5 @@
 import { useGT } from "gt-react-native";
+
 import { SettingsLegalDocumentRouteScreen } from "./components/SettingsLegalDocumentRouteScreen";
 import { LEGAL_URL } from "./lib/legal-document-url";
 

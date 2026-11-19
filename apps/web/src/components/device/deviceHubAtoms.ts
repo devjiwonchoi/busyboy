@@ -1,10 +1,11 @@
 import type { DeviceHubAccess } from "@t3tools/client-runtime/state/deviceHubAccess";
 import * as Effect from "effect/Effect";
+import { AsyncResult, Atom } from "effect/reactivity";
 import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
-import { AsyncResult, Atom } from "effect/reactivity";
 
+import { AndroidFoldError, readAndroidFold, type AndroidFoldState } from "./deviceFold";
 import {
   appendDeviceEventLog,
   type DeviceAxElement,
@@ -15,7 +16,6 @@ import {
   subscribeDeviceEventLog,
   subscribeDeviceForeground,
 } from "./deviceHubApi";
-import { AndroidFoldError, readAndroidFold, type AndroidFoldState } from "./deviceFold";
 
 const isAndroidFoldError = Schema.is(AndroidFoldError);
 

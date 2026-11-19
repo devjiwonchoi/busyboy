@@ -1,6 +1,5 @@
 import * as Schema from "effect/Schema";
 
-import { ChatAttachment } from "./chatAttachment.ts";
 import {
   GuestMessageId,
   GuestShareId,
@@ -9,6 +8,7 @@ import {
   TrimmedNonEmptyString,
   TrimmedString,
 } from "./baseSchemas.ts";
+import { ChatAttachment } from "./chatAttachment.ts";
 
 /**
  * A guest share lets one unauthenticated browser watch a thread over T3 Connect and propose

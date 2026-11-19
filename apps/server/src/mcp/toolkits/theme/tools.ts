@@ -4,12 +4,13 @@ import {
   EnvironmentThemeId,
   OrchestratorMcpFailure,
 } from "@t3tools/contracts";
-import * as Schema from "effect/Schema";
 import { Tool, Toolkit } from "effect/ai";
+import * as Schema from "effect/Schema";
+
 import * as EnvironmentTheme from "../../../environmentTheme.ts";
-import * as McpInvocationContext from "../../McpInvocationContext.ts";
 import * as ThreadCommandExecutor from "../../../orchestration-v2/ThreadCommandExecutor.ts";
 import * as ThreadManagementService from "../../../orchestration-v2/ThreadManagementService.ts";
+import * as McpInvocationContext from "../../McpInvocationContext.ts";
 
 const Appearance = Schema.Literals(["light", "dark", "system"]);
 

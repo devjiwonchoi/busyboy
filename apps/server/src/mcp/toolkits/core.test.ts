@@ -1,5 +1,3 @@
-import * as AssetSigner from "../../assets/AssetSigner.ts";
-import * as DocumentText from "../../provider/DocumentText.ts";
 import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { expect, it } from "@effect/vitest";
@@ -23,51 +21,52 @@ import {
   type OrchestrationV2ProjectedTurnItem,
   type OrchestrationV2ThreadShell,
 } from "@t3tools/contracts";
-import { pinOrderKeyBetween } from "@t3tools/shared/pinOrderKey";
-import * as DateTime from "effect/DateTime";
 import * as McpProviderSessions from "@t3tools/provider-core/server/McpProviderSessions";
+import { pinOrderKeyBetween } from "@t3tools/shared/pinOrderKey";
+import { McpSchema, McpServer } from "effect/ai";
+import * as DateTime from "effect/DateTime";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
-import * as TestClock from "effect/testing/TestClock";
+import { FetchHttpClient } from "effect/http";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
-import { McpAttachmentInput } from "./attachment/input.ts";
-import { McpSchema, McpServer } from "effect/ai";
-import { FetchHttpClient } from "effect/http";
+import * as TestClock from "effect/testing/TestClock";
 
+import * as AssetSigner from "../../assets/AssetSigner.ts";
+import * as ServerSecretStore from "../../auth/ServerSecretStore.ts";
+import * as ServerConfig from "../../config.ts";
 import {
   OrchestratorCommandRejectedError,
   OrchestratorDispatchError,
   OrchestratorProjectionError,
   OrchestratorProviderSelectionBusyError,
 } from "../../orchestration-v2/Orchestrator.ts";
-
-import * as ServerSecretStore from "../../auth/ServerSecretStore.ts";
-import * as ServerConfig from "../../config.ts";
+import type * as ProjectionStore from "../../orchestration-v2/ProjectionStore.ts";
 import * as ProviderAdapterRegistry from "../../orchestration-v2/ProviderAdapterRegistry.ts";
 import * as ThreadLaunchService from "../../orchestration-v2/ThreadLaunchService.ts";
-import * as GitVcsDriver from "../../vcs/GitVcsDriver.ts";
 import * as ThreadManagement from "../../orchestration-v2/ThreadManagementService.ts";
-import type * as ProjectionStore from "../../orchestration-v2/ProjectionStore.ts";
 import * as ThreadSearch from "../../orchestration-v2/ThreadSearch.ts";
-import * as PreviewBrowser from "../../preview/PreviewBrowser.ts";
-import * as ProjectService from "../../project/ProjectService.ts";
-import * as ProviderRegistry from "../../provider/ProviderRegistry.ts";
-import * as SecretRequests from "../../secrets/SecretRequests.ts";
-import * as RemoteDelegation from "../../peer/RemoteDelegation.ts";
-import * as ScheduledTaskService from "../../scheduledTasks/ScheduledTaskService.ts";
-import * as ServerSettings from "../../serverSettings.ts";
-import * as McpHttpServer from "../McpHttpServer.ts";
-import * as McpInvocationContext from "../McpInvocationContext.ts";
-import * as McpToolAccessTestkit from "../McpToolAccess.testkit.ts";
-import * as AnalyticsService from "../../telemetry/AnalyticsService.ts";
-import { dispatchFailure } from "../threadAccess.ts";
-import * as EnvironmentHandlers from "./environment/handlers.ts";
-import * as AttachmentHandlers from "./attachment/handlers.ts";
-import { ThreadToolkit } from "./thread/tools.ts";
 import * as PeerForwarding from "../../peer/PeerForwarding.ts";
 import * as PeerLinkRequests from "../../peer/PeerLinkRequests.ts";
 import * as PeerLinks from "../../peer/PeerLinks.ts";
+import * as RemoteDelegation from "../../peer/RemoteDelegation.ts";
+import * as PreviewBrowser from "../../preview/PreviewBrowser.ts";
+import * as ProjectService from "../../project/ProjectService.ts";
+import * as DocumentText from "../../provider/DocumentText.ts";
+import * as ProviderRegistry from "../../provider/ProviderRegistry.ts";
+import * as ScheduledTaskService from "../../scheduledTasks/ScheduledTaskService.ts";
+import * as SecretRequests from "../../secrets/SecretRequests.ts";
+import * as ServerSettings from "../../serverSettings.ts";
+import * as AnalyticsService from "../../telemetry/AnalyticsService.ts";
+import * as GitVcsDriver from "../../vcs/GitVcsDriver.ts";
+import * as McpHttpServer from "../McpHttpServer.ts";
+import * as McpInvocationContext from "../McpInvocationContext.ts";
+import * as McpToolAccessTestkit from "../McpToolAccess.testkit.ts";
+import { dispatchFailure } from "../threadAccess.ts";
+import * as AttachmentHandlers from "./attachment/handlers.ts";
+import { McpAttachmentInput } from "./attachment/input.ts";
+import * as EnvironmentHandlers from "./environment/handlers.ts";
+import { ThreadToolkit } from "./thread/tools.ts";
 
 const layerOrchestratorToolkit = McpHttpServer.layerOrchestratorToolkit.pipe(
   Layer.provide(Layer.mock(ThreadLaunchService.ThreadLaunchService)({})),

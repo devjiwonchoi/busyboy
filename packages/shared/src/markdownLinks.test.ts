@@ -1,13 +1,13 @@
-import { workspaceRelativeFilePath } from "./path.ts";
 import { describe, expect, it } from "vite-plus/test";
+
 import { serializeComposerFileLink } from "./composerTrigger.ts";
 import { extractMarkdownLinkHrefs, resolveMarkdownFileLinkTarget } from "./markdownLinks.ts";
-
 import {
   inlineCodeFilePathCandidate,
   isMarkdownFileLinkLabel,
   parseMarkdownFileLink,
 } from "./markdownLinks.ts";
+import { workspaceRelativeFilePath } from "./path.ts";
 
 describe("isMarkdownFileLinkLabel", () => {
   // regression: #15509 descriptive labels are not mistaken for the linked file name

@@ -1,6 +1,7 @@
-import { describe, expect, it } from "vite-plus/test";
 import { closestCenter, type CollisionDetection } from "@dnd-kit/core";
 import type { SortingStrategy } from "@dnd-kit/sortable";
+import { describe, expect, it } from "vite-plus/test";
+
 import {
   createSidebarCollisionDetection,
   createSidebarSortingStrategy,

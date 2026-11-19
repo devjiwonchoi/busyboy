@@ -1,8 +1,6 @@
-import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
-import { ThreadDetailsControl } from "./chat/ThreadDetailsControl";
-import { ComposerContextLabel } from "./ComposerContextLabel";
-import { useRightPanelStore } from "../rightPanelStore";
 import { scopeProjectRef, scopeThreadRef } from "@t3tools/client-runtime/environment";
+import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
+import { parsePullRequestReference } from "@t3tools/client-runtime/pull-request-link-input";
 import {
   isAtomCommandInterrupted,
   squashAtomCommandFailure,
@@ -17,7 +15,6 @@ import {
 } from "@t3tools/contracts";
 import { msg, T, useGT, useMessages, Var } from "gt-react";
 import { GitBranchIcon } from "lucide-react";
-import { m } from "../i18n/messages";
 import {
   useEffect,
   useEffectEvent,
@@ -30,26 +27,24 @@ import {
   type Ref,
 } from "react";
 
+import { readEnvironmentScope, useEnvironmentScope } from "~/state/session";
+
 import { useComposerDraftStore, type DraftId } from "../composerDraftStore";
 import { writeTextToClipboard } from "../hooks/useCopyToClipboard";
-import { readLocalApi } from "../localApi";
+import { m } from "../i18n/messages";
 import { useOpenPrLink } from "../lib/openPullRequestLink";
-import { usePaginatedBranches } from "../state/queries";
-import { useProjectClone } from "../state/projectClones";
+import { cn } from "../lib/utils";
+import { readLocalApi } from "../localApi";
+import { useRightPanelStore } from "../rightPanelStore";
+import { getSourceControlPresentation } from "../sourceControlPresentation";
 import { readThreadShell, useProject, useQuietThreadShell } from "../state/entities";
+import { useProjectClone } from "../state/projectClones";
+import { usePaginatedBranches } from "../state/queries";
 import { useEnvironmentQuery } from "../state/query";
-import { readEnvironmentScope, useEnvironmentScope } from "~/state/session";
 import { threadEnvironment } from "../state/threads";
 import { useAtomCommand } from "../state/use-atom-command";
 import { vcsEnvironment } from "../state/vcs";
-import { cn } from "../lib/utils";
-import { THREAD_DETAILS_PANEL_ICON_CLASS } from "./chat/threadDetailsPanelStyles";
-import { ThreadDetailsThreadPrRows } from "./chat/ThreadDetailsPrRows";
-import { ThreadDetailsIssueRows } from "./chat/ThreadDetailsIssueRows";
-import { parsePullRequestReference } from "@t3tools/client-runtime/pull-request-link-input";
-import { getSourceControlPresentation } from "../sourceControlPresentation";
-import { changeRequestTermKind } from "./pullRequest/changeRequestTerm";
-import { useComposerMenuProps } from "./chat/composerEventScope";
+import { BranchPicker, BranchPickerRefItem } from "./BranchPicker";
 import {
   type BranchHold,
   deriveLocalBranchNameFromRemoteRef,
@@ -66,16 +61,21 @@ import {
   sanitizeNewRefName,
   shouldIncludeBranchPickerItem,
 } from "./BranchToolbar.logic";
+import { ComposerControl } from "./chat/ComposerControl";
+import { useComposerMenuProps } from "./chat/composerEventScope";
+import { ThreadDetailsControl } from "./chat/ThreadDetailsControl";
+import { ThreadDetailsIssueRows } from "./chat/ThreadDetailsIssueRows";
+import { THREAD_DETAILS_PANEL_ICON_CLASS } from "./chat/threadDetailsPanelStyles";
+import { ThreadDetailsThreadPrRows } from "./chat/ThreadDetailsPrRows";
+import { ComposerContextLabel } from "./ComposerContextLabel";
+import { changeRequestTermKind } from "./pullRequest/changeRequestTerm";
 import {
   ThreadPullRequestBadgeControl,
   resolveDisplayedThreadPr,
   useThreadDisplayedPullRequest,
 } from "./ThreadStatusIndicators";
-
 import { ComboboxItem, ComboboxTrigger } from "./ui/combobox";
-import { ComposerControl } from "./chat/ComposerControl";
 import { MiddleTruncate } from "./ui/middle-truncate";
-import { BranchPicker, BranchPickerRefItem } from "./BranchPicker";
 import { stackedThreadToast, toastManager } from "./ui/toast";
 
 export interface BranchToolbarBranchSelectorHandle {

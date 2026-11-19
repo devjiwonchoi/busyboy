@@ -1,17 +1,16 @@
-import { errorDisplayMessage } from "@t3tools/client-runtime/errors";
 import { useAtomValue } from "@effect/atom-react";
-import { visibleLinkedThreads } from "@t3tools/client-runtime/state/threads";
-import { AsyncResult } from "effect/reactivity";
-import { useGT } from "gt-react-native";
-import { settlePromise, squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
-import * as Dialog from "../../components/ui/Dialog";
 import {
   StackActions,
   useNavigation,
   useNavigationState,
   useRoute,
 } from "@react-navigation/native";
+import { errorDisplayMessage } from "@t3tools/client-runtime/errors";
+import { sourceControlClients } from "@t3tools/client-runtime/source-control-clients";
+import { settlePromise, squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
+import { visibleLinkedThreads } from "@t3tools/client-runtime/state/threads";
 import { threadPullRequestLinkMode } from "@t3tools/client-runtime/thread-pull-request-compatibility";
+import { normalizeThreadPullRequestKey } from "@t3tools/client-runtime/thread-pull-requests";
 import {
   AuthOrchestrationOperateScope,
   AuthSourceControlWriteScope,
@@ -20,18 +19,21 @@ import {
   type PullRequestLinkedThreadsResult,
 } from "@t3tools/contracts";
 import { formatComposerContextReference } from "@t3tools/shared/composerContextReferences";
-import { sourceControlClients } from "@t3tools/client-runtime/source-control-clients";
-import { changeRequestTermKind } from "../../lib/changeRequestTerm";
-import { normalizeThreadPullRequestKey } from "@t3tools/client-runtime/thread-pull-requests";
+import { AsyncResult } from "effect/reactivity";
+import { useGT } from "gt-react-native";
 import { useRef, useState } from "react";
+
+import * as Dialog from "../../components/ui/Dialog";
+import { m } from "../../i18n/messages";
+import { changeRequestTermKind } from "../../lib/changeRequestTerm";
 import { pullRequestComposerContext } from "../../lib/composerContext";
 import { scopedThreadKey } from "../../lib/scopedEntities";
 import { uuidv4 } from "../../lib/uuid";
 import { useEnvironmentServerConfig } from "../../state/entities";
 import { composerPullRequests } from "../../state/pull-requests";
 import { useEnvironmentQuery } from "../../state/query";
-import { environmentThreadShells } from "../../state/threads";
 import { useEnvironmentScope } from "../../state/session";
+import { environmentThreadShells } from "../../state/threads";
 import {
   createNewTaskDraft,
   getComposerDraftSnapshot,
@@ -40,14 +42,13 @@ import {
   updateComposerDraftSettings,
   waitForComposerDraftsLoaded,
 } from "../../state/use-composer-drafts";
-import { usePullRequestConnected } from "./usePullRequestConnected";
-import { pullRequestTarget, type PullRequestParams } from "./usePullRequestDiff";
 import {
   appendPullRequestAgentPrompt,
   pullRequestAgentPrompt,
   type PullRequestAgentTask,
 } from "./pullRequestAgentTasks";
-import { m } from "../../i18n/messages";
+import { usePullRequestConnected } from "./usePullRequestConnected";
+import { pullRequestTarget, type PullRequestParams } from "./usePullRequestDiff";
 
 type LinkedThread = PullRequestLinkedThreadsResult["threads"][number];
 

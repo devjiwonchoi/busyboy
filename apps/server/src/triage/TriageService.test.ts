@@ -1,13 +1,13 @@
 import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import { GitCommandError } from "@t3tools/contracts";
 import { assert, it } from "@effect/vitest";
+import { GitCommandError } from "@t3tools/contracts";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
-import * as Queue from "effect/Queue";
 import { ChildProcessSpawner } from "effect/process";
+import * as Queue from "effect/Queue";
 
 import packageJson from "../../package.json" with { type: "json" };
 import * as ServerConfig from "../config.ts";

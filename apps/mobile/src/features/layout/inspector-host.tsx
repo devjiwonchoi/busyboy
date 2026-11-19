@@ -6,8 +6,8 @@ import { RenderErrorBoundary, RenderFailureView } from "../../components/RenderE
 import { PaneContext } from "../../components/ui/Pane";
 import { GLASS_HEADER_OPTIONS } from "../../native/glass-header-options";
 import { NativeColumnContent } from "../../native/NativeColumnContent.ios";
-import { V5StackHeader } from "../../native/V5StackHeader.ios";
 import { WorkspaceSlotOptionsContext } from "../../native/v5-workspace-context";
+import { V5StackHeader } from "../../native/V5StackHeader.ios";
 import {
   InspectorCloseContext,
   useInspectorBarSlot,

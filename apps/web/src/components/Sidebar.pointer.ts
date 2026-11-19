@@ -1,6 +1,6 @@
-import { type PointerEvent as ReactPointerEvent } from "react";
 import { type SensorProps } from "@dnd-kit/core";
 import { getOwnerDocument, getWindow } from "@dnd-kit/utilities";
+import { type PointerEvent as ReactPointerEvent } from "react";
 
 type Options = {
   distance: number;

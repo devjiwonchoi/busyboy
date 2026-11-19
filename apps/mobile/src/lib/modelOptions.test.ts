@@ -1,5 +1,4 @@
-import { describe, expect, it } from "vite-plus/test";
-
+import { groupModelsBySubProvider } from "@t3tools/client-runtime/providerSubProviders";
 import {
   DEFAULT_SERVER_SETTINGS,
   ProjectId,
@@ -9,6 +8,7 @@ import {
   type ServerConfig,
   type ServerSettings,
 } from "@t3tools/contracts";
+import { describe, expect, it } from "vite-plus/test";
 
 import {
   buildModelOptions,
@@ -21,7 +21,6 @@ import {
   withStoredThreadModelOptions,
   type ModelOption,
 } from "./modelOptions";
-import { groupModelsBySubProvider } from "@t3tools/client-runtime/providerSubProviders";
 
 describe("mobile model options", () => {
   it("distinguishes same-name OpenCode models without changing their routing", () => {

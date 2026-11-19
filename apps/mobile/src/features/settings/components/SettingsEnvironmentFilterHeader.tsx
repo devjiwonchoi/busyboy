@@ -1,8 +1,8 @@
-import { useGT } from "gt-react-native";
 import { resolveEnvironmentMachineKind } from "@t3tools/contracts";
+import { useGT } from "gt-react-native";
 
-import type { AppBarMenu } from "../../../components/ui/AppBar.types";
 import { ENVIRONMENT_MACHINE_SYMBOLS } from "../../../components/EnvironmentMachineSymbol";
+import type { AppBarMenu } from "../../../components/ui/AppBar.types";
 import { useSettingsEnvironmentFilter } from "../settings-environment-filter";
 
 /** The settings scope filter, as an `AppBar` menu. */

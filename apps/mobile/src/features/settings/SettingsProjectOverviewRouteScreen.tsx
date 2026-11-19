@@ -1,52 +1,52 @@
+import { useNavigation } from "@react-navigation/native";
 import { errorDisplayMessage } from "@t3tools/client-runtime/errors";
-import { T, useGT } from "gt-react-native";
-import { ScreenScrollView as ScrollView } from "../../components/ui/ScreenScrollView";
-import { AppText as Text, AppTextInput } from "../../components/ui/AppText";
-import { Button } from "../../components/ui/Button";
-import { ProjectFavicon } from "../../components/ProjectFavicon";
-import * as Dialog from "../../components/ui/Dialog";
-import { AuthOrchestrationOperateScope } from "@t3tools/contracts";
+import {
+  deriveProjectGroupLabel,
+  type ProjectGroup,
+} from "@t3tools/client-runtime/state/project-grouping";
 import { planProjectRemoval } from "@t3tools/client-runtime/state/projects";
 import {
   isAtomCommandInterrupted,
   squashAtomCommandFailure,
 } from "@t3tools/client-runtime/state/runtime";
-import {
-  deriveProjectGroupLabel,
-  type ProjectGroup,
-} from "@t3tools/client-runtime/state/project-grouping";
 import type { EnvironmentProject } from "@t3tools/client-runtime/state/shell";
-import { useNavigation } from "@react-navigation/native";
+import { AuthOrchestrationOperateScope } from "@t3tools/contracts";
+import { T, useGT } from "gt-react-native";
 import { useRef, useState } from "react";
 import { Platform, Pressable, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { projectEnvironment } from "../../state/projects";
-import { useThreadShells } from "../../state/entities";
+import { ProjectFavicon } from "../../components/ProjectFavicon";
+import { AppText as Text, AppTextInput } from "../../components/ui/AppText";
+import { Button } from "../../components/ui/Button";
+import * as Dialog from "../../components/ui/Dialog";
+import { ListActionRow as SettingsActionRow } from "../../components/ui/ListActionRow";
+import { ScreenScrollView as ScrollView } from "../../components/ui/ScreenScrollView";
+import { m } from "../../i18n/messages";
 import { appAtomRegistry } from "../../state/atom-registry";
-import {
-  clearComposerDraft,
-  composerDraftsAtom,
-  findNewTaskDraftKeys,
-  waitForComposerDraftsLoaded,
-} from "../../state/use-composer-drafts";
+import { useThreadShells } from "../../state/entities";
+import { readUnloadedThreadCount } from "../../state/olderSettledShelf";
+import { projectEnvironment } from "../../state/projects";
 import {
   readEnvironmentScope,
   useEnvironmentScope,
   useEnvironmentsWithScope,
 } from "../../state/session";
 import { useAtomCommand } from "../../state/use-atom-command";
-import { SettingsScreen } from "./components/SettingsScreen";
-import { SettingsSection } from "./components/SettingsSection";
-import { ListActionRow as SettingsActionRow } from "../../components/ui/ListActionRow";
-import { SettingsSwitchRow } from "./components/SettingsSwitchRow";
-import { useSettingsEnvironmentMenu } from "./components/SettingsEnvironmentFilterHeader";
-import { useSettingsEnvironmentFilter, type SettingsTarget } from "./settings-environment-filter";
-import { leaveSettingsPage } from "./settings-navigation";
+import {
+  clearComposerDraft,
+  composerDraftsAtom,
+  findNewTaskDraftKeys,
+  waitForComposerDraftsLoaded,
+} from "../../state/use-composer-drafts";
 import { workspaceHasColumns } from "../layout/workspace/workspace-selection-store";
 import { DEFAULT_SETTINGS_PAGE } from "../layout/workspace/workspace-tab-navigation";
-import { readUnloadedThreadCount } from "../../state/olderSettledShelf";
-import { m } from "../../i18n/messages";
+import { useSettingsEnvironmentMenu } from "./components/SettingsEnvironmentFilterHeader";
+import { SettingsScreen } from "./components/SettingsScreen";
+import { SettingsSection } from "./components/SettingsSection";
+import { SettingsSwitchRow } from "./components/SettingsSwitchRow";
+import { useSettingsEnvironmentFilter, type SettingsTarget } from "./settings-environment-filter";
+import { leaveSettingsPage } from "./settings-navigation";
 
 export function SettingsProjectOverviewRouteScreen() {
   const gt = useGT();

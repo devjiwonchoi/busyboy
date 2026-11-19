@@ -2,8 +2,8 @@ import { assert } from "@effect/vitest";
 import type { ProviderReplayTranscript } from "@t3tools/contracts";
 import { derivePendingBackgroundWork } from "@t3tools/shared/orchestrationV2PendingBackgroundWork";
 
-import type { OrchestratorV2ScenarioResult } from "../../OrchestratorScenario.ts";
 import { cancelledTurnItemWork } from "../../../RestartBackgroundNote.ts";
+import type { OrchestratorV2ScenarioResult } from "../../OrchestratorScenario.ts";
 import {
   assertBaseProjection,
   assertSemanticProjectionIntegrity,

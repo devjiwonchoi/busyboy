@@ -1,20 +1,21 @@
-import { useGT, useMessages } from "gt-react-native";
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
 import { AsyncResult } from "effect/reactivity";
-import { useAdaptiveWorkspaceLayout } from "../layout/adaptive-workspace-context";
+import { useGT, useMessages } from "gt-react-native";
 import { Platform, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+
+import { SymbolView } from "../../components/ui/AppSymbol";
+import { AppText as Text } from "../../components/ui/AppText";
+import { Button } from "../../components/ui/Button";
+import { IconButton } from "../../components/ui/IconButton";
+import { ScreenScrollView } from "../../components/ui/ScreenScrollView";
+import { mobilePreferencesAtom, updateMobilePreferencesAtom } from "../../state/preferences";
+import { useAdaptiveWorkspaceLayout } from "../layout/adaptive-workspace-context";
 import {
   moveNavigationTab,
   navigationCustomizationAvailable,
   toggleNavigationTabVisibility,
 } from "../layout/workspace/navigation-tab-order";
-import { AppText as Text } from "../../components/ui/AppText";
-import { IconButton } from "../../components/ui/IconButton";
-import { Button } from "../../components/ui/Button";
-import { ScreenScrollView } from "../../components/ui/ScreenScrollView";
-import { SymbolView } from "../../components/ui/AppSymbol";
-import { mobilePreferencesAtom, updateMobilePreferencesAtom } from "../../state/preferences";
 import {
   NAVIGATION_TAB_ICONS,
   WORKSPACE_TAB_LABELS,
@@ -22,9 +23,9 @@ import {
   useHiddenNavigationTabs,
   useEnabledNavigationTabs,
 } from "../layout/workspace/navigation-tabs";
+import { resolveWorkspaceTabOrder } from "../layout/workspace/workspace-tabs-state";
 import { SettingsScreen } from "./components/SettingsScreen";
 import { SettingsSection } from "./components/SettingsSection";
-import { resolveWorkspaceTabOrder } from "../layout/workspace/workspace-tabs-state";
 
 export function SettingsNavigationRouteScreen() {
   const gt = useGT();

@@ -1,14 +1,15 @@
-import { Chip } from "../../components/ui/Chip";
-import { PullRequestSectionHeading } from "./PullRequestSectionHeading";
 import type { PullRequestListEntry, PullRequestSummary } from "@t3tools/contracts";
 import { T, useGT, useMessages } from "gt-react-native";
 import { View } from "react-native";
+
+import { Chip } from "../../components/ui/Chip";
 import { PullRequestCardGroup, PullRequestCardRow } from "./PullRequestControls";
+import { PullRequestGlyph } from "./pullRequestGlyphs";
+import { pullRequestListReviewStatus } from "./pullRequestList";
+import { PullRequestSectionHeading } from "./PullRequestSectionHeading";
 import { PullRequestStackCard } from "./PullRequestStackCard";
 import type { PullRequestParams } from "./usePullRequestDiff";
 import type { PullRequestStackState } from "./usePullRequestStack";
-import { pullRequestListReviewStatus } from "./pullRequestList";
-import { PullRequestGlyph } from "./pullRequestGlyphs";
 
 export function PullRequestOverviewLoading({
   summary,

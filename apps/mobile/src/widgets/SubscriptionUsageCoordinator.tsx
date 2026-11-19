@@ -1,17 +1,18 @@
 import { useAtomValue } from "@effect/atom-react";
 import { Atom } from "effect/reactivity";
-import { useLocale, useMessages } from "gt-react-native";
 import * as Linking from "expo-linking";
+import { useLocale, useMessages } from "gt-react-native";
 import { useEffect, useEffectEvent } from "react";
 import { Platform } from "react-native";
-import { useAppearancePreferences } from "../features/settings/appearance/AppearancePreferencesProvider";
+
 import { environmentCatalog } from "../connection/catalog";
+import { useAppearancePreferences } from "../features/settings/appearance/AppearancePreferencesProvider";
+import type { MessageResolver } from "../i18n/messages";
 import { environmentPresentations } from "../state/presentation";
 import { republishAgentActivityWidget } from "./publishAgentActivityWidget";
 import { publishSubscriptionUsage } from "./publishSubscriptionUsage";
 import { buildSubscriptionUsageSnapshot } from "./subscriptionUsageSnapshot";
 import { createWidgetTheme } from "./widgetTheme";
-import type { MessageResolver } from "../i18n/messages";
 
 // Isolate quota changes from the much busier thread/config presentation stream.
 // One atom per UI language, so a language switch republishes the widget's copy.

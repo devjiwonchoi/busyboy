@@ -6,10 +6,9 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 
 import { definition } from "../shared/definition.ts";
-
 import * as AzureDevOpsCli from "./AzureDevOpsCli.ts";
-import * as AzureDevOpsPullRequestCli from "./AzureDevOpsPullRequestCli.ts";
 import * as AzureDevOpsIssueTracker from "./AzureDevOpsIssueTracker.ts";
+import * as AzureDevOpsPullRequestCli from "./AzureDevOpsPullRequestCli.ts";
 import * as AzureDevOpsPullRequestProvider from "./AzureDevOpsPullRequestProvider.ts";
 import * as AzureDevOpsSourceControlProvider from "./AzureDevOpsSourceControlProvider.ts";
 

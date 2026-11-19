@@ -2,8 +2,8 @@ import type { ReactNode } from "react";
 import { Platform, useWindowDimensions, View } from "react-native";
 
 import { cn } from "../../lib/cn";
-import { AppText } from "./AppText";
 import { SymbolView, type AppSymbolName } from "./AppSymbol";
+import { AppText } from "./AppText";
 
 export interface ListRowContentProps {
   readonly icon?: AppSymbolName;

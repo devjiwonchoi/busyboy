@@ -1,6 +1,3 @@
-import type { CSSProperties } from "react";
-import { useState } from "react";
-import { msg, useGT, useMessages } from "gt-react";
 import {
   DEFAULT_ENVIRONMENT_IDENTIFICATION_MODE,
   DEFAULT_UNIFIED_SETTINGS,
@@ -14,18 +11,22 @@ import {
   MIN_GLASS_OPACITY,
   MIN_PANEL_ANIMATION_DURATION_MS,
 } from "@t3tools/contracts/settings";
+import { msg, useGT, useMessages } from "gt-react";
+import type { CSSProperties } from "react";
+import { useState } from "react";
+
+import { useCustomThemes } from "../../hooks/useCustomThemes";
+import { useEnvironmentIdentificationMode } from "../../hooks/useSettings";
+import { useTheme } from "../../hooks/useTheme";
 import {
   resolveSidebarStageBackdropVariant,
   type SidebarStageBackdropVariant,
   useEnvironmentStageLabel,
 } from "../SidebarStageBackdrop";
-import { useCustomThemes } from "../../hooks/useCustomThemes";
-import { useEnvironmentIdentificationMode } from "../../hooks/useSettings";
-import { useTheme } from "../../hooks/useTheme";
-import { useScopedSettings, useUpdateScopedSettings } from "./useScopedSettings";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
 import { Switch } from "../ui/switch";
-import { ThemeLibrary } from "./ThemeSettings";
+import { AdvancedSettings } from "./AdvancedSettings";
+import { PanelAnimationsPreview } from "./PanelAnimationsPreview";
 import {
   SettingResetButton,
   SettingsPageContainer,
@@ -33,10 +34,10 @@ import {
   SettingsSection,
 } from "./settingsLayout";
 import { useSearchableSetting } from "./settingsSearch";
-import { AdvancedSettings } from "./AdvancedSettings";
-import { PanelAnimationsPreview } from "./PanelAnimationsPreview";
-import { TypographySection } from "./TypographySettings";
+import { ThemeLibrary } from "./ThemeSettings";
 import { ThreadDetailsItemsRow } from "./ThreadDetailsItemsRow";
+import { TypographySection } from "./TypographySettings";
+import { useScopedSettings, useUpdateScopedSettings } from "./useScopedSettings";
 
 const ENVIRONMENT_IDENTIFICATION_LABELS: Record<EnvironmentIdentificationMode, string> = {
   artwork: msg("Artwork"),

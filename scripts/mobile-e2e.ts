@@ -20,13 +20,13 @@ import {
   renderReport,
 } from "./mobile-e2e/report.ts";
 import { reviewPose } from "./mobile-e2e/review.ts";
+import { SHOWCASE_ENVIRONMENTS } from "./mobile-showcase-environment.ts";
 import {
   reserveAvailablePort,
   startShowcaseEnvironments,
   stopProcess,
   waitForPort,
 } from "./mobile-showcase.ts";
-import { SHOWCASE_ENVIRONMENTS } from "./mobile-showcase-environment.ts";
 
 const REPO_ROOT = NodePath.resolve(NodePath.dirname(NodeURL.fileURLToPath(import.meta.url)), "..");
 

@@ -1,6 +1,6 @@
-import { EnvironmentId, ProjectId, ThreadId } from "@t3tools/contracts";
 import { scopeThreadRef } from "@t3tools/client-runtime/environment";
 import type { EnvironmentProject } from "@t3tools/client-runtime/state/shell";
+import { EnvironmentId, ProjectId, ThreadId } from "@t3tools/contracts";
 import { AsyncResult, type Atom } from "effect/reactivity";
 import { expect, it, vi } from "vite-plus/test";
 
@@ -98,14 +98,14 @@ vi.mock(import("../../state/use-atom-command"), async (original) => {
   };
 });
 
-import { AppAtomRegistryProvider, appAtomRegistry } from "../../rpc/atomRegistry";
-import { allReachableShellsLiveAtom } from "../../state/shell";
 import { selectThreadDiffPanelSelection, useDiffPanelStore } from "../../diffPanelStore";
 import {
   selectActiveRightPanel,
   selectActiveRightPanelSurface,
   useRightPanelStore,
 } from "../../rightPanelStore";
+import { AppAtomRegistryProvider, appAtomRegistry } from "../../rpc/atomRegistry";
+import { allReachableShellsLiveAtom } from "../../state/shell";
 import { DesktopWebLinkCoordinator } from "./DesktopWebLinkCoordinator";
 
 const discoverySettled = allReachableShellsLiveAtom as Atom.Writable<boolean>;

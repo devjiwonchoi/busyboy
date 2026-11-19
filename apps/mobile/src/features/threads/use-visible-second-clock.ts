@@ -2,8 +2,8 @@ import { useIsFocused } from "@react-navigation/native";
 import { secondTick } from "@t3tools/client-runtime/clock";
 import { useSyncExternalStore } from "react";
 
-import { useAppActive } from "../../lib/appState";
 import { usePaneRole } from "../../components/ui/Pane";
+import { useAppActive } from "../../lib/appState";
 
 const subscribeNever = () => () => undefined;
 

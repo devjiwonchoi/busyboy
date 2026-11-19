@@ -1,14 +1,17 @@
-import * as Effect from "effect/Effect";
-import * as NodePathLayer from "@effect/platform-node/NodePath";
-import * as ProcessRunner from "../processRunner.ts";
-import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 // @effect-diagnostics nodeBuiltinImport:off - tests the same standalone script used by local and SSH hosts.
-import { describe, expect, it } from "@effect/vitest";
+
+import * as NodeChildProcess from "node:child_process";
 import * as NodeFSP from "node:fs/promises";
 import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
-import * as NodeChildProcess from "node:child_process";
 import * as NodeUtil from "node:util";
+
+import * as NodePathLayer from "@effect/platform-node/NodePath";
+import { describe, expect, it } from "@effect/vitest";
+import * as Effect from "effect/Effect";
+import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
+
+import * as ProcessRunner from "../processRunner.ts";
 import { pruneLocalDeviceTools, deviceToolMaintenanceScript } from "./deviceToolMaintenance.ts";
 
 const exec = NodeUtil.promisify(NodeChildProcess.execFile);

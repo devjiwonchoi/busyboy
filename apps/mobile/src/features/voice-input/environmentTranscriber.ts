@@ -1,12 +1,12 @@
-import { msg } from "gt-react-native";
-
-import { m } from "../../i18n/messages";
 import {
   VoiceTranscriptionError,
   VOICE_RECORDING_LIMIT_SECONDS,
   throwIfVoiceTranscriptionAborted,
   type VoiceTranscriber,
 } from "@t3tools/client-runtime/voice-input";
+import { msg } from "gt-react-native";
+
+import { m } from "../../i18n/messages";
 
 const pcmBytesPerSecond = 16_000 * 2;
 const maxPcmBytes = pcmBytesPerSecond * VOICE_RECORDING_LIMIT_SECONDS;

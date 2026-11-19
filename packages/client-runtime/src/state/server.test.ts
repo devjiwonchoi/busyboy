@@ -1,3 +1,4 @@
+import { describe, expect, it } from "@effect/vitest";
 import {
   EnvironmentId,
   ProviderDriverKind,
@@ -15,8 +16,6 @@ import {
   type ServerSelfUpdateOutcome,
   WS_METHODS,
 } from "@t3tools/contracts";
-import { describe, expect, it } from "@effect/vitest";
-import { vi } from "vite-plus/test";
 import * as Cause from "effect/Cause";
 import * as Clock from "effect/Clock";
 import * as Deferred from "effect/Deferred";
@@ -27,15 +26,16 @@ import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Queue from "effect/Queue";
+import { AsyncResult, Atom, AtomRegistry } from "effect/reactivity";
 import * as Ref from "effect/Ref";
+import { RpcClientError } from "effect/rpc";
 import * as Scheduler from "effect/Scheduler";
 import * as Schema from "effect/Schema";
+import * as Socket from "effect/socket/Socket";
 import * as Stream from "effect/Stream";
 import * as SubscriptionRef from "effect/SubscriptionRef";
-import { AsyncResult, Atom, AtomRegistry } from "effect/reactivity";
 import * as TestClock from "effect/testing/TestClock";
-import { RpcClientError } from "effect/rpc";
-import * as Socket from "effect/socket/Socket";
+import { vi } from "vite-plus/test";
 
 import {
   AVAILABLE_CONNECTION_STATE,
@@ -45,8 +45,8 @@ import {
 } from "../connection/model.ts";
 import * as EnvironmentRegistry from "../connection/registry.ts";
 import * as EnvironmentSupervisor from "../connection/supervisor.ts";
-import { RpcPermissionGuard } from "../rpc/client.ts";
 import * as Persistence from "../platform/persistence.ts";
+import { RpcPermissionGuard } from "../rpc/client.ts";
 import type { WsRpcProtocolClient } from "../rpc/protocol.ts";
 import type { RpcSession } from "../rpc/session.ts";
 import {

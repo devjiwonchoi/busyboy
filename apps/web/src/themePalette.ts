@@ -1,12 +1,4 @@
-import { pipe } from "effect/Function";
 import { THEME_CSS_MAX_LENGTH, type EnvironmentTheme } from "@t3tools/contracts";
-import * as Equal from "effect/Equal";
-import * as Option from "effect/Option";
-import * as Schema from "effect/Schema";
-import { Atom } from "effect/reactivity";
-import { msg } from "gt-react";
-import "culori/css";
-import { converter, parse } from "culori/fn";
 import {
   BUILT_IN_THEMES,
   EMBER_THEME,
@@ -24,17 +16,25 @@ import {
   type ThemeDefinition,
   type ThemeVariants,
 } from "@t3tools/shared/themePalettes";
+import { converter, parse } from "culori/fn";
+import * as Equal from "effect/Equal";
+import { pipe } from "effect/Function";
+import * as Option from "effect/Option";
+import { Atom } from "effect/reactivity";
+import "culori/css";
+import * as Schema from "effect/Schema";
+import { msg } from "gt-react";
+
+import { m } from "./i18n/messages";
 import {
   CONTEXT_CHIP_ACCENTS,
   contextChipColorVariable,
   type ContextChipAccentKind,
 } from "./lib/contextChipAccents";
-
-import { m } from "./i18n/messages";
 import { appAtomRegistry, subscribeAtomChanges } from "./rpc/atomRegistry";
+import { themeServerEnvironmentThemesAtom } from "./state/server";
 import { applyThemeBackground } from "./themeBackground";
 import { applyThemeCss } from "./themeCss";
-import { themeServerEnvironmentThemesAtom } from "./state/server";
 
 export { EMBER_THEME, GROVE_THEME, IRIS_THEME, OCEAN_THEME, T3_CHAT_THEME, THEME_COLOR_ROLES };
 export type { ThemeAppearance, ThemeColorRole, ThemeColors, ThemeDefinition, ThemeVariants };

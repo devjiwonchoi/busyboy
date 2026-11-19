@@ -2,8 +2,8 @@ import { AtomRegistry } from "effect/reactivity";
 import { describe, expect, it, vi } from "vite-plus/test";
 
 import type { DraftComposerAttachment } from "../../lib/composerImages";
-import type { IncomingShareDraft } from "../sharing/incoming-share-model";
 import { undoComposerDraftMergeState, type ComposerDraft } from "../../state/use-composer-drafts";
+import type { IncomingShareDraft } from "../sharing/incoming-share-model";
 import {
   makeIncomingShareImports,
   type ShareImportDeps,

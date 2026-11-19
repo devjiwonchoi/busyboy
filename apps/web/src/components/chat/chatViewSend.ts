@@ -1,4 +1,12 @@
 import {
+  wasBootstrapThreadDeleted,
+  wasBootstrapThreadNotCreated,
+} from "@t3tools/client-runtime/errors";
+import {
+  squashAtomCommandFailure,
+  type AtomCommandResult,
+} from "@t3tools/client-runtime/state/runtime";
+import {
   CommandId,
   type EnvironmentId,
   type ModelSelection,
@@ -6,27 +14,14 @@ import {
   type ThreadId,
   PROVIDER_SEND_TURN_MAX_ATTACHMENTS,
 } from "@t3tools/contracts";
-import {
-  wasBootstrapThreadDeleted,
-  wasBootstrapThreadNotCreated,
-} from "@t3tools/client-runtime/errors";
+import { ATTACHMENT_ONLY_BOOTSTRAP_PROMPT } from "@t3tools/shared/composerContextReferences";
+import { createModelSelection } from "@t3tools/shared/model";
 import { Atom } from "effect/reactivity";
 import { msg } from "gt-react";
-import {
-  squashAtomCommandFailure,
-  type AtomCommandResult,
-} from "@t3tools/client-runtime/state/runtime";
-import { m } from "../../i18n/messages";
-import { readLocalApi } from "../../localApi";
-import {
-  getUploadedAttachments,
-  refreshExpiredAttachmentUploads,
-} from "../../lib/attachmentUploadQueue";
-import { findRevertCheckpoint } from "../../session-logic";
-import { type ChatMessage } from "../../types";
+
 import { randomUUID } from "~/lib/utils";
-import { stackedThreadToast, toastManager } from "../ui/toast";
 import { newThreadId } from "~/lib/utils";
+
 import {
   type ComposerFileAttachment,
   type ComposerImageAttachment,
@@ -34,10 +29,16 @@ import {
   useComposerDraftStore,
   DraftId,
 } from "../../composerDraftStore";
-import { ATTACHMENT_ONLY_BOOTSTRAP_PROMPT } from "@t3tools/shared/composerContextReferences";
-import { createModelSelection } from "@t3tools/shared/model";
+import { m } from "../../i18n/messages";
+import {
+  getUploadedAttachments,
+  refreshExpiredAttachmentUploads,
+} from "../../lib/attachmentUploadQueue";
+import { readLocalApi } from "../../localApi";
 import type { ProviderInstanceEntry } from "../../providerInstances";
-import { getComposerPromptInjectionState, getComposerProviderState } from "./composerProviderState";
+import { findRevertCheckpoint } from "../../session-logic";
+import { readPreparedConnection } from "../../state/session";
+import { type ChatMessage } from "../../types";
 import {
   formatOutgoingPrompt,
   getAntigravitySendBlockReason,
@@ -47,8 +48,9 @@ import {
   prepareRevertedMessageAttachments,
   waitForRevertedMessage,
 } from "../ChatView.logic";
-import { readPreparedConnection } from "../../state/session";
+import { stackedThreadToast, toastManager } from "../ui/toast";
 import { recallComposerMessage } from "./composerPromptHistory";
+import { getComposerPromptInjectionState, getComposerProviderState } from "./composerProviderState";
 
 // Kept per route so a send in flight, and the multiple-model selections, survive
 // ChatView remounting while the user navigates.

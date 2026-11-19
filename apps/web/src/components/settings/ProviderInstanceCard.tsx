@@ -1,23 +1,3 @@
-import { Spinner } from "~/components/ui/spinner";
-
-import {
-  AlertTriangleIcon,
-  CheckIcon,
-  ArrowUpCircleIcon,
-  CopyIcon,
-  DownloadIcon,
-  ExternalLinkIcon,
-  LayersIcon,
-  PlusIcon,
-  Trash2Icon,
-  XIcon,
-  LockIcon,
-  LockOpenIcon,
-} from "lucide-react";
-import * as Arr from "effect/Array";
-import * as Result from "effect/Result";
-import { Fragment, useState, type ReactElement, type ReactNode } from "react";
-import { T, useGT, useMessages, Var } from "gt-react";
 import {
   isProviderDriverKind,
   resolveProviderInstanceEnabled,
@@ -32,44 +12,53 @@ import {
   type ServerProvider,
   type ServerProviderModel,
 } from "@t3tools/contracts";
-
-import {
-  type CustomModelDefinition,
-  readCustomModelEntries,
-  toCustomModelSetting,
-} from "@t3tools/shared/model";
-import { cn } from "../../lib/utils";
-import { useCopyToClipboard } from "../../hooks/useCopyToClipboard";
-import { useStableCallback } from "../../hooks/useStableCallback";
-import { normalizeProviderAccentColor } from "../../providerInstances";
-import { Badge } from "../ui/badge";
-import { Button } from "../ui/button";
-import { DraftInput } from "../ui/draft-input";
-import { SecretSourceInput, type SecretSource } from "./SecretSourceInput";
-import { Popover, PopoverPopup, PopoverTrigger } from "../ui/popover";
-import { Switch } from "../ui/switch";
-import { ManagedControl, ManagedNotice } from "../ManagedPolicy";
-import { managedInstanceLocks, useManagedPolicy } from "../../state/managedPolicy";
 import { disallowedProviderMessage, isManagedDriverAllowed } from "@t3tools/contracts";
-import { stackedThreadToast, toastManager } from "../ui/toast";
-import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import type {
   ProviderClientDefinition,
   ProviderEnvironmentField,
 } from "@t3tools/provider-core/client";
 import {
-  deriveProviderSettingsFields,
-  ProviderSettingsForm,
-  reconcileRowsDraft,
-  seedRowsDraft,
-} from "./ProviderSettingsForm";
-import { ProviderModelsSection } from "./ProviderModelsSection";
+  type CustomModelDefinition,
+  readCustomModelEntries,
+  toCustomModelSetting,
+} from "@t3tools/shared/model";
+import * as Arr from "effect/Array";
+import * as Result from "effect/Result";
+import { T, useGT, useMessages, Var } from "gt-react";
+import {
+  AlertTriangleIcon,
+  CheckIcon,
+  ArrowUpCircleIcon,
+  CopyIcon,
+  DownloadIcon,
+  ExternalLinkIcon,
+  LayersIcon,
+  PlusIcon,
+  Trash2Icon,
+  XIcon,
+  LockIcon,
+  LockOpenIcon,
+} from "lucide-react";
+import { Fragment, useState, type ReactElement, type ReactNode } from "react";
+
+import { Spinner } from "~/components/ui/spinner";
+
+import { useCopyToClipboard } from "../../hooks/useCopyToClipboard";
+import { useStableCallback } from "../../hooks/useStableCallback";
+import { cn } from "../../lib/utils";
+import { normalizeProviderAccentColor } from "../../providerInstances";
+import { managedInstanceLocks, useManagedPolicy } from "../../state/managedPolicy";
 import { ProviderInstanceIcon } from "../chat/ProviderInstanceIcon";
-import { ProviderAccentColorPicker } from "./ProviderAccentColorPicker";
-import { RedactedSensitiveText } from "./RedactedSensitiveText";
-import { SettingResetButton, SettingsRow, SettingsSection } from "./settingsLayout";
+import { ManagedControl, ManagedNotice } from "../ManagedPolicy";
+import { getProviderRestartNotice } from "../ProviderUpdateLaunchNotification.logic";
+import { Badge } from "../ui/badge";
+import { Button } from "../ui/button";
+import { DraftInput } from "../ui/draft-input";
+import { Popover, PopoverPopup, PopoverTrigger } from "../ui/popover";
+import { Switch } from "../ui/switch";
+import { stackedThreadToast, toastManager } from "../ui/toast";
+import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { AcpSessionManagementSection } from "./AcpSessionManagementSection";
-import { FoldedSettingsSection } from "./FoldedSettingsSection";
 import { readCodexSetupMode } from "./CodexSetupSection.logic";
 import {
   type CustomModelSave,
@@ -77,7 +66,15 @@ import {
   pendingCustomModelSaves,
   settleCustomModelSave,
 } from "./customModelSaves.logic";
-import { getProviderRestartNotice } from "../ProviderUpdateLaunchNotification.logic";
+import { FoldedSettingsSection } from "./FoldedSettingsSection";
+import { ProviderAccentColorPicker } from "./ProviderAccentColorPicker";
+import { ProviderModelsSection } from "./ProviderModelsSection";
+import {
+  deriveProviderSettingsFields,
+  ProviderSettingsForm,
+  reconcileRowsDraft,
+  seedRowsDraft,
+} from "./ProviderSettingsForm";
 import {
   getProviderVersionAdvisoryPresentation,
   PROVIDER_STATUS_STYLES,
@@ -86,6 +83,9 @@ import {
   getProviderVersionLabel,
   providerAuthLabel,
 } from "./providerStatus";
+import { RedactedSensitiveText } from "./RedactedSensitiveText";
+import { SecretSourceInput, type SecretSource } from "./SecretSourceInput";
+import { SettingResetButton, SettingsRow, SettingsSection } from "./settingsLayout";
 
 const ENVIRONMENT_VARIABLE_NAME_PATTERN = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
 

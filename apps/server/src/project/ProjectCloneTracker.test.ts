@@ -1,5 +1,5 @@
-import { SourceControlProviderKind } from "@t3tools/contracts";
 import { describe, expect, it } from "@effect/vitest";
+import { SourceControlProviderKind } from "@t3tools/contracts";
 import {
   OrchestrationDispatchCommandError,
   ProjectId,
@@ -15,9 +15,9 @@ import * as Stream from "effect/Stream";
 import * as TestClock from "effect/testing/TestClock";
 
 import * as SourceControlRepositoryService from "../sourceControl/SourceControlRepositoryService.ts";
+import { parseGitCloneProgressLine } from "./gitCloneProgress.ts";
 import * as ProjectCloneTracker from "./ProjectCloneTracker.ts";
 import { ProjectConflictError } from "./ProjectService.ts";
-import { parseGitCloneProgressLine } from "./gitCloneProgress.ts";
 
 const projectId = ProjectId.make("project-1");
 const startInput = {

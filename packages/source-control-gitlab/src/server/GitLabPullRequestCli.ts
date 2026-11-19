@@ -1,19 +1,4 @@
-import { removeAgentCredits } from "@t3tools/source-control-core/server/mergeMessage";
-import { isCommitSha } from "@t3tools/source-control-core/server/pullRequestUtils";
-import {
-  diffFileSection,
-  truncateLongDiffLines,
-} from "@t3tools/source-control-core/server/diffFileRevisions";
-import * as Context from "effect/Context";
-import * as Digest from "effect/crypto/Digest";
-import * as DateTime from "effect/DateTime";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import * as Option from "effect/Option";
-import * as Result from "effect/Result";
-import * as Schema from "effect/Schema";
 import { resolvePullRequestAuthorFilter, VcsProcessExitError } from "@t3tools/contracts";
-import { quoteGitPatchPath } from "@t3tools/shared/gitPatchPath";
 import type {
   PullRequestAction,
   PullRequestActor,
@@ -38,6 +23,27 @@ import type {
   PullRequestReviewVerdict,
   PullRequestReviewerCandidateList,
 } from "@t3tools/contracts";
+import { quoteGitPatchPath } from "@t3tools/shared/gitPatchPath";
+import {
+  diffFileSection,
+  truncateLongDiffLines,
+} from "@t3tools/source-control-core/server/diffFileRevisions";
+import { removeAgentCredits } from "@t3tools/source-control-core/server/mergeMessage";
+import type {
+  ProviderChangeRequestSummary,
+  ProviderChangeRequestWatchFingerprint,
+  ProviderFileStats,
+  ProviderListCursor,
+} from "@t3tools/source-control-core/server/PullRequestProvider";
+import { isCommitSha } from "@t3tools/source-control-core/server/pullRequestUtils";
+import * as Context from "effect/Context";
+import * as Digest from "effect/crypto/Digest";
+import * as DateTime from "effect/DateTime";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
 
 import * as GitLabCli from "./GitLabCli.ts";
 import {
@@ -94,12 +100,6 @@ import {
   type GitLabMergeRequestListState,
   type GitLabProjectUsers,
 } from "./gitLabMergeRequestJson.ts";
-import type {
-  ProviderChangeRequestSummary,
-  ProviderChangeRequestWatchFingerprint,
-  ProviderFileStats,
-  ProviderListCursor,
-} from "@t3tools/source-control-core/server/PullRequestProvider";
 
 export class GitLabMergeRequestReadError extends Schema.TaggedError<GitLabMergeRequestReadError>()(
   "GitLabMergeRequestReadError",

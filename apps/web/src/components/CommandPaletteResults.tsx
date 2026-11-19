@@ -1,19 +1,23 @@
-import { startPaletteThreadDrag } from "./CommandPalette.drag";
-import { useLegendListRef } from "~/hooks/useLegendListRef";
-import { type ResolvedKeybindingsConfig } from "@t3tools/contracts";
 import { LegendList, type LegendListRef } from "@legendapp/list/react";
+import { type ResolvedKeybindingsConfig } from "@t3tools/contracts";
+import { T } from "gt-react";
 import { ChevronRightIcon } from "lucide-react";
 import { type ReactNode, type RefObject, useState } from "react";
-import { T } from "gt-react";
+
+import { useLegendListRef } from "~/hooks/useLegendListRef";
 import { cn } from "~/lib/utils";
 import { textDirection } from "~/textDirection";
+
 import { shortcutLabelForCommand } from "../keybindings";
+import { startPaletteThreadDrag } from "./CommandPalette.drag";
 import {
   type CommandPaletteActionItem,
   type CommandPaletteGroup,
   type CommandPaletteRow,
   type CommandPaletteSubmenuItem,
 } from "./CommandPalette.logic";
+import { ProjectPinButton } from "./ProjectPinButton";
+import { SearchMatchHintLine, ThreadSearchMatchExcerpt } from "./ThreadSearchMatch";
 import {
   CommandCollection,
   CommandGroup,
@@ -25,8 +29,6 @@ import {
   CommandShortcut,
 } from "./ui/command";
 import { getVirtualizedScrollFadeClassName } from "./ui/scroll-area";
-import { ProjectPinButton } from "./ProjectPinButton";
-import { SearchMatchHintLine, ThreadSearchMatchExcerpt } from "./ThreadSearchMatch";
 
 interface CommandPaletteResultsProps {
   emptyStateMessage?: string;

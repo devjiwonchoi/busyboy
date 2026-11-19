@@ -1,11 +1,12 @@
 import { describe, expect, it } from "vite-plus/test";
+
+import { deriveLayout, deriveWorkspacePaneLayout } from "./layout";
 import {
   deriveBottomControlInsets,
   deriveContentSideInsets,
   deriveSharedTopBand,
   type NativeLayoutMetrics,
 } from "./reserved-regions";
-import { deriveLayout, deriveWorkspacePaneLayout } from "./layout";
 
 const innerDisplay: NativeLayoutMetrics = {
   width: 960,

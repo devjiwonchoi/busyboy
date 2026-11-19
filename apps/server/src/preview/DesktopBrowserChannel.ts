@@ -1,7 +1,11 @@
 // @effect-diagnostics nodeBuiltinImport:off - Bridges Playwright's WebSocket transport to the desktop's fds.
 /** Playwright needs a CDP WebSocket; the secret loopback endpoint relays desktop debugger frames over bootstrap fds. */
-import * as NodeStream from "@effect/platform-node/NodeStream";
+
+import * as NodeCrypto from "node:crypto";
+import * as NodeNet from "node:net";
+
 import * as NodeSocketServer from "@effect/platform-node/NodeSocketServer";
+import * as NodeStream from "@effect/platform-node/NodeStream";
 import {
   DesktopBrowserCommand,
   DesktopBrowserEvent,
@@ -11,6 +15,7 @@ import {
 import * as Context from "effect/Context";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as Ndjson from "effect/encoding/Ndjson";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as PubSub from "effect/PubSub";
@@ -19,9 +24,6 @@ import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
 import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
-import * as Ndjson from "effect/encoding/Ndjson";
-import * as NodeCrypto from "node:crypto";
-import * as NodeNet from "node:net";
 
 import * as ServerConfig from "../config.ts";
 import { writeAllToFileDescriptor } from "../resourceTelemetry/DesktopTelemetryReceiver.ts";

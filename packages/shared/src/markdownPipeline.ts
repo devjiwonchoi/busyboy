@@ -9,31 +9,32 @@ import type {
   TableCell,
   Text,
 } from "mdast";
-import { remarkKeepWindowsPaths } from "./markdownWindowsPaths.ts";
-import { type PluggableList, type Processor, type Transformer, unified } from "unified";
-import remarkParse from "remark-parse";
-import remarkRehype from "remark-rehype";
 import { find, html } from "property-information";
 import rehypeRaw from "rehype-raw";
 import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
 import remarkBreaks from "remark-breaks";
 import remarkGfm from "remark-gfm";
+import remarkParse from "remark-parse";
+import remarkRehype from "remark-rehype";
+import { type PluggableList, type Processor, type Transformer, unified } from "unified";
+
+import {
+  CODEX_ARTIFACT_TEMPLATE_HAST_PROPERTIES,
+  remarkCodexDirectives,
+} from "./codexMarkdownDirectives.ts";
 import { remarkGithubAlerts } from "./markdownGithubAlerts.ts";
-import { remarkNormalizeListItemIndentation } from "./markdownListIndentation.ts";
-import { remarkKeepOrderedListNumbers } from "./markdownOrderedListNumbers.ts";
 import {
   remarkEnableLeadingWhitespace,
   remarkKeepLeadingWhitespace,
 } from "./markdownLeadingWhitespace.ts";
 import {
-  CODEX_ARTIFACT_TEMPLATE_HAST_PROPERTIES,
-  remarkCodexDirectives,
-} from "./codexMarkdownDirectives.ts";
-import {
   absoluteFilePathMatches,
   isWindowsDrivePathHref,
   normalizeMarkdownLinkDestination,
 } from "./markdownLinks.ts";
+import { remarkNormalizeListItemIndentation } from "./markdownListIndentation.ts";
+import { remarkKeepOrderedListNumbers } from "./markdownOrderedListNumbers.ts";
+import { remarkKeepWindowsPaths } from "./markdownWindowsPaths.ts";
 import { isWindowsAbsolutePath } from "./path.ts";
 import { THREAD_LINK_PROTOCOL } from "./threadLinks.ts";
 

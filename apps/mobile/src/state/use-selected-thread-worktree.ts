@@ -1,6 +1,6 @@
+import { resolvePreferredThreadWorktreePath } from "../features/terminal/terminalLaunchContext";
 import { useSelectedThreadWorktreePath } from "./use-thread-detail";
 import { useThreadSelection } from "./use-thread-selection";
-import { resolvePreferredThreadWorktreePath } from "../features/terminal/terminalLaunchContext";
 
 export function useSelectedThreadWorktree() {
   const { selectedThread, selectedThreadProject } = useThreadSelection();

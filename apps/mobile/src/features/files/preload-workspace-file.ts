@@ -1,18 +1,18 @@
-import { AuthFilesystemReadScope } from "@t3tools/contracts";
-import { readEnvironmentScope } from "../../state/session";
 import { executeAtomQuery } from "@t3tools/client-runtime/state/runtime";
+import { AuthFilesystemReadScope } from "@t3tools/contracts";
 import type { EnvironmentId } from "@t3tools/contracts";
 import {
   isWorkspaceBrowserPreviewPath,
   isWorkspaceImagePreviewPath,
 } from "@t3tools/shared/filePreview";
 
+import type { HighlightScheme } from "../../lib/highlights";
 import { appAtomRegistry } from "../../state/atom-registry";
 import { projectEnvironment } from "../../state/projects";
+import { readEnvironmentScope } from "../../state/session";
 import { isVideoPreviewFile } from "./filePath";
 import { prepareSourceFileDocument } from "./source-file-document";
 import { sourceHighlightAtom } from "./sourceHighlightingState";
-import type { HighlightScheme } from "../../lib/highlights";
 
 const inFlightPreloads = new Map<string, Promise<void>>();
 const MAX_HIGHLIGHT_PRELOAD_CHARACTERS = 256 * 1024;

@@ -1,14 +1,14 @@
 // Scenarios: e2e tests that run against the real dev stack. See docs/operations/scenarios.md.
-import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
-import * as NodeServices from "@effect/platform-node/NodeServices";
 import { mobile, type DeviceProvider } from "@e2e-dev/mobile";
 import { web } from "@e2e-dev/web";
+import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
+import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as HostProcess from "@t3tools/shared/HostProcess";
 import { createAgentDeviceClient } from "agent-device";
 import type { E2EConfig } from "e2e";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import * as Path from "effect/Path";
-import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Schedule from "effect/Schedule";
 
 import { run, ScenarioError } from "./scenarios/shell.ts";

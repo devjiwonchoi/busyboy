@@ -4,11 +4,11 @@ import type {
   DesktopServerExposureState,
 } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
-import * as Schema from "effect/Schema";
 import { Atom } from "effect/reactivity";
+import * as Schema from "effect/Schema";
+import { msg } from "gt-react";
 
 import { appAtomRegistry } from "~/rpc/atomRegistry";
-import { msg } from "gt-react";
 
 import { m } from "../i18n/messages";
 

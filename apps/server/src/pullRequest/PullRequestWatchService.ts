@@ -15,6 +15,10 @@ import * as Schema from "effect/Schema";
 
 import * as Orchestrator from "../orchestration-v2/Orchestrator.ts";
 import * as ProjectService from "../project/ProjectService.ts";
+import {
+  threadPullRequestKeysEqual,
+  threadPullRequestsOf,
+} from "../sourceControl/threadPullRequests.ts";
 import * as PullRequestService from "./PullRequestService.ts";
 import {
   resolveTarget,
@@ -22,10 +26,6 @@ import {
   type PullRequestTargetError,
   type ResolvedTarget,
 } from "./pullRequestTarget.ts";
-import {
-  threadPullRequestKeysEqual,
-  threadPullRequestsOf,
-} from "../sourceControl/threadPullRequests.ts";
 
 export class PullRequestWatchFailedError extends Schema.TaggedError<PullRequestWatchFailedError>()(
   "PullRequestWatchFailedError",

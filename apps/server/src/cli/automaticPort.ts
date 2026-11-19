@@ -1,8 +1,8 @@
 import * as NetService from "@t3tools/shared/Net";
+import * as CliError from "effect/cli/CliError";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
-import * as CliError from "effect/cli/CliError";
 
 import { queryWindowsTcpListeners } from "../process/windowsTcpListeners.ts";
 import * as ProcessRunner from "../processRunner.ts";

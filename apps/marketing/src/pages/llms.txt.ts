@@ -1,7 +1,7 @@
 import type { APIRoute } from "astro";
 
-import { ANDROID_PLAY_STORE_URL, GITHUB_REPOSITORY_URL, IOS_APP_STORE_URL } from "../lib/site";
 import { absoluteUrl, SITE_TAGLINE } from "../lib/seo";
+import { ANDROID_PLAY_STORE_URL, GITHUB_REPOSITORY_URL, IOS_APP_STORE_URL } from "../lib/site";
 
 // https://llmstxt.org: a plain index that tells AI agents which domain and links are official.
 export const GET: APIRoute = () => {

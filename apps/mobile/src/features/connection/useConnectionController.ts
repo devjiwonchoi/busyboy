@@ -3,14 +3,14 @@ import {
   RelayConnectionRegistration,
   RelayConnectionTarget,
 } from "@t3tools/client-runtime/connection";
+import { errorDisplayMessage } from "@t3tools/client-runtime/errors";
 import type { EnvironmentId } from "@t3tools/contracts";
 import type {
   RelayClientEnvironmentRecord,
   RelayEnvironmentStatusResponse,
 } from "@t3tools/contracts/relay";
-import { errorDisplayMessage } from "@t3tools/client-runtime/errors";
-import { useMessages } from "gt-react-native";
 import * as Option from "effect/Option";
+import { useMessages } from "gt-react-native";
 import { useMemo } from "react";
 
 import { environmentCatalog } from "../../connection/catalog";
@@ -18,9 +18,9 @@ import {
   connectPairingUrl as connectPairingUrlAtom,
   updateBearerConnection,
 } from "../../connection/onboarding";
-import { useWorkspaceEnvironments } from "../../state/workspace";
 import { relayEnvironmentDiscovery } from "../../state/relay";
 import { useAtomCommand } from "../../state/use-atom-command";
+import { useWorkspaceEnvironments } from "../../state/workspace";
 import { relayManagedEnvironmentIds } from "./environmentSections";
 
 export interface RelayEnvironmentView {

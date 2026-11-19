@@ -1,8 +1,10 @@
-import DocumentPages, { sanitizeDocumentHtml } from "./DocumentPages";
-import { act, render, stubGlobal, type Screen } from "../../../test/render";
 import { EnvironmentId, ThreadId } from "@t3tools/contracts";
 import { describe, expect, it, vi } from "vite-plus/test";
 import { page, userEvent } from "vite-plus/test/browser";
+
+import { act, render, stubGlobal, type Screen } from "../../../test/render";
+import DocumentPages, { sanitizeDocumentHtml } from "./DocumentPages";
+
 import "~/index.css";
 
 // Prepare the real worker before tests; Vite's worker transform adds a large inline source map.
@@ -65,21 +67,23 @@ vi.mock(import("./office/WordDocument"), async () => {
   };
 });
 
-import { getClientSettings } from "~/hooks/useSettings";
-import { AttachmentFilePreview } from "./AttachmentFilePreview";
-import LargeTextViewer from "./LargeTextViewer";
-import VirtualTablePreview from "./VirtualTablePreview";
-import { OfficeFilePreview } from "./OfficeFilePreview";
-import { MermaidFilePreview } from "./MermaidFilePreview";
-import JSZip from "jszip";
 import { boundedZip } from "@t3tools/client-runtime/zip/bounded-zip";
+import JSZip from "jszip";
+import type { ReactElement } from "react";
+
+import { getClientSettings } from "~/hooks/useSettings";
+
+import { AttachmentFilePreview } from "./AttachmentFilePreview";
+import type { BinaryWorkerResult } from "./binaryPreviewProtocol";
 import BinaryViewer from "./BinaryViewer";
 import { decodeImagePreview } from "./decodeImagePreview";
-import type { BinaryWorkerResult } from "./binaryPreviewProtocol";
 import type { TextPreviewResult } from "./largeTextProtocol";
-import type { ReactElement } from "react";
+import LargeTextViewer from "./LargeTextViewer";
+import { MermaidFilePreview } from "./MermaidFilePreview";
+import { OfficeFilePreview } from "./OfficeFilePreview";
 import type { OfficeWorkerResult } from "./officePreviewProtocol";
 import { previewErrorText } from "./previewFailureMessages";
+import VirtualTablePreview from "./VirtualTablePreview";
 
 // Real worker imports and WASM initialization can exceed waitFor's default second
 // when the full browser project runs concurrently on CI.

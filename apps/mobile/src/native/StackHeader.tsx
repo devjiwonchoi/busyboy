@@ -8,11 +8,12 @@ import type {
   NativeStackNavigationProp,
 } from "@react-navigation/native-stack";
 import { isValidElement, use, useEffect, useLayoutEffect, useMemo, useRef } from "react";
+import type { ColorValue } from "react-native";
+
 import {
   NativeWorkspaceTabActivityContext,
   WorkspaceSlotOptionsContext,
 } from "./v5-workspace-context";
-import type { ColorValue } from "react-native";
 
 export {
   nativeHeaderScrollEdgeEffects,

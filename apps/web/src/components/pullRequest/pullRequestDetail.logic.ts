@@ -1,17 +1,13 @@
 import {
-  parsePullRequestAnchor,
-  pullRequestAnchorMatchesUrl,
-  pullRequestLinkCommit,
-  resolvePullRequestReviewAnchor,
-} from "@t3tools/shared/pullRequestAnchor";
-import { stripInlineContextReferences } from "~/lib/composerContextReferences";
-import type { Nodes as MdastNodes } from "mdast";
-import { fromMarkdown } from "mdast-util-from-markdown";
-import {
   sourceControlClients,
   type ChangeRequestTerminology,
 } from "@t3tools/client-runtime/source-control-clients";
-import * as Schema from "effect/Schema";
+import {
+  legacyThreadPullRequestKey,
+  resolveThreadCurrentPullRequestLink,
+  threadPullRequestKeysEqual,
+  visibleThreadPullRequests,
+} from "@t3tools/client-runtime/thread-pull-requests";
 import {
   COMPOSER_CONTEXT_REVIEW_TEXT_MAX_CHARS,
   GitCommandError,
@@ -42,15 +38,18 @@ import {
   type VcsRef,
 } from "@t3tools/contracts";
 import {
-  legacyThreadPullRequestKey,
-  resolveThreadCurrentPullRequestLink,
-  threadPullRequestKeysEqual,
-  visibleThreadPullRequests,
-} from "@t3tools/client-runtime/thread-pull-requests";
-
+  parsePullRequestAnchor,
+  pullRequestAnchorMatchesUrl,
+  pullRequestLinkCommit,
+  resolvePullRequestReviewAnchor,
+} from "@t3tools/shared/pullRequestAnchor";
+import * as Schema from "effect/Schema";
 import { msg } from "gt-react";
+import type { Nodes as MdastNodes } from "mdast";
+import { fromMarkdown } from "mdast-util-from-markdown";
 
 import { m, type MessageResolver } from "~/i18n/messages";
+import { stripInlineContextReferences } from "~/lib/composerContextReferences";
 import { inferReviewCommentFenceLanguage, type ReviewCommentContext } from "~/reviewCommentContext";
 
 import { changeRequestTermKind } from "./changeRequestTerm";

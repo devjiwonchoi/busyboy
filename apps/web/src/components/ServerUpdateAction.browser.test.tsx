@@ -1,8 +1,8 @@
 import { RegistryContext } from "@effect/atom-react";
 import { AuthSessionState, type EnvironmentId } from "@t3tools/contracts";
 import * as Cause from "effect/Cause";
-import * as Schema from "effect/Schema";
 import { AsyncResult, Atom } from "effect/reactivity";
+import * as Schema from "effect/Schema";
 import type { ReactNode } from "react";
 import { describe, expect, it, vi } from "vite-plus/test";
 
@@ -58,6 +58,7 @@ vi.mock(import("./ui/toast"), async (original) => {
 
 import { resetConfirmDialogForTests } from "~/confirmDialog";
 import { appAtomRegistry } from "~/rpc/atomRegistry";
+
 import {
   ServerUpdateAction,
   ServerUpdatesAction,

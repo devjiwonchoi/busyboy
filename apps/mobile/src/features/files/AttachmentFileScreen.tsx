@@ -1,28 +1,28 @@
-import * as Dialog from "../../components/ui/Dialog";
 import { useNavigation, type StaticScreenProps } from "@react-navigation/native";
-import { EnvironmentId, ThreadId } from "@t3tools/contracts";
 import {
   clampFileAttachmentUploadBytes,
   formatAttachmentSize,
 } from "@t3tools/client-runtime/state/attachments";
+import { EnvironmentId, ThreadId } from "@t3tools/contracts";
 import { msg, useGT } from "gt-react-native";
 import { useRef, useState } from "react";
 import { View } from "react-native";
 
 import { AppBar, type AppBarMenu } from "../../components/ui/AppBar";
-import { m } from "../../i18n/messages";
+import * as Dialog from "../../components/ui/Dialog";
 import { FilePreviewModal, type FilePreviewSource } from "../../components/ui/FilePreviewModal";
+import { m } from "../../i18n/messages";
 import { useAttachmentDocument } from "../../lib/attachmentDocument";
 import { nativeViewerErrorMessage } from "../../lib/attachmentDownload";
 import { isFileBackedComposerAttachment } from "../../lib/composerImages";
 import { copyTextWithHaptic } from "../../lib/copyTextWithHaptic";
-import { removeComposerDraftAttachment, useComposerDraft } from "../../state/use-composer-drafts";
-import { useEnvironmentServerConfig } from "../../state/entities";
-import { useRefreshAssetUrl } from "../../state/assets";
 import { scopedThreadKey } from "../../lib/scopedEntities";
+import { useRefreshAssetUrl } from "../../state/assets";
+import { useEnvironmentServerConfig } from "../../state/entities";
+import { removeComposerDraftAttachment, useComposerDraft } from "../../state/use-composer-drafts";
 import { useAppearancePreferences } from "../settings/appearance/AppearancePreferencesProvider";
-import { isZipFile, ZipArchiveView } from "./ZipArchiveView";
 import { AttachmentDocumentBody, nativeViewerKind } from "./AttachmentDocumentBody";
+import { isZipFile, ZipArchiveView } from "./ZipArchiveView";
 
 export type AttachmentFileRouteParams = {
   readonly environmentId?: string;

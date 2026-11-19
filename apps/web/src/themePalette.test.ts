@@ -1,10 +1,9 @@
-import { describe, expect, it, vi } from "vite-plus/test";
-import { converter } from "culori/fn";
 import { BUILT_IN_THEMES } from "@t3tools/shared/themePalettes";
+import { converter } from "culori/fn";
+import { describe, expect, it, vi } from "vite-plus/test";
 
 import { CONTEXT_CHIP_ACCENTS, contextChipColorVariable } from "./lib/contextChipAccents";
 import { appAtomRegistry } from "./rpc/atomRegistry";
-
 import {
   applyThemePalette,
   canonicalThemePreference,

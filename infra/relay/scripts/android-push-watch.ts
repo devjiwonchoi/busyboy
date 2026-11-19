@@ -1,5 +1,6 @@
 // @effect-diagnostics nodeBuiltinImport:off - Local developer verification reads private credential files.
 import * as NodeFSP from "node:fs/promises";
+
 import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
 import * as NodeWS from "@effect/platform-node/NodeWS";
 import {
@@ -12,25 +13,25 @@ import {
 import type { RelayAgentActivityState } from "@t3tools/contracts/relay";
 import { projectThreadAwarenessV2 } from "@t3tools/shared/agentAwareness";
 import * as Cause from "effect/Cause";
-import * as Option from "effect/Option";
 import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import * as Redacted from "effect/Redacted";
-import * as Schema from "effect/Schema";
-import * as Stream from "effect/Stream";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as Redacted from "effect/Redacted";
 import * as RpcClient from "effect/rpc/RpcClient";
 import * as RpcSerialization from "effect/rpc/RpcSerialization";
+import * as Schema from "effect/Schema";
 import * as Socket from "effect/socket/Socket";
+import * as Stream from "effect/Stream";
 
-import * as RelayConfiguration from "../src/Config.ts";
-import { androidActivityData, fitFcmData } from "../src/agentActivity/fcmPayloads.ts";
-import * as WebCrypto from "../src/WebCrypto.ts";
+import { makeAggregateState } from "../src/agentActivity/agentActivityAggregate.ts";
 import * as FcmAssertionSigner from "../src/agentActivity/FcmAssertionSigner.ts";
 import * as FcmClient from "../src/agentActivity/FcmClient.ts";
 import * as FcmDeliveries from "../src/agentActivity/FcmDeliveries.ts";
-import { makeAggregateState } from "../src/agentActivity/agentActivityAggregate.ts";
+import { androidActivityData, fitFcmData } from "../src/agentActivity/fcmPayloads.ts";
+import * as RelayConfiguration from "../src/Config.ts";
+import * as WebCrypto from "../src/WebCrypto.ts";
 
 const Device = Schema.Struct({
   token: Schema.NonEmptyString,

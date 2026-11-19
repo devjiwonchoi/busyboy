@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import * as NodeUtil from "node:util";
+
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { CodexSettings, ProviderInstanceId } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
@@ -7,8 +8,9 @@ import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
-import * as CodexTextGeneration from "../../apps/server/src/textGeneration/CodexTextGeneration.ts";
+
 import * as ServerConfig from "../../apps/server/src/config.ts";
+import * as CodexTextGeneration from "../../apps/server/src/textGeneration/CodexTextGeneration.ts";
 import { gradePrContent } from "./grade.ts";
 
 const { values } = NodeUtil.parseArgs({

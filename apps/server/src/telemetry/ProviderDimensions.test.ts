@@ -1,5 +1,5 @@
-import { ProviderInstanceId, ThreadId, type ServerProvider } from "@t3tools/contracts";
 import { expect, it } from "@effect/vitest";
+import { ProviderInstanceId, ThreadId, type ServerProvider } from "@t3tools/contracts";
 
 import { type AgentThread, agentToolProperties, handoffSettings } from "./ProviderDimensions.ts";
 

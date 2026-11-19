@@ -1,6 +1,8 @@
 import type { ProjectIconColor } from "@t3tools/contracts";
-import { projectIconColorClassName } from "../projectIconColors";
+
 import { cn } from "~/lib/utils";
+
+import { projectIconColorClassName } from "../projectIconColors";
 
 const monogramSegmenter = new Intl.Segmenter(undefined, { granularity: "grapheme" });
 

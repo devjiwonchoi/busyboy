@@ -1,18 +1,18 @@
 import { errorDisplayMessage } from "@t3tools/client-runtime/errors";
-import { useGT } from "gt-react-native";
-import type { SourceControlSignInPrompt } from "@t3tools/contracts";
 import {
   readHostCredentialSettings,
   type SourceControlAppSignIn,
   type SourceControlDefinition,
 } from "@t3tools/client-runtime/source-control-clients";
+import type { SourceControlSignInPrompt } from "@t3tools/contracts";
 import * as Cause from "effect/Cause";
 import * as Clipboard from "expo-clipboard";
+import { useGT } from "gt-react-native";
 import { useRef, useState } from "react";
 import { Linking } from "react-native";
-import { m } from "../../../i18n/messages";
 
 import * as Dialog from "../../../components/ui/Dialog";
+import { m } from "../../../i18n/messages";
 import { serverEnvironment } from "../../../state/server";
 import { sourceControlEnvironment } from "../../../state/sourceControl";
 import { useAtomCommand } from "../../../state/use-atom-command";

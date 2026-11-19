@@ -1,30 +1,19 @@
-import { useEffect, useId, useState } from "react";
-import { T, useGT } from "gt-react";
-import { useNavigate } from "@tanstack/react-router";
-import { create } from "zustand";
 import {
   localSnoozeDate,
   localSnoozeTime,
   resolveCustomSnooze,
   type CustomSnoozeInput,
 } from "@t3tools/client-runtime/state/thread-settled";
-import { Button } from "./ui/button";
+import { useNavigate } from "@tanstack/react-router";
+import { T, useGT } from "gt-react";
 import { CalendarIcon, Settings2Icon } from "lucide-react";
-import { Calendar } from "./ui/calendar";
-import { weekStartsOn } from "../timestampFormat";
+import { useEffect, useId, useState } from "react";
+import { create } from "zustand";
+
 import { useNowMinute } from "../hooks/useNowMinute";
-import { Popover, PopoverTrigger, PopoverPopup } from "./ui/popover";
-import { Input } from "./ui/input";
-import { Label } from "./ui/label";
-import { Toggle, ToggleGroup } from "./ui/toggle-group";
-import { Select, SelectTrigger, SelectValue, SelectPopup, SelectItem } from "./ui/select";
-import {
-  NumberField,
-  NumberFieldGroup,
-  NumberFieldInput,
-  NumberFieldDecrement,
-  NumberFieldIncrement,
-} from "./ui/number-field";
+import { weekStartsOn } from "../timestampFormat";
+import { Button } from "./ui/button";
+import { Calendar } from "./ui/calendar";
 import {
   Dialog,
   DialogPopup,
@@ -34,6 +23,18 @@ import {
   DialogPanel,
   DialogFooter,
 } from "./ui/dialog";
+import { Input } from "./ui/input";
+import { Label } from "./ui/label";
+import {
+  NumberField,
+  NumberFieldGroup,
+  NumberFieldInput,
+  NumberFieldDecrement,
+  NumberFieldIncrement,
+} from "./ui/number-field";
+import { Popover, PopoverTrigger, PopoverPopup } from "./ui/popover";
+import { Select, SelectTrigger, SelectValue, SelectPopup, SelectItem } from "./ui/select";
+import { Toggle, ToggleGroup } from "./ui/toggle-group";
 
 type SnoozeChoice = { readonly snoozedUntil: string };
 type Request = { readonly resolve: (choice: SnoozeChoice | null) => void };

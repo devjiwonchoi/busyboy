@@ -1,9 +1,3 @@
-/**
- * The port every issue tracker implements. A tracker hands back the neutral contract types and
- * declares what it cannot do in `capabilities`; the service refuses a call outside them.
- */
-import * as Schema from "effect/Schema";
-import type * as Effect from "effect/Effect";
 import type {
   IssueState,
   IssueCandidates,
@@ -26,6 +20,13 @@ import type {
   StandaloneIssueTrackerDescriptor,
 } from "@t3tools/contracts";
 import { IssueTrackerKind as IssueTrackerKindSchema } from "@t3tools/contracts";
+import type * as Effect from "effect/Effect";
+/**
+ * The port every issue tracker implements. A tracker hands back the neutral contract types and
+ * declares what it cannot do in `capabilities`; the service refuses a call outside them.
+ */
+import * as Schema from "effect/Schema";
+
 import type { IssueLink } from "../shared/definition.ts";
 
 /**

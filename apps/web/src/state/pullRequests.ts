@@ -10,6 +10,10 @@ import {
   type PullRequestPendingEdit,
 } from "@t3tools/client-runtime/state/pull-requests";
 import {
+  threadPullRequestKeyOf,
+  visibleThreadPullRequests,
+} from "@t3tools/client-runtime/thread-pull-requests";
+import {
   PullRequestListResult,
   PullRequestOperationError,
   PullRequestUnavailableError,
@@ -25,27 +29,23 @@ import {
   type PullRequestSummary,
   type ThreadPullRequestLink,
 } from "@t3tools/contracts";
-import {
-  threadPullRequestKeyOf,
-  visibleThreadPullRequests,
-} from "@t3tools/client-runtime/thread-pull-requests";
 import * as Cause from "effect/Cause";
 import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
-import * as Schema from "effect/Schema";
 import { AsyncResult, Atom, type AtomRegistry } from "effect/reactivity";
+import * as Schema from "effect/Schema";
 
-import { connectionAtomRuntime } from "../connection/runtime";
-import { appAtomRegistry } from "../rpc/atomRegistry";
+import { useGuideRunStore } from "../components/pullRequest/guide/guideRunStore";
+import { writePullRequestDetailSnapshot } from "../components/pullRequest/pullRequestDetail.logic";
 import {
   mergePullRequestLists,
   type EnvironmentPullRequestStat,
   type MergedPullRequestList,
 } from "../components/pullRequest/pullRequestList.logic";
-import { writePullRequestDetailSnapshot } from "../components/pullRequest/pullRequestDetail.logic";
 import { pullRequestChecksState } from "../components/pullRequest/pullRequestPresentation";
-import { useGuideRunStore } from "../components/pullRequest/guide/guideRunStore";
+import { connectionAtomRuntime } from "../connection/runtime";
+import { appAtomRegistry } from "../rpc/atomRegistry";
 import { formatEnvironmentQueryError } from "./query";
 import { environmentThreadShells } from "./threads";
 

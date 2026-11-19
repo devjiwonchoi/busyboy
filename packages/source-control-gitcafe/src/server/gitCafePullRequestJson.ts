@@ -1,7 +1,3 @@
-import { quoteGitPatchPath } from "@t3tools/shared/gitPatchPath";
-import { sortChecks } from "@t3tools/source-control-core/server/pullRequestChecks";
-import * as DateTime from "effect/DateTime";
-import * as Schema from "effect/Schema";
 import {
   IsoDateTime,
   NonNegativeInt,
@@ -17,12 +13,16 @@ import {
   type PullRequestReviewThread,
   type PullRequestViewerPermissions,
 } from "@t3tools/contracts";
+import { quoteGitPatchPath } from "@t3tools/shared/gitPatchPath";
+import { sortChecks } from "@t3tools/source-control-core/server/pullRequestChecks";
 import type {
   ProviderChangeRequest,
   ProviderChangeRequestActivity,
   ProviderChangeRequestStack,
   ProviderDiffSlice,
 } from "@t3tools/source-control-core/server/PullRequestProvider";
+import * as DateTime from "effect/DateTime";
+import * as Schema from "effect/Schema";
 
 const Actor = Schema.Union([
   Schema.Struct({

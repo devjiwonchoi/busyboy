@@ -1,7 +1,12 @@
+import { useAtomValue } from "@effect/atom-react";
 import {
   AVAILABLE_CONNECTION_STATE,
   connectionProjectionPhase,
 } from "@t3tools/client-runtime/connection";
+import {
+  type EnvironmentCatalogState,
+  enabledEnvironmentIds,
+} from "@t3tools/client-runtime/state/connections";
 import {
   createEnvironmentShellAtoms,
   createEnvironmentSnapshotAtom,
@@ -9,12 +14,7 @@ import {
   type EnvironmentShellState,
   type EnvironmentShellStatus,
 } from "@t3tools/client-runtime/state/shell";
-import {
-  type EnvironmentCatalogState,
-  enabledEnvironmentIds,
-} from "@t3tools/client-runtime/state/connections";
 import type { EnvironmentId } from "@t3tools/contracts";
-import { useAtomValue } from "@effect/atom-react";
 import * as Option from "effect/Option";
 import { AsyncResult, Atom } from "effect/reactivity";
 

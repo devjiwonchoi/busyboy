@@ -1,8 +1,9 @@
 import { ThreadLinkedPullRequest, ThreadPullRequestLink } from "@t3tools/contracts";
-import { legacyThreadPullRequestKey } from "./legacyThreadPullRequestKey.ts";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import * as SqlClient from "effect/sql/SqlClient";
+
+import { legacyThreadPullRequestKey } from "./legacyThreadPullRequestKey.ts";
 
 const decodeLegacyLink = Schema.decodeEffect(Schema.fromJsonString(ThreadLinkedPullRequest));
 const encodeLinks = Schema.encodeSync(Schema.fromJsonString(Schema.Array(ThreadPullRequestLink)));

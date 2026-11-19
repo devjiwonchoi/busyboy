@@ -2,8 +2,8 @@ import type { AtomCommandResult } from "@t3tools/client-runtime/state/runtime";
 import type { VcsRef } from "@t3tools/client-runtime/state/vcs";
 import { EnvironmentId } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
-import * as Schema from "effect/Schema";
 import { Atom } from "effect/reactivity";
+import * as Schema from "effect/Schema";
 
 export type BranchCheckoutResult = AtomCommandResult<VcsRef, unknown>;
 type BranchCheckoutFailure = Extract<BranchCheckoutResult, { readonly _tag: "Failure" }>;

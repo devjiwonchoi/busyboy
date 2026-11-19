@@ -1,6 +1,7 @@
 import type { EnvironmentId as EnvironmentIdType } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
+
 import * as EnvironmentRegistry from "../connection/registry.ts";
 import type * as EnvironmentSupervisor from "../connection/supervisor.ts";
 

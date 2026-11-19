@@ -9,16 +9,18 @@ import {
   type FilesystemEntryMetadata,
   type ResolvedKeybindingsConfig,
 } from "@t3tools/contracts";
-import { Cause } from "effect";
 import { compileResolvedKeybindingsConfig, DEFAULT_KEYBINDINGS } from "@t3tools/shared/keybindings";
+import { Cause } from "effect";
 import { Atom, AsyncResult } from "effect/reactivity";
-import type { GhosttyTerminalSurfaceOptions } from "~/terminal/ghostty/surface";
-import { AppAtomRegistryProvider, appAtomRegistry } from "../rpc/atomRegistry";
-import { useRightPanelStore } from "../rightPanelStore";
-import { useTerminalUiStateStore } from "../terminalUiStateStore";
-import { extractTerminalLinks } from "../terminal-links";
 import { expect, it, vi } from "vite-plus/test";
+
+import type { GhosttyTerminalSurfaceOptions } from "~/terminal/ghostty/surface";
+
 import { act, fakeTimers, render } from "../../test/render";
+import { useRightPanelStore } from "../rightPanelStore";
+import { AppAtomRegistryProvider, appAtomRegistry } from "../rpc/atomRegistry";
+import { extractTerminalLinks } from "../terminal-links";
+import { useTerminalUiStateStore } from "../terminalUiStateStore";
 import ThreadTerminalDrawer from "./ThreadTerminalDrawer";
 
 const fixture = vi.hoisted(() => ({

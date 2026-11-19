@@ -5,8 +5,9 @@ import * as NodeCrypto from "node:crypto";
 import * as NodeFSP from "node:fs/promises";
 import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
-import * as NodeURL from "node:url";
 import * as NodeReadlinePromises from "node:readline/promises";
+import * as NodeURL from "node:url";
+
 import { patchNativeCli } from "../src/nativeHook.js";
 
 const home = NodeOS.homedir();

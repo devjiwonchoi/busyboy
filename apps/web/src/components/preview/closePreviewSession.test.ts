@@ -7,13 +7,12 @@ import type {
 import { Atom, AsyncResult } from "effect/reactivity";
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
+import { useClosedViewStore } from "~/closedViewStore";
 import {
   applyPreviewServerSnapshot,
   readThreadPreviewState,
   resetPreviewStateForTests,
 } from "~/previewStateStore";
-
-import { useClosedViewStore } from "~/closedViewStore";
 import { appAtomRegistry } from "~/rpc/atomRegistry";
 import { primaryEnvironmentIdAtom } from "~/state/primaryEnvironment";
 

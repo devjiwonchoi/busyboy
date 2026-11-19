@@ -21,6 +21,7 @@ import * as Scope from "effect/Scope";
 import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
 
+import { subscribeBeforeSnapshot } from "../utils/subscribeBeforeSnapshot.ts";
 import * as DesktopTelemetryReceiver from "./DesktopTelemetryReceiver.ts";
 import {
   emptyTelemetryCounters,
@@ -35,7 +36,6 @@ import {
   normalizeResourceTelemetryHistoryInput,
   type ResourceTelemetryHistoryWithLegacyBuckets,
 } from "./ResourceTelemetryHistory.ts";
-import { subscribeBeforeSnapshot } from "../utils/subscribeBeforeSnapshot.ts";
 
 export class ResourceTelemetryRefreshFailed extends Schema.TaggedError<ResourceTelemetryRefreshFailed>()(
   "ResourceTelemetryRefreshFailed",

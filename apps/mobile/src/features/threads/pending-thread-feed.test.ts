@@ -1,4 +1,3 @@
-import { describe, expect, it } from "vite-plus/test";
 import {
   CommandId,
   ComposerContextId,
@@ -7,6 +6,8 @@ import {
   ProjectId,
   ThreadId,
 } from "@t3tools/contracts";
+import { describe, expect, it } from "vite-plus/test";
+
 import type { QueuedThreadMessage } from "../../state/thread-outbox-model";
 import {
   appendAcceptedThreadMessages,

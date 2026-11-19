@@ -1,7 +1,7 @@
 import * as Effect from "effect/Effect";
 
-import { environmentEndpointUrl } from "./endpoint.ts";
 import { executeEnvironmentHttpRequest, makeEnvironmentHttpApiGroupClient } from "../rpc/http.ts";
+import { environmentEndpointUrl } from "./endpoint.ts";
 
 const DEFAULT_REMOTE_REQUEST_TIMEOUT_MS = 10_000;
 

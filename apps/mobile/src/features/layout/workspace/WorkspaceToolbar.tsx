@@ -1,27 +1,27 @@
-import { msg, useGT, useMessages } from "gt-react-native";
-import { useActiveNewTask } from "../../../state/active-new-task";
-import { Toolbar } from "../../../components/ui/Toolbar";
 import { useFocusEffect, useIsFocused, useNavigationState } from "@react-navigation/native";
+import { msg, useGT, useMessages } from "gt-react-native";
 import { use, useCallback, useEffect, useRef } from "react";
-import { isDuoDevice } from "../../../lib/device-type";
-import { useDeviceType } from "../../../native/native-layout-metrics";
-import { createNativeHeaderMenu } from "../../../components/ui/nativeHeaderMenu.ios";
-import { useSettingsEnvironmentMenu } from "../../settings/components/SettingsEnvironmentFilterHeader";
 import type { SearchBarCommands } from "react-native-screens";
 
+import { createNativeHeaderMenu } from "../../../components/ui/nativeHeaderMenu.ios";
+import { Toolbar } from "../../../components/ui/Toolbar";
+import { isDuoDevice } from "../../../lib/device-type";
 import { NATIVE_LIQUID_GLASS_SUPPORTED } from "../../../native/native-glass";
+import { useDeviceType } from "../../../native/native-layout-metrics";
 import { NativeStackScreenOptions } from "../../../native/StackHeader";
 import {
   NativePrimaryColumnContext,
   NativeWorkspaceTabActivityContext,
 } from "../../../native/v5-workspace-context";
+import { useActiveNewTask } from "../../../state/active-new-task";
 import { useHardwareKeyboardCommand } from "../../keyboard/hardwareKeyboardCommands";
+import { useSettingsEnvironmentMenu } from "../../settings/components/SettingsEnvironmentFilterHeader";
 import { useAdaptiveWorkspaceLayout, useWorkspacePaneState } from "../AdaptiveWorkspaceLayout";
-import { useWorkspaceTabs } from "./WorkspaceTabsContext";
-import { shouldRestoreNativeSearch } from "./workspace-tabs-state";
 import { useFloatingWorkspaceTabs, useSidebarWorkspaceTabs } from "./useSystemWorkspaceTabBar";
-import { WorkspaceTabToolbarButtons } from "./WorkspaceSectionToolbar";
 import { useWorkspaceCompose } from "./useWorkspaceCompose";
+import { shouldRestoreNativeSearch } from "./workspace-tabs-state";
+import { WorkspaceTabToolbarButtons } from "./WorkspaceSectionToolbar";
+import { useWorkspaceTabs } from "./WorkspaceTabsContext";
 
 const SEARCH_LABELS = {
   threads: msg("Search threads"),

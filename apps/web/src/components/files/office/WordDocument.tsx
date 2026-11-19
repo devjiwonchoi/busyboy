@@ -1,13 +1,15 @@
 /* oxlint-disable react/no-array-index-key -- Text spans retain their order within an immutable page. */
 /* oxlint-disable react/no-unstable-nested-components -- These callbacks return overlays, and are invoked as render functions. */
-import { Tooltip, TooltipTrigger, TooltipPopup } from "~/components/ui/tooltip";
+
 import { msg } from "gt-react";
 import { Fragment, useEffect, useRef, useState } from "react";
+
+import { Tooltip, TooltipTrigger, TooltipPopup } from "~/components/ui/tooltip";
 import { m } from "~/i18n/messages";
+
 import { FileSurfaceLoading } from "../fileSurfaceChrome";
 import { OfficePages, type PaintPage } from "./OfficePages";
 import { rasterize } from "./vector-pictures";
-import { createWorkerClient } from "./worker-rpc";
 import {
   layerFont,
   lineHeight,
@@ -16,6 +18,7 @@ import {
   type WordSpan,
   type WordLink,
 } from "./word-protocol";
+import { createWorkerClient } from "./worker-rpc";
 
 type Opened = {
   pages: readonly WordPageSize[];

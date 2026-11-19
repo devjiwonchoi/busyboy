@@ -1,10 +1,11 @@
 import { mergeProps } from "@base-ui/react/merge-props";
 import { useRender } from "@base-ui/react/use-render";
 import { cva, type VariantProps } from "class-variance-authority";
+import * as Schema from "effect/Schema";
 import { T, useGT } from "gt-react";
 import { PanelLeftCloseIcon, PanelLeftIcon } from "lucide-react";
 import * as React from "react";
-import { cn } from "~/lib/utils";
+
 import { Button } from "~/components/ui/button";
 import { Input, type InputProps } from "~/components/ui/input";
 import { ScrollArea } from "~/components/ui/scroll-area";
@@ -16,17 +17,18 @@ import {
   SheetTitle,
 } from "~/components/ui/sheet";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
-import { useResizeDrag } from "~/hooks/useResizeDrag";
-import { useMediaQuery } from "~/hooks/useMediaQuery";
-import { useClientSettings } from "~/hooks/useSettings";
 import {
   getLocalStorageItem,
   setLocalStorageItem,
   writeLocalStorageValue,
 } from "~/hooks/useLocalStorage";
-import { resolveSidebarState, type ResponsiveSidebarState } from "./sidebarState";
-import * as Schema from "effect/Schema";
+import { useMediaQuery } from "~/hooks/useMediaQuery";
+import { useResizeDrag } from "~/hooks/useResizeDrag";
+import { useClientSettings } from "~/hooks/useSettings";
 import { announceSidebarVisibility } from "~/lib/accessibilityAnnouncements";
+import { cn } from "~/lib/utils";
+
+import { resolveSidebarState, type ResponsiveSidebarState } from "./sidebarState";
 
 const SIDEBAR_WIDTH = "16rem";
 const SIDEBAR_WIDTH_MOBILE = "calc(100vw - var(--spacing) * 3)";

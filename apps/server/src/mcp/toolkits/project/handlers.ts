@@ -8,31 +8,32 @@ import {
   type Project as ProjectRecord,
   T3_PROJECT_FILE_NAME,
 } from "@t3tools/contracts";
-import * as Digest from "effect/crypto/Digest";
-import * as Effect from "effect/Effect";
-import * as Hex from "effect/encoding/Hex";
-import * as FileSystem from "effect/FileSystem";
-import * as Option from "effect/Option";
-import * as Schema from "effect/Schema";
-import { OrchestratorRuntimeModeAboveCeilingError } from "../../../orchestration-v2/Orchestrator.ts";
-import * as ThreadLaunch from "../../../orchestration-v2/ThreadLaunchService.ts";
-import * as ThreadMessageIntake from "../../../orchestration-v2/ThreadMessageIntake.ts";
-import * as Claims from "../../../orchestration-v2/AttachmentClaims.ts";
-import * as Project from "../../../project/ProjectService.ts";
-import * as ProjectCloneTracker from "../../../project/ProjectCloneTracker.ts";
-import { mutateProjectWithClone } from "../../../project/ProjectMutation.ts";
-import * as ManagedProjectFolders from "../../../project/ManagedProjectFolders.ts";
-import * as Repositories from "../../../sourceControl/SourceControlRepositoryService.ts";
-import * as GitVcsDriver from "../../../vcs/GitVcsDriver.ts";
-import * as ServerSettings from "../../../serverSettings.ts";
-import * as ProviderRegistry from "../../../provider/ProviderRegistry.ts";
-import * as DateTime from "effect/DateTime";
-import { resolveNewThreadModelSelection } from "@t3tools/shared/usageLimits";
 import {
   resolveProjectFileBackedSetting,
   resolveProjectSettings,
 } from "@t3tools/shared/projectSettings";
 import { parseT3ProjectFile } from "@t3tools/shared/t3ProjectFile";
+import { resolveNewThreadModelSelection } from "@t3tools/shared/usageLimits";
+import * as Digest from "effect/crypto/Digest";
+import * as DateTime from "effect/DateTime";
+import * as Effect from "effect/Effect";
+import * as Hex from "effect/encoding/Hex";
+import * as FileSystem from "effect/FileSystem";
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
+
+import * as Claims from "../../../orchestration-v2/AttachmentClaims.ts";
+import { OrchestratorRuntimeModeAboveCeilingError } from "../../../orchestration-v2/Orchestrator.ts";
+import * as ThreadLaunch from "../../../orchestration-v2/ThreadLaunchService.ts";
+import * as ThreadMessageIntake from "../../../orchestration-v2/ThreadMessageIntake.ts";
+import * as ManagedProjectFolders from "../../../project/ManagedProjectFolders.ts";
+import * as ProjectCloneTracker from "../../../project/ProjectCloneTracker.ts";
+import { mutateProjectWithClone } from "../../../project/ProjectMutation.ts";
+import * as Project from "../../../project/ProjectService.ts";
+import * as ProviderRegistry from "../../../provider/ProviderRegistry.ts";
+import * as ServerSettings from "../../../serverSettings.ts";
+import * as Repositories from "../../../sourceControl/SourceControlRepositoryService.ts";
+import * as GitVcsDriver from "../../../vcs/GitVcsDriver.ts";
 import { resolveRuntimeMode } from "../../delegatedTaskModes.ts";
 import * as McpInvocationContext from "../../McpInvocationContext.ts";
 import * as McpToolAccess from "../../McpToolAccess.ts";

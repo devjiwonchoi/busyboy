@@ -1,8 +1,8 @@
+import type { MenuAction } from "@react-native-menu/menu";
 import {
   sourceControlClients,
   type ChangeRequestTerminology,
 } from "@t3tools/client-runtime/source-control-clients";
-import type { MenuAction } from "@react-native-menu/menu";
 import type { PullRequestDetail, PullRequestLinkedThreadsResult } from "@t3tools/contracts";
 import { msg } from "gt-react-native";
 

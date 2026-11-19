@@ -9,8 +9,8 @@ import * as Effect from "effect/Effect";
 import * as Ref from "effect/Ref";
 import * as Schema from "effect/Schema";
 
-import { claudeLocalSettingsDirectory } from "./Drivers/ClaudeHome.ts";
 import { type ClaudeModelCatalog, withClaudeCodeModelRoutes } from "./ClaudeModelCatalog.ts";
+import { claudeLocalSettingsDirectory } from "./Drivers/ClaudeHome.ts";
 
 // Env names that pick the backend, its region, or the model a family alias resolves to.
 const MODEL_SETTINGS_ENV_PREFIXES = [

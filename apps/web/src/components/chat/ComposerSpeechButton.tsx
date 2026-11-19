@@ -3,13 +3,14 @@ import { msg, useGT, useMessages } from "gt-react";
 import { CheckIcon, MicIcon, XIcon } from "lucide-react";
 import { useEffect, useState, type PointerEvent, type ReactElement } from "react";
 
-import { VoiceInputErrorPill } from "./VoiceInputErrorPill";
-import { VoiceInputPill, VoiceWaveform } from "./VoiceInputPill";
 import { m, type MessageResolver } from "~/i18n/messages";
 import { cn } from "~/lib/utils";
+
 import { Button } from "../ui/button";
 import { Spinner } from "../ui/spinner";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
+import { VoiceInputErrorPill } from "./VoiceInputErrorPill";
+import { VoiceInputPill, VoiceWaveform } from "./VoiceInputPill";
 
 type DownloadProgress = { downloaded: number; total: number } | null;
 

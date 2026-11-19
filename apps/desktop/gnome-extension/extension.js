@@ -5,8 +5,9 @@ import Shell from "gi://Shell";
 import St from "gi://St";
 import { Extension } from "resource:///org/gnome/shell/extensions/extension.js";
 import * as Main from "resource:///org/gnome/shell/ui/main.js";
-import { CaptureService, isWaylandSession } from "./captureService.js";
+
 import { CaptureFeedback } from "./captureFeedback.js";
+import { CaptureService, isWaylandSession } from "./captureService.js";
 
 const NAME = "org.gnome.Shell.Extensions.T3SnapShot";
 const PATH = "/org/gnome/Shell/Extensions/T3SnapShot";

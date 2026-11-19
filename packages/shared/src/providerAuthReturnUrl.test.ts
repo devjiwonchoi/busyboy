@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
+
 import { providerAuthReturnUrl } from "./providerAuthReturnUrl.ts";
 
 describe("provider auth return destinations", () => {

@@ -1,10 +1,11 @@
 // @effect-diagnostics nodeBuiltinImport:off - Measures real local HTTP/WebSocket sockets.
 import * as NodeHttp from "node:http";
 import * as NodeUtil from "node:util";
-import { assert, it } from "@effect/vitest";
-import * as NodeHttpServer from "@effect/platform-node/NodeHttpServer";
+
 import * as NodeHttpPlatform from "@effect/platform-node/NodeHttpPlatform";
+import * as NodeHttpServer from "@effect/platform-node/NodeHttpServer";
 import * as NodeServices from "@effect/platform-node/NodeServices";
+import { assert, it } from "@effect/vitest";
 import {
   ORCHESTRATION_PROTOCOL_HEADER,
   ORCHESTRATION_PROTOCOL_VERSION,
@@ -33,33 +34,35 @@ import {
   type OrchestrationV2ShellStreamItem,
   type ThreadId,
 } from "@t3tools/contracts";
-import * as Context from "effect/Context";
 import * as Config from "effect/Config";
+import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import { HttpRouter, HttpServer } from "effect/http";
+import * as HttpApi from "effect/http-api/HttpApi";
+import * as HttpApiBuilder from "effect/http-api/HttpApiBuilder";
 import * as Layer from "effect/Layer";
 import * as PubSub from "effect/PubSub";
 import * as Queue from "effect/Queue";
+import { Rpc, RpcGroup, RpcServer, RpcSerialization } from "effect/rpc";
 import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
-import * as HttpApi from "effect/http-api/HttpApi";
-import * as HttpApiBuilder from "effect/http-api/HttpApiBuilder";
-import { HttpRouter, HttpServer } from "effect/http";
-import { Rpc, RpcGroup, RpcServer, RpcSerialization } from "effect/rpc";
+
 import * as ServerEnvironment from "../src/environment/ServerEnvironment.ts";
-import * as SqlitePersistence from "../src/persistence/Sqlite.ts";
-import * as OrchestrationEventStore from "../src/persistence/OrchestrationEventStore.ts";
-import * as EventStore from "../src/orchestration-v2/EventStore.ts";
-import * as EventSink from "../src/orchestration-v2/EventSink.ts";
-import * as ProjectionStore from "../src/orchestration-v2/ProjectionStore.ts";
-import * as ThreadManagementService from "../src/orchestration-v2/ThreadManagementService.ts";
-import * as ProjectStore from "../src/orchestration-v2/ProjectStore.ts";
-import * as ProjectService from "../src/project/ProjectService.ts";
-import * as ProjectEnrichmentService from "../src/project/ProjectEnrichmentService.ts";
-import * as OrchestrationHttp from "../src/orchestration-v2/http.ts";
 import * as ServerHttp from "../src/http.ts";
+import * as EventSink from "../src/orchestration-v2/EventSink.ts";
+import * as EventStore from "../src/orchestration-v2/EventStore.ts";
+import * as OrchestrationHttp from "../src/orchestration-v2/http.ts";
+import * as ProjectionStore from "../src/orchestration-v2/ProjectionStore.ts";
+import * as ProjectStore from "../src/orchestration-v2/ProjectStore.ts";
+import * as ThreadManagementService from "../src/orchestration-v2/ThreadManagementService.ts";
+import * as OrchestrationEventStore from "../src/persistence/OrchestrationEventStore.ts";
+import * as SqlitePersistence from "../src/persistence/Sqlite.ts";
+import * as ProjectEnrichmentService from "../src/project/ProjectEnrichmentService.ts";
+import * as ProjectService from "../src/project/ProjectService.ts";
 import { subscribeOrchestrationV2Thread, subscribeOrchestrationV2Shell } from "../src/ws.ts";
+import { TRANSFER_HISTORY_TURN_COUNT } from "./fixtures/transferBudget.ts";
 import {
   measureHttpGet,
   openMeasuredWsClient,
@@ -74,7 +77,6 @@ import {
   transferBudgetViolations,
   type TransferBudgetRun,
 } from "./TransferBudgetReport.integration.ts";
-import { TRANSFER_HISTORY_TURN_COUNT } from "./fixtures/transferBudget.ts";
 import {
   FLEET_PROJECT_IDENTITY,
   fleetProjectCreated,

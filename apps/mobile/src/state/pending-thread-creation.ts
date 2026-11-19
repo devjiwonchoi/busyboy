@@ -1,16 +1,16 @@
+import { threadKey } from "@t3tools/client-runtime/state/entities";
 import {
   presentThreadShell,
   type EnvironmentThreadShell,
 } from "@t3tools/client-runtime/state/shell";
-import type { LocalThreadMessage } from "../lib/threadActivity";
-import { DEFAULT_PROVIDER_INTERACTION_MODE, DEFAULT_RUNTIME_MODE } from "@t3tools/contracts";
-import { threadKey } from "@t3tools/client-runtime/state/entities";
 import { asLaunchingThread } from "@t3tools/client-runtime/state/thread-inbox";
-import { Atom } from "effect/reactivity";
+import { DEFAULT_PROVIDER_INTERACTION_MODE, DEFAULT_RUNTIME_MODE } from "@t3tools/contracts";
 import * as DateTime from "effect/DateTime";
+import { Atom } from "effect/reactivity";
 
 import { deriveThreadTitleFromPrompt } from "../lib/projectThreadStartTurn";
 import { scopedThreadKey } from "../lib/scopedEntities";
+import type { LocalThreadMessage } from "../lib/threadActivity";
 import { appAtomRegistry } from "./atom-registry";
 import type { QueuedThreadMessage } from "./thread-outbox-model";
 

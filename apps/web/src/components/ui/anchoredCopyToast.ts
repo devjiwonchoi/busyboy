@@ -1,7 +1,8 @@
-import type { RefObject } from "react";
 import { msg } from "gt-react";
+import type { RefObject } from "react";
 
 import { m } from "~/i18n/messages";
+
 import { anchoredToastManager } from "./toast";
 
 export const ANCHORED_COPY_TOAST_TIMEOUT_MS = 1000;

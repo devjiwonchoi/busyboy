@@ -4,6 +4,13 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 
+import { applyOrchestrationV2ProjectionEvent } from "../state/orchestrationV2Projection.ts";
+import {
+  v2Now,
+  v2Projection,
+  v2ShellSnapshot,
+  v2ThreadId,
+} from "../state/orchestrationV2TestFixtures.ts";
 import {
   ORCHESTRATION_CACHE_SCHEMA_VERSION,
   ORCHESTRATION_THREAD_CACHE_SCHEMA_VERSION,
@@ -11,14 +18,6 @@ import {
   StoredOrchestrationThreadSnapshot,
   decodeOrDiscardOrchestrationCache,
 } from "./orchestrationCache.ts";
-import {
-  v2Now,
-  v2Projection,
-  v2ShellSnapshot,
-  v2ThreadId,
-} from "../state/orchestrationV2TestFixtures.ts";
-
-import { applyOrchestrationV2ProjectionEvent } from "../state/orchestrationV2Projection.ts";
 
 const environmentId = EnvironmentId.make("environment-cache-test");
 const StoredThreadSnapshotJson = Schema.fromJsonString(StoredOrchestrationThreadSnapshot);

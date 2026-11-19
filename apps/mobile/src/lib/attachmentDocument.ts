@@ -1,26 +1,26 @@
 import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import { errorDisplayMessage } from "@t3tools/client-runtime/errors";
-import { Atom, AsyncResult } from "effect/reactivity";
-import { settlePromise, squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
-import * as Dialog from "../components/ui/Dialog";
-import { msg, useMessages } from "gt-react-native";
-import { m } from "../i18n/messages";
-import { filePreviewDelimiter, parseDelimitedPreview } from "@t3tools/shared/delimitedPreview";
-import type { AssetResource, EnvironmentId } from "@t3tools/contracts";
 import { readFilePreviewResponse } from "@t3tools/client-runtime/file-preview";
+import { settlePromise, squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
+import type { AssetResource, EnvironmentId } from "@t3tools/contracts";
+import { filePreviewDelimiter, parseDelimitedPreview } from "@t3tools/shared/delimitedPreview";
 import { filePreviewKind, FILE_TEXT_PREVIEW_MAX_BYTES } from "@t3tools/shared/filePreview";
-import { fetch } from "expo/fetch";
-import { File } from "expo-file-system";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
+import { Atom, AsyncResult } from "effect/reactivity";
 import * as Schema from "effect/Schema";
+import { File } from "expo-file-system";
+import { fetch } from "expo/fetch";
+import { msg, useMessages } from "gt-react-native";
 import { useEffect, useRef, useState } from "react";
 
-import type { FileBackedComposerAttachment } from "./composerImages";
-import { localAttachmentPreviewAtom, localAttachmentPreviewState } from "./localAttachmentPreview";
-import { downloadAndShareAttachment, shareLocalAttachment } from "./attachmentDownload";
+import * as Dialog from "../components/ui/Dialog";
+import { m } from "../i18n/messages";
 import { refreshAssetUrl, useFreshAssetUrl, useRefreshAssetUrl } from "../state/assets";
 import { attachmentDocumentPresentation } from "./attachmentDocumentPresentation";
+import { downloadAndShareAttachment, shareLocalAttachment } from "./attachmentDownload";
+import type { FileBackedComposerAttachment } from "./composerImages";
+import { localAttachmentPreviewAtom, localAttachmentPreviewState } from "./localAttachmentPreview";
 
 const isLocalUri = (uri: string) => /^(file|content):/.test(uri);
 

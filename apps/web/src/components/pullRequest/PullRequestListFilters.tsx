@@ -1,4 +1,3 @@
-import { Spinner } from "~/components/ui/spinner";
 import type {
   EnvironmentId,
   ProjectId,
@@ -8,6 +7,7 @@ import type {
   PullRequestListState,
   SourceControlProviderKind,
 } from "@t3tools/contracts";
+import { msg, T, useGT, useMessages } from "gt-react";
 import {
   CircleCheckIcon,
   CircleDashedIcon,
@@ -21,16 +21,16 @@ import {
   TagIcon,
   UserRoundIcon,
 } from "lucide-react";
-import { msg, T, useGT, useMessages } from "gt-react";
 import { type ElementType, useState } from "react";
 
+import { Spinner } from "~/components/ui/spinner";
 import { getSourceControlPresentationForKind } from "~/sourceControlPresentation";
-import { useDebouncedValue } from "~/state/queries";
 import { type EnvironmentQueryTarget, usePullRequestFilterOptions } from "~/state/pullRequests";
-import { ProjectFavicon, type ProjectFaviconProject } from "../ProjectFavicon";
-import { InputGroup, InputGroupAddon, InputGroupInput } from "../ui/input-group";
-import { Button } from "../ui/button";
+import { useDebouncedValue } from "~/state/queries";
 
+import { ProjectFavicon, type ProjectFaviconProject } from "../ProjectFavicon";
+import { Button } from "../ui/button";
+import { InputGroup, InputGroupAddon, InputGroupInput } from "../ui/input-group";
 import {
   Menu,
   MenuCheckboxItem,
@@ -48,6 +48,7 @@ import {
   MenuTrigger,
 } from "../ui/menu";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
+import { PullRequestGlyph } from "./pullRequestIcons";
 import {
   pullRequestAuthorChoices,
   selectedPullRequestAuthor,
@@ -58,7 +59,6 @@ import {
 } from "./pullRequestList.logic";
 import { resolveFilterOptions } from "./pullRequestListOptions";
 import { PullRequestActorAvatar } from "./pullRequestPresentation";
-import { PullRequestGlyph } from "./pullRequestIcons";
 
 export interface PullRequestFilterOption<Value extends string> {
   readonly value: Value;

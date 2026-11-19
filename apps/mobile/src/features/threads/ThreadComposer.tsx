@@ -1,12 +1,15 @@
-import { Button } from "../../components/ui/Button";
-import * as Dialog from "../../components/ui/Dialog";
-import type { ComposerTextPaste } from "../../native/T3ComposerEditor.types";
-import { useAppearancePreferences } from "../settings/appearance/AppearancePreferencesProvider";
-import type { EnvironmentThreadShell } from "@t3tools/client-runtime/state/shell";
-import { settlePromise, squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
-import { AsyncResult } from "effect/reactivity";
 import { useAtomValue } from "@effect/atom-react";
+import { StackActions, useFocusEffect, useNavigation } from "@react-navigation/native";
+import type { ComposerEnvironmentCandidate } from "@t3tools/client-runtime/composerThreadItems";
+import { scopeProjectRef } from "@t3tools/client-runtime/environment";
+import { offersLinkedEnvironments } from "@t3tools/client-runtime/link-request";
 import { clampFileAttachmentUploadBytes } from "@t3tools/client-runtime/state/attachments";
+import {
+  composerRunsDraftLocally,
+  type ActiveTurnComposerAction,
+} from "@t3tools/client-runtime/state/composer-dispatch";
+import { settlePromise, squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
+import type { EnvironmentThreadShell } from "@t3tools/client-runtime/state/shell";
 import { pastedTextDisposition, replaceTextSelection } from "@t3tools/client-runtime/text-paste";
 import {
   AuthOrchestrationOperateScope,
@@ -19,52 +22,25 @@ import {
   type ServerConfig as T3ServerConfig,
   type UsageLimitsReport,
 } from "@t3tools/contracts";
+import { formatTokens } from "@t3tools/shared/usageFormat";
 import {
   collectProviderUsageLimits,
   hasProviderUsageLimits,
   isUsageLimitsCommand,
 } from "@t3tools/shared/usageLimits";
-import { StackActions, useFocusEffect, useNavigation } from "@react-navigation/native";
+import { AsyncResult } from "effect/reactivity";
 import { msg, T, useGT, useMessages } from "gt-react-native";
 import type { ReactNode } from "react";
 import { useEffect, useEffectEvent, useRef, useState, type RefObject } from "react";
 import { Keyboard, Platform, View } from "react-native";
-import { composerImageGallery } from "../../lib/composerImageGallery";
-import { filePreviewGallery } from "../../lib/filePreviewGallery";
-import { FilePreviewModal, type FilePreviewSource } from "../../components/ui/FilePreviewModal";
-import {
-  composerAttachmentUploadBlockReason,
-  composerAttachmentsStillUploading,
-  composerAttachmentUploadsAtom,
-} from "../../state/composer-attachment-uploads";
 import Animated, { FadeIn, FadeOut, ReduceMotion } from "react-native-reanimated";
-import { useUniwindTheme } from "../../lib/useUniwindTheme";
-import { themeColorWithAlpha } from "../../lib/mobileTheme";
-import { armAgentAwarenessLiveActivityForLocalWork } from "../agent-awareness/remoteRegistration";
-import { scopedThreadKey } from "../../lib/scopedEntities";
-import {
-  getComposerDraftSnapshot,
-  setComposerDraftText,
-  composerContextImportsAtom,
-  countComposerDraftAttachmentsAfterSelection,
-  useComposerDraft,
-  useComposerDraftResetGeneration,
-} from "../../state/use-composer-drafts";
-import type { ComposerDocumentAttachment } from "../../lib/composerContext";
-import { useProject, useVisibleThreadShells } from "../../state/entities";
-import { useMentionableEnvironments } from "../../state/environments";
-import { useLinkedEnvironments } from "../../state/peerLinks";
-import { useEnvironmentScopeDenied } from "../../state/session";
-import { scopeProjectRef } from "@t3tools/client-runtime/environment";
 
-import { AppText as Text } from "../../components/ui/AppText";
-import { ComposerAttachmentButton } from "./ComposerAttachmentButton";
 import {
   ComposerAttachmentStrip,
   ComposerAttachmentThumbnail,
 } from "../../components/ComposerAttachmentStrip";
-import { VideoPreviewModal, type VideoPreviewSource } from "../../components/ui/VideoPreviewModal";
 import { ComposerEditor, type ComposerEditorHandle } from "../../components/ComposerEditor";
+import { ComposerModelControl } from "../../components/ComposerModelControl";
 import {
   COMPOSER_BOTTOM_GUTTER,
   COMPOSER_TRANSITION_DURATION_MS,
@@ -73,43 +49,57 @@ import {
   useComposerChrome,
   useCompactComposerEditor,
 } from "../../components/ComposerSurface";
-import { fileRoutePathSegments } from "../files/filePath";
 import {
   ComposerActionButton,
   ComposerInlineControl,
   ComposerToolbarRow,
 } from "../../components/ComposerToolbar";
-import { formatTokens } from "@t3tools/shared/usageFormat";
-import { ComposerModelControl } from "../../components/ComposerModelControl";
+import { AppText as Text } from "../../components/ui/AppText";
+import { Button } from "../../components/ui/Button";
+import * as Dialog from "../../components/ui/Dialog";
+import { FilePreviewModal, type FilePreviewSource } from "../../components/ui/FilePreviewModal";
+import { Menu } from "../../components/ui/Menu";
+import { VideoPreviewModal, type VideoPreviewSource } from "../../components/ui/VideoPreviewModal";
+import { composerAttachmentUploadKey } from "../../lib/composerAttachmentUploadQueue";
+import type { ComposerDocumentAttachment } from "../../lib/composerContext";
+import { composerImageGallery } from "../../lib/composerImageGallery";
 import {
   composerStripAttachments,
   type DraftComposerFileAttachment,
 } from "../../lib/composerImages";
-import { composerAttachmentUploadKey } from "../../lib/composerAttachmentUploadQueue";
+import type { RemoteClientConnectionState } from "../../lib/connection";
+import { filePreviewGallery } from "../../lib/filePreviewGallery";
+import type { FollowUpBehavior } from "../../lib/followUpBehavior";
+import { themeColorWithAlpha } from "../../lib/mobileTheme";
 import {
   buildModelOptions,
   isModelSelectionUnavailable,
   serverConfigForCwd,
 } from "../../lib/modelOptions";
+import { scopedThreadKey } from "../../lib/scopedEntities";
+import { useUniwindTheme } from "../../lib/useUniwindTheme";
+import type { ComposerTextPaste } from "../../native/T3ComposerEditor.types";
+import {
+  composerAttachmentUploadBlockReason,
+  composerAttachmentsStillUploading,
+  composerAttachmentUploadsAtom,
+} from "../../state/composer-attachment-uploads";
+import { useProject, useVisibleThreadShells } from "../../state/entities";
+import { useMentionableEnvironments } from "../../state/environments";
+import { useLinkedEnvironments } from "../../state/peerLinks";
+import { useEnvironmentScopeDenied } from "../../state/session";
+import {
+  getComposerDraftSnapshot,
+  setComposerDraftText,
+  composerContextImportsAtom,
+  countComposerDraftAttachmentsAfterSelection,
+  useComposerDraft,
+  useComposerDraftResetGeneration,
+} from "../../state/use-composer-drafts";
+import { armAgentAwarenessLiveActivityForLocalWork } from "../agent-awareness/remoteRegistration";
+import { fileRoutePathSegments } from "../files/filePath";
+import { useAppearancePreferences } from "../settings/appearance/AppearancePreferencesProvider";
 import { useComposerTextRole } from "../settings/appearance/useScaledTextRole";
-import type { RemoteClientConnectionState } from "../../lib/connection";
-import { Menu } from "../../components/ui/Menu";
-import {
-  composerRunsDraftLocally,
-  type ActiveTurnComposerAction,
-} from "@t3tools/client-runtime/state/composer-dispatch";
-import type { FollowUpBehavior } from "../../lib/followUpBehavior";
-import {
-  resolveComposerSendPresentation,
-  type ComposerSendPresentation,
-} from "./composerSendPresentation";
-import { useSubmitAfterNativeImages } from "./useSubmitAfterNativeImages";
-import { ComposerCommandPopover } from "./ComposerCommandPopover";
-import { ComposerPopoverAnchor } from "./ComposerPopoverAnchor";
-import { ComposerQueuedEditAttachments } from "./ComposerQueuedEdit";
-import { useComposerCommandMenu } from "./use-composer-command-menu";
-import type { ComposerEnvironmentCandidate } from "@t3tools/client-runtime/composerThreadItems";
-import { offersLinkedEnvironments } from "@t3tools/client-runtime/link-request";
 import {
   ComposerDictationCancelAction,
   ComposerDictationDraftContent,
@@ -121,11 +111,21 @@ import {
 } from "../voice-input/ComposerDictationControl";
 import { useVoiceInputController } from "../voice-input/useVoiceInputController";
 import { resolveVoiceComposerPresentation } from "../voice-input/voiceInputPresentation";
+import { ComposerAttachmentButton } from "./ComposerAttachmentButton";
+import { ComposerCommandPopover } from "./ComposerCommandPopover";
+import { ComposerPopoverAnchor } from "./ComposerPopoverAnchor";
+import { ComposerQueuedEditAttachments } from "./ComposerQueuedEdit";
+import {
+  resolveComposerSendPresentation,
+  type ComposerSendPresentation,
+} from "./composerSendPresentation";
 import type { ExistingThreadSettingsRouteParams } from "./ThreadSettingsSheet";
+import { useComposerCommandMenu } from "./use-composer-command-menu";
 import {
   useThreadSettingsSheetPresentation,
   type NavigationWithFinishTransitioning,
 } from "./use-thread-settings-sheet-presentation";
+import { useSubmitAfterNativeImages } from "./useSubmitAfterNativeImages";
 
 export const COMPOSER_COLLAPSED_CHROME = 60;
 export const THREAD_COMPOSER_BOTTOM_GUTTER = COMPOSER_BOTTOM_GUTTER;

@@ -1,3 +1,9 @@
+import { describe, expect, it } from "@effect/vitest";
+import {
+  ConnectionBlockedError,
+  ConnectionTransientError,
+} from "@t3tools/client-runtime/connection";
+import { ClientCapabilities } from "@t3tools/client-runtime/platform";
 import {
   AuthStandardClientScopes,
   EnvironmentId,
@@ -6,16 +12,11 @@ import {
   type DesktopSshEnvironmentBootstrap,
   type DesktopSshEnvironmentTarget,
 } from "@t3tools/contracts";
-import { describe, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import { afterEach, vi } from "vite-plus/test";
-import { ClientCapabilities } from "@t3tools/client-runtime/platform";
-import {
-  ConnectionBlockedError,
-  ConnectionTransientError,
-} from "@t3tools/client-runtime/connection";
 
+import { APP_VERSION } from "../branding.ts";
 import {
   canRetainCachedPlatformRegistrationAfterRefreshFailure,
   canReuseCachedPlatformRegistration,
@@ -28,7 +29,6 @@ import {
   provisionDesktopSshEnvironment,
   secondaryRegistrationsToRetainAfterTopologyRead,
 } from "./platform.ts";
-import { APP_VERSION } from "../branding.ts";
 
 const TARGET: DesktopSshEnvironmentTarget = {
   alias: "devbox",

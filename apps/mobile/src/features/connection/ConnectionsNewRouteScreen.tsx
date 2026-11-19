@@ -1,39 +1,40 @@
-import { errorDisplayMessage } from "@t3tools/client-runtime/errors";
-import { T, useGT } from "gt-react-native";
-import { ListRow } from "../../components/ui/ListRow";
-import * as Dialog from "../../components/ui/Dialog";
-import { ScreenScrollView as ScrollView } from "../../components/ui/ScreenScrollView";
 import { useAuth } from "@clerk/expo";
-import { CameraView, useCameraPermissions } from "expo-camera";
-import * as Haptics from "expo-haptics";
+import { useAtomValue } from "@effect/atom-react";
 import {
   StackActions,
   useIsFocused,
   useNavigation,
   type StaticScreenProps,
 } from "@react-navigation/native";
+import { errorDisplayMessage } from "@t3tools/client-runtime/errors";
 import type { EnvironmentId } from "@t3tools/contracts";
-import { useAtomValue } from "@effect/atom-react";
+import { CameraView, useCameraPermissions } from "expo-camera";
+import * as Haptics from "expo-haptics";
+import { T, useGT } from "gt-react-native";
 import { useState } from "react";
 import { Linking, Pressable, StyleSheet, View } from "react-native";
-import Svg, { Defs, RadialGradient, Rect, Stop } from "react-native-svg";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import Svg, { Defs, RadialGradient, Rect, Stop } from "react-native-svg";
+
+import { SymbolView } from "../../components/ui/AppSymbol";
+import { AppText as Text, AppTextInput, type AppTextInputProps } from "../../components/ui/AppText";
+import * as Dialog from "../../components/ui/Dialog";
+import { FrostedCutout } from "../../components/ui/FrostedCutout";
+import { ListRow } from "../../components/ui/ListRow";
+import { ScreenScrollView as ScrollView } from "../../components/ui/ScreenScrollView";
+import { m } from "../../i18n/messages";
 import { cn } from "../../lib/cn";
 import { useUniwindTheme } from "../../lib/useUniwindTheme";
+import { useRemoteConnections } from "../../state/use-remote-environment-registry";
+import { hasCloudPublicConfig } from "../cloud/publicConfig";
+import { workspaceHasColumns } from "../layout/workspace/workspace-selection-store";
 import { useAppearancePreferences } from "../settings/appearance/AppearancePreferencesProvider";
 import { SettingsScreen } from "../settings/components/SettingsScreen";
-import { AppText as Text, AppTextInput, type AppTextInputProps } from "../../components/ui/AppText";
-import { FrostedCutout } from "../../components/ui/FrostedCutout";
-import { buildPairingUrl, extractPairingUrlFromQrPayload, parsePairingUrl } from "./pairing";
-import { useRemoteConnections } from "../../state/use-remote-environment-registry";
-import { SymbolView } from "../../components/ui/AppSymbol";
-import { hasCloudPublicConfig } from "../cloud/publicConfig";
+import { leaveSettingsPage } from "../settings/settings-navigation";
 import { CloudEnvironmentRows } from "./CloudEnvironmentRows";
 import { autoConnectReport, devAutoConnectAttemptAtom } from "./devAutoConnect";
 import { splitEnvironmentSections } from "./environmentSections";
-import { leaveSettingsPage } from "../settings/settings-navigation";
-import { workspaceHasColumns } from "../layout/workspace/workspace-selection-store";
-import { m } from "../../i18n/messages";
+import { buildPairingUrl, extractPairingUrlFromQrPayload, parsePairingUrl } from "./pairing";
 
 type ConnectionsNewRouteParams = {
   readonly mode?: string;

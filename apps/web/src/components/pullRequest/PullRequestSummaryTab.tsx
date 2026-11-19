@@ -1,9 +1,14 @@
-import { pullRequestCommentPreview } from "./pullRequestMarkdown.logic";
-import { parsePullRequestAnchor } from "@t3tools/shared/pullRequestAnchor";
-import { holdLinkedNodeInView } from "./holdLinkedNodeInView";
 import { useAtomValue } from "@effect/atom-react";
+import {
+  canEditPullRequestChangeRequest,
+  canEditPullRequestComment,
+  descriptionDraftInForce,
+  settleDescriptionSave,
+  startDescriptionSave,
+  type DescriptionDraft,
+} from "@t3tools/client-runtime/pull-request-editing";
+import { canReactPullRequestComment } from "@t3tools/client-runtime/pull-request-reactions";
 import { sourceControlClients } from "@t3tools/client-runtime/source-control-clients";
-import { useAtomCommand } from "~/state/use-atom-command";
 import {
   type EnvironmentId,
   type PullRequestComment,
@@ -13,6 +18,10 @@ import {
   type ScopedThreadRef,
   pullRequestConversationThreads,
 } from "@t3tools/contracts";
+import { setMarkdownTaskChecked } from "@t3tools/shared/markdownTaskList";
+import { parsePullRequestAnchor } from "@t3tools/shared/pullRequestAnchor";
+import * as Schema from "effect/Schema";
+import { msg, T, useGT, useMessages, Var } from "gt-react";
 import {
   ArrowDownUpIcon,
   ChevronDownIcon,
@@ -23,22 +32,19 @@ import {
   TagIcon,
   UsersIcon,
 } from "lucide-react";
-import * as Schema from "effect/Schema";
-import { msg, T, useGT, useMessages, Var } from "gt-react";
 import { useEffect, useEffectEvent, useRef, useState, type ReactNode } from "react";
 
-import { m, type MessageResolver } from "~/i18n/messages";
-
-import { pullRequestEnvironment } from "~/state/pullRequests";
-import { useLocalStorage } from "~/hooks/useLocalStorage";
-import { cn } from "~/lib/utils";
 import { useOpenLink } from "~/browser/useOpenLink";
 import { RelativeTime } from "~/components/RelativeTime";
+import { useLocalStorage } from "~/hooks/useLocalStorage";
 import { useClientSettings } from "~/hooks/useSettings";
+import { m, type MessageResolver } from "~/i18n/messages";
+import { cn } from "~/lib/utils";
+import { pullRequestEnvironment } from "~/state/pullRequests";
+import { useAtomCommand } from "~/state/use-atom-command";
 import { formatFullTimestamp } from "~/timestampFormat";
 
 import { Button } from "../ui/button";
-import { PullRequestEditButton } from "./PullRequestEditButton";
 import { Collapsible, CollapsiblePanel, CollapsibleTrigger } from "../ui/collapsible";
 import {
   Menu,
@@ -50,20 +56,10 @@ import {
 } from "../ui/menu";
 import { toastManager } from "../ui/toast";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
-import {
-  PullRequestActorLabel,
-  PullRequestCheckStatusIcon,
-  pullRequestCheckStatusLabel,
-  PullRequestLabelChip,
-  PullRequestReviewOutcomeBadge,
-  pullRequestReviewOutcomeLabel,
-  PullRequestReviewOutcomeAvatarBadge,
-  pullRequestReviewOutcomeRingClassName,
-  pullRequestReviewOutcomeStaleLabel,
-} from "./pullRequestPresentation";
-import { PullRequestLabelPicker } from "./PullRequestLabelPicker";
-import { PullRequestReviewerPicker } from "./PullRequestReviewerPicker";
+import { changeRequestTermKind } from "./changeRequestTerm";
+import { holdLinkedNodeInView } from "./holdLinkedNodeInView";
 import { PullRequestActivityUnavailableState } from "./PullRequestActivityUnavailableState";
+import { PullRequestCommentBody } from "./PullRequestCommentBody";
 import {
   filterPullRequestConversationItems,
   isPullRequestCommentFinished,
@@ -79,30 +75,32 @@ import {
   type PullRequestConversationItem,
   type PullRequestFinding,
 } from "./pullRequestDetail.logic";
-import {
-  canEditPullRequestChangeRequest,
-  canEditPullRequestComment,
-  descriptionDraftInForce,
-  settleDescriptionSave,
-  startDescriptionSave,
-  type DescriptionDraft,
-} from "@t3tools/client-runtime/pull-request-editing";
-import { setMarkdownTaskChecked } from "@t3tools/shared/markdownTaskList";
+import { PullRequestEditButton } from "./PullRequestEditButton";
+import { PullRequestConversationGhost } from "./PullRequestGhosts";
+import { PullRequestLabelPicker } from "./PullRequestLabelPicker";
 import { PullRequestMarkdown } from "./PullRequestMarkdown";
-import { PullRequestCommentBody } from "./PullRequestCommentBody";
-import { PullRequestMoreReplies } from "./PullRequestMoreReplies";
+import { pullRequestCommentPreview } from "./pullRequestMarkdown.logic";
 import { PullRequestMarkdownEditor } from "./PullRequestMarkdownEditor";
 import {
   type PullRequestCompletionScope,
   pullRequestCompletionScope,
 } from "./PullRequestMarkdownTextarea";
+import { PullRequestMoreReplies } from "./PullRequestMoreReplies";
+import {
+  PullRequestActorLabel,
+  PullRequestCheckStatusIcon,
+  pullRequestCheckStatusLabel,
+  PullRequestLabelChip,
+  PullRequestReviewOutcomeBadge,
+  pullRequestReviewOutcomeLabel,
+  PullRequestReviewOutcomeAvatarBadge,
+  pullRequestReviewOutcomeRingClassName,
+  pullRequestReviewOutcomeStaleLabel,
+} from "./pullRequestPresentation";
 import { PullRequestReactionBar } from "./PullRequestReactions";
-import { canReactPullRequestComment } from "@t3tools/client-runtime/pull-request-reactions";
 import { PullRequestResolveThreadButton } from "./PullRequestResolveThreadButton";
-import { PullRequestConversationGhost } from "./PullRequestGhosts";
+import { PullRequestReviewerPicker } from "./PullRequestReviewerPicker";
 import { sectionCollapseAnchorScrollTop } from "./pullRequestSummaryScroll.logic";
-
-import { changeRequestTermKind } from "./changeRequestTerm";
 
 function reviewerKey(login: string): string {
   return login.toLowerCase();

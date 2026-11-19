@@ -7,8 +7,9 @@ import {
   ServerSettings,
   ServerSettingsPatch,
 } from "@t3tools/contracts";
-import * as Schema from "effect/Schema";
 import { Tool, Toolkit } from "effect/ai";
+import * as Schema from "effect/Schema";
+
 import * as ServerEnvironment from "../../../environment/ServerEnvironment.ts";
 import * as ThreadCommandExecutor from "../../../orchestration-v2/ThreadCommandExecutor.ts";
 import * as ThreadManagementService from "../../../orchestration-v2/ThreadManagementService.ts";

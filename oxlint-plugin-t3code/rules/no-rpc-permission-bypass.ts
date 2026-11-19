@@ -1,5 +1,6 @@
 import { defineRule } from "@oxlint/plugins";
 import * as Option from "effect/Option";
+
 import { getPropertyName } from "../utils.ts";
 
 const readOptions = (options: ReadonlyArray<unknown>) => {

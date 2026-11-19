@@ -1,4 +1,3 @@
-import { describe, expect, it, vi } from "vite-plus/test";
 import {
   applyTerminalAttachStreamEvent,
   combineTerminalSessionState,
@@ -6,6 +5,7 @@ import {
   INITIAL_TERMINAL_OUTPUT_CURSOR,
   nextTerminalAttachSeedState,
 } from "@t3tools/client-runtime/state/terminal";
+import { describe, expect, it, vi } from "vite-plus/test";
 
 import {
   shouldHandleTerminalExit,

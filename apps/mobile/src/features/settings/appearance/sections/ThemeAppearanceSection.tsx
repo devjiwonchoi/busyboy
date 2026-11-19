@@ -1,13 +1,14 @@
+import { mixThemePreviewBase, THEME_PREVIEW_RENDER_SPECS } from "@t3tools/shared/themePreview";
 import { msg, useGT, useMessages } from "gt-react-native";
 import { memo, useId } from "react";
 import { Pressable, View } from "react-native";
 import Svg, { Circle, Defs, RadialGradient, Stop } from "react-native-svg";
 import { ScopedTheme, ScopedVariables } from "uniwind";
 
-import { mixThemePreviewBase, THEME_PREVIEW_RENDER_SPECS } from "@t3tools/shared/themePreview";
-
 import { SymbolView } from "../../../../components/ui/AppSymbol";
 import { AppText as Text } from "../../../../components/ui/AppText";
+import type { MessageResolver } from "../../../../i18n/messages";
+import { cn } from "../../../../lib/cn";
 import {
   getMobileThemePreviewColors,
   MOBILE_THEME_OPTIONS,
@@ -17,8 +18,6 @@ import {
   type MobileThemeMode,
 } from "../../../../lib/mobileTheme";
 import { getMobileUniwindThemeName } from "../../../../lib/mobileThemeRuntime";
-import type { MessageResolver } from "../../../../i18n/messages";
-import { cn } from "../../../../lib/cn";
 import { useAppearancePreferences } from "../AppearancePreferencesProvider";
 
 const THEME_NAMES: Readonly<Record<string, string>> = {

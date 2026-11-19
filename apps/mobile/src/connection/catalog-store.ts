@@ -1,15 +1,15 @@
+import { ConnectionTransientError } from "@t3tools/client-runtime/connection";
 import {
   ConnectionCatalogDocument,
   type ConnectionCatalogDocument as ConnectionCatalogDocumentType,
   EMPTY_CONNECTION_CATALOG_DOCUMENT,
 } from "@t3tools/client-runtime/platform";
-import { ConnectionTransientError } from "@t3tools/client-runtime/connection";
 import * as Effect from "effect/Effect";
-import { msg } from "gt-react-native";
 import * as Option from "effect/Option";
 import * as Ref from "effect/Ref";
 import * as Schema from "effect/Schema";
 import * as Semaphore from "effect/Semaphore";
+import { msg } from "gt-react-native";
 
 import { m } from "../i18n/messages";
 import * as MobileSecureStorage from "../persistence/mobile-secure-storage";

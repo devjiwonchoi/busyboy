@@ -1,13 +1,3 @@
-/**
- * Decoders for GitLab issues as `glab api` answers them. REST enums are decoded as plain strings
- * and normalized here, so a GitLab release that adds a state or a label action never fails a
- * whole payload; a row that cannot be read is skipped rather than failing its page.
- *
- * @module source-control-gitlab/server/gitLabIssueJson
- */
-import * as Exit from "effect/Exit";
-import * as Result from "effect/Result";
-import * as Schema from "effect/Schema";
 import type {
   IssueActor,
   IssueAssigneeCandidate,
@@ -23,6 +13,16 @@ import type {
 } from "@t3tools/contracts";
 import { decodeJsonResult } from "@t3tools/shared/schemaJson";
 import type { TrackerIssueSummary } from "@t3tools/source-control-core/server/IssueTracker";
+/**
+ * Decoders for GitLab issues as `glab api` answers them. REST enums are decoded as plain strings
+ * and normalized here, so a GitLab release that adds a state or a label action never fails a
+ * whole payload; a row that cannot be read is skipped rather than failing its page.
+ *
+ * @module source-control-gitlab/server/gitLabIssueJson
+ */
+import * as Exit from "effect/Exit";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
 
 /** GitLab's ceiling on `per_page`, which is what every bounded read asks for. */
 export const PAGE_SIZE = 100;

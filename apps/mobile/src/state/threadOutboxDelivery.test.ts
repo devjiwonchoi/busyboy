@@ -1,9 +1,4 @@
-import {
-  acknowledgedThreadMessagesAtom,
-  pruneCaughtUpAcknowledgedThreadMessages,
-} from "./acknowledged-thread-messages";
-import * as Effect from "effect/Effect";
-import * as Fiber from "effect/Fiber";
+import { describe, expect, it } from "@effect/vitest";
 import {
   CommandId,
   ComposerContextId,
@@ -13,10 +8,15 @@ import {
   ProviderInstanceId,
   ThreadId,
 } from "@t3tools/contracts";
-import { describe, expect, it } from "@effect/vitest";
+import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
 import { afterEach, beforeEach, vi } from "vite-plus/test";
 
 import type { PreparedTurnAttachments } from "../lib/attachmentUpload";
+import {
+  acknowledgedThreadMessagesAtom,
+  pruneCaughtUpAcknowledgedThreadMessages,
+} from "./acknowledged-thread-messages";
 
 const harness = vi.hoisted(() => ({
   canOperate: true,
@@ -153,15 +153,14 @@ vi.mock("./thread-outbox", async () => {
 });
 
 import * as Option from "effect/Option";
+
 import { scopedThreadKey } from "../lib/scopedEntities";
 import { appAtomRegistry } from "./atom-registry";
+import { startComposerDraftOperation } from "./composerDraftOperations";
 import { pendingThreadCreationOutcomesAtom } from "./pending-thread-creation";
+import { recoverFailedThreadDraft } from "./recover-failed-thread-draft";
 import { clearThreadComposerError, threadComposerErrorsAtom } from "./thread-composer-error";
 import type { QueuedThreadMessage } from "./thread-outbox-model";
-import * as composerDrafts from "./use-composer-drafts";
-import { startComposerDraftOperation } from "./composerDraftOperations";
-import { recoverFailedThreadDraft } from "./recover-failed-thread-draft";
-import { editingQueuedMessageIdsAtom } from "./use-thread-outbox";
 import {
   completeQueuedMessageDelivery,
   type DeliveryRetry,
@@ -170,6 +169,8 @@ import {
   removeAcknowledgedExistingThreadMessage,
   restoreRejectedQueuedMessage,
 } from "./threadOutboxDelivery";
+import * as composerDrafts from "./use-composer-drafts";
+import { editingQueuedMessageIdsAtom } from "./use-thread-outbox";
 
 function queuedMessage(input: {
   readonly messageId: string;

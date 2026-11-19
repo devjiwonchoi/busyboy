@@ -1,11 +1,27 @@
-import { presentThreadShell } from "@t3tools/client-runtime/state/models";
+import { scopeThreadRef, scopedThreadKey } from "@t3tools/client-runtime/environment";
 import { threadKey } from "@t3tools/client-runtime/state/entities";
+import { presentThreadShell } from "@t3tools/client-runtime/state/models";
 import { isThreadWorking as isSidebarThreadWorking } from "@t3tools/client-runtime/state/thread-inbox";
-import * as DateTime from "effect/DateTime";
-import { deriveActiveWorkStartedAt } from "../session-logic.ts";
-import { describe, expect, it } from "vite-plus/test";
+import { threadSearchMatchKey } from "@t3tools/client-runtime/state/thread-search";
+import {
+  sortActiveThreadsByOrderKey,
+  sortPinnedThreadsByOrderKey,
+} from "@t3tools/client-runtime/state/thread-sort";
+import { EnvironmentId, ProjectId, ProviderInstanceId, RunId, ThreadId } from "@t3tools/contracts";
 import * as Cause from "effect/Cause";
+import * as DateTime from "effect/DateTime";
 import { AsyncResult } from "effect/reactivity";
+import { describe, expect, it } from "vite-plus/test";
+
+import { deriveActiveWorkStartedAt } from "../session-logic.ts";
+import { makeThreadFixture, type ThreadFixtureOverrides } from "../test-fixtures";
+import {
+  DEFAULT_INTERACTION_MODE,
+  DEFAULT_RUNTIME_MODE,
+  type Project,
+  type Thread,
+} from "../types";
+import { resolveProjectExpanded } from "../uiStateStore";
 import {
   shouldCreateNewThreadInCurrentProject,
   deleteSelectedThreadEntries,
@@ -37,22 +53,6 @@ import {
   resolveSidebarFolderDot,
   sidebarFolderExpansionKeys,
 } from "./Sidebar.logic";
-import { scopeThreadRef, scopedThreadKey } from "@t3tools/client-runtime/environment";
-import {
-  sortActiveThreadsByOrderKey,
-  sortPinnedThreadsByOrderKey,
-} from "@t3tools/client-runtime/state/thread-sort";
-import { resolveProjectExpanded } from "../uiStateStore";
-import { threadSearchMatchKey } from "@t3tools/client-runtime/state/thread-search";
-import { EnvironmentId, ProjectId, ProviderInstanceId, RunId, ThreadId } from "@t3tools/contracts";
-
-import {
-  DEFAULT_INTERACTION_MODE,
-  DEFAULT_RUNTIME_MODE,
-  type Project,
-  type Thread,
-} from "../types";
-import { makeThreadFixture, type ThreadFixtureOverrides } from "../test-fixtures";
 import {
   completeSidebarRouteReveal,
   pendingSidebarRouteReveal,

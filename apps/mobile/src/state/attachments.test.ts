@@ -1,14 +1,14 @@
+import { describe, expect, it } from "@effect/vitest";
+import { runAttachmentUploadCycle } from "@t3tools/client-runtime/state/attachments";
 import {
   AuthOrchestrationOperateScope,
   EnvironmentAuthorizationError,
   EnvironmentId,
 } from "@t3tools/contracts";
-import { runAttachmentUploadCycle } from "@t3tools/client-runtime/state/attachments";
 import * as Cause from "effect/Cause";
-import { AsyncResult, AtomRegistry } from "effect/reactivity";
-import { describe, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
+import { AsyncResult, AtomRegistry } from "effect/reactivity";
 import { afterEach, beforeEach, vi } from "vite-plus/test";
 
 const state = vi.hoisted(() => ({

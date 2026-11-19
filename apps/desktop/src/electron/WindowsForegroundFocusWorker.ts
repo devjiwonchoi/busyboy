@@ -1,7 +1,8 @@
 import * as NodeWorkerThreads from "node:worker_threads";
 
-import type { WindowsForegroundFocusTarget } from "./WindowsForegroundFocusThread.ts";
 import type { Element } from "@crowecawcaw/xa11y";
+
+import type { WindowsForegroundFocusTarget } from "./WindowsForegroundFocusThread.ts";
 
 type FocusRequest = {
   readonly type: "prepare" | "focus";

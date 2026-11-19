@@ -1,23 +1,17 @@
-import type { PullRequestAction } from "@t3tools/contracts";
 import { sourceControlClients } from "@t3tools/client-runtime/source-control-clients";
+import type { PullRequestAction } from "@t3tools/contracts";
 import { T } from "gt-react";
 import { SearchIcon } from "lucide-react";
-import { PullRequestChangeBreakdownStat } from "./PullRequestChangeBreakdownStat";
-import { PullRequestStackPopover } from "./PullRequestStackPopover";
-import {
-  PullRequestSpeedActions,
-  type PullRequestSpeedActionResult,
-} from "./PullRequestSpeedActions";
 import { memo, type RefCallback } from "react";
 
 import { cn } from "~/lib/utils";
 import { getSourceControlPresentationForKind } from "~/sourceControlPresentation";
 
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
+import { PullRequestChangeBreakdownStat } from "./PullRequestChangeBreakdownStat";
 import { PullRequestChecksPopover } from "./PullRequestChecksPopover";
-import { pullRequestPanelReference } from "./usePullRequestDetail";
-import type { EnvironmentPullRequestEntry } from "./pullRequestList.logic";
 import { openOnHostLabel, showPullRequestLinkContextMenu } from "./pullRequestLinkContextMenu";
+import type { EnvironmentPullRequestEntry } from "./pullRequestList.logic";
 import {
   PULL_REQUEST_ROW_CLASS,
   PULL_REQUEST_ROW_NUMBER_CLASS,
@@ -26,6 +20,12 @@ import {
   PullRequestRowLines,
 } from "./PullRequestListRow";
 import { PullRequestLabelChip, PullRequestReviewDecisionGlyph } from "./pullRequestPresentation";
+import {
+  PullRequestSpeedActions,
+  type PullRequestSpeedActionResult,
+} from "./PullRequestSpeedActions";
+import { PullRequestStackPopover } from "./PullRequestStackPopover";
+import { pullRequestPanelReference } from "./usePullRequestDetail";
 
 const LABEL_SLOTS = [
   { overflow: "@xl/pr-row-meta:hidden" },

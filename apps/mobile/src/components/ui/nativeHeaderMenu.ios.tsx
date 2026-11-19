@@ -1,6 +1,5 @@
-import { Toolbar } from "./Toolbar";
-
 import type { AppBarMenu, AppBarMenuItem } from "./AppBar.types";
+import { Toolbar } from "./Toolbar";
 
 function renderMenuItems(items: ReadonlyArray<AppBarMenuItem>) {
   return items.map((item) =>

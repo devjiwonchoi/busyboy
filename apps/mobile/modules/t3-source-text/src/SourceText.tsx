@@ -1,7 +1,8 @@
 import React, { type ComponentRef, type Ref } from "react";
 import { Platform, StyleSheet, Text, type TextProps, type TextStyle } from "react-native";
-import T3SourceTextRunNativeComponent from "./T3SourceTextRunNativeComponent";
+
 import T3SourceTextNativeComponent from "./T3SourceTextNativeComponent";
+import T3SourceTextRunNativeComponent from "./T3SourceTextRunNativeComponent";
 import { flattenStyles } from "./util";
 
 const TextAncestorContext = React.createContext<[boolean, TextStyle]>([false, {}]);

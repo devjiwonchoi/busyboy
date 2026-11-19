@@ -3,6 +3,7 @@ import { createContext, use, type ComponentProps } from "react";
 import { Platform, ScrollView, type ViewProps } from "react-native";
 // oxlint-disable-next-line eslint/no-restricted-imports -- The wrapper every screen must use.
 import { ScrollViewMarker } from "react-native-screens";
+
 import { nativeHeaderScrollEdgeEffects } from "./scrollEdgeEffects";
 
 type ScrollEdgeEffects = ComponentProps<typeof ScrollViewMarker>["scrollEdgeEffects"];

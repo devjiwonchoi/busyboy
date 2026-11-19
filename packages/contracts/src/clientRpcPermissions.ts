@@ -1,5 +1,5 @@
 import * as Schema from "effect/Schema";
-import { GitPreparePullRequestThreadInput, GitRunStackedActionInput } from "./git.ts";
+
 import {
   AuthAccessWriteScope,
   AuthEnvironmentMaintainScope,
@@ -12,6 +12,7 @@ import {
   AuthTerminalOperateScope,
   type AuthEnvironmentScope,
 } from "./auth.ts";
+import { GitPreparePullRequestThreadInput, GitRunStackedActionInput } from "./git.ts";
 import { ORCHESTRATION_V2_WS_METHODS } from "./orchestrationV2.ts";
 import { WS_METHODS } from "./rpc.ts";
 

@@ -1,6 +1,7 @@
 // @effect-diagnostics nodeBuiltinImport:off -- Exercise the bundled KWin script in an isolated JS context.
 import * as NodeFSP from "node:fs/promises";
 import * as NodeVM from "node:vm";
+
 import { expect, it } from "vite-plus/test";
 
 const source = await NodeFSP.readFile(new URL("./activate.js", import.meta.url), "utf8");

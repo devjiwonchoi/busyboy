@@ -5,8 +5,8 @@ import type {
   EnvironmentId,
 } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
-import * as Schema from "effect/Schema";
 import { AsyncResult, Atom } from "effect/reactivity";
+import * as Schema from "effect/Schema";
 
 import { previewBridge } from "~/components/preview/previewBridge";
 import { environmentCatalog } from "~/connection/catalog";

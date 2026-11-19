@@ -1,6 +1,7 @@
+import { useNavigation } from "@react-navigation/native";
 import { BlurView } from "expo-blur";
 import { GlassView, isGlassEffectAPIAvailable } from "expo-glass-effect";
-import { useNavigation } from "@react-navigation/native";
+import { useGT } from "gt-react-native";
 import { use, useEffect, useState, type ReactNode } from "react";
 import { Platform, Pressable, StyleSheet, TextInput, View } from "react-native";
 import Animated, {
@@ -11,17 +12,16 @@ import Animated, {
   withTiming,
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useGT } from "gt-react-native";
 import { withUniwind } from "uniwind";
 
 import { SymbolView, type AppSymbolName } from "../../components/ui/AppSymbol";
 import { AppText } from "../../components/ui/AppText";
-import { deriveSharedTopBand } from "../../lib/reserved-regions";
-import { isDarkThemeColor, themeColorWithAlpha } from "../../lib/mobileTheme";
 import { useBarInset } from "../../components/ui/useBarInset";
-import { WorkspaceColumnMetricsContext } from "../../native/v5-workspace-context";
 import { isDuoDevice } from "../../lib/device-type";
+import { isDarkThemeColor, themeColorWithAlpha } from "../../lib/mobileTheme";
+import { deriveSharedTopBand } from "../../lib/reserved-regions";
 import { useDeviceType, useNativeColumnLayoutMetrics } from "../../native/native-layout-metrics";
+import { WorkspaceColumnMetricsContext } from "../../native/v5-workspace-context";
 import { useAppearancePreferences } from "../settings/appearance/AppearancePreferencesProvider";
 
 type BrowserBarProps = {

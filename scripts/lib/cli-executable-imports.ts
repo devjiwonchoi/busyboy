@@ -1,5 +1,6 @@
 // @effect-diagnostics nodeBuiltinImport:off
 import * as NodeModule from "node:module";
+
 import ts from "typescript-legacy";
 
 /** Node single-executable imports resolve only builtins; use createRequire for file-backed external packages. */

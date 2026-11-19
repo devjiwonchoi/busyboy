@@ -7,10 +7,12 @@ import * as NodeFS from "node:fs";
 import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
 import * as NodeUtil from "node:util";
+
 import * as Effect from "effect/Effect";
+import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/http";
 import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
-import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/http";
+
 import { proxyConfig } from "../shared/proxy.ts";
 import { cases, type Case } from "./cases.ts";
 import { grade, testRange, type Comment } from "./grade.ts";

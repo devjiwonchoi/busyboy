@@ -1,5 +1,5 @@
-import * as Option from "effect/Option";
 import { HttpServerRequest } from "effect/http";
+import * as Option from "effect/Option";
 
 /**
  * `HttpServerRequest.toURL` that honors `X-Forwarded-Proto: https`. Effect 4.1

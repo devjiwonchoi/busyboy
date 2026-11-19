@@ -1,8 +1,10 @@
-import { type ChatFileAttachment, type ChatImageAttachment } from "../../types";
 import type { ComposerContextRecord, KnownComposerContextRecord } from "@t3tools/contracts";
 import { msg } from "gt-react";
+
 import { m, type MessageResolver } from "~/i18n/messages";
 import { asKnownContextRecord } from "~/lib/composerContextRecords";
+
+import { type ChatFileAttachment, type ChatImageAttachment } from "../../types";
 
 export function userMessageFileLabel(
   file: Pick<ChatFileAttachment, "name" | "source">,

@@ -13,9 +13,9 @@ import * as SecretResolver from "@t3tools/secret-provider-core/server/SecretReso
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Equal from "effect/Equal";
+import { FetchHttpClient, HttpClient } from "effect/http";
 import * as Layer from "effect/Layer";
 import * as Ref from "effect/Ref";
-import { FetchHttpClient, HttpClient } from "effect/http";
 
 import * as SecretResolverLayer from "../secrets/SecretResolver.ts";
 import { requireSettingsSecret } from "../secrets/settingsSecretValue.ts";

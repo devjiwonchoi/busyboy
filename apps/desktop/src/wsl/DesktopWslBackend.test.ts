@@ -1,21 +1,20 @@
 import { assert, describe, it } from "@effect/vitest";
+import * as NetService from "@t3tools/shared/Net";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 
-import * as NetService from "@t3tools/shared/Net";
-
 import * as DesktopBackendConfiguration from "../backend/DesktopBackendConfiguration.ts";
-import * as DesktopBackendPool from "../backend/DesktopBackendPool.ts";
 import type {
   DesktopBackendSnapshot,
   DesktopBackendStartConfig,
 } from "../backend/DesktopBackendManager.ts";
+import * as DesktopBackendPool from "../backend/DesktopBackendPool.ts";
 import * as DesktopServerExposure from "../backend/DesktopServerExposure.ts";
 import * as DesktopAppSettings from "../settings/DesktopAppSettings.ts";
-import * as DesktopWslEnvironment from "./DesktopWslEnvironment.ts";
 import * as DesktopWslBackend from "./DesktopWslBackend.ts";
+import * as DesktopWslEnvironment from "./DesktopWslEnvironment.ts";
 
 function makeStubInstance(input: {
   readonly id: DesktopBackendPool.BackendInstanceId;

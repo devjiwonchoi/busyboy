@@ -9,13 +9,14 @@ import {
   type SlideDisplayList,
   type SlidePrimitive,
 } from "@betteroffice/pptx";
+
+import { PreviewError } from "../previewFailure";
+import { officeImageBitmap } from "./image-bitmap";
 import { slideFonts } from "./slide-fonts";
 import type { SlideMethods, SlidePainted, SlideSummary } from "./slide-protocol";
-import { maxImageSide, type VectorBitmap, type VectorRequest } from "./vector-pictures";
 import { deckText } from "./slide-text";
-import { officeImageBitmap } from "./image-bitmap";
+import { maxImageSide, type VectorBitmap, type VectorRequest } from "./vector-pictures";
 import { serveWorker, Transfer } from "./worker-rpc";
-import { PreviewError } from "../previewFailure";
 
 // One worker holds one open PowerPoint deck: its engine, fonts, laid-out slides, decoded pictures and painting. The
 // window terminates the worker when the deck closes, which is the only way the engine's memory is given back.

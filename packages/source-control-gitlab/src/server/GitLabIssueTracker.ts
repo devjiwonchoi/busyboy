@@ -1,11 +1,3 @@
-/**
- * GitLab's issue tracker over `glab api`. GitLab pages by offset, so every cursor is a page
- * number. Notes, label events, linked merge requests and awards are separate endpoints, joined
- * into the detail.
- */
-import * as Effect from "effect/Effect";
-import * as Result from "effect/Result";
-import * as Schema from "effect/Schema";
 import {
   IssueTrackerKind,
   type IssueCapabilities,
@@ -17,6 +9,14 @@ import {
   type IssueInvolvementFilter,
   type IssueTrackerApi,
 } from "@t3tools/source-control-core/server/IssueTracker";
+/**
+ * GitLab's issue tracker over `glab api`. GitLab pages by offset, so every cursor is a page
+ * number. Notes, label events, linked merge requests and awards are separate endpoints, joined
+ * into the detail.
+ */
+import * as Effect from "effect/Effect";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
 
 import * as GitLabCli from "./GitLabCli.ts";
 import {

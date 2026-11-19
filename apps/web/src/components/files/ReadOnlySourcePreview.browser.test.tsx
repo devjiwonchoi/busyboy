@@ -1,11 +1,12 @@
 import type { ReactNode } from "react";
 import { describe, expect, it, vi } from "vite-plus/test";
 import { cdp, userEvent } from "vite-plus/test/browser";
+
 import "~/index.css";
 
-import { render } from "../../../test/render";
-
 import { getSyntaxHighlighterPromise } from "~/lib/syntaxHighlighting";
+
+import { render } from "../../../test/render";
 
 // The pool starts its workers before showing any code, which can outlast a cold CI browser.
 vi.mock(import("~/components/DiffWorkerPoolProvider"), () => ({

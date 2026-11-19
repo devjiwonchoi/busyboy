@@ -1,24 +1,25 @@
 import { useAtomValue } from "@effect/atom-react";
-import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
 import { scopeThreadRef } from "@t3tools/client-runtime/environment";
+import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
+import {
+  isAtomCommandInterrupted,
+  squashAtomCommandFailure,
+} from "@t3tools/client-runtime/state/runtime";
 import {
   AuthPreviewOperateScope,
   type DiscoveredLocalServer,
   type EnvironmentId,
   type ThreadId,
 } from "@t3tools/contracts";
-import {
-  isAtomCommandInterrupted,
-  squashAtomCommandFailure,
-} from "@t3tools/client-runtime/state/runtime";
 import { T, useGT, Var } from "gt-react";
-import { m } from "~/i18n/messages";
 import { GlobeIcon, SquareIcon, ChevronDownIcon, ChevronUpIcon } from "lucide-react";
 import { type MouseEvent, useState } from "react";
 
+import { m } from "~/i18n/messages";
+
 import { resolveExternalServerUrl } from "../../browser/browserTargetResolver";
-import { readLocalApi } from "../../localApi";
 import { cn, isMacPlatform } from "../../lib/utils";
+import { readLocalApi } from "../../localApi";
 import { useThreadDiscoveredPorts } from "../../portDiscoveryState";
 import { useEnvironment } from "../../state/environments";
 import { previewEnvironment } from "../../state/preview";
@@ -29,8 +30,8 @@ import { Spinner } from "../ui/spinner";
 import { stackedThreadToast, toastManager } from "../ui/toast";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { ThreadDetailsControl } from "./ThreadDetailsControl";
-import { ThreadDetailsSection } from "./ThreadDetailsSection";
 import { THREAD_DETAILS_PANEL_ICON_CLASS } from "./threadDetailsPanelStyles";
+import { ThreadDetailsSection } from "./ThreadDetailsSection";
 
 const SERVER_PAGE_COUNT = 4;
 

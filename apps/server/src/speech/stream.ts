@@ -7,12 +7,13 @@ import {
   type SpeechStreamEvent,
 } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
+import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
 import * as Layer from "effect/Layer";
 import * as Queue from "effect/Queue";
 import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
-import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
 import * as Socket from "effect/socket/Socket";
+
 import * as EnvironmentAuth from "../auth/EnvironmentAuth.ts";
 import * as SpeechService from "./SpeechService.ts";
 

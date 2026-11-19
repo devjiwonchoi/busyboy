@@ -1,8 +1,8 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { expect, it, vi } from "vite-plus/test";
 
-import { buildReviewParsedDiff, type ReviewRenderableFile } from "./reviewModel";
 import { useReviewFileVisibility } from "./reviewFileVisibility";
+import { buildReviewParsedDiff, type ReviewRenderableFile } from "./reviewModel";
 
 const stored = vi.hoisted(() => ({ expanded: undefined as ReadonlyArray<string> | undefined }));
 vi.mock("./reviewState", () => ({

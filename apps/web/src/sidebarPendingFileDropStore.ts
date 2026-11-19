@@ -1,6 +1,5 @@
-import { create } from "zustand";
-
 import type { ScopedThreadRef } from "@t3tools/contracts";
+import { create } from "zustand";
 
 /** Compare both ids; scopedThreadKey can collide when ids contain colons. */
 export function isSameSidebarThreadRef(a: ScopedThreadRef, b: ScopedThreadRef): boolean {

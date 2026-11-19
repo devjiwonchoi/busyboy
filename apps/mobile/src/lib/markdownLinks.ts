@@ -1,10 +1,10 @@
-import { fileBasename } from "@t3tools/shared/path";
 import { fileLinkLabel } from "@t3tools/shared/fileLinks";
 import {
   inlineCodeFilePathCandidate,
   normalizeMarkdownLinkDestination,
   parseMarkdownFileLink,
 } from "@t3tools/shared/markdownLinks";
+import { fileBasename } from "@t3tools/shared/path";
 import { parseThreadLinkHref } from "@t3tools/shared/threadLinks";
 import { videoMimeType } from "@t3tools/shared/video";
 

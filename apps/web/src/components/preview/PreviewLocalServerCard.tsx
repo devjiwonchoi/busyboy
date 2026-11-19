@@ -3,7 +3,6 @@ import { msg, useMessages } from "gt-react";
 
 import type { MessageResolver } from "../../i18n/messages";
 import { DiscoveryListRow } from "../ui/discovery-list";
-
 import { PreviewFaviconIcon } from "./PreviewFaviconIcon";
 import type { PreviewableServer } from "./useDiscoveredLocalServers";
 

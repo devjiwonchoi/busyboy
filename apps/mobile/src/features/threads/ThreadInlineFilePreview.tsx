@@ -4,14 +4,11 @@ import { useAudioPlayerStatus } from "expo-audio";
 import { useGT, useMessages } from "gt-react-native";
 import { useContext, useEffect, useRef, useState } from "react";
 import { AppState, Pressable, View } from "react-native";
-import type { FilePreviewSource } from "../../components/ui/FilePreviewModal";
-import { filePreviewKey } from "../../lib/filePreviewGallery";
+
 import { PierreEntryIcon } from "../../components/PierreEntryIcon";
-import { AppText as Text } from "../../components/ui/AppText";
 import { SymbolView } from "../../components/ui/AppSymbol";
-import { useFullscreenVideoOpen, useMediaAudioSessionHold } from "../../lib/videoAudioSession";
-import { useRefreshAssetUrl } from "../../state/assets";
-import { ThreadMediaRetainContext, ThreadMediaVisibleContext } from "./ThreadMarkdownVideo";
+import { AppText as Text } from "../../components/ui/AppText";
+import type { FilePreviewSource } from "../../components/ui/FilePreviewModal";
 import {
   acquireAudioSession,
   activateAudioSession,
@@ -19,7 +16,11 @@ import {
   pauseAudioPlayer,
   releaseAudioSession,
 } from "../../lib/audioSession";
+import { filePreviewKey } from "../../lib/filePreviewGallery";
+import { useFullscreenVideoOpen, useMediaAudioSessionHold } from "../../lib/videoAudioSession";
+import { useRefreshAssetUrl } from "../../state/assets";
 import { usePlaybackAudioPlayer } from "../voice-input/usePlaybackAudioPlayer";
+import { ThreadMediaRetainContext, ThreadMediaVisibleContext } from "./ThreadMarkdownVideo";
 
 type PreviewProps = {
   readonly source: FilePreviewSource;

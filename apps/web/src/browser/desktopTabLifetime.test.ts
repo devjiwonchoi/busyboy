@@ -21,8 +21,9 @@ vi.mock("./browserRecording", () => ({
   stopBrowserRecording,
 }));
 
-import { acquireDesktopTab } from "./desktopTabLifetime";
 import { __setClientSettingsForTests } from "~/hooks/useSettings";
+
+import { acquireDesktopTab } from "./desktopTabLifetime";
 
 const DEFAULT_TAB_STATE = {
   zoomFactor: DEFAULT_PREVIEW_ZOOM_FACTOR,

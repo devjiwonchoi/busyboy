@@ -1,25 +1,26 @@
-import { useAndroidFloatingTabs } from "../../settings/appearance/AppearancePreferencesProvider";
-import { WorkspaceNoTabs } from "./WorkspaceNoTabs";
-import { useEnabledNavigationTabs } from "./navigation-tabs";
-import { NAVIGATION_TAB_ORDER } from "./navigation-tab-order";
 import { useNavigationState } from "@react-navigation/native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useAndroidControlSizing } from "../../../components/ui/useAndroidControlSizing";
-import { FLOATING_TABS } from "./floating-workspace-tabs";
 import { View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+
 import { ScreenContent } from "../../../components/ui/ScreenContent";
-import { PullRequestsScreen } from "../../pull-requests/PullRequestsScreen";
-import { ListSearchToolbar } from "./ListSearchToolbar.android";
-import { IssuesScreen } from "../../issues/IssuesScreen";
-import { selectedIssueKey } from "../../issues/issueParams";
-import { selectedPullRequestKey } from "../../pull-requests/pullRequestSelection";
+import { useAndroidControlSizing } from "../../../components/ui/useAndroidControlSizing";
+import { WorkspaceAppBarScope } from "../../../components/ui/WorkspaceAppBar.android";
 import { AndroidHomeFabLayout } from "../../home/AndroidHomeFab";
+import { selectedIssueKey } from "../../issues/issueParams";
+import { IssuesScreen } from "../../issues/IssuesScreen";
+import { selectedPullRequestKey } from "../../pull-requests/pullRequestSelection";
+import { PullRequestsScreen } from "../../pull-requests/PullRequestsScreen";
+import { useAndroidFloatingTabs } from "../../settings/appearance/AppearancePreferencesProvider";
 import { useAdaptiveWorkspaceLayout } from "../adaptive-workspace-context";
 import { useAndroidWorkspaceRoot } from "./AndroidWorkspaceTabsProvider";
-import { WorkspaceTabsContext, useWorkspaceTabs } from "./WorkspaceTabsContext";
+import { FLOATING_TABS } from "./floating-workspace-tabs";
+import { ListSearchToolbar } from "./ListSearchToolbar.android";
+import { NAVIGATION_TAB_ORDER } from "./navigation-tab-order";
+import { useEnabledNavigationTabs } from "./navigation-tabs";
+import { WorkspaceNoTabs } from "./WorkspaceNoTabs";
 import { WorkspaceTabPanes } from "./WorkspaceTabPanes";
+import { WorkspaceTabsContext, useWorkspaceTabs } from "./WorkspaceTabsContext";
 import { WorkspaceThreadSidebar } from "./WorkspaceThreadSidebar";
-import { WorkspaceAppBarScope } from "../../../components/ui/WorkspaceAppBar.android";
 
 /** The Home route in the sidebar column: the selected tab's list. */
 export function AndroidWorkspaceSidebar() {

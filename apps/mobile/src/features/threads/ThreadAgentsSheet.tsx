@@ -1,4 +1,5 @@
 import { useAtomValue } from "@effect/atom-react";
+import { StackActions, useNavigation, type StaticScreenProps } from "@react-navigation/native";
 import {
   deriveWorkflowGroups,
   projectedSubagentsToRuntime,
@@ -12,7 +13,6 @@ import {
 } from "@t3tools/contracts";
 import { deriveSubagentElapsedMs } from "@t3tools/shared/orchestrationTiming";
 import { formatDuration } from "@t3tools/shared/orchestrationTimingCopy";
-import { StackActions, useNavigation, type StaticScreenProps } from "@react-navigation/native";
 import * as DateTime from "effect/DateTime";
 import { Atom } from "effect/reactivity";
 import * as Haptics from "expo-haptics";
@@ -21,18 +21,17 @@ import { useMemo } from "react";
 import { Pressable, ScrollView, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { SheetHeader } from "../../components/ui/SheetHeader";
 import { AppText as Text } from "../../components/ui/AppText";
-import { environmentThreadDetails } from "../../state/threads";
-import { useEnvironments } from "../../state/environments";
-import { SubagentRow } from "./SubagentRow";
-import { useVisibleSecondClock } from "./use-visible-second-clock";
-import { SubagentStopButton } from "./SubagentStopButton";
-import { ThreadWorkflowGroup } from "./ThreadWorkflowGroup";
 import { ScreenContent } from "../../components/ui/ScreenContent";
-import { subagentThreadTarget } from "./threadAgentsPresentation";
-
+import { SheetHeader } from "../../components/ui/SheetHeader";
+import { useEnvironments } from "../../state/environments";
+import { environmentThreadDetails } from "../../state/threads";
+import { SubagentRow } from "./SubagentRow";
+import { SubagentStopButton } from "./SubagentStopButton";
 import { useOpenThreadInspector } from "./thread-inspector-navigation";
+import { subagentThreadTarget } from "./threadAgentsPresentation";
+import { ThreadWorkflowGroup } from "./ThreadWorkflowGroup";
+import { useVisibleSecondClock } from "./use-visible-second-clock";
 
 type AgentsTarget = { readonly environmentId: EnvironmentId; readonly threadId: ThreadId };
 

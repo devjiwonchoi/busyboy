@@ -2,13 +2,13 @@ import { useGT } from "gt-react-native";
 import { useId, useState } from "react";
 import { Image, Pressable, View } from "react-native";
 
-import { FilePreviewLoading } from "./FilePreviewFeedback";
+import { MediaActionsMenu } from "../../components/MediaActionsMenu";
 import { EmptyState } from "../../components/ui/EmptyState";
 import { FilePreviewModal, type FilePreviewSource } from "../../components/ui/FilePreviewModal";
 import { PresentationSource } from "../../components/ui/NativePresentation";
-import { useMediaActions } from "../../state/mediaActions";
 import { type MediaActionsSource } from "../../lib/mediaActionsSource";
-import { MediaActionsMenu } from "../../components/MediaActionsMenu";
+import { useMediaActions } from "../../state/mediaActions";
+import { FilePreviewLoading } from "./FilePreviewFeedback";
 
 function ResolvedWorkspaceFileImagePreview(props: {
   readonly accessibilityLabel: string;

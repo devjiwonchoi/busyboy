@@ -1,20 +1,20 @@
+import { describe, expect, it } from "@effect/vitest";
+import { EnvironmentAuthInvalidError } from "@t3tools/contracts";
 import {
   RelayAuthInvalidError,
   RelayEnvironmentConnectNotAuthorizedError,
   RelayEnvironmentEndpointTimedOutError,
 } from "@t3tools/contracts/relay";
-import { EnvironmentAuthInvalidError } from "@t3tools/contracts";
-import { describe, expect, it } from "@effect/vitest";
 
+import { NETWORK_BLOCKING_HINT } from "../errors/network.ts";
+import { DPOP_UNKNOWN_HINT } from "../relay/errorPresentation.ts";
+import { ManagedRelayRequestFailedError } from "../relay/managedRelay.ts";
+import { RemoteEnvironmentAuthFetchError, RemoteEnvironmentAuthTimeoutError } from "../rpc/http.ts";
 import {
   isHostCredentialRefusal,
   mapManagedRelayError,
   mapRemoteDpopEnvironmentError,
 } from "./errors.ts";
-import { DPOP_UNKNOWN_HINT } from "../relay/errorPresentation.ts";
-import { ManagedRelayRequestFailedError } from "../relay/managedRelay.ts";
-import { NETWORK_BLOCKING_HINT } from "../errors/network.ts";
-import { RemoteEnvironmentAuthFetchError, RemoteEnvironmentAuthTimeoutError } from "../rpc/http.ts";
 
 describe("mapManagedRelayError", () => {
   it("keeps a timeout reported by the relay distinct from a local network failure", () => {

@@ -1,5 +1,10 @@
 import { PrimaryConnectionTarget } from "@t3tools/client-runtime/connection";
-import { createEnvironmentThreadShellAtoms } from "@t3tools/client-runtime/state/threads";
+import {
+  scopedProjectKey,
+  scopedThreadKey,
+  scopeProjectRef,
+  scopeThreadRef,
+} from "@t3tools/client-runtime/environment";
 import {
   applyShellStreamEvent,
   createEnvironmentSnapshotAtom,
@@ -7,16 +12,7 @@ import {
   type EnvironmentShellState,
   type EnvironmentShellStatus,
 } from "@t3tools/client-runtime/state/shell";
-import { makeThreadProjectionFixture } from "./test-fixtures";
-import * as Option from "effect/Option";
-import { AsyncResult, Atom, AtomRegistry } from "effect/reactivity";
-import {
-  scopedProjectKey,
-  scopedThreadKey,
-  scopeProjectRef,
-  scopeThreadRef,
-} from "@t3tools/client-runtime/environment";
-import { DEFAULT_UNIFIED_SETTINGS } from "@t3tools/contracts/settings";
+import { createEnvironmentThreadShellAtoms } from "@t3tools/client-runtime/state/threads";
 import {
   defaultInstanceIdForDriver,
   DEFAULT_MODEL,
@@ -36,7 +32,12 @@ import {
   type ScopedThreadRef,
   type ServerProvider,
 } from "@t3tools/contracts";
+import { DEFAULT_UNIFIED_SETTINGS } from "@t3tools/contracts/settings";
 import { createModelSelection } from "@t3tools/shared/model";
+import * as Option from "effect/Option";
+import { AsyncResult, Atom, AtomRegistry } from "effect/reactivity";
+
+import { makeThreadProjectionFixture } from "./test-fixtures";
 
 const CODEX_INSTANCE = ProviderInstanceId.make("codex");
 const CODEX_SECONDARY_INSTANCE = ProviderInstanceId.make("codex_secondary");
@@ -73,9 +74,10 @@ function selectionsByProvider(
   }
   return result;
 }
+import { threadContextRecord } from "@t3tools/shared/composerContextReferences";
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vite-plus/test";
-import { createMemoryStorage } from "./lib/storage";
 
+import { waitForDraftHeroTransition } from "./components/chat/draftHeroTransition";
 import {
   COMPOSER_DRAFT_STORAGE_KEY,
   subscribeComposerDraftModelReconciliation,
@@ -97,20 +99,19 @@ import {
   useComposerDraftStore,
   DraftId,
 } from "./composerDraftStore";
-import { waitForDraftHeroTransition } from "./components/chat/draftHeroTransition";
-import { insertInlineContextReference } from "./lib/composerContextReferences";
 import {
   buildMessageContext,
   environmentContextRecord,
   terminalContextReference,
 } from "./lib/composerContextRecords";
-import { threadContextRecord } from "@t3tools/shared/composerContextReferences";
+import { insertInlineContextReference } from "./lib/composerContextReferences";
 import {
   copiedComposerAttachmentFile,
   rememberCopiedComposerAttachments,
 } from "./lib/copiedComposerAttachments";
-import { formatTerminalContextReference, type TerminalContextDraft } from "./lib/terminalContext";
+import { createMemoryStorage } from "./lib/storage";
 import { createDeferredStorage } from "./lib/storage";
+import { formatTerminalContextReference, type TerminalContextDraft } from "./lib/terminalContext";
 import { applyPreviewServerSnapshot, resetPreviewStateForTests } from "./previewStateStore";
 
 function makeImage(input: {

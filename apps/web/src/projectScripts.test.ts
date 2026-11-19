@@ -1,7 +1,7 @@
-import { shortcutLabelForCommand } from "./keybindings";
-import { describe, expect, it } from "vite-plus/test";
 import { settleProjectScript, setupProjectScript } from "@t3tools/shared/projectScripts";
+import { describe, expect, it } from "vite-plus/test";
 
+import { shortcutLabelForCommand } from "./keybindings";
 import {
   commandForProjectScript,
   nextProjectScriptId,

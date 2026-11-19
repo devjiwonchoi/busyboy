@@ -5,17 +5,16 @@ import { AppState, Dimensions, Platform } from "react-native";
 
 import { environmentCatalog } from "../../../connection/catalog";
 import { deriveLayout } from "../../../lib/layout";
-import {
-  NATIVE_METRICS_TIMEOUT_MS,
-  nativeWorkspaceColumnsSupportedFor,
-} from "../../../native/NativeWorkspaceColumns";
+import { rootStackState, type RootStackNavigation } from "../../../lib/root-stack-reset";
 import {
   currentNativeLayoutMetrics,
   firstNativeLayoutMetrics,
 } from "../../../native/native-layout-metrics";
+import {
+  NATIVE_METRICS_TIMEOUT_MS,
+  nativeWorkspaceColumnsSupportedFor,
+} from "../../../native/NativeWorkspaceColumns";
 import { loadPreferences, savePreferencesPatch } from "../../../persistence/imperative";
-import { rootStackState, type RootStackNavigation } from "../../../lib/root-stack-reset";
-import { workspaceRoutesOf } from "../workspace-overlay-routes";
 import type { WorkspaceSelections } from "../../../persistence/mobile-preferences";
 import { appAtomRegistry } from "../../../state/atom-registry";
 import { environmentPresentations } from "../../../state/presentation";
@@ -24,6 +23,7 @@ import {
   startOpeningEnvironmentThread,
   threadEnvironment,
 } from "../../../state/threads";
+import { workspaceRoutesOf } from "../workspace-overlay-routes";
 import {
   rememberedSettingsPage,
   workspaceSelectionsIn,

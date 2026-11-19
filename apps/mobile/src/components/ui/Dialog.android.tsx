@@ -1,4 +1,3 @@
-import { NativeThemeHost } from "./NativeThemeHost.android";
 import {
   AlertDialog,
   Button,
@@ -11,16 +10,16 @@ import {
   useNativeState,
 } from "@expo/ui/jetpack-compose";
 import { verticalScroll } from "@expo/ui/jetpack-compose/modifiers";
+import { msg, useGT } from "gt-react-native";
+import { useSyncExternalStore } from "react";
+import type { Alert, AlertButton } from "react-native";
 
 import { useAppearancePreferences } from "../../features/settings/appearance/AppearancePreferencesProvider";
 import { useScaledTextRole } from "../../features/settings/appearance/useScaledTextRole";
-
-import { msg, useGT } from "gt-react-native";
-import { useSyncExternalStore } from "react";
 import { m } from "../../i18n/messages";
 import { themeColorWithContrast } from "../../lib/mobileTheme";
-import type { Alert, AlertButton } from "react-native";
 import type { ConfirmDialogRequest, TextInputDialogRequest } from "./Dialog.types";
+import { NativeThemeHost } from "./NativeThemeHost.android";
 
 export type { ConfirmDialogRequest, TextInputDialogRequest } from "./Dialog.types";
 

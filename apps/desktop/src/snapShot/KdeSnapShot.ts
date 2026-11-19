@@ -1,16 +1,18 @@
 // @effect-diagnostics nodeBuiltinImport:off -- KDE authorizes a dedicated, installed native executable.
-import * as NodeCrypto from "node:crypto";
+
 import * as NodeChildProcess from "node:child_process";
+import * as NodeCrypto from "node:crypto";
 import * as NodeFSP from "node:fs/promises";
 import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
 import * as NodeURL from "node:url";
-import * as Schema from "effect/Schema";
+
 import type { DesktopCaptureHelperState } from "@t3tools/contracts";
+import * as Schema from "effect/Schema";
 
 import { escapeDesktopEntryExecArgument } from "../app/DesktopLinuxUrlHandler.ts";
-import type { LinuxWindowSnapshot } from "./LinuxSnapShot.ts";
 import { CaptureSetupRequiredError, readPortalPng } from "./linuxCaptureSession.ts";
+import type { LinuxWindowSnapshot } from "./LinuxSnapShot.ts";
 import { startNativeCaptureFeedback } from "./NativeCaptureFeedback.ts";
 export { isKdeCaptureSession } from "./linuxCaptureSession.ts";
 

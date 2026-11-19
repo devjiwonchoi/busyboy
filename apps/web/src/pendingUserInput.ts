@@ -1,3 +1,10 @@
+import {
+  buildPendingUserInputAnswers,
+  normalizeSelectedOptionValues,
+  resolvePendingUserInputAnswer,
+  type PendingUserInputAnswer,
+  type PendingUserInputDraftAnswer,
+} from "@t3tools/client-runtime/state/pending-user-input";
 import type {
   PreviewAnnotationContextRecord,
   PreviewAnnotationPayload,
@@ -10,19 +17,12 @@ import {
   replaceComposerContextReferences,
 } from "@t3tools/shared/composerContextReferences";
 import { formatThreadLink } from "@t3tools/shared/threadLinks";
-import {
-  buildPendingUserInputAnswers,
-  normalizeSelectedOptionValues,
-  resolvePendingUserInputAnswer,
-  type PendingUserInputAnswer,
-  type PendingUserInputDraftAnswer,
-} from "@t3tools/client-runtime/state/pending-user-input";
 
-import { collectInlineContextIds } from "./lib/composerContextReferences";
 import {
   previewAnnotationContextRecord,
   reviewCommentContextRecord,
 } from "./lib/composerContextRecords";
+import { collectInlineContextIds } from "./lib/composerContextReferences";
 import type { ReviewCommentContext } from "./reviewCommentContext";
 
 type AnswerContextRecord =

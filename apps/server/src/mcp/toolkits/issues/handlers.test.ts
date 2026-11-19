@@ -1,3 +1,4 @@
+import { describe, expect, it } from "@effect/vitest";
 import {
   EnvironmentId,
   IssueTrackerKind,
@@ -9,29 +10,28 @@ import {
   type ThreadIssueLink,
   SourceControlProviderKind,
 } from "@t3tools/contracts";
-import { describe, expect, it } from "@effect/vitest";
 import {
   IssueTrackerError,
   type StandaloneIssueTrackerApi,
 } from "@t3tools/source-control-core/server/IssueTracker";
+import type { Tool } from "effect/ai";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Ref from "effect/Ref";
 import * as Stream from "effect/Stream";
-import type { Tool } from "effect/ai";
 
 import * as IssueService from "../../../issue/IssueService.ts";
 import * as IssueTrackerRegistry from "../../../issue/IssueTrackerRegistry.ts";
 import * as Orchestrator from "../../../orchestration-v2/Orchestrator.ts";
-import * as ThreadIssueService from "../../../orchestration-v2/ThreadIssueService.ts";
 import { v2PullRequestThread } from "../../../orchestration-v2/testkit/pullRequestFixtures.ts";
+import * as ThreadIssueService from "../../../orchestration-v2/ThreadIssueService.ts";
 import * as IssueTrackerBindings from "../../../persistence/IssueTrackerBindings.ts";
 import * as ProjectService from "../../../project/ProjectService.ts";
 import * as RepositoryIdentityResolver from "../../../project/RepositoryIdentityResolver.ts";
 import * as McpInvocationContext from "../../McpInvocationContext.ts";
-import * as McpToolAccess from "../../McpToolAccess.ts";
 import * as McpToolAccessTestkit from "../../McpToolAccess.testkit.ts";
+import * as McpToolAccess from "../../McpToolAccess.ts";
 import * as IssuesHandlers from "./handlers.ts";
 import { IssuesToolkit } from "./tools.ts";
 

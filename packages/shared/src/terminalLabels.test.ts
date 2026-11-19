@@ -1,9 +1,8 @@
-import { describe, expect, it } from "vite-plus/test";
-
 import { DEFAULT_TERMINAL_ID, TerminalOpenInput } from "@t3tools/contracts";
 import * as Schema from "effect/Schema";
 import { mFallback } from "gt-i18n";
 import type { MFunctionType } from "gt-i18n/types";
+import { describe, expect, it } from "vite-plus/test";
 
 import { getTerminalLabel, nextTerminalId } from "./terminalLabels.ts";
 import { resolveTerminalSessionLabel } from "./terminalLabelsCopy.ts";

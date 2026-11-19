@@ -1,16 +1,4 @@
 import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
-import * as DateTime from "effect/DateTime";
-import { msg } from "gt-react";
-
-import { resolveDesktopPairingUrl, resolveHostedPairingUrl } from "./pairingUrls";
-import { getPairingTokenFromUrl, setPairingTokenOnUrl } from "@t3tools/shared/remote";
-import { readHostedPairingRequest } from "../../hostedPairing";
-import { m, type MessageResolver } from "../../i18n/messages";
-import {
-  isLoopbackHostname,
-  type ServerClientSessionRecord,
-  type ServerPairingLinkRecord,
-} from "~/environments/primary";
 import {
   type AdvertisedEndpoint,
   type AuthClientMetadata,
@@ -28,10 +16,23 @@ import {
   type ServerAuthPolicy,
   type ServerDirectEndpoint,
 } from "@t3tools/contracts";
+import { getPairingTokenFromUrl, setPairingTokenOnUrl } from "@t3tools/shared/remote";
+import * as DateTime from "effect/DateTime";
+import { msg } from "gt-react";
+
+import {
+  isLoopbackHostname,
+  type ServerClientSessionRecord,
+  type ServerPairingLinkRecord,
+} from "~/environments/primary";
+
+import { readHostedPairingRequest } from "../../hostedPairing";
+import { m, type MessageResolver } from "../../i18n/messages";
 import {
   getDesktopUpdateDownloadedVersion,
   resolveDesktopUpdateButtonAction,
 } from "../desktopUpdate.logic";
+import { resolveDesktopPairingUrl, resolveHostedPairingUrl } from "./pairingUrls";
 
 /** Keep terminal:read with terminal:operate to avoid creating unseen shells on every script run. */
 export function togglePairingScopeSelection(

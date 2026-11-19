@@ -1,4 +1,8 @@
-import { pipe } from "effect/Function";
+import {
+  normalizeProviderAccentColor,
+  resolveProviderInstanceDisplayName,
+  shouldShowInstanceBadge,
+} from "@t3tools/client-runtime/state/provider-instance-display";
 import {
   DEFAULT_MODEL_BY_PROVIDER,
   defaultInstanceIdForDriver,
@@ -12,11 +16,7 @@ import {
   type ServerSettings,
   type ServerProviderState,
 } from "@t3tools/contracts";
-import {
-  normalizeProviderAccentColor,
-  resolveProviderInstanceDisplayName,
-  shouldShowInstanceBadge,
-} from "@t3tools/client-runtime/state/provider-instance-display";
+import { pipe } from "effect/Function";
 
 export { normalizeProviderAccentColor, shouldShowInstanceBadge };
 

@@ -9,10 +9,10 @@ import Animated, { FadeIn, FadeOut, ReduceMotion } from "react-native-reanimated
 
 import { SymbolView } from "../../components/ui/AppSymbol";
 import { useAppForeground } from "../../lib/appState";
+import { usePreparedConnection } from "../../state/session";
 import { useAppearancePreferences } from "../settings/appearance/AppearancePreferencesProvider";
 import { browserTabTitle } from "./browserTabs";
 import { PreviewStreamWebView } from "./PreviewStreamWebView";
-import { usePreparedConnection } from "../../state/session";
 
 const PLAYER_LONG_SIDE = 184;
 const PLAYER_ENTERING = FadeIn.duration(180).reduceMotion(ReduceMotion.System);

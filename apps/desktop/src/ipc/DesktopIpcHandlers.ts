@@ -1,22 +1,48 @@
-import { startFileDrag } from "./methods/fileDrag.ts";
 import * as Effect from "effect/Effect";
 
-import { receiveProviderAuthCallback, cancelProviderAuthCallback } from "./methods/providerAuth.ts";
 import * as DesktopIpc from "./DesktopIpc.ts";
-import { installNotificationBadge } from "./methods/notificationBadge.ts";
+import * as AppActivationIpc from "./methods/appActivation.ts";
+import {
+  getCliCommandState,
+  installCliCommand,
+  uninstallCliCommand,
+  addCliCommandToPath,
+} from "./methods/cliCommand.ts";
 import { getClientSettings, setClientSettings } from "./methods/clientSettings.ts";
 import { getConnectionCatalog, setConnectionCatalog } from "./methods/connectionCatalog.ts";
+import { startFileDrag } from "./methods/fileDrag.ts";
+import {
+  completeLegacyLocalStorage,
+  takeLegacyLocalStorage,
+} from "./methods/legacyLocalStorage.ts";
 import {
   getHostEnvironmentId,
   getLocalEnvironmentEnabled,
   setLocalEnvironmentEnabled,
 } from "./methods/localEnvironment.ts";
+import { installNotificationBadge } from "./methods/notificationBadge.ts";
+import * as PreviewIpc from "./methods/preview.ts";
+import { receiveProviderAuthCallback, cancelProviderAuthCallback } from "./methods/providerAuth.ts";
 import {
   getAdvertisedEndpoints,
   getServerExposureState,
   setServerExposureMode,
   setTailscaleServeEnabled,
 } from "./methods/serverExposure.ts";
+import {
+  acknowledgeSnapShot,
+  checkSnapShotShortcut,
+  dismissSnapShotAnimation,
+  getSnapShotState,
+  setupSnapShot,
+  previewSnapShotConfig,
+  applySnapShotConfig,
+  listPendingSnapShots,
+  readSnapShot,
+  requestSnapShotPermissions,
+  setSnapShotAnimationDestination,
+  setSnapShotShortcutSuppressed,
+} from "./methods/snapShot.ts";
 import {
   bootstrapSshBearerSession,
   disconnectSshEnvironment,
@@ -34,6 +60,7 @@ import {
   installUpdate,
   setUpdateChannel,
 } from "./methods/updates.ts";
+import * as WebLinksIpc from "./methods/webLinks.ts";
 import {
   getAppBranding,
   getLocalEnvironmentBootstraps,
@@ -59,34 +86,7 @@ import {
   syncHtmlFullscreen,
   showContextMenu,
 } from "./methods/window.ts";
-import {
-  acknowledgeSnapShot,
-  checkSnapShotShortcut,
-  dismissSnapShotAnimation,
-  getSnapShotState,
-  setupSnapShot,
-  previewSnapShotConfig,
-  applySnapShotConfig,
-  listPendingSnapShots,
-  readSnapShot,
-  requestSnapShotPermissions,
-  setSnapShotAnimationDestination,
-  setSnapShotShortcutSuppressed,
-} from "./methods/snapShot.ts";
-import * as PreviewIpc from "./methods/preview.ts";
-import * as AppActivationIpc from "./methods/appActivation.ts";
-import * as WebLinksIpc from "./methods/webLinks.ts";
-import {
-  completeLegacyLocalStorage,
-  takeLegacyLocalStorage,
-} from "./methods/legacyLocalStorage.ts";
 import { getWslState, setWslBackendEnabled, setWslDistro, setWslOnly } from "./methods/wsl.ts";
-import {
-  getCliCommandState,
-  installCliCommand,
-  uninstallCliCommand,
-  addCliCommandToPath,
-} from "./methods/cliCommand.ts";
 
 export const installDesktopIpcHandlers = Effect.fn("desktop.ipc.installHandlers")(function* () {
   const ipc = yield* DesktopIpc.DesktopIpc;

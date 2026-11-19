@@ -12,6 +12,15 @@ import {
   Vector3,
   WebGLRenderer,
 } from "three";
+
+import {
+  createAndroidFoldScene,
+  DEFAULT_FOLD_INNER_ASPECT,
+  isFoldInnerAspect,
+} from "./androidFoldScene.ts";
+import { createDeviceFraming } from "./deviceFraming.ts";
+import { createDeviceMotion } from "./deviceMotion.ts";
+import { nearestDeviceView } from "./deviceViewSnap.ts";
 import {
   createDeviceModelSlot,
   type DeviceModelSource,
@@ -19,17 +28,9 @@ import {
 } from "./model.ts";
 import { createImportedPhoneScene, loadDeviceModel } from "./modelScene.ts";
 import { createPhoneScene, phoneDisplayLayout } from "./phoneScene.ts";
-import {
-  createAndroidFoldScene,
-  DEFAULT_FOLD_INNER_ASPECT,
-  isFoldInnerAspect,
-} from "./androidFoldScene.ts";
 import { createRenderScheduler } from "./renderScheduler.ts";
-import { createDeviceMotion } from "./deviceMotion.ts";
-import { createDeviceFraming } from "./deviceFraming.ts";
-import { nearestDeviceView } from "./deviceViewSnap.ts";
-import type { DeviceScreenSize } from "./stream.ts";
 import { IOS_PHONE_SHAPE, type DeviceShapeProfile } from "./shapeProfile.ts";
+import type { DeviceScreenSize } from "./stream.ts";
 
 export interface PhoneViewer {
   readonly setModel: (source: DeviceModelSource | null) => void;

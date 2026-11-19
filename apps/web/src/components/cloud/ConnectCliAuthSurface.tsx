@@ -8,10 +8,10 @@ import {
   connectCliSignInRedirectUrl,
 } from "../../cloud/connectCliAuth";
 import { isElectron } from "../../env";
-import { StandalonePage, StandalonePageHeader } from "../ui/standalone-page";
 import { resolveClerkSignInProps } from "../clerk/authRedirect";
 import { retryClerkLoad, useClerkLoadFailed } from "../clerk/clerkLoadFailure";
 import { Button } from "../ui/button";
+import { StandalonePage, StandalonePageHeader } from "../ui/standalone-page";
 
 const invalidLinkMessage = {
   context: msg("Authorization request"),

@@ -1,6 +1,7 @@
 import { DEFAULT_SPEECH_TRANSCRIPTION_OPTIONS } from "@t3tools/contracts";
-import { expect, it, vi } from "vite-plus/test";
 import { SPEECH_STREAM_MAX_QUEUED_BYTES, type SpeechStreamEvent } from "@t3tools/contracts";
+import { expect, it, vi } from "vite-plus/test";
+
 import { openSpeechStream } from "./stream.ts";
 
 class TestSocket extends EventTarget {

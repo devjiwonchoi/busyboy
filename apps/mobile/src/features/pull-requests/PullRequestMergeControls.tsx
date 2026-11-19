@@ -1,18 +1,21 @@
-import { errorDisplayMessage } from "@t3tools/client-runtime/errors";
-import * as Dialog from "../../components/ui/Dialog";
 import { useAtomRefresh, useAtomSet, useAtomValue } from "@effect/atom-react";
-import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
+import { errorDisplayMessage } from "@t3tools/client-runtime/errors";
 import { sourceControlClients } from "@t3tools/client-runtime/source-control-clients";
-import { changeRequestTermKind } from "../../lib/changeRequestTerm";
+import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
 import type { PullRequestDetail, PullRequestMergeMethod } from "@t3tools/contracts";
 import { resolveProjectSettings } from "@t3tools/shared/projectSettings";
 import { AsyncResult } from "effect/reactivity";
 import { useGT, useMessages } from "gt-react-native";
 import { useRef, useState } from "react";
 import { View } from "react-native";
+
+import type { AppSymbolName } from "../../components/ui/AppSymbol";
 import { AppText as Text } from "../../components/ui/AppText";
 import { Button } from "../../components/ui/Button";
+import * as Dialog from "../../components/ui/Dialog";
 import { SplitButton } from "../../components/ui/SplitButton";
+import { m as resolveMessage } from "../../i18n/messages";
+import { changeRequestTermKind } from "../../lib/changeRequestTerm";
 import { useEnvironmentServerConfig } from "../../state/entities";
 import { mobilePreferencesAtom, updateMobilePreferencesAtom } from "../../state/preferences";
 import { composerPullRequests } from "../../state/pull-requests";
@@ -27,14 +30,12 @@ import {
   pullRequestActionLabel,
   resolveMergeMethod,
 } from "./pullRequestActions";
-import { pullRequestStackMerge, singlePullRequestMergeAllowed } from "./pullRequestStack";
-import { pullRequestTarget, type PullRequestParams } from "./usePullRequestDiff";
-import { usePullRequestAction } from "./usePullRequestAction";
-import { usePullRequestPermissions } from "./usePullRequestPermissions";
 import { PullRequestGlyph } from "./pullRequestGlyphs";
-import type { AppSymbolName } from "../../components/ui/AppSymbol";
+import { pullRequestStackMerge, singlePullRequestMergeAllowed } from "./pullRequestStack";
+import { usePullRequestAction } from "./usePullRequestAction";
+import { pullRequestTarget, type PullRequestParams } from "./usePullRequestDiff";
+import { usePullRequestPermissions } from "./usePullRequestPermissions";
 import type { PullRequestStackState } from "./usePullRequestStack";
-import { m as resolveMessage } from "../../i18n/messages";
 
 export function PullRequestMergeControls(props: {
   readonly pr: PullRequestDetail;

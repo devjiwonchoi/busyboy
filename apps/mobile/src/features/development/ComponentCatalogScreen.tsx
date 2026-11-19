@@ -1,33 +1,33 @@
-import { NativeAppBarExample } from "./NativeAppBarExample";
-import { Toast } from "../../components/ui/Toast";
-import { Progress } from "../../components/ui/Progress";
 import { useNavigation } from "@react-navigation/native";
 import { useRef, useState } from "react";
 import { View, type TextInputInstance } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { AppBar } from "../../components/ui/AppBar";
 import { AppText, AppTextInput } from "../../components/ui/AppText";
-import { Sheet } from "../../components/ui/Sheet";
+import { Button } from "../../components/ui/Button";
 import { Chip } from "../../components/ui/Chip";
-import { Menu } from "../../components/ui/Menu";
+import * as Dialog from "../../components/ui/Dialog";
+import { FloatingActionButton } from "../../components/ui/FloatingActionButton";
+import { IconButton } from "../../components/ui/IconButton";
 import { ListActionRow } from "../../components/ui/ListActionRow";
 import { ListChoiceRow } from "../../components/ui/ListChoiceRow";
 import { ListRow } from "../../components/ui/ListRow";
 import { ListSection } from "../../components/ui/ListSection";
 import { ListToggleRow } from "../../components/ui/ListToggleRow";
-import { Button } from "../../components/ui/Button";
-import { IconButton } from "../../components/ui/IconButton";
-import { FloatingActionButton } from "../../components/ui/FloatingActionButton";
-import { SearchField } from "../../components/ui/SearchField";
+import { Menu } from "../../components/ui/Menu";
 import { Notice } from "../../components/ui/Notice";
 import { NumberField } from "../../components/ui/NumberField";
-import { AppBar } from "../../components/ui/AppBar";
+import { Progress } from "../../components/ui/Progress";
 import { ScreenScrollView } from "../../components/ui/ScreenScrollView";
+import { SearchField } from "../../components/ui/SearchField";
 import { SegmentedControl } from "../../components/ui/SegmentedControl";
+import { Sheet } from "../../components/ui/Sheet";
 import { SliderRow } from "../../components/ui/SliderRow";
-import * as Dialog from "../../components/ui/Dialog";
-import { useAppearancePreferences } from "../settings/appearance/AppearancePreferencesProvider";
+import { Toast } from "../../components/ui/Toast";
 import { MOBILE_THEME_IDS } from "../../lib/mobileTheme";
+import { useAppearancePreferences } from "../settings/appearance/AppearancePreferencesProvider";
+import { NativeAppBarExample } from "./NativeAppBarExample";
 
 const CHOICES = [
   { value: "overview", label: "Overview" },

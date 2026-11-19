@@ -7,7 +7,6 @@ import {
   type OrchestrationMessageContext,
   type ServerProviderSkill,
 } from "@t3tools/contracts";
-import { collectComposerInlineTokens } from "@t3tools/shared/composerInlineTokens";
 import { serializeAssistantCitation } from "@t3tools/shared/assistantCitations";
 import {
   ATTACHMENT_ONLY_BOOTSTRAP_PROMPT,
@@ -15,7 +14,9 @@ import {
   formatComposerContextReference,
   projectComposerContextForProvider,
 } from "@t3tools/shared/composerContextReferences";
+import { collectComposerInlineTokens } from "@t3tools/shared/composerInlineTokens";
 import { describe, expect, it } from "vite-plus/test";
+
 import {
   assistantCitationDraftWithinLimit,
   collectComposerModelTokens,

@@ -1,22 +1,23 @@
 import { useGT } from "gt-react-native";
 import { type RefObject, use, useRef, useState } from "react";
 import { Keyboard, type TextInputInstance, View } from "react-native";
-import { useHardwareBack } from "../../lib/backHandler";
-import { useToolbarLayout } from "./useToolbarLayout";
-import { BottomSheetContext } from "./BottomSheetContext";
-import { RoutedFormSheetContext } from "./RoutedFormSheetContext";
-import { NativeStackScreenOptions } from "../../native/StackHeader";
-import { useSidebarToggle } from "../../features/layout/useSidebarToggle";
+
 import { useAdaptiveWorkspaceLayout } from "../../features/layout/adaptive-workspace-context";
 import { InspectorCloseContext } from "../../features/layout/inspector-bar-store";
+import { useSidebarToggle } from "../../features/layout/useSidebarToggle";
 import { useAppearancePreferences } from "../../features/settings/appearance/AppearancePreferencesProvider";
+import { useHardwareBack } from "../../lib/backHandler";
+import { NativeStackScreenOptions } from "../../native/StackHeader";
 import { AndroidHeaderIconButton, AndroidScreenHeader } from "./AndroidScreenHeader.android";
-import { ScreenHeaderButton } from "./ScreenHeaderButton.android";
-import { Menu } from "./Menu";
-import { Button } from "./Button";
-import { SearchField } from "./SearchField";
-import { findAppBarMenuItem, menuActionsFromAppBarItems } from "./menuActionItems";
 import type { AppBarMenuItem, AppBarProps, AppBarSearch } from "./AppBar.types";
+import { BottomSheetContext } from "./BottomSheetContext";
+import { Button } from "./Button";
+import { Menu } from "./Menu";
+import { findAppBarMenuItem, menuActionsFromAppBarItems } from "./menuActionItems";
+import { RoutedFormSheetContext } from "./RoutedFormSheetContext";
+import { ScreenHeaderButton } from "./ScreenHeaderButton.android";
+import { SearchField } from "./SearchField";
+import { useToolbarLayout } from "./useToolbarLayout";
 import { useHasWorkspaceAppBar, WorkspaceAppBar } from "./WorkspaceAppBar.android";
 
 function selectMenuItem(items: ReadonlyArray<AppBarMenuItem>, id: string) {

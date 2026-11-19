@@ -1,9 +1,6 @@
 import { useSyncLayout } from "@legendapp/list/react";
 import { type OrchestrationV2CheckpointFileTotals, type RunId } from "@t3tools/contracts";
 import { T, useGT } from "gt-react";
-import { type MouseEvent, type ReactNode, memo, useLayoutEffect, useRef, useState } from "react";
-import { type TurnDiffFileChange } from "../../types";
-import { buildTurnDiffTree, type TurnDiffTreeNode } from "../../lib/turnDiffTree";
 import {
   ChevronRightIcon,
   FileDiffIcon,
@@ -12,13 +9,18 @@ import {
   FolderClosedIcon,
   FolderIcon,
 } from "lucide-react";
+import { type MouseEvent, type ReactNode, memo, useLayoutEffect, useRef, useState } from "react";
+
+import { observeResize } from "~/lib/observeResize";
 import { cn } from "~/lib/utils";
+
+import { buildTurnDiffTree, type TurnDiffTreeNode } from "../../lib/turnDiffTree";
+import { type TurnDiffFileChange } from "../../types";
+import { Button } from "../ui/button";
+import { MiddleTruncate } from "../ui/middle-truncate";
+import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { DiffStatLabel, hasNonZeroStat } from "./DiffStatLabel";
 import { PierreEntryIcon } from "./PierreEntryIcon";
-import { Button } from "../ui/button";
-import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
-import { MiddleTruncate } from "../ui/middle-truncate";
-import { observeResize } from "~/lib/observeResize";
 
 const EMPTY_DIRECTORY_OVERRIDES: Record<string, boolean> = {};
 const VIRTUALIZE_AFTER_ROWS = 250;

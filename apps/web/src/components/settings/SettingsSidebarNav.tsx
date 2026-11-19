@@ -1,12 +1,6 @@
-import {
-  lazy,
-  Suspense,
-  useEffect,
-  useRef,
-  useState,
-  type ComponentType,
-  type KeyboardEvent,
-} from "react";
+import { resolveEventKeys } from "@t3tools/shared/keybindings";
+import { useLocation, useNavigate } from "@tanstack/react-router";
+import { T, useGT, useMessages } from "gt-react";
 import {
   ArchiveIcon,
   FlaskConicalIcon,
@@ -33,11 +27,18 @@ import {
   WrenchIcon,
   XIcon,
 } from "lucide-react";
-import { resolveEventKeys } from "@t3tools/shared/keybindings";
-import { useLocation, useNavigate } from "@tanstack/react-router";
-import { T, useGT, useMessages } from "gt-react";
+import {
+  lazy,
+  Suspense,
+  useEffect,
+  useRef,
+  useState,
+  type ComponentType,
+  type KeyboardEvent,
+} from "react";
 
 import { cn } from "../../lib/utils";
+import { workspaceAreaProps } from "../../lib/workspaceFocus";
 import { Button } from "../ui/button";
 import { Kbd } from "../ui/kbd";
 import {
@@ -59,9 +60,8 @@ import {
   type SettingsPath,
   type SettingsSearchItem,
 } from "./settingsSearch";
-import { useAvailableSettingsSearchItems } from "./useAvailableSettingsSearchItems";
 import { handleSettingsSectionKeyDown } from "./settingsSectionNavigation";
-import { workspaceAreaProps } from "../../lib/workspaceFocus";
+import { useAvailableSettingsSearchItems } from "./useAvailableSettingsSearchItems";
 
 const SnapShotIcon = createLucideIcon("snap-shot", [
   [

@@ -1,6 +1,6 @@
 // Historical sessions cannot be mapped unambiguously to configured instances; leave the column nullable.
-import * as SqlClient from "effect/sql/SqlClient";
 import * as Effect from "effect/Effect";
+import * as SqlClient from "effect/sql/SqlClient";
 
 export default Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;

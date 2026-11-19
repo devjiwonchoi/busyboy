@@ -4,28 +4,28 @@ import * as NodeWorkerThreads from "node:worker_threads";
 
 import * as Cache from "effect/Cache";
 import * as Clock from "effect/Clock";
+import * as Context from "effect/Context";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
-import * as Result from "effect/Result";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
 import { identity } from "effect/Function";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
+import * as Reactivity from "effect/reactivity/Reactivity";
 import * as References from "effect/References";
-import * as Schema from "effect/Schema";
+import * as Result from "effect/Result";
 import * as Scheduler from "effect/Scheduler";
+import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
 import * as Semaphore from "effect/Semaphore";
-import * as Context from "effect/Context";
-import * as Stream from "effect/Stream";
-import * as Tracer from "effect/Tracer";
-import * as Reactivity from "effect/reactivity/Reactivity";
 import * as Client from "effect/sql/SqlClient";
 import type { Borrower, Connection } from "effect/sql/SqlConnection";
 import { SqlError, classifySqliteError } from "effect/sql/SqlError";
 import * as Statement from "effect/sql/Statement";
+import * as Stream from "effect/Stream";
+import * as Tracer from "effect/Tracer";
 
 const ATTR_DB_SYSTEM_NAME = "db.system.name";
 

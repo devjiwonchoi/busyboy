@@ -1,9 +1,10 @@
 import { useGT } from "gt-react-native";
-import { tryOpenExternalUrl } from "../../lib/openExternalUrl";
 import Animated, { FadeIn, FadeOut, ReduceMotion } from "react-native-reanimated";
+
 import { Toast } from "../../components/ui/Toast";
 import { useBarInset } from "../../components/ui/useBarInset";
 import { MOBILE_MOTION } from "../../lib/designTokens";
+import { tryOpenExternalUrl } from "../../lib/openExternalUrl";
 import type { GitActionProgress } from "../../state/use-vcs-action-state";
 
 export function GitActionProgressOverlay(props: {

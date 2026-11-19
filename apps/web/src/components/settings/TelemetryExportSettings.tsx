@@ -1,19 +1,19 @@
 import { useAtomValue } from "@effect/atom-react";
 import type { OtlpEndpointCheckResult, OtlpSignal, ServerObservability } from "@t3tools/contracts";
-import { useEffect, useEffectEvent, useState } from "react";
 import { msg, T, useGT, useMessages, Var } from "gt-react";
-import { m, type MessageResolver } from "../../i18n/messages";
+import { useEffect, useEffectEvent, useState } from "react";
 
+import { m, type MessageResolver } from "../../i18n/messages";
 import { serverEnvironment } from "../../state/server";
 import { useAtomCommand } from "../../state/use-atom-command";
+import { ConnectionStatusDot } from "../ConnectionStatusDot";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Label } from "../ui/label";
-import { ConnectionStatusDot } from "../ConnectionStatusDot";
-import { useSettingsScope } from "./SettingsScopeContext";
-import { useScopedSettings } from "./useScopedSettings";
 import { SettingsSection } from "./settingsLayout";
+import { useSettingsScope } from "./SettingsScopeContext";
 import { SettingsScopeNotice } from "./SettingsScopeNotice";
+import { useScopedSettings } from "./useScopedSettings";
 
 const SIGNALS = [
   {

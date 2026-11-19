@@ -1,19 +1,18 @@
-import * as Effect from "effect/Effect";
-import * as Option from "effect/Option";
-import * as Queue from "effect/Queue";
-import * as Schema from "effect/Schema";
-import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
-
 import { TextGenerationError } from "@t3tools/contracts";
+import { parseGenericCliVersion } from "@t3tools/provider-core/server/snapshotProbe";
+import * as TextGenerationOperations from "@t3tools/provider-core/server/textGenerationOperations";
 import { getModelSelectionStringOptionValue } from "@t3tools/shared/model";
 import { compareSemverVersions } from "@t3tools/shared/semver";
-import { parseGenericCliVersion } from "@t3tools/provider-core/server/snapshotProbe";
-import type { PiSettings } from "../settings.ts";
+import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
+import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
+import * as Queue from "effect/Queue";
+import * as Schema from "effect/Schema";
 
-import { makePiRpcConnection, piRecordField, piRecordString, resolvePiModelSlug } from "./rpc.ts";
+import type { PiSettings } from "../settings.ts";
 import { buildPiRpcLaunch, resolvePiLaunchArgs } from "./mcpInjection.ts";
-import * as TextGenerationOperations from "@t3tools/provider-core/server/textGenerationOperations";
 import { isPiThinkingLevel } from "./modelCapabilities.ts";
+import { makePiRpcConnection, piRecordField, piRecordString, resolvePiModelSlug } from "./rpc.ts";
 import { MINIMUM_PI_VERSION, runPiVersionCommand } from "./status.ts";
 
 const PI_TIMEOUT_MS = 180_000;

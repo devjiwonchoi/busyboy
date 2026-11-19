@@ -1,10 +1,5 @@
-import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
-import { m as resolveMessage } from "~/i18n/messages";
 import { useAtomValue } from "@effect/atom-react";
-import { msg, T, useGT, useMessages } from "gt-react";
-import { useId, useRef, useState } from "react";
-import * as Cause from "effect/Cause";
-import * as Option from "effect/Option";
+import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
 import {
   isSecretReference,
   type DeviceEasAccount,
@@ -12,7 +7,13 @@ import {
   type EnvironmentId,
   type SettingsSecretValue,
 } from "@t3tools/contracts";
+import * as Cause from "effect/Cause";
+import * as Option from "effect/Option";
+import { msg, T, useGT, useMessages } from "gt-react";
 import { XIcon } from "lucide-react";
+import { useId, useRef, useState } from "react";
+
+import { m as resolveMessage } from "~/i18n/messages";
 
 import { deviceEasAccountCheck, deviceEnvironment } from "../../state/device";
 import { useAtomCommand } from "../../state/use-atom-command";

@@ -1,6 +1,5 @@
-import { requireNativeModule } from "expo";
-import { msg } from "gt-react-native";
-import { m } from "../i18n/messages";
+import { resolveAssetUrl } from "@t3tools/client-runtime/state/assets";
+import { executeAtomQuery, squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
 import {
   type ComposerContextClipboardFragment,
   type ComposerContextRecord,
@@ -19,27 +18,29 @@ import {
   threadContextsOutsideEnvironment,
   threadLinkContextReferences,
 } from "@t3tools/shared/composerContextReferences";
-import { executeAtomQuery, squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
-import { resolveAssetUrl } from "@t3tools/client-runtime/state/assets";
 import * as Option from "effect/Option";
-import { appAtomRegistry } from "../state/atom-registry";
+import { requireNativeModule } from "expo";
+import { msg } from "gt-react-native";
+
+import { m } from "../i18n/messages";
 import { assetEnvironment } from "../state/assets";
+import { appAtomRegistry } from "../state/atom-registry";
 import { environmentSession } from "../state/session";
 import { environmentThreadShells } from "../state/threads";
+import {
+  findLocalComposerClipboardAttachment,
+  waitForComposerDraftsLoaded,
+} from "../state/use-composer-drafts";
 import { workspaceConnections } from "../state/workspace";
 import { downloadAttachmentForPreview } from "./attachmentDownload";
+import { referencedComposerContext, reidentifyComposerContext } from "./composerContext";
 import {
   persistComposerAttachmentFile,
   removePersistedComposerAttachmentFile,
   type DraftComposerAttachment,
 } from "./composerImages";
-import { referencedComposerContext, reidentifyComposerContext } from "./composerContext";
-import { uuidv4 } from "./uuid";
-import {
-  findLocalComposerClipboardAttachment,
-  waitForComposerDraftsLoaded,
-} from "../state/use-composer-drafts";
 import { loadLocalAttachmentPreview } from "./localAttachmentPreview";
+import { uuidv4 } from "./uuid";
 
 export interface NativeContextClipboard {
   readonly text: string;

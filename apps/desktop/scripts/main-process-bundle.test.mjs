@@ -2,8 +2,9 @@ import * as NodeChildProcess from "node:child_process";
 import * as NodeFSP from "node:fs/promises";
 import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
-import * as NodeVM from "node:vm";
 import * as NodeURL from "node:url";
+import * as NodeVM from "node:vm";
+
 import { build } from "vite-plus/pack";
 import { assert, it } from "vite-plus/test";
 

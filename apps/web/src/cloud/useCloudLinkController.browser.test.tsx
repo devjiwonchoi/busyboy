@@ -1,3 +1,4 @@
+import { ManagedRelay } from "@t3tools/client-runtime/relay";
 import {
   AuthRelayReadScope,
   AuthRelayWriteScope,
@@ -6,7 +7,6 @@ import {
   EnvironmentId,
   type EnvironmentCloudLinkStateResult,
 } from "@t3tools/contracts";
-import { ManagedRelay } from "@t3tools/client-runtime/relay";
 import {
   RelayEnvironmentLinkLimitExceededError,
   type RelayManagedEndpointProviderKind,

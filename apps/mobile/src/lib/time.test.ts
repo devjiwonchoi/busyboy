@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
+
 import { byTimestamp, compareTimestamps, msUntilRelativeTimeChange, relativeTime } from "./time";
 
 const at = "2026-10-19T12:00:00.000Z";

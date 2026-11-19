@@ -1,22 +1,20 @@
-import * as FileSystem from "effect/FileSystem";
-
 import type { AgentOptions, RunResult } from "@cursor/sdk";
-import * as Effect from "effect/Effect";
-import * as Schema from "effect/Schema";
-
 import {
   type ProviderSetupError,
   type ServerProviderModel,
   TextGenerationError,
 } from "@t3tools/contracts";
-import type { CursorSettings } from "../settings.ts";
-
 import * as TextGenerationOperations from "@t3tools/provider-core/server/textGenerationOperations";
-import { cursorSdkModelSelection } from "./sdkModel.ts";
+import * as HostProcess from "@t3tools/shared/HostProcess";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Schema from "effect/Schema";
+
+import type { CursorSettings } from "../settings.ts";
 import type { CursorAuth } from "./auth.ts";
 import * as CursorAgentSdk from "./CursorAgentSdk.ts";
 import * as CursorSdk from "./CursorSdk.ts";
-import * as HostProcess from "@t3tools/shared/HostProcess";
+import { cursorSdkModelSelection } from "./sdkModel.ts";
 
 const CURSOR_TIMEOUT_MS = 180_000;
 

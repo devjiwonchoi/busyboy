@@ -10,9 +10,9 @@ import {
 } from "react-native";
 import { withUniwind } from "uniwind";
 
-import { MOBILE_SHAPE } from "../../lib/designTokens";
-import { cn } from "../../lib/cn";
 import { useAppearancePreferences } from "../../features/settings/appearance/AppearancePreferencesProvider";
+import { cn } from "../../lib/cn";
+import { MOBILE_SHAPE } from "../../lib/designTokens";
 import { GlassBackdrop } from "./GlassBackdrop";
 
 // Explicit mappings keep the native glassEffectStyle enum out of style-array conversion.

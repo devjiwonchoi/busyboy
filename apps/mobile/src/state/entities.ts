@@ -1,12 +1,11 @@
 import { useAtomValue } from "@effect/atom-react";
-import { deriveReportedModelSelection } from "@t3tools/client-runtime/state/thread-execution";
-
-import { appAtomRegistry } from "./atom-registry";
+import { scopeThreadRef } from "@t3tools/client-runtime/environment";
 import type {
   EnvironmentProject,
   EnvironmentThread,
   EnvironmentThreadShell,
 } from "@t3tools/client-runtime/state/shell";
+import { deriveReportedModelSelection } from "@t3tools/client-runtime/state/thread-execution";
 import {
   EnvironmentId,
   ThreadId,
@@ -15,7 +14,6 @@ import {
   type ScopedThreadRef,
   type ServerConfig,
 } from "@t3tools/contracts";
-import { scopeThreadRef } from "@t3tools/client-runtime/environment";
 import {
   guessThreadLinkRef,
   hasThreadLinks,
@@ -25,14 +23,15 @@ import {
   type ThreadLink,
 } from "@t3tools/shared/threadLinks";
 import { relabelThreadLinks } from "@t3tools/shared/threadLinksCopy";
-import * as Schema from "effect/Schema";
 import { AsyncResult, Atom } from "effect/reactivity";
+import * as Schema from "effect/Schema";
 import { msg, useMessages } from "gt-react-native";
 
 import { threadChipTargets } from "../lib/enrichedLinkPresentation";
 import { resolveProjectChipIcon } from "../lib/projectIcon";
 import { projectGlyphImageAtom, projectGlyphKey } from "../native/ProjectChipIconImages";
 import { projectFaviconUrlAtom } from "./assets";
+import { appAtomRegistry } from "./atom-registry";
 import { orchestrationEnvironment } from "./orchestration";
 import { environmentProjects } from "./projects";
 import { environmentServerConfigsAtom, serverEnvironment } from "./server";

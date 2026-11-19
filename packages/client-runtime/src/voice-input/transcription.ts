@@ -1,6 +1,7 @@
-import { msg } from "gt-i18n";
-import { MarkedText, translatableMessage } from "../errors/translatable.ts";
 import * as Schema from "effect/Schema";
+import { msg } from "gt-i18n";
+
+import { MarkedText, translatableMessage } from "../errors/translatable.ts";
 
 /** Cancellation is cooperative: settle only after the underlying work has stopped. */
 export type VoiceTranscriptionOptions = {

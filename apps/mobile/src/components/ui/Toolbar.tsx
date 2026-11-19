@@ -1,4 +1,5 @@
 import { GlassContainer } from "expo-glass-effect";
+
 import { NativeHeaderToolbar } from "../../native/NativeHeaderToolbar";
 import type { ToolbarProps } from "./Toolbar.types";
 

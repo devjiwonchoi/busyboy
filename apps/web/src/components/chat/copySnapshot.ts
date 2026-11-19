@@ -5,7 +5,6 @@ import {
 import { msg } from "gt-react";
 
 import { m } from "../../i18n/messages";
-
 import { readMediaPng } from "../media/mediaContent";
 
 export async function copySnapshot(src: string, text: string, fragment: string): Promise<void> {

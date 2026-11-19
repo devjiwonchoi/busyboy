@@ -1,4 +1,3 @@
-import { useGT } from "gt-react-native";
 import {
   createNavigatorFactory,
   NavigationContext,
@@ -20,6 +19,8 @@ import {
   type NativeStackNavigatorProps,
   type NativeStackTypeBag,
 } from "@react-navigation/native-stack";
+import { EnvironmentId, ThreadId } from "@t3tools/contracts";
+import { useGT } from "gt-react-native";
 import {
   Fragment,
   use,
@@ -29,51 +30,35 @@ import {
   type ComponentProps,
   type ReactNode,
 } from "react";
-import { withKnownPullRequestSummary } from "../../state/use-thread-pr";
-import {
-  currentWorkspaceSelections,
-  workspaceSelectionCheck,
-} from "./workspace/workspace-selection-store";
-import { workspaceTabColumns, workspaceTabPage } from "./workspace/workspace-tab-navigation";
 import { Platform, StyleSheet, View } from "react-native";
-import { Split, type SplitHostCommands } from "react-native-screens";
-import { SafeAreaView } from "react-native-safe-area-context";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
-import { EnvironmentId, ThreadId } from "@t3tools/contracts";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { Split, type SplitHostCommands } from "react-native-screens";
+
+import { PaneContext } from "../../components/ui/Pane";
 import { NATIVE_INSPECTOR_MIN_MAIN_WIDTH } from "../../lib/layout";
 import { scopedThreadKey } from "../../lib/scopedEntities";
-import { WorkspaceTabsProvider, useWorkspaceTabs } from "./workspace/WorkspaceTabsContext";
-import {
-  WorkspaceNativeTabs,
-  WorkspaceSidebarTabsFooter,
-} from "./workspace/WorkspaceNativeTabs.ios";
-import { workspaceUsesColumns } from "./workspace/workspace-tabs-state";
-import { useWorkspaceCompose } from "./workspace/useWorkspaceCompose";
-import { NAVIGATION_TAB_ORDER } from "./workspace/navigation-tab-order";
-import { selectedIssueKeyOf } from "../issues/issueParams";
-import { isSettingsRoute, settingsOpenIn } from "../settings/settings-navigation";
-import { workspaceRoutesOf } from "./workspace-overlay-routes";
-import { setNativelyPoppingWorkspaceRoute } from "./workspace/workspace-detail-selection";
-import { useDeviceType, useNativeLayoutMetrics } from "../../native/native-layout-metrics";
-
-import { useAdaptiveWorkspaceLayout, useWorkspacePaneState } from "./AdaptiveWorkspaceLayout";
-import { WorkspacePaneDivider } from "./workspace-pane-divider";
-import { WorkspaceEmptyDetail } from "./WorkspaceEmptyDetail";
-import { NativeColumnContent as ColumnContent } from "../../native/NativeColumnContent.ios";
 import {
   modalEnvelopeOptions,
   V5CardStackView,
   V5StackView,
 } from "../../native/createV5StackNavigator.ios";
+import { useDeviceType, useNativeLayoutMetrics } from "../../native/native-layout-metrics";
+import { NativeColumnContent as ColumnContent } from "../../native/NativeColumnContent.ios";
 import {
   useNativeWorkspaceColumnsReady,
   useNativeWorkspaceColumnsSupported,
 } from "../../native/NativeWorkspaceColumns";
-import { V5StackHeader } from "../../native/V5StackHeader.ios";
-import { InspectorColumnScreens } from "./inspector-host";
-import { PaneContext } from "../../components/ui/Pane";
-import { useWorkspaceSidebarHeaderItem } from "./useWorkspaceSidebarHeaderItem";
 import type { AppNativeStackNavigationOptions } from "../../native/StackHeader";
+import {
+  NativePrimaryColumnContext,
+  NativeWorkspaceInspectorContext,
+  NativeWorkspaceModeContext,
+  NativeWorkspaceTabActivityContext,
+  WorkspaceSlotOptionsContext,
+  slotScreenOptions,
+} from "../../native/v5-workspace-context";
+import { V5StackHeader } from "../../native/V5StackHeader.ios";
 import {
   collapsedSplitTransition,
   nativeWorkspacePopAction,
@@ -83,14 +68,29 @@ import {
   type CollapsedSplitColumn,
   isPresentedRoute,
 } from "../../native/workspace-stack-projection";
+import { withKnownPullRequestSummary } from "../../state/use-thread-pr";
+import { selectedIssueKeyOf } from "../issues/issueParams";
+import { isSettingsRoute, settingsOpenIn } from "../settings/settings-navigation";
+import { useAdaptiveWorkspaceLayout, useWorkspacePaneState } from "./AdaptiveWorkspaceLayout";
+import { InspectorColumnScreens } from "./inspector-host";
+import { useWorkspaceSidebarHeaderItem } from "./useWorkspaceSidebarHeaderItem";
+import { workspaceRoutesOf } from "./workspace-overlay-routes";
+import { WorkspacePaneDivider } from "./workspace-pane-divider";
+import { NAVIGATION_TAB_ORDER } from "./workspace/navigation-tab-order";
+import { useWorkspaceCompose } from "./workspace/useWorkspaceCompose";
+import { setNativelyPoppingWorkspaceRoute } from "./workspace/workspace-detail-selection";
 import {
-  NativePrimaryColumnContext,
-  NativeWorkspaceInspectorContext,
-  NativeWorkspaceModeContext,
-  NativeWorkspaceTabActivityContext,
-  WorkspaceSlotOptionsContext,
-  slotScreenOptions,
-} from "../../native/v5-workspace-context";
+  currentWorkspaceSelections,
+  workspaceSelectionCheck,
+} from "./workspace/workspace-selection-store";
+import { workspaceTabColumns, workspaceTabPage } from "./workspace/workspace-tab-navigation";
+import { workspaceUsesColumns } from "./workspace/workspace-tabs-state";
+import {
+  WorkspaceNativeTabs,
+  WorkspaceSidebarTabsFooter,
+} from "./workspace/WorkspaceNativeTabs.ios";
+import { WorkspaceTabsProvider, useWorkspaceTabs } from "./workspace/WorkspaceTabsContext";
+import { WorkspaceEmptyDetail } from "./WorkspaceEmptyDetail";
 
 type ViewProps = ComponentProps<typeof NativeStackView>;
 type Descriptor = ViewProps["descriptors"][string];

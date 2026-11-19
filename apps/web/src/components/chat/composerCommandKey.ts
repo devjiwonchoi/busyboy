@@ -1,37 +1,38 @@
-import type { ChatComposerProps } from "./ChatComposer";
-import { type ComposerCommandItem } from "./ComposerCommandMenu";
 import {
   type ComposerDispatchMode,
   resolveComposerDispatchMode,
 } from "@t3tools/client-runtime/state/composer-dispatch";
-import { type ComposerPromptEditorHandle } from "../ComposerPromptEditorTiptap";
-import {
-  type ComposerPromptHistoryMentions,
-  type ComposerPromptHistoryPosition,
-  buildComposerPromptHistoryEntries,
-  stepComposerPromptHistory,
-} from "./composerPromptHistory";
-import {
-  type ComposerSubmissionIntent,
-  type ComposerTrigger,
-  collapseExpandedComposerCursor,
-  composerSubmissionIntentForKey,
-} from "../../composer-logic";
-import { type PendingUserInput } from "../../session-logic";
 import {
   type EnvironmentContextRecord,
   type PreviewAnnotationPayload,
   type ThreadContextRecord,
 } from "@t3tools/contracts";
-import { type ReviewCommentContext } from "../../reviewCommentContext";
-import { composerTargetKey } from "../../composerDraftStore";
+import type { Dispatch, RefObject, SetStateAction } from "react";
+
 import {
   type ComposerListEdit,
   listContinuationForEnter,
   listIndentForTab,
   listOutdentForTab,
 } from "../../composer-list-continuation";
-import type { Dispatch, RefObject, SetStateAction } from "react";
+import {
+  type ComposerSubmissionIntent,
+  type ComposerTrigger,
+  collapseExpandedComposerCursor,
+  composerSubmissionIntentForKey,
+} from "../../composer-logic";
+import { composerTargetKey } from "../../composerDraftStore";
+import { type ReviewCommentContext } from "../../reviewCommentContext";
+import { type PendingUserInput } from "../../session-logic";
+import { type ComposerPromptEditorHandle } from "../ComposerPromptEditorTiptap";
+import type { ChatComposerProps } from "./ChatComposer";
+import { type ComposerCommandItem } from "./ComposerCommandMenu";
+import {
+  type ComposerPromptHistoryMentions,
+  type ComposerPromptHistoryPosition,
+  buildComposerPromptHistoryEntries,
+  stepComposerPromptHistory,
+} from "./composerPromptHistory";
 
 /**
  * The composer's key handling inside the editor: send shortcuts, the slash/mention menu,

@@ -1,11 +1,10 @@
-import { describe, expect, it, vi } from "vite-plus/test";
-
 import {
   EnvironmentId,
   type PreviewViewportSetting,
   ThreadId,
   type PreviewSessionSnapshot,
 } from "@t3tools/contracts";
+import { describe, expect, it, vi } from "vite-plus/test";
 
 const mocks = vi.hoisted(() => ({
   resize: Symbol("preview-resize"),

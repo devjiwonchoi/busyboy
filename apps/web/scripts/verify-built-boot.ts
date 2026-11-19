@@ -4,6 +4,7 @@
 import * as NodeFS from "node:fs";
 import * as NodePath from "node:path";
 import * as NodeURL from "node:url";
+
 import { chromium } from "playwright";
 
 const distDir = NodeURL.fileURLToPath(new URL("../dist/", import.meta.url));

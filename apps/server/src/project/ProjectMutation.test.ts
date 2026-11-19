@@ -4,8 +4,8 @@ import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 
-import { ProjectNotEmptyError } from "./ProjectService.ts";
 import { mutateProjectWithClone } from "./ProjectMutation.ts";
+import { ProjectNotEmptyError } from "./ProjectService.ts";
 
 const projectId = ProjectId.make("project-1");
 const deletedProject: Project = {

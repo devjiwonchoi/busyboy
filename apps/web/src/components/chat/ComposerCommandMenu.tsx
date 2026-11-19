@@ -1,9 +1,8 @@
-import { formatProviderSkillDisplayName } from "@t3tools/shared/inlineSkills";
-import type { ComposerPathSearchTarget } from "@t3tools/client-runtime/state/threads";
 import {
   resolveProviderSkillSourceKind,
   type ProviderSkillSourceKind,
 } from "@t3tools/client-runtime/providerSkills";
+import type { ComposerPathSearchTarget } from "@t3tools/client-runtime/state/threads";
 import {
   type EnvironmentId,
   type EnvironmentMachineKind,
@@ -15,6 +14,8 @@ import {
   type ServerProviderSkill,
   type ServerProviderSlashCommand,
 } from "@t3tools/contracts";
+import { formatProviderSkillDisplayName } from "@t3tools/shared/inlineSkills";
+import { msg, useGT, useMessages } from "gt-react";
 import {
   BlocksIcon,
   FolderIcon,
@@ -24,19 +25,19 @@ import {
   UserRoundIcon,
   type LucideIcon,
 } from "lucide-react";
-import { msg, useGT, useMessages } from "gt-react";
 import { memo, useLayoutEffect, useRef, useState } from "react";
 
-import { type ComposerSlashCommand, type ComposerTriggerKind } from "../../composer-logic";
 import { cn } from "~/lib/utils";
+
+import { type ComposerSlashCommand, type ComposerTriggerKind } from "../../composer-logic";
+import { EnvironmentMachineIcon } from "../EnvironmentMachineIcon";
+import { resolvePullRequestState } from "../pullRequest/pullRequestPresentation";
 import { Badge } from "../ui/badge";
 import { Command, CommandGroup, CommandItem, CommandList } from "../ui/command";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
-import { EnvironmentMachineIcon } from "../EnvironmentMachineIcon";
+import { ComposerBanner } from "./ComposerBanner";
 import { PierreEntryIcon } from "./PierreEntryIcon";
 import { ProviderInstanceIcon } from "./ProviderInstanceIcon";
-import { ComposerBanner } from "./ComposerBanner";
-import { resolvePullRequestState } from "../pullRequest/pullRequestPresentation";
 
 export type ComposerCommandItem =
   | {

@@ -6,8 +6,8 @@ import {
   useAdaptiveWorkspaceLayout,
   useWorkspacePaneState,
 } from "../layout/AdaptiveWorkspaceLayout";
-import type { ThreadInspectorMode } from "./thread-inspector-navigation";
 import { useWorkspaceBackNavigation } from "../layout/workspace/useAndroidWorkspaceNavigation";
+import type { ThreadInspectorMode } from "./thread-inspector-navigation";
 import {
   threadTerminalMenu,
   useThreadGitMenuDefinition,

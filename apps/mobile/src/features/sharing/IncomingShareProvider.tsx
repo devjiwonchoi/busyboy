@@ -1,9 +1,8 @@
+import { CommonActions } from "@react-navigation/native";
 import { errorDisplayMessage } from "@t3tools/client-runtime/errors";
-import * as Dialog from "../../components/ui/Dialog";
-import { m } from "../../i18n/messages";
+import { EnvironmentId, PROVIDER_SEND_TURN_MAX_FILE_BYTES } from "@t3tools/contracts";
 import Constants from "expo-constants";
 import * as Crypto from "expo-crypto";
-import { EnvironmentId, PROVIDER_SEND_TURN_MAX_FILE_BYTES } from "@t3tools/contracts";
 import {
   clearSharedPayloads,
   getResolvedSharedPayloadsAsync,
@@ -14,25 +13,13 @@ import {
 import { msg } from "gt-react-native";
 import { useSyncExternalStore } from "react";
 import { Platform } from "react-native";
-import { CommonActions } from "@react-navigation/native";
 
-import {
-  buildIncomingShareDraft,
-  isShareFileUriUnderOwnedRoots,
-  selectIncomingShareAttachmentsForServer,
-  type IncomingShareDestination,
-  type IncomingShareDraft,
-} from "./incoming-share-model";
-import { createIncomingSharePayloadReader } from "./incoming-share-native";
-import { IncomingShareInbox } from "./incoming-share-inbox";
-import { persistComposerAttachmentFile } from "../../lib/composerImages";
+import * as Dialog from "../../components/ui/Dialog";
+import { m } from "../../i18n/messages";
 import { subscribeAppActive } from "../../lib/appState";
 import { coalescedRun } from "../../lib/coalescedRun";
+import { persistComposerAttachmentFile } from "../../lib/composerImages";
 import { rootNavigationRef } from "../../lib/rootNavigation";
-import { selectWorkspaceDetail } from "../layout/workspace/workspace-detail-selection";
-import { isDraftThreadRoute } from "../threads/thread-route-state";
-import { makeIncomingShareImports } from "../threads/incomingShareImport";
-import { liveNewTaskFlowKeys } from "../threads/new-task-flow-state";
 import { appAtomRegistry } from "../../state/atom-registry";
 import { serverEnvironment } from "../../state/server";
 import {
@@ -41,6 +28,19 @@ import {
   scheduleUnusedComposerAttachmentCleanup,
   undoComposerDraftMerge,
 } from "../../state/use-composer-drafts";
+import { selectWorkspaceDetail } from "../layout/workspace/workspace-detail-selection";
+import { makeIncomingShareImports } from "../threads/incomingShareImport";
+import { liveNewTaskFlowKeys } from "../threads/new-task-flow-state";
+import { isDraftThreadRoute } from "../threads/thread-route-state";
+import { IncomingShareInbox } from "./incoming-share-inbox";
+import {
+  buildIncomingShareDraft,
+  isShareFileUriUnderOwnedRoots,
+  selectIncomingShareAttachmentsForServer,
+  type IncomingShareDestination,
+  type IncomingShareDraft,
+} from "./incoming-share-model";
+import { createIncomingSharePayloadReader } from "./incoming-share-native";
 import {
   EMPTY_INCOMING_SHARE_PRESENTATION_STATE,
   transitionIncomingSharePresentation,

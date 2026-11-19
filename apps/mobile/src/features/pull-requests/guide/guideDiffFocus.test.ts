@@ -1,4 +1,5 @@
 import { expect, it } from "vite-plus/test";
+
 import type { NativeReviewDiffRow } from "../../diffs/nativeReviewDiffSurface";
 import { guideFocusedRows } from "./guideDiffFocus";
 

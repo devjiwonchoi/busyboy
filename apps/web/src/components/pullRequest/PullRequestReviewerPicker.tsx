@@ -1,9 +1,3 @@
-import { useAtomCommand } from "~/state/use-atom-command";
-import type {
-  EnvironmentId,
-  PullRequestRef,
-  PullRequestReviewerCandidate,
-} from "@t3tools/contracts";
 import {
   hostReviewerQuery,
   reviewerCandidateView,
@@ -16,21 +10,26 @@ import {
   selectionChanges,
   toggleSelection,
 } from "@t3tools/client-runtime/pull-request-selection";
-import { CheckIcon, UserPlusIcon } from "lucide-react";
+import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
+import type {
+  EnvironmentId,
+  PullRequestRef,
+  PullRequestReviewerCandidate,
+} from "@t3tools/contracts";
 import { msg, useGT, useMessages } from "gt-react";
+import { CheckIcon, UserPlusIcon } from "lucide-react";
 import { useState } from "react";
 
 import { m, type MessageResolver } from "~/i18n/messages";
-
 import { pullRequestEnvironment } from "~/state/pullRequests";
-import { useEnvironmentQuery } from "~/state/query";
 import { useDebouncedValue } from "~/state/queries";
-import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
+import { useEnvironmentQuery } from "~/state/query";
+import { useAtomCommand } from "~/state/use-atom-command";
 
 import { toastManager } from "../ui/toast";
 import { PullRequestCandidatePicker } from "./PullRequestCandidatePicker";
-import { PullRequestActorLabel } from "./pullRequestPresentation";
 import { readableFailure } from "./pullRequestDetail.logic";
+import { PullRequestActorLabel } from "./pullRequestPresentation";
 
 const TRUNCATED_LABELS: Record<
   ReviewerTruncation,

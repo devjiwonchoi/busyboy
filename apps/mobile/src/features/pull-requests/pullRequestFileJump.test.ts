@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
+
 import { requestPullRequestFileJump, subscribePullRequestFileJump } from "./pullRequestFileJump";
 
 describe("pull request file jumps", () => {

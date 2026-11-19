@@ -1,9 +1,11 @@
 import { describe, expect, it } from "@effect/vitest";
+import { EnvironmentAuthInvalidError } from "@t3tools/contracts";
+import { hashTelemetryId } from "@t3tools/shared/telemetryId";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 
-import { EnvironmentAuthInvalidError } from "@t3tools/contracts";
-import { hashTelemetryId } from "@t3tools/shared/telemetryId";
+import * as ClientCapabilities from "../platform/capabilities.ts";
+import * as RpcHttp from "../rpc/http.ts";
 import {
   bootstrapRemoteBearerSession,
   exchangeRemoteDpopAccessToken,
@@ -12,8 +14,6 @@ import {
   resolveRemoteDpopWebSocketConnectionUrl,
   resolveRemoteWebSocketConnectionUrl,
 } from "./remote.ts";
-import * as ClientCapabilities from "../platform/capabilities.ts";
-import * as RpcHttp from "../rpc/http.ts";
 
 const isEnvironmentAuthInvalidError = Schema.is(EnvironmentAuthInvalidError);
 

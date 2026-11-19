@@ -1,8 +1,8 @@
-import { NativeThemeHost } from "./NativeThemeHost.android";
 import { Switch as ComposeSwitch } from "@expo/ui/jetpack-compose";
 import { Pressable, View } from "react-native";
-import type { ThemedSwitchProps } from "./NativeSwitch.types";
 
+import type { ThemedSwitchProps } from "./NativeSwitch.types";
+import { NativeThemeHost } from "./NativeThemeHost.android";
 import { useControlTheme } from "./useControlTheme";
 
 /** RN Pressable must own touch: Compose-handled switch taps can activate the parent row instead. */

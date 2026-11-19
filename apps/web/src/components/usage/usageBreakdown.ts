@@ -5,7 +5,6 @@ import {
   type ModelTotals,
   type SpeedCost,
 } from "@t3tools/shared/usageMerge";
-
 import { msg } from "gt-react";
 
 import type { ShareSegment } from "./UsageShareBar";

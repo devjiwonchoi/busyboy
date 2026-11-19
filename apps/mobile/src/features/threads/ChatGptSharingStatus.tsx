@@ -1,10 +1,11 @@
-import * as Dialog from "../../components/ui/Dialog";
 import type { ServerProvider } from "@t3tools/contracts";
 import { CHATGPT_USAGE_URL, usesChatGptSharing } from "@t3tools/shared/usageLimits";
 import { T, useGT } from "gt-react-native";
 import { Linking, Pressable, View } from "react-native";
-import { AppText as Text } from "../../components/ui/AppText";
+
 import { ProviderIcon } from "../../components/ProviderIcon";
+import { AppText as Text } from "../../components/ui/AppText";
+import * as Dialog from "../../components/ui/Dialog";
 
 export function ChatGptSharingStatus({ provider }: { provider: ServerProvider | null }) {
   const gt = useGT();

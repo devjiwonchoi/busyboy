@@ -12,7 +12,6 @@ import {
   clearProjectSettingsOverrides,
   resolveProjectSettings,
 } from "@t3tools/shared/projectSettings";
-
 import { msg } from "gt-react-native";
 
 import { m, type MessageResolver } from "../../i18n/messages";

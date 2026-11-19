@@ -17,6 +17,7 @@ import type { ReactElement } from "react";
 
 import { splitPromptIntoComposerSegments } from "~/composer-editor-mentions";
 import { composerFileNeedsReattach } from "~/composerDraftStore";
+
 import type {
   ComposerDraftContextRecord,
   ComposerDraftContextRecords,

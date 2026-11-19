@@ -1,3 +1,8 @@
+import { useAtomValue } from "@effect/atom-react";
+import {
+  isAtomCommandInterrupted,
+  squashAtomCommandFailure,
+} from "@t3tools/client-runtime/state/runtime";
 import type {
   StorageCleanupReport,
   StorageCleanupSettings,
@@ -5,28 +10,20 @@ import type {
 } from "@t3tools/contracts";
 import { resolvePastedPath } from "@t3tools/shared/path";
 import { resolveWorktreeCleanup } from "@t3tools/shared/projectSettings";
+import { msg, T, useGT, useMessages, Var } from "gt-react";
 import { useRef, useState } from "react";
-import { useAtomValue } from "@effect/atom-react";
-import {
-  isAtomCommandInterrupted,
-  squashAtomCommandFailure,
-} from "@t3tools/client-runtime/state/runtime";
+
+import { useNowMinute } from "../../hooks/useNowMinute";
+import { m, type MessageResolver } from "../../i18n/messages";
 import { formatBytes } from "../../lib/formatBytes";
 import { environmentAtomList, environmentIdsKey } from "../../state/environmentAtomList";
+import { useDebouncedValue } from "../../state/queries";
 import { serverEnvironment } from "../../state/server";
 import { useAtomCommand } from "../../state/use-atom-command";
 import { formatRelativeTimeLabel } from "../../timestampFormat";
-import { useNowMinute } from "../../hooks/useNowMinute";
-import { useDebouncedValue } from "../../state/queries";
 import { AnimatedHeight } from "../AnimatedHeight";
 import { Button } from "../ui/button";
-import { toastManager } from "../ui/toast";
-import { msg, T, useGT, useMessages, Var } from "gt-react";
-import { m, type MessageResolver } from "../../i18n/messages";
-
 import { Input } from "../ui/input";
-import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
-import { Switch } from "../ui/switch";
 import {
   NumberField,
   NumberFieldDecrement,
@@ -34,14 +31,18 @@ import {
   NumberFieldIncrement,
   NumberFieldInput,
 } from "../ui/number-field";
-import { SettingResetButton, SettingsRow, SettingsSection } from "./settingsLayout";
-import { DatabaseStorageNotice } from "./DatabaseStorageNotice";
+import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
+import { Switch } from "../ui/switch";
+import { toastManager } from "../ui/toast";
 import { AdvancedSettings } from "./AdvancedSettings";
+import { DatabaseStorageNotice } from "./DatabaseStorageNotice";
 import { FoldedSettingsSection } from "./FoldedSettingsSection";
-import { SettingsScopeNotice } from "./SettingsScopeNotice";
-import { SettingsGroup } from "./SettingsGroup";
 import type { ScopedSettingsTarget } from "./scopedSettings";
+import { SettingsGroup } from "./SettingsGroup";
+import { SettingResetButton, SettingsRow, SettingsSection } from "./settingsLayout";
+import { settingsScopeEnvironmentLabel } from "./settingsScopeAxis";
 import { useSettingsScope } from "./SettingsScopeContext";
+import { SettingsScopeNotice } from "./SettingsScopeNotice";
 import { useSearchableSetting } from "./settingsSearch";
 import {
   useClearScopedSettings,
@@ -49,7 +50,6 @@ import {
   useScopedSettingsMixed,
   useUpdateScopedSettings,
 } from "./useScopedSettings";
-import { settingsScopeEnvironmentLabel } from "./settingsScopeAxis";
 
 export function WorktreesDirectoryRow() {
   const setting = useSearchableSetting();

@@ -1,4 +1,3 @@
-import { decodeSpeechPcmRequest } from "@t3tools/shared/speech";
 import {
   AuthFilesystemReadScope,
   AuthOrchestrationOperateScope,
@@ -10,12 +9,13 @@ import {
   EnvironmentVoiceBodyLimit,
   SPEECH_MAX_OPTIONS_BYTES,
 } from "@t3tools/contracts";
+import { decodeSpeechPcmRequest } from "@t3tools/shared/speech";
 import * as ByteSize from "effect/ByteSize";
 import * as Effect from "effect/Effect";
+import * as HttpApiBuilder from "effect/http-api/HttpApiBuilder";
+import * as HttpServerRequest from "effect/http/HttpServerRequest";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
-import * as HttpServerRequest from "effect/http/HttpServerRequest";
-import * as HttpApiBuilder from "effect/http-api/HttpApiBuilder";
 
 import {
   annotateEnvironmentRequest,
@@ -23,8 +23,8 @@ import {
   failEnvironmentInvalidRequest,
   requireEnvironmentScope,
 } from "../auth/http.ts";
-import * as SpeechPostProcessing from "./postProcessing.ts";
 import * as CloudSpeech from "./CloudSpeech.ts";
+import * as SpeechPostProcessing from "./postProcessing.ts";
 import * as SpeechService from "./SpeechService.ts";
 
 const MAX_TRANSCRIBE_BODY_BYTES = SpeechService.MAX_SPEECH_BYTES + SPEECH_MAX_OPTIONS_BYTES + 4;

@@ -1,17 +1,17 @@
-import { msg, useGT, useMessages } from "gt-react-native";
-import { Button } from "../../components/ui/Button";
-import { AppActivityIndicator } from "../../components/ui/AppActivityIndicator";
-import { ConnectionTraceId } from "./ConnectionTraceId";
 import {
   connectionErrorText,
   type EnvironmentConnectionPhase,
   type EnvironmentConnectionPresentation,
 } from "@t3tools/client-runtime/connection";
-import { SymbolView } from "../../components/ui/AppSymbol";
+import { msg, useGT, useMessages } from "gt-react-native";
 import { View } from "react-native";
 
+import { AppActivityIndicator } from "../../components/ui/AppActivityIndicator";
+import { SymbolView } from "../../components/ui/AppSymbol";
 import { AppText as Text } from "../../components/ui/AppText";
+import { Button } from "../../components/ui/Button";
 import type { MessageResolver } from "../../i18n/messages";
+import { ConnectionTraceId } from "./ConnectionTraceId";
 
 function noticeTitle(
   phase: EnvironmentConnectionPhase,

@@ -1,7 +1,5 @@
 // @effect-diagnostics globalDate:off globalTimers:off - This isolated Electron preload does not run inside an Effect runtime.
-import { ipcRenderer } from "electron";
-import { getElementContext } from "react-grab/primitives";
-import { matchesKeybindingShortcut } from "@t3tools/shared/keybindingMatching";
+
 import type {
   DesktopPreviewAnnotationTheme,
   DesktopPreviewAnnotationVoiceConfig,
@@ -17,6 +15,9 @@ import type {
   PreviewAnnotationStyleChange,
   PreviewAnnotationSubmission,
 } from "@t3tools/contracts";
+import { matchesKeybindingShortcut } from "@t3tools/shared/keybindingMatching";
+import { ipcRenderer } from "electron";
+import { getElementContext } from "react-grab/primitives";
 
 import { createAnnotationIdSource } from "./AnnotationIds.ts";
 import { resolveAnnotationSubmission } from "./AnnotationKeyboard.ts";
@@ -28,8 +29,6 @@ import {
   type StrokeGeometry,
 } from "./AnnotationStroke.ts";
 import { previewAnnotationStyles } from "./AnnotationStyles.generated.ts";
-import { installRecordingCursor } from "./RecordingCursor.ts";
-import { DEFAULT_RECORDING_INPUT_OPTIONS } from "./RecordingInput.ts";
 import {
   ANNOTATION_CAPTURED_CHANNEL,
   ANNOTATION_SEND_ENABLED_CHANNEL,
@@ -49,6 +48,8 @@ import {
   START_PICK_CHANNEL,
   THUMB_PRESS_CHANNEL,
 } from "./GuestProtocol.ts";
+import { installRecordingCursor } from "./RecordingCursor.ts";
+import { DEFAULT_RECORDING_INPUT_OPTIONS } from "./RecordingInput.ts";
 const OVERLAY_ATTRIBUTE = "data-t3code-annotation-ui";
 const INPUT_LAYER_ATTRIBUTE = "data-t3code-annotation-input";
 const Z_INDEX_OVERLAY = 2147483646;

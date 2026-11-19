@@ -1,7 +1,7 @@
-import { pipe } from "effect/Function";
 import { p256 } from "@noble/curves/nist";
 import { sha256 } from "@noble/hashes/sha2";
 import * as Base64Url from "effect/encoding/Base64Url";
+import { pipe } from "effect/Function";
 import * as Option from "effect/Option";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";

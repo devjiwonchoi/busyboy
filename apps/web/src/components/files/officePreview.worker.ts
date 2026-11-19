@@ -1,5 +1,5 @@
-import { boundedArchive, prepareOffice } from "./officeArchive";
 import { PREVIEW_PAGE_ROWS } from "./largeTextProtocol";
+import { boundedArchive, prepareOffice } from "./officeArchive";
 import type { OfficeWorkerRequest, OfficeWorkerResult } from "./officePreviewProtocol";
 import { PreviewError, previewFailure } from "./previewFailure";
 

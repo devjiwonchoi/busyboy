@@ -1,7 +1,4 @@
 import { T, useGT } from "gt-react-native";
-
-import { Button } from "./Button";
-import * as Dialog from "./Dialog";
 import { createContext, useContext, useEffect, useEffectEvent } from "react";
 import { Modal, View } from "react-native";
 import ImageViewing from "react-native-image-viewing";
@@ -9,6 +6,9 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { openAttachmentInViewer } from "../../lib/attachmentDownload";
 import { useMediaActions } from "../../state/mediaActions";
+import { MediaPreviewHeader } from "../MediaPreviewHeader";
+import { Button } from "./Button";
+import * as Dialog from "./Dialog";
 import type {
   FilePreviewImages,
   FilePreviewModalProps,
@@ -16,7 +16,6 @@ import type {
   ResolvedFilePreviewDocument,
 } from "./FilePreviewModal.types";
 import { FilePreviewSession } from "./FilePreviewSession";
-import { MediaPreviewHeader } from "../MediaPreviewHeader";
 
 export type {
   FilePreviewItem,
@@ -24,8 +23,8 @@ export type {
   ResolvedFilePreviewSource,
 } from "./FilePreviewModal.types";
 import { PdfPreview } from "../PdfPreview";
-import { SheetHeader } from "./SheetHeader";
 import { AppText as Text } from "./AppText";
+import { SheetHeader } from "./SheetHeader";
 
 function PdfDocumentPreview(props: {
   readonly source: ResolvedFilePreviewDocument;

@@ -1,9 +1,12 @@
-import { AuthSettingsWriteScope } from "@t3tools/contracts";
-import { readEnvironmentScope } from "../../state/session";
-import { useRef, useState } from "react";
 import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
+import { AuthSettingsWriteScope } from "@t3tools/contracts";
 import type { SshDeviceHostConfig } from "@t3tools/contracts";
+import { msg } from "gt-react";
+import { useRef, useState } from "react";
+
+import { m } from "../../i18n/messages";
 import { deviceEnvironment } from "../../state/device";
+import { readEnvironmentScope } from "../../state/session";
 import { useAtomCommand } from "../../state/use-atom-command";
 import {
   checkDeviceHostConnections,
@@ -11,8 +14,6 @@ import {
   type DeviceHostCheck,
   type DeviceHostCheckTarget,
 } from "./deviceHostConnectionChecks";
-import { msg } from "gt-react";
-import { m } from "../../i18n/messages";
 
 export function useHostConnectionChecks(targets: ReadonlyArray<DeviceHostCheckTarget>) {
   const test = useAtomCommand(deviceEnvironment.testHost, { reportFailure: false });

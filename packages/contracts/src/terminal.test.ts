@@ -1,6 +1,7 @@
 import * as Schema from "effect/Schema";
 import { describe, expect, it } from "vite-plus/test";
 
+import { ProviderInstanceId } from "./providerInstance.ts";
 import {
   chunkTerminalWrite,
   DEFAULT_TERMINAL_ID,
@@ -9,7 +10,6 @@ import {
   TerminalOpenInput,
   TerminalProviderEnvironmentError,
 } from "./terminal.ts";
-import { ProviderInstanceId } from "./providerInstance.ts";
 
 const encodeTerminalError = Schema.encodeUnknownSync(TerminalError);
 const decodeTerminalError = Schema.decodeUnknownSync(TerminalError);

@@ -1,17 +1,15 @@
-import type { HighlightScheme } from "../../lib/highlights";
-
 import { settlePromise, squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
 import { AsyncResult } from "effect/reactivity";
 import { useEffect, useRef, useState } from "react";
 
+import type { HighlightScheme } from "../../lib/highlights";
 import {
   highlightNativeReviewDiffVisibleRows,
   type NativeReviewDiffHighlightChunk,
 } from "../diffs/nativeReviewDiffHighlighter";
 import type { NativeReviewDiffRow } from "../diffs/nativeReviewDiffSurface";
-import type { NativeReviewDiffFile } from "../diffs/nativeReviewDiffTypes";
 import { diffHighlightTraceId, traceDiffHighlight } from "../diffs/nativeReviewDiffTrace";
-
+import type { NativeReviewDiffFile } from "../diffs/nativeReviewDiffTypes";
 import {
   createReviewDiffHighlightScheduler,
   type NativeReviewVisibleRange,

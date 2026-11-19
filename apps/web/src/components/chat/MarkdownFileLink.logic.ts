@@ -3,7 +3,6 @@ import { splitFilePathPosition } from "@t3tools/shared/fileLinks";
 import { msg } from "gt-react";
 
 import { m } from "../../i18n/messages";
-
 import type { MarkdownFileLinkMeta } from "../../markdown-links";
 import type { RemoteOpenMode } from "../../remoteOpen";
 

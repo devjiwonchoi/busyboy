@@ -2,8 +2,7 @@ import { Dialog as CommandDialogPrimitive } from "@base-ui/react/dialog";
 import { SearchIcon } from "lucide-react";
 import { useRef } from "react";
 import type * as React from "react";
-import { cn } from "~/lib/utils";
-import { useNativeTitlebarHeight } from "~/lib/windowControlsOverlay";
+
 import {
   Autocomplete,
   AutocompleteCollection,
@@ -15,8 +14,10 @@ import {
   AutocompleteListHeading,
   AutocompleteListVirtualized,
 } from "~/components/ui/autocomplete";
-import { DIALOG_BACKDROP_CLASS, DIALOG_POPUP_CLASS } from "~/components/ui/dialog-styles";
 import { Button } from "~/components/ui/button";
+import { DIALOG_BACKDROP_CLASS, DIALOG_POPUP_CLASS } from "~/components/ui/dialog-styles";
+import { cn } from "~/lib/utils";
+import { useNativeTitlebarHeight } from "~/lib/windowControlsOverlay";
 
 const CommandDialog = CommandDialogPrimitive.Root;
 

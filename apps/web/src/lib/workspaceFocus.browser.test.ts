@@ -1,7 +1,9 @@
 import { describe, expect, it, vi } from "vite-plus/test";
 import { userEvent } from "vite-plus/test/browser";
-import appCss from "~/index.css?inline";
+
 import { createWorkspaceFocusController } from "./workspaceFocus";
+
+import appCss from "~/index.css?inline";
 
 function setup() {
   const root = document.createElement("div");

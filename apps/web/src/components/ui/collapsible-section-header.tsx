@@ -1,5 +1,6 @@
-import type { ComponentProps, ReactNode } from "react";
 import { ChevronDownIcon } from "lucide-react";
+import type { ComponentProps, ReactNode } from "react";
+
 import { cn } from "../../lib/utils";
 
 const tones = {

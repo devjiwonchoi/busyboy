@@ -1,15 +1,14 @@
 import { HeaderHeightContext } from "@react-navigation/elements";
 import { use } from "react";
 import { Platform } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useAdaptiveWorkspaceLayout } from "../../features/layout/adaptive-workspace-context";
 import { NATIVE_MAIL_SEARCH_TOOLBAR_CONTENT_INSET } from "../../features/layout/native-mail-search-toolbar";
-import { useNativeMailSearchToolbar } from "../../native/use-native-mail-search-toolbar";
-import type { AppBarSearch } from "./AppBar.types";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
-
 import { IOS_NAV_BAR_HEIGHT } from "../../lib/layoutMetrics";
 import { useNativeColumnLayoutMetrics } from "../../native/native-layout-metrics";
+import { useNativeMailSearchToolbar } from "../../native/use-native-mail-search-toolbar";
+import type { AppBarSearch } from "./AppBar.types";
 import { useToolbarLayout } from "./useToolbarLayout";
 
 /**

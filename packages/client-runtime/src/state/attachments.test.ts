@@ -9,12 +9,12 @@ import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import { AsyncResult, Atom, AtomRegistry } from "effect/reactivity";
 
-import type { AtomCommand } from "./runtime.ts";
 import {
   formatAttachmentSize,
   runAttachmentUploadCycle,
   verifyPersistedAttachmentUpload,
 } from "./attachments.ts";
+import type { AtomCommand } from "./runtime.ts";
 
 const environmentId = EnvironmentId.make("environment-1");
 const registry = {} as AtomRegistry.AtomRegistry;

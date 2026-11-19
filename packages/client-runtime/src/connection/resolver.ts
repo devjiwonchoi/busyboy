@@ -1,5 +1,3 @@
-import { msg } from "gt-i18n";
-import { translatableDetail } from "../errors/translatable.ts";
 import type {
   AuthClientPresentationMetadata,
   ExecutionEnvironmentDescriptor,
@@ -7,10 +5,11 @@ import type {
 import { withRelayClientTracing } from "@t3tools/shared/relayTracing";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
-import * as HttpClient from "effect/http/HttpClient";
+import { msg } from "gt-i18n";
 
 import {
   appendClientConnectionParams,
@@ -18,6 +17,8 @@ import {
   readClientOwnerParams,
 } from "../authorization/remote.ts";
 import * as RemoteEnvironmentAuthorization from "../authorization/service.ts";
+import { fetchRemoteEnvironmentDescriptor } from "../environment/descriptor.ts";
+import { translatableDetail } from "../errors/translatable.ts";
 import * as ClientCapabilities from "../platform/capabilities.ts";
 import {
   BearerConnectionCredential,
@@ -25,6 +26,10 @@ import {
   type ConnectionCatalogEntry,
   SshConnectionProfile,
 } from "./catalog.ts";
+import {
+  appendOrchestrationProtocol,
+  orchestrationProtocolCompatibilityError,
+} from "./compatibility.ts";
 import * as ConnectionCredentialStore from "./credentialStore.ts";
 import {
   credentialMissingError,
@@ -32,10 +37,6 @@ import {
   mapRemoteEnvironmentError,
   profileMissingError,
 } from "./errors.ts";
-import {
-  PullRequestRoutingPermissions,
-  pullRequestRoutingConnectionKey,
-} from "./pullRequestRoutingPermissions.ts";
 import type {
   BearerConnectionTarget,
   ConnectionTarget,
@@ -47,11 +48,10 @@ import type {
 import { ConnectionBlockedError, type ConnectionAttemptError } from "./model.ts";
 import * as ConnectionProfileStore from "./profileStore.ts";
 import {
-  appendOrchestrationProtocol,
-  orchestrationProtocolCompatibilityError,
-} from "./compatibility.ts";
+  PullRequestRoutingPermissions,
+  pullRequestRoutingConnectionKey,
+} from "./pullRequestRoutingPermissions.ts";
 import { credentialConnectionId } from "./routes.ts";
-import { fetchRemoteEnvironmentDescriptor } from "../environment/descriptor.ts";
 
 export class ConnectionResolver extends Context.Service<
   ConnectionResolver,

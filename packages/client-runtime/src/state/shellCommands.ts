@@ -1,8 +1,8 @@
 import { WS_METHODS } from "@t3tools/contracts";
 import { Atom } from "effect/reactivity";
 
-import { createEnvironmentRpcCommand } from "./runtime.ts";
 import type { EnvironmentRegistry } from "../connection/registry.ts";
+import { createEnvironmentRpcCommand } from "./runtime.ts";
 
 export function createShellEnvironmentAtoms<R, E>(
   runtime: Atom.AtomRuntime<EnvironmentRegistry | R, E>,

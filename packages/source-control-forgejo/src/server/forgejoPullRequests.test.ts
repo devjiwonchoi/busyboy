@@ -2,8 +2,8 @@ import { expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 
-import { repositoryNameFromRemoteUrl } from "./ForgejoSourceControlProvider.ts";
 import { ForgejoPullRequestSchema, toForgejoChangeRequest } from "./forgejoPullRequests.ts";
+import { repositoryNameFromRemoteUrl } from "./ForgejoSourceControlProvider.ts";
 
 const decodeForgejoPullRequest = Schema.decodeEffect(ForgejoPullRequestSchema);
 

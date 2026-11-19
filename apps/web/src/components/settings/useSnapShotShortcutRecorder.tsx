@@ -1,5 +1,4 @@
 import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
-import { m } from "~/i18n/messages";
 import {
   isModifierPairShortcut,
   type SnapShotModifier,
@@ -8,6 +7,9 @@ import {
 import { parseKeybindingShortcut } from "@t3tools/shared/keybindings";
 import { useGT } from "gt-react";
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
+
+import { m } from "~/i18n/messages";
+
 import { getDesktopSnapShotBridge } from "../../lib/desktopSnapShot";
 import {
   formatSnapShotShortcutLabel,

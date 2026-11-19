@@ -1,3 +1,8 @@
+import type { PendingThreadRequests } from "@t3tools/client-runtime/state/thread-requests";
+import {
+  makeThreadRequestsResolvedAnnouncer,
+  sendApprovalFeedback,
+} from "@t3tools/client-runtime/state/thread-requests";
 import {
   AuthOrchestrationOperateScope,
   DEFAULT_SERVER_SETTINGS,
@@ -16,19 +21,15 @@ import {
   type RuntimeMode,
   type ServerConfig,
 } from "@t3tools/contracts";
+import { DateTime } from "effect";
+import { AsyncResult, type Atom } from "effect/reactivity";
+import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
+
 import {
   v2Now,
   v2Projection,
 } from "../../../../packages/client-runtime/src/state/orchestrationV2TestFixtures";
 import type { DraftComposerImageAttachment } from "../lib/composerImages";
-import type { PendingThreadRequests } from "@t3tools/client-runtime/state/thread-requests";
-import {
-  makeThreadRequestsResolvedAnnouncer,
-  sendApprovalFeedback,
-} from "@t3tools/client-runtime/state/thread-requests";
-import { DateTime } from "effect";
-import { AsyncResult, type Atom } from "effect/reactivity";
-import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 const state = vi.hoisted(() => ({
   grantedEnvironments: new Set<string>(),
@@ -244,9 +245,10 @@ vi.mock("../lib/copyTextWithHaptic", () => ({ copyTextWithHaptic: vi.fn() }));
 vi.mock("./use-remote-environment-registry", () => ({ setPendingConnectionError: vi.fn() }));
 
 import { Alert } from "react-native";
-import { useThreadComposerState } from "./use-thread-composer-state";
-import { useSelectedThreadRequests } from "./use-selected-thread-requests";
+
 import { questionAttachmentDraftKey } from "./question-attachments";
+import { useSelectedThreadRequests } from "./use-selected-thread-requests";
+import { useThreadComposerState } from "./use-thread-composer-state";
 
 const NO_SIDE_CHATS = { startSideChat: async () => false };
 

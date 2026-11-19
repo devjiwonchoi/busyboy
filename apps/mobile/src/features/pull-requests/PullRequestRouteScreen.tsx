@@ -1,8 +1,21 @@
+import { RegistryContext, useAtomRefresh, useAtomValue } from "@effect/atom-react";
+import type { LegendListRef } from "@legendapp/list/react-native";
+import { AnimatedLegendList } from "@legendapp/list/reanimated";
+import { useFocusEffect, useNavigation, type StaticScreenProps } from "@react-navigation/native";
+import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import {
   isFileDiffCollapsed,
   withFileDiffFold,
   type FileDiffFoldChoices,
 } from "@t3tools/client-runtime/pull-request-diff-fold";
+import { sourceControlClients } from "@t3tools/client-runtime/source-control-clients";
+import {
+  pullRequestConversationThreads,
+  type PullRequestDetail,
+  type PullRequestListEntry,
+  type PullRequestSummary,
+} from "@t3tools/contracts";
+import { isTestChangedFile } from "@t3tools/shared/changedFileKind";
 import {
   parsePullRequestAnchor,
   pullRequestAnchorMatchesUrl,
@@ -11,19 +24,56 @@ import {
   resolvePullRequestAnchorRange,
   resolvePullRequestReviewAnchor,
 } from "@t3tools/shared/pullRequestAnchor";
+import * as Clipboard from "expo-clipboard";
 import { T, useGT, useMessages, Var } from "gt-react-native";
+import { use, useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
+import { Linking, Platform, Pressable, StyleSheet, View } from "react-native";
+import Animated from "react-native-reanimated";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+
+import { RelativeTime } from "../../components/RelativeTime";
 import { AppActivityIndicator } from "../../components/ui/AppActivityIndicator";
+import { AppBar, type AppBarMenu } from "../../components/ui/AppBar";
+import { SymbolView } from "../../components/ui/AppSymbol";
+import { AppText as Text } from "../../components/ui/AppText";
+import { Button } from "../../components/ui/Button";
 import { Chip } from "../../components/ui/Chip";
-import { pullRequestTabOffset } from "./pullRequestTabScroll";
+import { EmptyState } from "../../components/ui/EmptyState";
+import { RefreshControl } from "../../components/ui/RefreshControl";
+import { ScreenContent } from "../../components/ui/ScreenContent";
+import { SegmentedControl } from "../../components/ui/SegmentedControl";
+import { useAndroidControlSizing } from "../../components/ui/useAndroidControlSizing";
+import { useContentTopInset } from "../../components/ui/useBarInset";
+import { changeRequestTermKind } from "../../lib/changeRequestTerm";
+import { NativeScrollView } from "../../native/NativeScrollViewMarker";
+import { composerPullRequests } from "../../state/pull-requests";
+import { useEnvironmentQuery } from "../../state/query";
+import { usePullToRefresh } from "../../state/use-pull-to-refresh";
+import {
+  resolveNativeReviewDiffView,
+  type NativeReviewDiffViewHandle,
+  type NativeReviewDiffViewProps,
+} from "../diffs/nativeReviewDiffSurface";
+import { useAdaptiveWorkspaceLayout } from "../layout/AdaptiveWorkspaceLayout";
+import { useAndroidWorkspaceBack } from "../layout/workspace/useAndroidWorkspaceNavigation";
+import {
+  getCachedNativeReviewDiffData,
+  NATIVE_REVIEW_DIFF_CONTENT_WIDTH,
+} from "../review/nativeReviewDiffAdapter";
+import { useNativeReviewDiffBridge } from "../review/useNativeReviewDiffBridge";
+import { useAppearancePreferences } from "../settings/appearance/AppearancePreferencesProvider";
+import { useAppearanceCodeSurface } from "../settings/appearance/useAppearanceCodeSurface";
 import { guideFocusedRows, type GuideDiffFocus } from "./guide/guideDiffFocus";
 import { PullRequestGuideContent } from "./guide/PullRequestGuideScreen";
 import { useReviewGuidesEnabled } from "./guide/useReviewGuide";
+import {
+  canPerformPullRequestAction,
+  openOnProviderLabel,
+  PR_ACTION_ICONS,
+  pullRequestActionLabel,
+} from "./pullRequestActions";
 import { filterPullRequestActivity, type ActivityFilter } from "./pullRequestActivityFilter";
 import { PullRequestActivityFilters } from "./PullRequestActivityFilters";
-import { usePullRequestActivityFilter } from "./usePullRequestActivityFilter";
-import type { LegendListRef } from "@legendapp/list/react-native";
-import { AnimatedLegendList } from "@legendapp/list/reanimated";
-import Animated from "react-native-reanimated";
 import {
   PR_ROW_LAYOUT,
   PR_ROW_ENTER,
@@ -31,82 +81,46 @@ import {
   PR_POSITION_LAYOUT,
 } from "./pullRequestAnimations";
 import {
-  canPerformPullRequestAction,
-  openOnProviderLabel,
-  PR_ACTION_ICONS,
-  pullRequestActionLabel,
-} from "./pullRequestActions";
-import * as Clipboard from "expo-clipboard";
-import { Button } from "../../components/ui/Button";
-import { usePullRequestReviewDraft } from "./usePullRequestReviewDraft";
-import { usePullRequestFilesViewed } from "./usePullRequestFilesViewed";
-import { usePullRequestPermissions } from "./usePullRequestPermissions";
-import { usePullRequestDescription } from "./usePullRequestDescription";
-import { usePullRequestAction } from "./usePullRequestAction";
-import { annotatePullRequestDiff, reviewPosition } from "./pullRequestDiffComments";
-import { usePullRequestFileFilter } from "./usePullRequestFileFilter";
-import {
-  handlePullRequestDiffDebugEvent,
-  pullRequestDiffInitialPosition,
-} from "./pullRequestDiffDebug";
-import { usePullRequestDiffHighlightFiles } from "./usePullRequestDiffHighlightFiles";
-import { isTestChangedFile } from "@t3tools/shared/changedFileKind";
-import { useFocusEffect, useNavigation, type StaticScreenProps } from "@react-navigation/native";
-import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import { RegistryContext, useAtomRefresh, useAtomValue } from "@effect/atom-react";
-import { pullRequestReviewKey } from "./pullRequestReviewDrafts";
-import {
-  pullRequestConversationThreads,
-  type PullRequestDetail,
-  type PullRequestListEntry,
-  type PullRequestSummary,
-} from "@t3tools/contracts";
-import { PullRequestOverviewLoading } from "./PullRequestOverviewLoading";
-import { copyPullRequestLink, sharePullRequestLink } from "./pullRequestLink";
-import { pullRequestStatus } from "./pullRequestStatus";
-import { use, useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
-import { Linking, Platform, Pressable, StyleSheet, View } from "react-native";
-import { RefreshControl } from "../../components/ui/RefreshControl";
-import { NativeScrollView } from "../../native/NativeScrollViewMarker";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
-
-import { AppText as Text } from "../../components/ui/AppText";
-import { AppBar, type AppBarMenu } from "../../components/ui/AppBar";
-import { useContentTopInset } from "../../components/ui/useBarInset";
-import { useAndroidControlSizing } from "../../components/ui/useAndroidControlSizing";
-import { useAdaptiveWorkspaceLayout } from "../layout/AdaptiveWorkspaceLayout";
-import { useAndroidWorkspaceBack } from "../layout/workspace/useAndroidWorkspaceNavigation";
-import { EmptyState } from "../../components/ui/EmptyState";
-import { SegmentedControl } from "../../components/ui/SegmentedControl";
-import { SymbolView } from "../../components/ui/AppSymbol";
-import { ScreenContent } from "../../components/ui/ScreenContent";
-import { RelativeTime } from "../../components/RelativeTime";
-import { usePullRequestConnected } from "./usePullRequestConnected";
-import { usePullRequestLiveChecks } from "./usePullRequestLiveChecks";
-import { pullRequestLabelColor } from "./pullRequestList";
-import { PullRequestReactions } from "./PullRequestReactions";
-import { composerPullRequests } from "../../state/pull-requests";
-import { useEnvironmentQuery } from "../../state/query";
-import { SourceControlAppAccessNotice } from "./SourceControlAppAccessNotice";
-import { usePullToRefresh } from "../../state/use-pull-to-refresh";
-import {
-  resolveNativeReviewDiffView,
-  type NativeReviewDiffViewHandle,
-  type NativeReviewDiffViewProps,
-} from "../diffs/nativeReviewDiffSurface";
-import {
-  getCachedNativeReviewDiffData,
-  NATIVE_REVIEW_DIFF_CONTENT_WIDTH,
-} from "../review/nativeReviewDiffAdapter";
-import { useAppearancePreferences } from "../settings/appearance/AppearancePreferencesProvider";
-import { useAppearanceCodeSurface } from "../settings/appearance/useAppearanceCodeSurface";
-import { useNativeReviewDiffBridge } from "../review/useNativeReviewDiffBridge";
-import { pullRequestTimelineRows } from "./PullRequestTimeline";
-import {
   PullRequestActionToolbar,
   PullRequestCardGroup,
   usePullRequestVerticalControls,
 } from "./PullRequestControls";
+import { PullRequestDescription } from "./PullRequestDescription";
+import { annotatePullRequestDiff, reviewPosition } from "./pullRequestDiffComments";
+import {
+  handlePullRequestDiffDebugEvent,
+  pullRequestDiffInitialPosition,
+} from "./pullRequestDiffDebug";
+import { pullRequestFileJumpScope, subscribePullRequestFileJump } from "./pullRequestFileJump";
+import { usePullRequestFilesSection } from "./PullRequestFiles";
+import { copyPullRequestLink, sharePullRequestLink } from "./pullRequestLink";
+import { pullRequestLabelColor } from "./pullRequestList";
+import { PullRequestMarkdownRepository } from "./PullRequestMarkdown";
+import { PullRequestMediaVisibleContext } from "./PullRequestMedia";
+import { PullRequestMergeControls } from "./PullRequestMergeControls";
+import { PullRequestOverviewLoading } from "./PullRequestOverviewLoading";
+import {
+  PullRequestAvatar,
+  PullRequestDiffStats,
+  PullRequestReadStatus,
+} from "./PullRequestPresentation";
+import { PullRequestReactions } from "./PullRequestReactions";
+import { pullRequestReviewKey } from "./pullRequestReviewDrafts";
+import { PullRequestStackCard } from "./PullRequestStackCard";
+import { pullRequestStatus } from "./pullRequestStatus";
+import {
+  PullRequestStatusMenu,
+  PullRequestChecksRow,
+  PullRequestBranchRow,
+  PullRequestReviewersRow,
+} from "./PullRequestStatusRows";
+import { pullRequestTabOffset } from "./pullRequestTabScroll";
+import { pullRequestTimelineRows } from "./PullRequestTimeline";
+import { SourceControlAppAccessNotice } from "./SourceControlAppAccessNotice";
+import { usePullRequestAction } from "./usePullRequestAction";
+import { usePullRequestActivityFilter } from "./usePullRequestActivityFilter";
+import { usePullRequestConnected } from "./usePullRequestConnected";
+import { usePullRequestDescription } from "./usePullRequestDescription";
 import {
   pullRequestTarget as requestTarget,
   usePullRequestDiff,
@@ -114,29 +128,15 @@ import {
   type PullRequestDiffParams,
   type PullRequestParams,
 } from "./usePullRequestDiff";
-import {
-  PullRequestAvatar,
-  PullRequestDiffStats,
-  PullRequestReadStatus,
-} from "./PullRequestPresentation";
-import { usePullRequestFilesSection } from "./PullRequestFiles";
-import { usePullRequestMaintainerEdits } from "./usePullRequestMaintainerEdits";
-import { PullRequestDescription } from "./PullRequestDescription";
-import { PullRequestMediaVisibleContext } from "./PullRequestMedia";
-import { PullRequestMarkdownRepository } from "./PullRequestMarkdown";
-import {
-  PullRequestStatusMenu,
-  PullRequestChecksRow,
-  PullRequestBranchRow,
-  PullRequestReviewersRow,
-} from "./PullRequestStatusRows";
-import { PullRequestMergeControls } from "./PullRequestMergeControls";
-import { PullRequestStackCard } from "./PullRequestStackCard";
-import { usePullRequestStack, type PullRequestStackState } from "./usePullRequestStack";
+import { usePullRequestDiffHighlightFiles } from "./usePullRequestDiffHighlightFiles";
 import { usePullRequestEnvironmentFallback } from "./usePullRequestEnvironmentFallback";
-import { pullRequestFileJumpScope, subscribePullRequestFileJump } from "./pullRequestFileJump";
-import { sourceControlClients } from "@t3tools/client-runtime/source-control-clients";
-import { changeRequestTermKind } from "../../lib/changeRequestTerm";
+import { usePullRequestFileFilter } from "./usePullRequestFileFilter";
+import { usePullRequestFilesViewed } from "./usePullRequestFilesViewed";
+import { usePullRequestLiveChecks } from "./usePullRequestLiveChecks";
+import { usePullRequestMaintainerEdits } from "./usePullRequestMaintainerEdits";
+import { usePullRequestPermissions } from "./usePullRequestPermissions";
+import { usePullRequestReviewDraft } from "./usePullRequestReviewDraft";
+import { usePullRequestStack, type PullRequestStackState } from "./usePullRequestStack";
 
 function usePullRequestActivityRows(params: PullRequestParams, filter: ActivityFilter) {
   const navigation = useNavigation();

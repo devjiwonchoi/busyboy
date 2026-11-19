@@ -1,48 +1,48 @@
-import { LegendList, type LegendListRef } from "@legendapp/list/react-native";
-import { SheetHeader } from "../../components/ui/SheetHeader";
-import { appAtomRegistry } from "../../state/atom-registry";
 import { useAtomValue } from "@effect/atom-react";
+import { LegendList, type LegendListRef } from "@legendapp/list/react-native";
 import type { EnvironmentThreadShell } from "@t3tools/client-runtime/state/shell";
-import { effectiveSnoozed } from "@t3tools/client-runtime/state/thread-settled";
 import { sortInboxThreadsByReturn } from "@t3tools/client-runtime/state/thread-inbox";
+import { effectiveSnoozed } from "@t3tools/client-runtime/state/thread-settled";
+import { sortSettledThreads } from "@t3tools/client-runtime/state/thread-sort";
 import { msg, T, useGT, useMessages } from "gt-react-native";
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { Animated, Modal, Pressable, useWindowDimensions, View } from "react-native";
 import { Gesture, GestureDetector, GestureHandlerRootView } from "react-native-gesture-handler";
 import Reanimated, { ReduceMotion, useAnimatedStyle, withTiming } from "react-native-reanimated";
-import { threadDragGapOffset } from "./threadDragGap";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 
-import { AppText as Text } from "../../components/ui/AppText";
 import { SymbolView } from "../../components/ui/AppSymbol";
-import { scopedThreadKey } from "../../lib/scopedEntities";
+import { AppText as Text } from "../../components/ui/AppText";
+import { SheetHeader } from "../../components/ui/SheetHeader";
 import { deriveThreadArrangementSizing } from "../../lib/layout";
-import { environmentServerConfigsAtom } from "../../state/server";
-import { threadListEnvironmentsAtom } from "../../state/presentation";
-import { steadyNavigationThreadShellsAtom, steadyShellsHoldingAtom } from "../../state/threads";
-import { sortSettledThreads } from "@t3tools/client-runtime/state/thread-sort";
+import { scopedThreadKey } from "../../lib/scopedEntities";
+import { appAtomRegistry } from "../../state/atom-registry";
 import { useOlderSettledShelf, useOlderSettledShelfGrowth } from "../../state/olderSettledShelf";
+import { threadListEnvironmentsAtom } from "../../state/presentation";
+import { environmentServerConfigsAtom } from "../../state/server";
 import {
   pendingThreadOrderAtom,
   threadDropBusyAtom,
   threadArrangementOpenAtom,
 } from "../../state/thread-order";
+import { steadyNavigationThreadShellsAtom, steadyShellsHoldingAtom } from "../../state/threads";
 import { queuedThreadKeysAtom } from "../../state/use-thread-outbox";
 import { useThreadListActions } from "../home/useThreadListActions";
-import {
-  createThreadMovePlanner,
-  threadDragAction,
-  type ThreadMoveDestination,
-} from "./threadOrder";
+import { useAppearancePreferences } from "../settings/appearance/AppearancePreferencesProvider";
+import { threadDragGapOffset } from "./threadDragGap";
 import {
   getThreadListV2OrderedSection,
   THREAD_LIST_V2_SETTLED_INITIAL_COUNT,
   THREAD_LIST_V2_SETTLED_PAGE_COUNT,
   threadListInboxReturns,
 } from "./threadListV2";
+import {
+  createThreadMovePlanner,
+  threadDragAction,
+  type ThreadMoveDestination,
+} from "./threadOrder";
 import { useThreadListNow } from "./use-thread-list-now";
 import { useThreadListV2ShelfPreferences } from "./use-thread-list-v2-shelf-preferences";
-import { useAppearancePreferences } from "../settings/appearance/AppearancePreferencesProvider";
 
 const keyOf = (thread: EnvironmentThreadShell) => scopedThreadKey(thread.environmentId, thread.id);
 type Section = "pinned" | "active" | "snoozed" | "settled";

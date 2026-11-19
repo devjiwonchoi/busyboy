@@ -1,6 +1,11 @@
-import * as CloudflareRetry from "@distilled.cloud/cloudflare/Retry";
-import * as Alchemy from "alchemy";
 import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as CloudflareRetry from "@distilled.cloud/cloudflare/Retry";
+import type {
+  RelayManagedEndpoint,
+  RelayManagedEndpointOrigin,
+  RelayManagedEndpointRuntimeConfig,
+} from "@t3tools/contracts/relay";
+import * as Alchemy from "alchemy";
 import * as Arr from "effect/Array";
 import * as Cause from "effect/Cause";
 import * as Clock from "effect/Clock";
@@ -13,12 +18,6 @@ import * as Hex from "effect/encoding/Hex";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
-
-import type {
-  RelayManagedEndpoint,
-  RelayManagedEndpointOrigin,
-  RelayManagedEndpointRuntimeConfig,
-} from "@t3tools/contracts/relay";
 
 import * as RelayConfiguration from "../Config.ts";
 import {

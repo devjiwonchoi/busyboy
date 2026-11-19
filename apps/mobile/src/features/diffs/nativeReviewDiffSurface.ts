@@ -1,3 +1,5 @@
+import { requireNativeView } from "expo";
+import { msg, useMessages } from "gt-react-native";
 import {
   createElement,
   useCallback,
@@ -9,8 +11,6 @@ import {
   type Ref,
 } from "react";
 import { View, type NativeSyntheticEvent, type ViewProps } from "react-native";
-import { requireNativeView } from "expo";
-import { msg, useMessages } from "gt-react-native";
 
 import { EmptyState } from "../../components/ui/EmptyState";
 import { NativeViewResolutionError } from "../../native/nativeViewResolutionError";

@@ -1,12 +1,13 @@
-import { PROVIDER_SEND_TURN_MAX_IMAGE_BYTES } from "@t3tools/contracts";
 import {
   downscalableImageMimeType,
   fitImageAttachmentSize,
 } from "@t3tools/client-runtime/image-attachment-size";
+import { PROVIDER_SEND_TURN_MAX_IMAGE_BYTES } from "@t3tools/contracts";
 import {
   IMAGE_DIMENSIONS_HEADER_BYTES,
   readImageDimensions,
 } from "@t3tools/shared/imageDimensions";
+
 import { estimateBase64ByteSize } from "./base64";
 
 const PHOTO_JPEG_QUALITY = 0.85;

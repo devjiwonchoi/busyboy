@@ -32,58 +32,57 @@ import {
   LOCAL_DEVICE_HOST_LABEL,
   type ThreadId,
 } from "@t3tools/contracts";
+import * as SecretResolver from "@t3tools/secret-provider-core/server/SecretResolver";
+import * as HostProcess from "@t3tools/shared/HostProcess";
+import { resolveNodeExecutable, nodeRuntimeUnavailableMessage } from "@t3tools/shared/nodeRuntime";
 import { extractPng } from "@t3tools/shared/png";
 import { SshCommandError } from "@t3tools/ssh/errors";
-import * as FileSystem from "effect/FileSystem";
-import { resolveNodeExecutable, nodeRuntimeUnavailableMessage } from "@t3tools/shared/nodeRuntime";
-import * as Path from "effect/Path";
-import {
-  DeviceToolchainInstallError,
-  ensureAgentDevice,
-  ensureDeviceHub,
-} from "./DeviceToolchain.ts";
-import {
-  agentDeviceCloseOutcome,
-  bindAgentDeviceLauncher,
-  ensureAgentDeviceShim,
-  pruneAgentDeviceLaunchers,
-} from "./AgentDeviceShim.ts";
-import * as ServerConfig from "../config.ts";
-import {
-  agentDeviceConfigPath,
-  agentDeviceSession,
-  writeAgentDeviceConfig,
-} from "./AgentDeviceTarget.ts";
 import * as Context from "effect/Context";
 import * as Digest from "effect/crypto/Digest";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as FileSystem from "effect/FileSystem";
+import * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as Path from "effect/Path";
 import * as PubSub from "effect/PubSub";
 import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
 import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
 import * as SynchronizedRef from "effect/SynchronizedRef";
-import * as HttpClient from "effect/http/HttpClient";
 
-import * as ServerSettings from "../serverSettings.ts";
-import { isLocalSshDeviceHost, remoteSshDeviceHosts } from "./localSshDeviceHost.ts";
-
-import { readDeviceDetail, runDeviceAction } from "./DeviceActions.ts";
+import * as ServerConfig from "../config.ts";
 import * as ProcessRunner from "../processRunner.ts";
-import * as SecretResolver from "@t3tools/secret-provider-core/server/SecretResolver";
 import * as SecretResolverLayer from "../secrets/SecretResolver.ts";
 import { requireSettingsSecret } from "../secrets/settingsSecretValue.ts";
+import * as ServerSettings from "../serverSettings.ts";
+import {
+  agentDeviceCloseOutcome,
+  bindAgentDeviceLauncher,
+  ensureAgentDeviceShim,
+  pruneAgentDeviceLaunchers,
+} from "./AgentDeviceShim.ts";
+import {
+  agentDeviceConfigPath,
+  agentDeviceSession,
+  writeAgentDeviceConfig,
+} from "./AgentDeviceTarget.ts";
+import { readDeviceDetail, runDeviceAction } from "./DeviceActions.ts";
 import * as DeviceHost from "./DeviceHost.ts";
-import * as SshDeviceHost from "./SshDeviceHost.ts";
+import {
+  DeviceToolchainInstallError,
+  ensureAgentDevice,
+  ensureDeviceHub,
+} from "./DeviceToolchain.ts";
 import * as EasDeviceHost from "./EasDeviceHost.ts";
-import * as SimlockDeviceHost from "./SimlockDeviceHost.ts";
-import * as HostProcess from "@t3tools/shared/HostProcess";
 import { makeExpoApi } from "./ExpoApi.ts";
-import * as Exit from "effect/Exit";
 import * as LocalDeviceHost from "./LocalDeviceHost.ts";
+import { isLocalSshDeviceHost, remoteSshDeviceHosts } from "./localSshDeviceHost.ts";
+import * as SimlockDeviceHost from "./SimlockDeviceHost.ts";
+import * as SshDeviceHost from "./SshDeviceHost.ts";
 
 export const DEVICE_HUB_ROUTE_PREFIX = "/api/device-hub";
 

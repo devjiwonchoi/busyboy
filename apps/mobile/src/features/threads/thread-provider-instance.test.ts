@@ -6,17 +6,16 @@ import {
   ThreadId,
   type ServerConfig,
 } from "@t3tools/contracts";
-import { describe, expect, it } from "vite-plus/test";
 import { Atom, AtomRegistry } from "effect/reactivity";
+import { describe, expect, it } from "vite-plus/test";
 
-import { computeThreadMoveAvailability, createThreadMovePlanner } from "./threadOrder";
-import { makeThreadShellFixture } from "../../test-fixtures";
 import { createThreadListEnvironmentsAtom } from "../../state/thread-list-environments";
-
+import { makeThreadShellFixture } from "../../test-fixtures";
 import {
   createThreadRowProviderInstanceResolver,
   resolveThreadProviderInstance,
 } from "./thread-provider-instance";
+import { computeThreadMoveAvailability, createThreadMovePlanner } from "./threadOrder";
 
 function makeConfig(
   providers: ReadonlyArray<{

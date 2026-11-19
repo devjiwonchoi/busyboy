@@ -9,11 +9,11 @@ import {
   type AuthMcpClientAccess,
   type AuthPairingCredentialResult,
 } from "@t3tools/contracts";
-import * as Schema from "effect/Schema";
 import * as Effect from "effect/Effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import * as Option from "effect/Option";
 import type { Atom } from "effect/reactivity";
+import * as Schema from "effect/Schema";
 import * as SubscriptionRef from "effect/SubscriptionRef";
 
 import * as RemoteEnvironmentAuthorization from "../authorization/service.ts";

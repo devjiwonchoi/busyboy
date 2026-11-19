@@ -5,10 +5,10 @@ import * as NodeFS from "node:fs";
 import * as NodeHttp from "node:http";
 import * as NodeNet from "node:net";
 
+import { Argument, Command } from "effect/cli";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
-import { Argument, Command } from "effect/cli";
 
 import packageJson from "../../package.json" with { type: "json" };
 import { compareExactServiceVersions, isExactServiceVersion } from "../cloud/serviceProtocol.ts";

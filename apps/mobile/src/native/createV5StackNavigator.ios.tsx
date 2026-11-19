@@ -21,13 +21,14 @@ import {
   type NativeStackTypeBag,
 } from "@react-navigation/native-stack";
 import { use, useCallback, useRef, useState, type ComponentProps } from "react";
-import { WorkspaceSlotOptionsContext, slotScreenOptions } from "./v5-workspace-context";
 import { StyleSheet, View } from "react-native";
 import { Stack } from "react-native-screens";
-import { NativeScrollEdgeEffectsContext } from "./NativeScrollViewMarker";
-import { V5StackHeader } from "./V5StackHeader.ios";
-import type { AppNativeStackNavigationOptions } from "./StackHeader";
+
 import { NativeColumnContent } from "./NativeColumnContent.ios";
+import { NativeScrollEdgeEffectsContext } from "./NativeScrollViewMarker";
+import type { AppNativeStackNavigationOptions } from "./StackHeader";
+import { WorkspaceSlotOptionsContext, slotScreenOptions } from "./v5-workspace-context";
+import { V5StackHeader } from "./V5StackHeader.ios";
 import {
   isPresentedRoute,
   nativeStackPopAction,

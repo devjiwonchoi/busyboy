@@ -1,17 +1,17 @@
 import { describe, expect, it } from "@effect/vitest";
+import { IssueTemplateList } from "@t3tools/contracts";
+import * as SourceControlRateLimit from "@t3tools/source-control-core/server/SourceControlRateLimit";
 import * as Effect from "effect/Effect";
+import { HttpClient, HttpClientResponse } from "effect/http";
 import * as Layer from "effect/Layer";
-
 import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
-import { HttpClient, HttpClientResponse } from "effect/http";
-import { IssueTemplateList } from "@t3tools/contracts";
+
 import * as GitHubAppSignIn from "./GitHubAppSignIn.ts";
 import * as GitHubCredentials from "./GitHubCredentials.ts";
-import * as GitHubRest from "./GitHubRest.ts";
-import * as GitHubQuota from "./GitHubQuota.ts";
-import * as SourceControlRateLimit from "@t3tools/source-control-core/server/SourceControlRateLimit";
 import * as GitHubIssueTracker from "./GitHubIssueTracker.ts";
+import * as GitHubQuota from "./GitHubQuota.ts";
+import * as GitHubRest from "./GitHubRest.ts";
 
 const DETAIL_RESPONSE = JSON.stringify({
   data: {

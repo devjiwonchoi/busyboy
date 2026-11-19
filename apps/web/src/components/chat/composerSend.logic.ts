@@ -1,8 +1,9 @@
 import type { EnvironmentId, ThreadContextRecord } from "@t3tools/contracts";
 import { msg } from "gt-react";
+
+import type { ComposerThreadDraftState } from "../../composerDraftStore";
 import { m, type MessageResolver } from "../../i18n/messages";
 import { collectInlineContextIds } from "../../lib/composerContextReferences";
-import type { ComposerThreadDraftState } from "../../composerDraftStore";
 
 /** Compare immutable user content without copying image bytes or upload metadata. */
 export function composerDraftContentChanged(

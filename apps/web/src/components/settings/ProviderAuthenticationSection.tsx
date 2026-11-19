@@ -1,5 +1,4 @@
 import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
-import { m } from "~/i18n/messages";
 import {
   isAtomCommandInterrupted,
   squashAtomCommandFailure,
@@ -13,11 +12,13 @@ import type {
   ServerProvider,
 } from "@t3tools/contracts";
 import { msg, T, useGT, useMessages, Var } from "gt-react";
-import { lazy, Suspense, useRef, useState } from "react";
 import { CopyIcon } from "lucide-react";
+import { lazy, Suspense, useRef, useState } from "react";
 
-import { writeTextToClipboard } from "../../hooks/useCopyToClipboard";
+import { m } from "~/i18n/messages";
+
 import { isWebUrl } from "../../browser/webUrl";
+import { writeTextToClipboard } from "../../hooks/useCopyToClipboard";
 import { ensureLocalApi } from "../../localApi";
 import { useEnvironmentQuery } from "../../state/query";
 import { serverEnvironment } from "../../state/server";
@@ -26,8 +27,8 @@ import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
-import { SettingsRow } from "./settingsLayout";
 import { RedactedSensitiveText } from "./RedactedSensitiveText";
+import { SettingsRow } from "./settingsLayout";
 
 const ProviderAuthTerminal = lazy(() => import("./ProviderAuthTerminal"));
 

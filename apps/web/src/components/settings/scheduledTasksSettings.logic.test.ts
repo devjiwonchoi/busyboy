@@ -10,13 +10,11 @@ import {
 } from "@t3tools/contracts";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 
+import { deriveProviderInstanceEntries } from "../../providerInstances";
 import type {
   SidebarProjectGroupMember,
   SidebarProjectSnapshot,
 } from "../../sidebarProjectGrouping";
-import { resolveSettingsScope, type SettingsScopeSearch } from "./settingsScope";
-
-import { deriveProviderInstanceEntries } from "../../providerInstances";
 import {
   scheduledTaskDefaultModel,
   defaultScheduledTaskProjectId,
@@ -26,6 +24,7 @@ import {
   taskToDraft,
   unbindDraftFromThread,
 } from "./scheduledTasksSettings.logic";
+import { resolveSettingsScope, type SettingsScopeSearch } from "./settingsScope";
 
 const laptopId = EnvironmentId.make("laptop");
 const serverId = EnvironmentId.make("server");

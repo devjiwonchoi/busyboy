@@ -2,13 +2,13 @@ import { normalizeHost } from "@t3tools/source-control-core/server/pullRequestUt
 import * as Clock from "effect/Clock";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as Sse from "effect/encoding/Sse";
+import { HttpClient, HttpClientRequest } from "effect/http";
 import * as Option from "effect/Option";
 import * as Random from "effect/Random";
 import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
-import * as Sse from "effect/encoding/Sse";
-import { HttpClient, HttpClientRequest } from "effect/http";
 
 import * as GitHubRest from "./GitHubRest.ts";
 

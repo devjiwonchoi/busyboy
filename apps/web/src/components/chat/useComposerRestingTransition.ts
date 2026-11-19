@@ -1,6 +1,8 @@
-import { observeResize } from "~/lib/observeResize";
-import { shouldAnimateComposerRestingTransition } from "../composerFooterLayout";
 import { useEffect, useLayoutEffect, useRef } from "react";
+
+import { observeResize } from "~/lib/observeResize";
+
+import { shouldAnimateComposerRestingTransition } from "../composerFooterLayout";
 
 const COMPOSER_RESTING_TRANSITION_CLEANUP_BUFFER_MS = 50;
 const COMPOSER_RESTING_TRANSITION_EASING = "cubic-bezier(0.32, 0.72, 0, 1)";

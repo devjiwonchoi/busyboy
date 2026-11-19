@@ -1,4 +1,3 @@
-import * as Dialog from "../../components/ui/Dialog";
 import {
   ComposerContextId,
   COMPOSER_CONTEXT_TERMINAL_TEXT_MAX_CHARS,
@@ -10,13 +9,15 @@ import { msg, T, useGT } from "gt-react-native";
 import { useState } from "react";
 import { Pressable, ScrollView, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { REVIEW_MONO_FONT_FAMILY } from "../review/reviewDiffRendering";
+
 import { AppText as Text } from "../../components/ui/AppText";
-import { Sheet } from "../../components/ui/Sheet";
 import { Button } from "../../components/ui/Button";
-import { uuidv4 } from "../../lib/uuid";
+import * as Dialog from "../../components/ui/Dialog";
+import { Sheet } from "../../components/ui/Sheet";
 import { m } from "../../i18n/messages";
+import { uuidv4 } from "../../lib/uuid";
 import { insertComposerDraftContext } from "../../state/use-composer-drafts";
+import { REVIEW_MONO_FONT_FAMILY } from "../review/reviewDiffRendering";
 
 export function TerminalContextSheet(props: {
   text: string;

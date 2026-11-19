@@ -1,7 +1,8 @@
-import { T } from "gt-react";
-import type { ComponentProps } from "react";
-import { ExternalLinkIcon } from "lucide-react";
 import { CHATGPT_USAGE_URL } from "@t3tools/shared/usageLimits";
+import { T } from "gt-react";
+import { ExternalLinkIcon } from "lucide-react";
+import type { ComponentProps } from "react";
+
 import { ensureLocalApi } from "../../localApi";
 import { Button } from "../ui/button";
 

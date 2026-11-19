@@ -1,12 +1,12 @@
 import { useMemo, useRef, useState } from "react";
 import type { NativeSyntheticEvent } from "react-native";
 
-import { createNativeReviewDiffTheme, type NativeReviewDiffData } from "./nativeReviewDiffAdapter";
-import { useAppearanceCodeSurface } from "../settings/appearance/useAppearanceCodeSurface";
-import { useAppearancePreferences } from "../settings/appearance/AppearancePreferencesProvider";
-import { useNativeReviewDiffHighlighting } from "./useNativeReviewDiffHighlighting";
-import { buildNativeReviewTokensResetKey } from "./reviewDiffBridgeKeys";
 import { useUniwindTheme } from "../../lib/useUniwindTheme";
+import { useAppearancePreferences } from "../settings/appearance/AppearancePreferencesProvider";
+import { useAppearanceCodeSurface } from "../settings/appearance/useAppearanceCodeSurface";
+import { createNativeReviewDiffTheme, type NativeReviewDiffData } from "./nativeReviewDiffAdapter";
+import { buildNativeReviewTokensResetKey } from "./reviewDiffBridgeKeys";
+import { useNativeReviewDiffHighlighting } from "./useNativeReviewDiffHighlighting";
 
 export function useNativeReviewDiffBridge(input: {
   readonly threadKey: string | null;

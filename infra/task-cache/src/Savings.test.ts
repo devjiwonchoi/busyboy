@@ -1,11 +1,14 @@
 // @effect-diagnostics nodeBuiltinImport:off - real SQLite verifies the D1 transaction's deduplication.
-import * as NodeSqlite from "node:sqlite";
+
 import * as NodeFS from "node:fs";
-import * as Effect from "effect/Effect";
+import * as NodeSqlite from "node:sqlite";
+
 import type * as Cloudflare from "@cloudflare/workers-types";
 import { expect, it } from "@effect/vitest";
-import * as Savings from "./Savings.ts";
+import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+
+import * as Savings from "./Savings.ts";
 
 it.effect(
   "increments lifetime totals once per receipt, including retries and different hosts",

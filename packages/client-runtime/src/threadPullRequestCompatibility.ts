@@ -3,6 +3,7 @@ import type {
   ThreadId,
   ThreadPullRequestKey,
 } from "@t3tools/contracts";
+
 import type { EnvironmentThreadShell } from "./state/models.ts";
 import { normalizeThreadPullRequestKey } from "./threadPullRequests.ts";
 

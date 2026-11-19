@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+
 import { AppText } from "../../components/ui/AppText";
 
 export function PullRequestSectionHeading({ children }: { readonly children: ReactNode }) {

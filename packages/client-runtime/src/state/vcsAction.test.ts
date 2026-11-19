@@ -1,4 +1,4 @@
-import { vi } from "vite-plus/test";
+import { describe, expect, it } from "@effect/vitest";
 import {
   EnvironmentId,
   AuthOrchestrationReadScope,
@@ -10,14 +10,14 @@ import {
   type GitRunStackedActionInput,
   type GitRunStackedActionResult,
 } from "@t3tools/contracts";
-import { describe, expect, it } from "@effect/vitest";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import { AsyncResult, Atom, AtomRegistry } from "effect/reactivity";
 import * as Stream from "effect/Stream";
 import * as SubscriptionRef from "effect/SubscriptionRef";
-import { AsyncResult, Atom, AtomRegistry } from "effect/reactivity";
+import { vi } from "vite-plus/test";
 
 import {
   AVAILABLE_CONNECTION_STATE,

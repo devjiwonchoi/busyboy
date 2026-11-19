@@ -8,13 +8,6 @@ import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 
 import {
-  ANTIGRAVITY_SUBAGENT_BATCH_TITLE,
-  antigravitySubagentLaunches,
-  describeAntigravitySubagentLaunches,
-  readAntigravityChildWork,
-} from "./AntigravityChildWork.ts";
-import { sanitizeAntigravityToolPayload } from "./AntigravityProtocol.ts";
-import {
   autoApproved,
   CHILD,
   invokeStep,
@@ -24,6 +17,13 @@ import {
   ROOT,
   transcriptLines,
 } from "./AntigravityChildWork.testkit.ts";
+import {
+  ANTIGRAVITY_SUBAGENT_BATCH_TITLE,
+  antigravitySubagentLaunches,
+  describeAntigravitySubagentLaunches,
+  readAntigravityChildWork,
+} from "./AntigravityChildWork.ts";
+import { sanitizeAntigravityToolPayload } from "./AntigravityProtocol.ts";
 
 const read = (
   profileDirectory: string,

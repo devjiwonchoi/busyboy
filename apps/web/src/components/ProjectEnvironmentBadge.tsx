@@ -2,6 +2,7 @@ import type { EnvironmentId, EnvironmentMachineKind } from "@t3tools/contracts";
 import { useGT } from "gt-react";
 
 import type { SidebarProjectSnapshot } from "~/sidebarProjectGrouping";
+
 import { EnvironmentMachineIcon } from "./EnvironmentMachineIcon";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "./ui/tooltip";
 

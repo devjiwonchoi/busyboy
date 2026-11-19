@@ -1,6 +1,7 @@
 import { expect, it } from "vite-plus/test";
-import workerUrl from "./imageDecode.worker.ts?worker&url";
+
 import photoUrl from "../../../test/fixtures/images/photo.heic?url";
+import workerUrl from "./imageDecode.worker.ts?worker&url";
 
 it("decodes HEIC under the desktop content security policy", async () => {
   const bytes = await (await fetch(photoUrl)).arrayBuffer();

@@ -1,28 +1,24 @@
-import ChatMarkdown from "./ChatMarkdown";
-import { isSvgAttachment } from "@t3tools/shared/image";
-import { ReadOnlySourcePreview } from "./files/AttachmentFilePreview";
+import { formatAttachmentSize } from "@t3tools/client-runtime/state/attachments";
 import type {
   EnvironmentContextRecord,
   PreviewAnnotationPayload,
   ThreadContextRecord,
 } from "@t3tools/contracts";
-import { formatAttachmentSize } from "@t3tools/client-runtime/state/attachments";
+import { isSvgAttachment } from "@t3tools/shared/image";
 import { videoMimeType } from "@t3tools/shared/video";
+import { msg, T, useGT, useMessages } from "gt-react";
 import { MessageCircleIcon, MousePointerClickIcon } from "lucide-react";
 import { createContext, type ReactElement, type ReactNode, use } from "react";
-import { msg, T, useGT, useMessages } from "gt-react";
-import type { MessageResolver } from "../i18n/messages";
-import { ComposerContextActionsContext } from "./composerContextActions";
 
+import { PullRequestGlyph } from "~/components/pullRequest/pullRequestIcons";
 import type { ComposerFileAttachment, ComposerImageAttachment } from "~/composerDraftStore";
 import { composerFileNeedsReattach } from "~/composerDraftStore";
+import { useAttachmentUploadProgress } from "~/hooks/useAttachmentUploadProgress";
 import { useTheme } from "~/hooks/useTheme";
 import {
   attachmentUploadFailureText,
   type AttachmentUploadState,
 } from "~/lib/attachmentUploadState";
-import { useAttachmentUploadProgress } from "~/hooks/useAttachmentUploadProgress";
-import { PullRequestGlyph } from "~/components/pullRequest/pullRequestIcons";
 import {
   fileContextReference,
   imageContextReference,
@@ -40,16 +36,13 @@ import {
 } from "~/lib/composerContextRecords";
 import type { TerminalContextDraft } from "~/lib/terminalContext";
 import type { ReviewCommentContext } from "~/reviewCommentContext";
-import { ComposerPendingTerminalContextChip } from "./chat/ComposerPendingTerminalContexts";
-import { EnvironmentContextChip } from "./EnvironmentContextChip";
-import { ThreadContextChip } from "./ThreadContextChip";
 import { useLinkedEnvironments } from "~/state/peerLinks";
-import {
-  createContextPresentationRegistry,
-  type ContextPresentationCapability,
-} from "./contextPresentationRegistry";
+
+import type { MessageResolver } from "../i18n/messages";
+import { ComposerPendingTerminalContextChip } from "./chat/ComposerPendingTerminalContexts";
+import ChatMarkdown from "./ChatMarkdown";
+import { ComposerContextActionsContext } from "./composerContextActions";
 import type { ContextChipKind } from "./ContextChip";
-import { Tooltip, TooltipPopup, TooltipTrigger } from "./ui/tooltip";
 import {
   ContextChipPopover,
   ContextChipShell,
@@ -59,6 +52,14 @@ import {
   PullRequestChip,
   UnresolvedChip,
 } from "./contextChipParts";
+import {
+  createContextPresentationRegistry,
+  type ContextPresentationCapability,
+} from "./contextPresentationRegistry";
+import { EnvironmentContextChip } from "./EnvironmentContextChip";
+import { ReadOnlySourcePreview } from "./files/AttachmentFilePreview";
+import { ThreadContextChip } from "./ThreadContextChip";
+import { Tooltip, TooltipPopup, TooltipTrigger } from "./ui/tooltip";
 
 export type ComposerDraftContextRecord =
   | { kind: "terminal"; record: TerminalContextDraft }

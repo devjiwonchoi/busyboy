@@ -1,13 +1,13 @@
-import type { IssueState, IssueTrackerKind } from "@t3tools/contracts";
 import { sourceControlClients } from "@t3tools/client-runtime/source-control-clients";
+import type { IssueState, IssueTrackerKind } from "@t3tools/contracts";
 import { CircleCheckIcon, CircleDotIcon, CircleSlashIcon, TicketIcon } from "lucide-react";
 
-import { cn } from "~/lib/utils";
 import { LinearIcon, type Icon } from "~/components/Icons";
+import { cn } from "~/lib/utils";
 import { getSourceControlPresentationForKind } from "~/sourceControlPresentation";
 
-import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { PULL_REQUEST_STATE_PRESENTATION } from "../pullRequest/pullRequestIcons";
+import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 
 export const IssueGlyph = { issue: CircleDotIcon } as const;
 

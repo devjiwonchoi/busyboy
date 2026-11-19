@@ -1,3 +1,5 @@
+import { scopeProjectRef } from "@t3tools/client-runtime/environment";
+import { isScratchProject } from "@t3tools/client-runtime/state/projects";
 import type {
   EditorId,
   EnvironmentId,
@@ -6,45 +8,42 @@ import type {
   ResolvedKeybindingsConfig,
   ThreadId,
 } from "@t3tools/contracts";
-
-import { scopeProjectRef } from "@t3tools/client-runtime/environment";
-import { isScratchProject } from "@t3tools/client-runtime/state/projects";
+import { T, useGT } from "gt-react";
+import { SlidersHorizontalIcon } from "lucide-react";
+import { memo, useState, type ComponentProps } from "react";
 
 import type { ComposerThreadTarget, DraftId } from "../../composerDraftStore";
+import { useClientSettings } from "../../hooks/useSettings";
 import { useT3ProjectFileScripts } from "../../hooks/useT3ProjectFileScripts";
-import { type EnvMode, type EnvironmentOption } from "../BranchToolbar.logic";
+import { cn } from "../../lib/utils";
+import { useProject, useServerConfigs } from "../../state/entities";
 import { BranchToolbar } from "../BranchToolbar";
+import { type EnvMode, type EnvironmentOption } from "../BranchToolbar.logic";
 import BaseGitActionsControl from "../GitActionsControl";
 import ProjectScriptsControl, {
   type NewProjectScriptInput,
   type ProjectScriptActionResult,
 } from "../ProjectScriptsControl";
-import { T, useGT } from "gt-react";
-import { memo, useState, type ComponentProps } from "react";
-import { ThreadDetailsCard } from "./ThreadDetailsCard";
+import { Menu, MenuPopup } from "../ui/menu";
 import { OpenInPicker } from "./OpenInPicker";
-import { ThreadDetailsSection } from "./ThreadDetailsSection";
 import { ThreadAutomationsPanel } from "./ThreadAutomationsPanel";
-import { ThreadRelationshipsPanel } from "./ThreadRelationshipsControl";
-import { ThreadServersPanel } from "./ThreadServersPanel";
+import { ThreadDetailsCard } from "./ThreadDetailsCard";
+import { ThreadDetailsControl } from "./ThreadDetailsControl";
+import { resolveThreadDetailsVisibility, THREAD_DETAILS_ITEMS } from "./threadDetailsItems";
+import { ThreadDetailsItemsMenuItems } from "./ThreadDetailsItemsMenu";
+import {
+  THREAD_DETAILS_PANEL_ICON_CLASS,
+  THREAD_DETAILS_PANEL_LABEL_CLASS,
+} from "./threadDetailsPanelStyles";
+import { ThreadDetailsThreadPrRows } from "./ThreadDetailsPrRows";
+import { ThreadDetailsSection } from "./ThreadDetailsSection";
 import {
   ThreadDetailsContext,
   ThreadDetailsUsage,
   type ThreadDetailsUsageInput,
 } from "./ThreadDetailsUsage";
-import { ThreadDetailsItemsMenuItems } from "./ThreadDetailsItemsMenu";
-import { resolveThreadDetailsVisibility, THREAD_DETAILS_ITEMS } from "./threadDetailsItems";
-import { useClientSettings } from "../../hooks/useSettings";
-import { useProject, useServerConfigs } from "../../state/entities";
-import { ThreadDetailsThreadPrRows } from "./ThreadDetailsPrRows";
-import { cn } from "../../lib/utils";
-import { SlidersHorizontalIcon } from "lucide-react";
-import { ThreadDetailsControl } from "./ThreadDetailsControl";
-import {
-  THREAD_DETAILS_PANEL_ICON_CLASS,
-  THREAD_DETAILS_PANEL_LABEL_CLASS,
-} from "./threadDetailsPanelStyles";
-import { Menu, MenuPopup } from "../ui/menu";
+import { ThreadRelationshipsPanel } from "./ThreadRelationshipsControl";
+import { ThreadServersPanel } from "./ThreadServersPanel";
 
 const GitActionsControl = memo(BaseGitActionsControl);
 

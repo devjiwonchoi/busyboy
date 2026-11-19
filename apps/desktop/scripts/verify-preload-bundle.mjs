@@ -4,6 +4,7 @@ import * as NodeFSP from "node:fs/promises";
 import * as NodeTimers from "node:timers";
 import * as NodeURL from "node:url";
 import * as NodeVM from "node:vm";
+
 import { parse } from "acorn";
 
 const expectedDesktopBridgeApis = [

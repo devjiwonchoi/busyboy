@@ -33,8 +33,8 @@ import {
 } from "./model.ts";
 import { listNativeSpeechGpuDevices, loadNativeSpeechModel } from "./native.ts";
 import { nativeSpeechLanguage } from "./nativeLanguage.ts";
-import { SILERO_VAD } from "./silero.ts";
 import { isSpeechPlatformSupported } from "./platform.ts";
+import { SILERO_VAD } from "./silero.ts";
 import * as SpeechModelStore from "./SpeechModelStore.ts";
 
 const SAMPLE_RATE = 16_000;

@@ -1,11 +1,11 @@
+import * as HostProcess from "@t3tools/shared/HostProcess";
+import { resolveSymlinkTarget } from "@t3tools/shared/symlink";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import type * as PlatformError from "effect/PlatformError";
 import * as Result from "effect/Result";
-import * as HostProcess from "@t3tools/shared/HostProcess";
-import { resolveSymlinkTarget } from "@t3tools/shared/symlink";
 
 /** Windows open-file locks block renames; the same codes can mean permanent denial, so bound retries. */
 export const isWindowsRenameLock = (error: PlatformError.PlatformError) => {

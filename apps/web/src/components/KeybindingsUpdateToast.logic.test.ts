@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vite-plus/test";
 import type { ServerConfigStreamEvent } from "@t3tools/contracts";
+import { describe, expect, it } from "vite-plus/test";
 
 import { createKeybindingsUpdateToastController } from "./KeybindingsUpdateToast.logic";
 

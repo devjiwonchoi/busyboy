@@ -1,5 +1,5 @@
-import * as AssetSigner from "./AssetSigner.ts";
 import * as DocumentText from "../provider/DocumentText.ts";
+import * as AssetSigner from "./AssetSigner.ts";
 // @effect-diagnostics nodeBuiltinImport:off
 import * as NodeFS from "node:fs";
 import * as NodePath from "node:path";

@@ -1,4 +1,5 @@
-import { resolveProviderProbeTimeoutMs } from "@t3tools/provider-core/server/snapshotProbe";
+import type { Agent, ProviderListResponse } from "@opencode-ai/sdk/v2";
+import { ServiceUnavailableError } from "@opencode/protocol/errors";
 import {
   type ModelCapabilities,
   type ServerProviderModel,
@@ -6,16 +7,7 @@ import {
   type ServerProviderSlashCommand,
   settingsSecretLiteral,
 } from "@t3tools/contracts";
-import type { OpenCodeSettings } from "../settings.ts";
-import * as Cause from "effect/Cause";
-import * as Schema from "effect/Schema";
-import * as DateTime from "effect/DateTime";
-import * as Effect from "effect/Effect";
-import * as Option from "effect/Option";
-import * as Schedule from "effect/Schedule";
-
-import { createModelCapabilities } from "@t3tools/shared/model";
-import { compareSemverVersions } from "@t3tools/shared/semver";
+import { resolveProviderProbeTimeoutMs } from "@t3tools/provider-core/server/snapshotProbe";
 import {
   buildServerProvider,
   COMPACT_SLASH_COMMAND,
@@ -23,11 +15,19 @@ import {
   providerModelsFromSettings,
   type ServerProviderDraft,
 } from "@t3tools/provider-core/server/snapshotProbe";
+import { createModelCapabilities } from "@t3tools/shared/model";
+import { compareSemverVersions } from "@t3tools/shared/semver";
+import * as Cause from "effect/Cause";
+import * as DateTime from "effect/DateTime";
+import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
+import * as Schedule from "effect/Schedule";
+import * as Schema from "effect/Schema";
+
+import type { OpenCodeSettings } from "../settings.ts";
 import * as OpenCodeRuntime from "./OpenCodeRuntime.ts";
-import type { ProbedOpenCode } from "./versionProbe.ts";
-import type { Agent, ProviderListResponse } from "@opencode-ai/sdk/v2";
-import { ServiceUnavailableError } from "@opencode/protocol/errors";
 import * as OpenCodeServerOwner from "./OpenCodeServerOwner.ts";
+import type { ProbedOpenCode } from "./versionProbe.ts";
 
 const OPENCODE_PRESENTATION = {
   displayName: "OpenCode",

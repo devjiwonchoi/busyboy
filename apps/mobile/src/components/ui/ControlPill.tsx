@@ -1,10 +1,11 @@
 import { type ComponentProps, type ReactNode, useRef } from "react";
 import { Platform, Pressable, View } from "react-native";
+
 import { cn } from "../../lib/cn";
 import { SymbolView } from "./AppSymbol";
 import { AppText as Text } from "./AppText";
-import { IconButton } from "./IconButton";
 import { Button } from "./Button";
+import { IconButton } from "./IconButton";
 import { useAndroidControlSizing } from "./useAndroidControlSizing";
 
 export function ControlPill(props: {

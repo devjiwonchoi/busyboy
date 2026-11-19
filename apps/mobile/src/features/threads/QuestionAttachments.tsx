@@ -1,37 +1,38 @@
-import { settlePromise, squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
-import { errorDisplayMessage } from "@t3tools/client-runtime/errors";
-import { AsyncResult } from "effect/reactivity";
-import * as Dialog from "../../components/ui/Dialog";
-import { TextInputWrapper } from "expo-paste-input";
-import { AppTextInput as TextInput } from "../../components/ui/AppText";
-import { useNativePaste } from "../../lib/useNativePaste";
-import { convertPastedImagesToAttachments } from "../../lib/composerImages";
-import { PROVIDER_SEND_TURN_MAX_ATTACHMENTS, type UserInputQuestion } from "@t3tools/contracts";
 import { useAtomValue } from "@effect/atom-react";
-import { View, type TextInputInstance } from "react-native";
-import { useEffect, useEffectEvent, useRef, useState } from "react";
-import { ComposerAttachmentButton } from "./ComposerAttachmentButton";
-import { ComposerAttachmentStrip } from "../../components/ComposerAttachmentStrip";
-import { pickComposerFiles, pickComposerMedia } from "../../lib/composerImages";
-import { useThreadSelection } from "../../state/use-thread-selection";
 import { useNavigation } from "@react-navigation/native";
+import { errorDisplayMessage } from "@t3tools/client-runtime/errors";
+import { settlePromise, squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
+import { PROVIDER_SEND_TURN_MAX_ATTACHMENTS, type UserInputQuestion } from "@t3tools/contracts";
+import { AsyncResult } from "effect/reactivity";
+import { TextInputWrapper } from "expo-paste-input";
 import { useGT } from "gt-react-native";
-import { m } from "../../i18n/messages";
+import { useEffect, useEffectEvent, useRef, useState } from "react";
+import { View, type TextInputInstance } from "react-native";
+
+import { ComposerAttachmentStrip } from "../../components/ComposerAttachmentStrip";
+import { AppTextInput as TextInput } from "../../components/ui/AppText";
+import * as Dialog from "../../components/ui/Dialog";
 import { FilePreviewModal, type FilePreviewSource } from "../../components/ui/FilePreviewModal";
 import { VideoPreviewModal, type VideoPreviewSource } from "../../components/ui/VideoPreviewModal";
-import { useServerConfigs } from "../../state/entities";
+import { m } from "../../i18n/messages";
+import { convertPastedImagesToAttachments } from "../../lib/composerImages";
+import { pickComposerFiles, pickComposerMedia } from "../../lib/composerImages";
+import { useNativePaste } from "../../lib/useNativePaste";
 import { appAtomRegistry } from "../../state/atom-registry";
+import { useServerConfigs } from "../../state/entities";
+import {
+  changeQuestionAttachmentPreparation,
+  questionAttachmentDraftKey,
+  questionAttachmentPreparationAtom,
+} from "../../state/question-attachments";
 import {
   appendComposerDraftAttachments,
   composerDraftsAtom,
   removeComposerDraftAttachment,
   releaseUnusedComposerAttachmentFiles,
 } from "../../state/use-composer-drafts";
-import {
-  changeQuestionAttachmentPreparation,
-  questionAttachmentDraftKey,
-  questionAttachmentPreparationAtom,
-} from "../../state/question-attachments";
+import { useThreadSelection } from "../../state/use-thread-selection";
+import { ComposerAttachmentButton } from "./ComposerAttachmentButton";
 
 export function QuestionAttachments(props: {
   requestId: string;

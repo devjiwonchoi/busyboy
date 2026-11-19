@@ -1,28 +1,28 @@
-import { useGT } from "gt-react-native";
-import { ScreenScrollView as ScrollView } from "../../components/ui/ScreenScrollView";
-import { useNavigation } from "@react-navigation/native";
 import { useAtomValue } from "@effect/atom-react";
+import { useNavigation } from "@react-navigation/native";
 import { managedRelaySessionAtom } from "@t3tools/client-runtime/relay";
 import type { EnvironmentId } from "@t3tools/contracts";
+import { useGT } from "gt-react-native";
 import { useRef, useState } from "react";
-import { RefreshControl } from "../../components/ui/RefreshControl";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { SettingsScreen } from "./components/SettingsScreen";
-import { CloudEnvironmentRows } from "../connection/CloudEnvironmentRows";
-import { LocalEnvironmentList } from "../connection/LocalEnvironmentList";
-import { PullRequestRoutingSettings } from "../connection/PullRequestRoutingSettings";
-import { splitEnvironmentSections } from "../connection/environmentSections";
+import { RefreshControl } from "../../components/ui/RefreshControl";
+import { ScreenScrollView as ScrollView } from "../../components/ui/ScreenScrollView";
 import { useUniwindTheme } from "../../lib/useUniwindTheme";
-import { useRemoteConnections } from "../../state/use-remote-environment-registry";
 import { relayEnvironmentDiscovery } from "../../state/relay";
 import { useAtomCommand } from "../../state/use-atom-command";
+import { useRemoteConnections } from "../../state/use-remote-environment-registry";
+import { CloudEnvironmentRows } from "../connection/CloudEnvironmentRows";
+import { splitEnvironmentSections } from "../connection/environmentSections";
+import { LocalEnvironmentList } from "../connection/LocalEnvironmentList";
+import { PullRequestRoutingSettings } from "../connection/PullRequestRoutingSettings";
 import {
   applyShowcaseLocalEnvironmentDisplayUrls,
   resolveShowcaseEnvironmentUpdateDisplayUrl,
   SHOWCASE_AVAILABLE_CLOUD_ENVIRONMENTS,
   SHOWCASE_CONNECTED_CLOUD_ENVIRONMENTS,
 } from "../showcase/showcaseEnvironmentRows";
+import { SettingsScreen } from "./components/SettingsScreen";
 
 const SHOWCASE_ENABLED = process.env.EXPO_PUBLIC_SHOWCASE === "1";
 

@@ -1,12 +1,11 @@
 import type { NotificationResponse } from "expo-notifications";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 
-import { consumeLastAgentNotificationResponse } from "./notificationResponseConsumer";
-
 import {
   extractAgentNotificationDeepLink,
   routeAgentNotificationResponseOnce,
 } from "./notificationPayload";
+import { consumeLastAgentNotificationResponse } from "./notificationResponseConsumer";
 
 function responseWithData(data: Record<string, unknown>, identifier = "notification-1") {
   return {

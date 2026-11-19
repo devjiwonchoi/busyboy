@@ -1,4 +1,3 @@
-import type { MarkedText } from "../errors/translatable.ts";
 import {
   resolveEnvironmentMachineKind,
   type EnvironmentMachineKind,
@@ -18,8 +17,9 @@ import {
   type EnvironmentPresentation,
   type EnvironmentServerConfig,
 } from "../connection/presentation.ts";
-import { type EnvironmentCatalogState, enabledEnvironmentIds } from "./connections.ts";
 import { hasRelayRoute } from "../connection/routes.ts";
+import type { MarkedText } from "../errors/translatable.ts";
+import { type EnvironmentCatalogState, enabledEnvironmentIds } from "./connections.ts";
 
 function mapsEqual<K, V>(left: ReadonlyMap<K, V>, right: ReadonlyMap<K, V>): boolean {
   if (left.size !== right.size) {

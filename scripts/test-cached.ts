@@ -1,6 +1,7 @@
 // @effect-diagnostics nodeBuiltinImport:off globalConsole:off
-import * as NodeCrypto from "node:crypto";
+
 import * as NodeChildProcess from "node:child_process";
+import * as NodeCrypto from "node:crypto";
 import * as NodeFS from "node:fs";
 import * as NodePath from "node:path";
 import * as NodeUtil from "node:util";

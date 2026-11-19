@@ -4,14 +4,12 @@ import { msg } from "gt-i18n";
 
 import { m } from "../i18n/messages.ts";
 import { MAC_PERMISSION_HELPER_CHANNEL } from "../ipc/channels.ts";
-
+import { MAC_PERMISSION_SETUP_TITLES, type MacPermission } from "./MacPermission.ts";
 import {
   settingsHelperBounds,
   watchMacSettingsWindow,
   type SettingsWindow,
 } from "./MacSettingsWindow.ts";
-
-import { MAC_PERMISSION_SETUP_TITLES, type MacPermission } from "./MacPermission.ts";
 
 const permissionGranted = (permission: MacPermission) => {
   if (permission === "screen-recording")

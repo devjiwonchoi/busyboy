@@ -2,12 +2,9 @@ import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
 /* oxlint-disable react/no-array-index-key -- Spreadsheet rows and columns retain their source positions. */
 import { formatAttachmentSize } from "@t3tools/client-runtime/state/attachments";
 import type { OfficePreviewKind } from "@t3tools/shared/filePreview";
-import { ChevronLeftIcon, ChevronRightIcon } from "lucide-react";
 import { msg, T, useGT, useMessages } from "gt-react";
+import { ChevronLeftIcon, ChevronRightIcon } from "lucide-react";
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
-import { m } from "~/i18n/messages";
-
-import VirtualTablePreview from "./VirtualTablePreview";
 
 import {
   Select,
@@ -16,10 +13,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "~/components/ui/select";
+import { m } from "~/i18n/messages";
 
 import { FileSurfaceAction, FileSurfaceLoading, FileSurfaceNotice } from "./fileSurfaceChrome";
 import { OFFICE_PREVIEW_MAX_BYTES, type OfficeWorkerResult } from "./officePreviewProtocol";
 import { previewFailureText } from "./previewFailureMessages";
+import VirtualTablePreview from "./VirtualTablePreview";
 
 const DocumentPages = lazy(() => import("./DocumentPages"));
 const NotebookPreview = lazy(() => import("./NotebookPreview"));

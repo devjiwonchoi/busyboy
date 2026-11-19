@@ -1,22 +1,4 @@
-import { joinTextblockBackward, joinTextblockForward } from "@tiptap/pm/commands";
-import {
-  Fragment,
-  Mark,
-  type MarkType,
-  type Node as ProseMirrorNode,
-  type ResolvedPos,
-} from "@tiptap/pm/model";
-import {
-  Bold,
-  starInputRegex as boldStarInputRegex,
-  underscoreInputRegex as boldUnderscoreInputRegex,
-} from "@tiptap/extension-bold";
-import { Code } from "@tiptap/extension-code";
-import { Blockquote } from "@tiptap/extension-blockquote";
-import { CodeBlock } from "@tiptap/extension-code-block";
-import { Heading } from "@tiptap/extension-heading";
-import { HorizontalRule } from "@tiptap/extension-horizontal-rule";
-import { Italic, starInputRegex, starPasteRegex } from "@tiptap/extension-italic";
+import { composerMathRanges } from "@t3tools/shared/composerInlineTokens";
 import {
   combineTransactionSteps,
   getChangedRanges,
@@ -27,12 +9,30 @@ import {
   markPasteRule,
   mergeAttributes,
 } from "@tiptap/core";
-import { isHistoryTransaction } from "@tiptap/pm/history";
-import { canJoin, findWrapping } from "@tiptap/pm/transform";
+import { Blockquote } from "@tiptap/extension-blockquote";
+import {
+  Bold,
+  starInputRegex as boldStarInputRegex,
+  underscoreInputRegex as boldUnderscoreInputRegex,
+} from "@tiptap/extension-bold";
+import { Code } from "@tiptap/extension-code";
+import { CodeBlock } from "@tiptap/extension-code-block";
+import { Heading } from "@tiptap/extension-heading";
+import { HorizontalRule } from "@tiptap/extension-horizontal-rule";
+import { Italic, starInputRegex, starPasteRegex } from "@tiptap/extension-italic";
 import { BulletList, ListItem, OrderedList } from "@tiptap/extension-list";
 import { Strike, inputRegex as strikeInputRegex } from "@tiptap/extension-strike";
 import { TaskItem } from "@tiptap/extension-task-item";
 import { TaskList } from "@tiptap/extension-task-list";
+import { joinTextblockBackward, joinTextblockForward } from "@tiptap/pm/commands";
+import { isHistoryTransaction } from "@tiptap/pm/history";
+import {
+  Fragment,
+  Mark,
+  type MarkType,
+  type Node as ProseMirrorNode,
+  type ResolvedPos,
+} from "@tiptap/pm/model";
 import {
   type EditorState,
   Plugin,
@@ -41,6 +41,7 @@ import {
   TextSelection,
   type Transaction,
 } from "@tiptap/pm/state";
+import { canJoin, findWrapping } from "@tiptap/pm/transform";
 import { ReplaceStep } from "@tiptap/pm/transform";
 
 import { splitPromptIntoComposerSegments } from "~/composer-editor-mentions";
@@ -52,7 +53,6 @@ import {
   type RichTextMark,
 } from "~/composer-rich-text";
 import { collectInlineContextIds } from "~/lib/composerContextReferences";
-import { composerMathRanges } from "@t3tools/shared/composerInlineTokens";
 
 export type SkillMeta = { label: string; description: string | null };
 

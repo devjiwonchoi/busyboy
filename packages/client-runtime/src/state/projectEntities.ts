@@ -8,11 +8,11 @@ import type {
 } from "@t3tools/contracts";
 import { Atom } from "effect/reactivity";
 
+import { type EnvironmentCatalogState, enabledEnvironmentIds } from "./connections.ts";
+import { arrayElementsEqual, parseProjectKey, projectKey, projectRefsEqual } from "./entities.ts";
 import type { EnvironmentProject } from "./models.ts";
 import { scopeProject } from "./models.ts";
 import { isScratchProject } from "./projects.ts";
-import { type EnvironmentCatalogState, enabledEnvironmentIds } from "./connections.ts";
-import { arrayElementsEqual, parseProjectKey, projectKey, projectRefsEqual } from "./entities.ts";
 
 const EMPTY_PROJECTS: ReadonlyArray<OrchestrationProjectShell> = Object.freeze([]);
 const EMPTY_PROJECT_INDEX: ReadonlyMap<ProjectId, OrchestrationProjectShell> = new Map();

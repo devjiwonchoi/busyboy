@@ -1,12 +1,12 @@
-import { ActiveNewTaskContext } from "../../state/active-new-task";
+import { useAtomValue } from "@effect/atom-react";
 import { errorDisplayMessage } from "@t3tools/client-runtime/errors";
-import { msg, useMessages } from "gt-react-native";
-import { resolveNewThreadModelSelection } from "@t3tools/shared/usageLimits";
-import { useNowMinuteMs } from "../../lib/clock";
-import { m, type MessageResolver } from "../../i18n/messages";
-import * as Dialog from "../../components/ui/Dialog";
-import React, { useRef, useState } from "react";
-
+import { availableScratchWorkspaceRoot } from "@t3tools/client-runtime/operations/projects";
+import {
+  isAtomCommandInterrupted,
+  squashAtomCommandFailure,
+} from "@t3tools/client-runtime/state/runtime";
+import { EnvironmentProject } from "@t3tools/client-runtime/state/shell";
+import { type VcsRef } from "@t3tools/client-runtime/state/vcs";
 import type {
   EnvironmentId,
   ModelSelection,
@@ -23,10 +23,15 @@ import {
 } from "@t3tools/contracts";
 import { threadContextsOutsideEnvironment } from "@t3tools/shared/composerContextReferences";
 import { isTriagePrompt, replaceTriagePlaybookLink } from "@t3tools/shared/triagePrompt";
+import { resolveNewThreadModelSelection } from "@t3tools/shared/usageLimits";
 import * as Arr from "effect/Array";
 import { pipe } from "effect/Function";
+import { msg, useMessages } from "gt-react-native";
+import React, { useRef, useState } from "react";
 
-import { useProjects, useServerConfigs, useThreadShells } from "../../state/entities";
+import * as Dialog from "../../components/ui/Dialog";
+import { m, type MessageResolver } from "../../i18n/messages";
+import { useNowMinuteMs } from "../../lib/clock";
 import type { TurnCommandMetadata } from "../../lib/commandMetadata";
 import type { DraftComposerAttachment } from "../../lib/composerImages";
 import type { ModelOption, ProviderGroup } from "../../lib/modelOptions";
@@ -39,11 +44,16 @@ import {
   serverConfigForCwd,
 } from "../../lib/modelOptions";
 import { scopedProjectKey } from "../../lib/scopedEntities";
-import { useAtomValue } from "@effect/atom-react";
+import { ActiveNewTaskContext } from "../../state/active-new-task";
 import { appAtomRegistry } from "../../state/atom-registry";
-import { projectEnvironment } from "../../state/projects";
+import { useProjects, useServerConfigs, useThreadShells } from "../../state/entities";
 import { useLinkedEnvironments } from "../../state/peerLinks";
+import { useMobileProjectGroupingSettings } from "../../state/project-grouping";
+import { projectEnvironment } from "../../state/projects";
+import { useBranches, usePaginatedBranches } from "../../state/queries";
 import { useEnvironmentQuery } from "../../state/query";
+import { useEnvironmentShellReadiness } from "../../state/shell";
+import { type QueuedThreadMessage } from "../../state/thread-outbox";
 import { useAtomCommand } from "../../state/use-atom-command";
 import {
   appendComposerDraftAttachments,
@@ -66,36 +76,24 @@ import {
   rememberModelOptions,
   withRememberedModelOptions,
 } from "../../state/use-model-option-memory";
-import { useBranches, usePaginatedBranches } from "../../state/queries";
-import { vcsEnvironment } from "../../state/vcs";
-import { type QueuedThreadMessage } from "../../state/thread-outbox";
 import {
   setPendingConnectionError,
   useRemoteConnectionStatus,
   useSavedRemoteConnections,
 } from "../../state/use-remote-environment-registry";
-import { availableScratchWorkspaceRoot } from "@t3tools/client-runtime/operations/projects";
-import {
-  isAtomCommandInterrupted,
-  squashAtomCommandFailure,
-} from "@t3tools/client-runtime/state/runtime";
-import { EnvironmentProject } from "@t3tools/client-runtime/state/shell";
-import { type VcsRef } from "@t3tools/client-runtime/state/vcs";
+import { vcsEnvironment } from "../../state/vcs";
+import { useConnectionsReady, useWorkspaceEnvironments } from "../../state/workspace";
 import {
   buildHomeProjectScopes,
   sortHomeProjectScopes,
   type HomeProjectScope,
 } from "../home/homeThreadList";
-import { useMobileProjectGroupingSettings } from "../../state/project-grouping";
+import { usePrepareTriage } from "../triage/usePrepareTriage";
 import {
   resolveNewTaskDraftWorkspace,
   resolveNewTaskBranchWorktreePath,
   resolveNewTaskLocalWorkspaceSelection,
 } from "./new-task-context-presentation";
-import { isSameRepository, resolveEnvironmentProjectMatch } from "./new-task-project-selection";
-import { useNewTaskProjectDefaults } from "./use-new-task-project-defaults";
-import { resolveNewThreadRuntimeMode } from "./thread-settings-options";
-import { resolveProjectThreadCreationBranch } from "./projectThreadCreationValidation";
 import {
   INACTIVE_FLOW_KEY,
   type NewTaskFlowState,
@@ -106,9 +104,10 @@ import {
   stampedEnvironmentProjectsLoading,
   updateNewTaskFlowState,
 } from "./new-task-flow-state";
-import { usePrepareTriage } from "../triage/usePrepareTriage";
-import { useEnvironmentShellReadiness } from "../../state/shell";
-import { useConnectionsReady, useWorkspaceEnvironments } from "../../state/workspace";
+import { isSameRepository, resolveEnvironmentProjectMatch } from "./new-task-project-selection";
+import { resolveProjectThreadCreationBranch } from "./projectThreadCreationValidation";
+import { resolveNewThreadRuntimeMode } from "./thread-settings-options";
+import { useNewTaskProjectDefaults } from "./use-new-task-project-defaults";
 
 type WorkspaceMode = "local" | "worktree";
 

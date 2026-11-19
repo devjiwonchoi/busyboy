@@ -1,6 +1,5 @@
 // @effect-diagnostics globalTimers:off - imperative WebSocket callbacks own and clear their response deadline.
-import { msg } from "gt-i18n";
-import { translatableError } from "../errors/translatable.ts";
+
 import {
   SPEECH_STREAM_MAX_CHUNK_BYTES,
   SPEECH_STREAM_MAX_QUEUED_BYTES,
@@ -9,6 +8,9 @@ import {
   type SpeechTranscriptionOptions,
 } from "@t3tools/contracts";
 import * as Schema from "effect/Schema";
+import { msg } from "gt-i18n";
+
+import { translatableError } from "../errors/translatable.ts";
 
 const decodeEvent = Schema.decodeUnknownSync(Schema.fromJsonString(SpeechStreamEvent));
 

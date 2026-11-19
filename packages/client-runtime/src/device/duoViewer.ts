@@ -15,6 +15,10 @@ import {
   WebGLRenderer,
 } from "three";
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
+
+import { createDeviceFraming } from "./deviceFraming.ts";
+import { createDeviceMotion } from "./deviceMotion.ts";
+import { duoScreenSettled, type DuoPose } from "./duoControl.ts";
 import {
   createDuoScene,
   duoDisplayKey,
@@ -22,14 +26,11 @@ import {
   type DuoPanelId,
   type DuoHingeLeaf,
 } from "./duoScene.ts";
-import { loadDeviceModel } from "./modelScene.ts";
-import { createDeviceModelSlot, type DeviceModelSource } from "./model.ts";
-import { createDeviceFraming } from "./deviceFraming.ts";
-import { createDeviceMotion } from "./deviceMotion.ts";
 import { duoViewSnaps, nearestDuoView, type DuoRestFace } from "./duoSnap.ts";
+import { createDeviceModelSlot, type DeviceModelSource } from "./model.ts";
+import { loadDeviceModel } from "./modelScene.ts";
 import { createRenderScheduler } from "./renderScheduler.ts";
 import type { DeviceScreenSize } from "./stream.ts";
-import { duoScreenSettled, type DuoPose } from "./duoControl.ts";
 
 export interface DuoViewer {
   readonly setScreen: (screen: DeviceScreenSize | null) => void;

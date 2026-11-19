@@ -1,7 +1,8 @@
-import { ThreadId, type WorktreeSetupSnapshot } from "@t3tools/contracts";
 import { resolveVisibleWorktreeSetup } from "@t3tools/client-runtime/worktree-setup";
-import { describe, expect, it } from "vite-plus/test";
+import { ThreadId, type WorktreeSetupSnapshot } from "@t3tools/contracts";
 import * as DateTime from "effect/DateTime";
+import { describe, expect, it } from "vite-plus/test";
+
 import { resolveWorktreeSetupSnapshot } from "./worktree-setup-state";
 
 const threadId = ThreadId.make("setup-thread");

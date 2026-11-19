@@ -12,8 +12,8 @@ import { useEffect, useEffectEvent } from "react";
 import { connectionAtomRuntime } from "../connection/runtime";
 import { useEnvironmentIdentities, useEnvironments } from "./environments";
 import { environmentPresentations } from "./presentation";
-import { relayEnvironmentDiscovery } from "./relay";
 import { useEnvironmentQuery } from "./query";
+import { relayEnvironmentDiscovery } from "./relay";
 import { useEnvironmentsWithScope } from "./session";
 import { useAtomCommand } from "./use-atom-command";
 

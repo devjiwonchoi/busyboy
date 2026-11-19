@@ -1,11 +1,7 @@
-import {
-  parsePullRequestAnchor,
-  pullRequestAnchorMatchesUrl,
-  resolvePullRequestReviewAnchor,
-} from "@t3tools/shared/pullRequestAnchor";
-import { holdLinkedNodeInView } from "./holdLinkedNodeInView";
+import { LegendList, type LegendListRef } from "@legendapp/list/react";
+import { canEditPullRequestComment } from "@t3tools/client-runtime/pull-request-editing";
+import { canReactPullRequestComment } from "@t3tools/client-runtime/pull-request-reactions";
 import { sourceControlClients } from "@t3tools/client-runtime/source-control-clients";
-import { useAtomCommand } from "~/state/use-atom-command";
 import type {
   EnvironmentId,
   PullRequestActor,
@@ -15,6 +11,12 @@ import type {
   ScopedThreadRef,
 } from "@t3tools/contracts";
 import {
+  parsePullRequestAnchor,
+  pullRequestAnchorMatchesUrl,
+  resolvePullRequestReviewAnchor,
+} from "@t3tools/shared/pullRequestAnchor";
+import { msg, T, useGT, useMessages, Var } from "gt-react";
+import {
   ChevronDownIcon,
   CircleCheckIcon,
   ExternalLinkIcon,
@@ -23,21 +25,21 @@ import {
   MessageSquareIcon,
   MessageSquarePlusIcon,
 } from "lucide-react";
-import { msg, T, useGT, useMessages, Var } from "gt-react";
-
-import { m } from "~/i18n/messages";
 import { useEffect, useEffectEvent, useRef, useState, type ReactNode } from "react";
 
+import { RelativeTime } from "~/components/RelativeTime";
+import { m } from "~/i18n/messages";
 import { cn } from "~/lib/utils";
 import { readLocalApi } from "~/localApi";
 import { pullRequestEnvironment } from "~/state/pullRequests";
-import { RelativeTime } from "~/components/RelativeTime";
+import { useAtomCommand } from "~/state/use-atom-command";
 
 import { Button } from "../ui/button";
-import { PullRequestEditButton } from "./PullRequestEditButton";
 import { Collapsible, CollapsiblePanel, CollapsibleTrigger } from "../ui/collapsible";
 import { toastManager } from "../ui/toast";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
+import { changeRequestTermKind, type ChangeRequestTermKind } from "./changeRequestTerm";
+import { holdLinkedNodeInView } from "./holdLinkedNodeInView";
 import {
   buildPullRequestTimeline,
   groupPullRequestTimelineConversations,
@@ -51,13 +53,15 @@ import {
   type PullRequestTimelineEvent,
   type PullRequestTimelineThread,
 } from "./pullRequestDetail.logic";
-import { canEditPullRequestComment } from "@t3tools/client-runtime/pull-request-editing";
+import { PullRequestEditButton } from "./PullRequestEditButton";
+import { PullRequestGlyph } from "./pullRequestIcons";
 import { PullRequestMarkdown } from "./PullRequestMarkdown";
-import { PullRequestMoreReplies } from "./PullRequestMoreReplies";
 import { PullRequestMarkdownEditor } from "./PullRequestMarkdownEditor";
-import { PullRequestReactionBar } from "./PullRequestReactions";
-import { canReactPullRequestComment } from "@t3tools/client-runtime/pull-request-reactions";
-import { PullRequestResolveThreadButton } from "./PullRequestResolveThreadButton";
+import {
+  type PullRequestCompletionScope,
+  pullRequestCompletionScope,
+} from "./PullRequestMarkdownTextarea";
+import { PullRequestMoreReplies } from "./PullRequestMoreReplies";
 import {
   PullRequestActorAvatar,
   PullRequestDiffStat,
@@ -67,14 +71,8 @@ import {
   pullRequestReviewOutcomeStaleLabel,
   pullRequestReviewOutcomeToneClassName,
 } from "./pullRequestPresentation";
-import { PullRequestGlyph } from "./pullRequestIcons";
-import {
-  type PullRequestCompletionScope,
-  pullRequestCompletionScope,
-} from "./PullRequestMarkdownTextarea";
-import { LegendList, type LegendListRef } from "@legendapp/list/react";
-
-import { changeRequestTermKind, type ChangeRequestTermKind } from "./changeRequestTerm";
+import { PullRequestReactionBar } from "./PullRequestReactions";
+import { PullRequestResolveThreadButton } from "./PullRequestResolveThreadButton";
 
 interface ReactionSurface {
   revealAnchor?: string | null;

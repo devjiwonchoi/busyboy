@@ -1,24 +1,6 @@
 import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import * as Clock from "effect/Clock";
-import * as Effect from "effect/Effect";
-import * as Context from "effect/Context";
-import type * as Digest from "effect/crypto/Digest";
-import * as Base64Url from "effect/encoding/Base64Url";
-import * as Deferred from "effect/Deferred";
-import * as Fiber from "effect/Fiber";
-import * as FileSystem from "effect/FileSystem";
-import * as Layer from "effect/Layer";
-import * as Option from "effect/Option";
-import * as Queue from "effect/Queue";
-import type * as Path from "effect/Path";
-import type * as Scope from "effect/Scope";
-import * as Stream from "effect/Stream";
-import { SCAN_CACHE_FILE_NAME } from "./usage/usageScanCache.ts";
-import { TestClock } from "effect/testing";
-import * as SqlClient from "effect/sql/SqlClient";
-import * as Sqlite from "./persistence/Sqlite.ts";
-import { checkpointRefForScopeOrdinal } from "./orchestration-v2/CheckpointService.ts";
+import { describe, expect, it } from "@effect/vitest";
 import {
   DEFAULT_SERVER_SETTINGS,
   type WorktreeKeepWhen,
@@ -26,23 +8,6 @@ import {
   type TerminalMetadataStreamEvent,
   type TerminalSummary,
 } from "@t3tools/contracts";
-import * as HostProcess from "@t3tools/shared/HostProcess";
-import * as ServerConfig from "./config.ts";
-import * as StorageCleanup from "./storageCleanup.ts";
-import * as GitVcsDriver from "./vcs/GitVcsDriver.ts";
-import * as GitManager from "./git/GitManager.ts";
-import * as GitWorkflowService from "./git/GitWorkflowService.ts";
-import * as Settings from "./serverSettings.ts";
-import * as ProjectionStore from "./orchestration-v2/ProjectionStore.ts";
-import * as ProviderSessionManager from "./orchestration-v2/ProviderSessionManager.ts";
-import * as ProjectStore from "./orchestration-v2/ProjectStore.ts";
-import * as Orchestrator from "./orchestration-v2/Orchestrator.ts";
-import * as ThreadManagement from "./orchestration-v2/ThreadManagementService.ts";
-import * as TerminalManager from "./terminal/Manager.ts";
-import { CodexProviderCapabilitiesV2 } from "./orchestration-v2/Adapters/CodexAdapterV2.ts";
-import { ServerActivation } from "./serverActivation.ts";
-import { withWorkspaceLease } from "./workspace/workspaceLease.ts";
-import { describe, expect, it } from "@effect/vitest";
 import {
   CheckpointScopeId,
   EventId,
@@ -57,12 +22,48 @@ import {
   type OrchestrationV2ServerCommand,
   type OrchestrationV2ThreadShell,
 } from "@t3tools/contracts";
+import * as HostProcess from "@t3tools/shared/HostProcess";
+import * as Clock from "effect/Clock";
+import * as Context from "effect/Context";
+import type * as Digest from "effect/crypto/Digest";
 import * as DateTime from "effect/DateTime";
+import * as Deferred from "effect/Deferred";
+import * as Effect from "effect/Effect";
+import * as Base64Url from "effect/encoding/Base64Url";
+import * as Fiber from "effect/Fiber";
+import * as FileSystem from "effect/FileSystem";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import type * as Path from "effect/Path";
+import * as Queue from "effect/Queue";
+import type * as Scope from "effect/Scope";
+import * as SqlClient from "effect/sql/SqlClient";
+import * as Stream from "effect/Stream";
+import { TestClock } from "effect/testing";
+
+import * as ServerConfig from "./config.ts";
+import * as GitManager from "./git/GitManager.ts";
+import * as GitWorkflowService from "./git/GitWorkflowService.ts";
+import { CodexProviderCapabilitiesV2 } from "./orchestration-v2/Adapters/CodexAdapterV2.ts";
+import { checkpointRefForScopeOrdinal } from "./orchestration-v2/CheckpointService.ts";
+import * as Orchestrator from "./orchestration-v2/Orchestrator.ts";
+import * as ProjectionStore from "./orchestration-v2/ProjectionStore.ts";
+import * as ProjectStore from "./orchestration-v2/ProjectStore.ts";
+import * as ProviderSessionManager from "./orchestration-v2/ProviderSessionManager.ts";
+import * as ThreadManagement from "./orchestration-v2/ThreadManagementService.ts";
+import * as Sqlite from "./persistence/Sqlite.ts";
+import { ServerActivation } from "./serverActivation.ts";
+import * as Settings from "./serverSettings.ts";
+import * as StorageCleanup from "./storageCleanup.ts";
 import {
   storageCleanupActivityAt,
   storageCleanupPullRequestMerged,
   storageCleanupThreadIdle,
 } from "./storageCleanup.ts";
+import * as TerminalManager from "./terminal/Manager.ts";
+import { SCAN_CACHE_FILE_NAME } from "./usage/usageScanCache.ts";
+import * as GitVcsDriver from "./vcs/GitVcsDriver.ts";
+import { withWorkspaceLease } from "./workspace/workspaceLease.ts";
 
 const NOW_MS = Date.parse("2026-06-10T12:00:00.000Z");
 const DAY_MS = 24 * 60 * 60 * 1_000;

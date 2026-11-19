@@ -1,29 +1,8 @@
-import { errorDisplayMessage } from "@t3tools/client-runtime/errors";
-import { msg, useGT, useMessages } from "gt-react-native";
-import * as Dialog from "../../components/ui/Dialog";
-import { managedCapabilityDenial } from "@t3tools/client-runtime/contract-labels";
-import {
-  AuthRelayConfigureScope,
-  AuthRelayWriteScope,
-  type EnvironmentId,
-} from "@t3tools/contracts";
-import { readEnvironmentScope } from "../../state/session";
-import { appAtomRegistry } from "../../state/atom-registry";
-import { serverEnvironment } from "../../state/server";
-import { ScreenScrollView as ScrollView } from "../../components/ui/ScreenScrollView";
 import { useAuth } from "@clerk/expo";
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
-import * as Notifications from "expo-notifications";
 import { useNavigation } from "@react-navigation/native";
-import * as Effect from "effect/Effect";
-import * as Schema from "effect/Schema";
-import { AsyncResult } from "effect/reactivity";
-import { useRef, useState, useSyncExternalStore } from "react";
-import { Linking, Platform } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { m as resolveMessage } from "../../i18n/messages";
-
-import { AppText as Text } from "../../components/ui/AppText";
+import { managedCapabilityDenial } from "@t3tools/client-runtime/contract-labels";
+import { errorDisplayMessage } from "@t3tools/client-runtime/errors";
 import {
   createEnvironmentCommand,
   isAtomCommandInterrupted,
@@ -32,11 +11,37 @@ import {
   settlePromise,
   squashAtomCommandFailure,
 } from "@t3tools/client-runtime/state/runtime";
-import { supportsAgentAwarenessPush } from "../agent-awareness/capabilities";
+import {
+  AuthRelayConfigureScope,
+  AuthRelayWriteScope,
+  type EnvironmentId,
+} from "@t3tools/contracts";
+import * as Effect from "effect/Effect";
+import { AsyncResult } from "effect/reactivity";
+import * as Schema from "effect/Schema";
+import * as Notifications from "expo-notifications";
+import { msg, useGT, useMessages } from "gt-react-native";
+import { useRef, useState, useSyncExternalStore } from "react";
+import { Linking, Platform } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+
+import { AppText as Text } from "../../components/ui/AppText";
+import * as Dialog from "../../components/ui/Dialog";
+import { ScreenScrollView as ScrollView } from "../../components/ui/ScreenScrollView";
+import { connectionAtomRuntime } from "../../connection/runtime";
+import { m as resolveMessage } from "../../i18n/messages";
+import { makePermissionStatusAtom } from "../../lib/permissionStatusAtom";
+import { runtime } from "../../lib/runtime";
+import { appAtomRegistry } from "../../state/atom-registry";
+import { mobilePreferencesAtom, updateMobilePreferencesAtom } from "../../state/preferences";
+import { serverEnvironment } from "../../state/server";
+import { readEnvironmentScope } from "../../state/session";
+import { useSavedRemoteConnections } from "../../state/use-remote-environment-registry";
 import {
   openAndroidLiveUpdateSettings,
   supportsAndroidLiveUpdateSettings,
 } from "../agent-awareness/androidNotifications";
+import { supportsAgentAwarenessPush } from "../agent-awareness/capabilities";
 import {
   LiveActivityEnvironmentUpdateError,
   setLiveActivityUpdatesEnabled,
@@ -48,7 +53,6 @@ import {
   refreshAgentAwarenessRegistration,
   subscribeAgentAwarenessRegistrationStatus,
 } from "../agent-awareness/remoteRegistration";
-import { connectionAtomRuntime } from "../../connection/runtime";
 import {
   CloudEnvironmentLinkError,
   linkEnvironmentToCloudWithPreference,
@@ -56,14 +60,10 @@ import {
 } from "../cloud/linkEnvironment";
 import { refreshManagedRelayEnvironments } from "../cloud/managedRelayState";
 import { hasCloudPublicConfig, resolveRelayClerkTokenOptions } from "../cloud/publicConfig";
-import { makePermissionStatusAtom } from "../../lib/permissionStatusAtom";
-import { runtime } from "../../lib/runtime";
-import { mobilePreferencesAtom, updateMobilePreferencesAtom } from "../../state/preferences";
-import { useSavedRemoteConnections } from "../../state/use-remote-environment-registry";
 import { SettingsRow } from "./components/SettingsRow";
+import { SettingsScreen } from "./components/SettingsScreen";
 import { SettingsSection } from "./components/SettingsSection";
 import { SettingsSwitchRow } from "./components/SettingsSwitchRow";
-import { SettingsScreen } from "./components/SettingsScreen";
 import { resolveAgentAwarenessPlatformPresentation } from "./SettingsRouteScreen.logic";
 
 const updateLiveActivityPreference = createEnvironmentCommand(connectionAtomRuntime, {

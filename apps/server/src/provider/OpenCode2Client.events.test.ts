@@ -1,12 +1,11 @@
 import { assert, it } from "@effect/vitest";
+import * as OpenCode2Client from "@t3tools/provider-opencode/server/v2/OpenCode2Client";
 import * as Effect from "effect/Effect";
+import { HttpClient, HttpClientResponse } from "effect/http";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
-import { HttpClient, HttpClientResponse } from "effect/http";
 import { describe } from "vite-plus/test";
-
-import * as OpenCode2Client from "@t3tools/provider-opencode/server/v2/OpenCode2Client";
 
 const encodeJson = Schema.encodeSync(Schema.fromJsonString(Schema.Unknown));
 

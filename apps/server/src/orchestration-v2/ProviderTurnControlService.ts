@@ -1,4 +1,3 @@
-import { projectComposerContextForProvider } from "@t3tools/shared/composerContextReferences";
 import {
   MessageId,
   type ModelSelection,
@@ -9,15 +8,16 @@ import {
   RunAttemptId,
   ThreadId,
 } from "@t3tools/contracts";
-import type * as DateTime from "effect/DateTime";
+import * as ProviderAdapter from "@t3tools/provider-core/server/ProviderAdapter";
+import { projectComposerContextForProvider } from "@t3tools/shared/composerContextReferences";
 import * as Context from "effect/Context";
+import type * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 
-import * as ProviderAdapter from "@t3tools/provider-core/server/ProviderAdapter";
 import * as McpAppModelContext from "../mcpApps/McpAppModelContext.ts";
 import * as EventSink from "./EventSink.ts";
 import * as ProjectionStore from "./ProjectionStore.ts";

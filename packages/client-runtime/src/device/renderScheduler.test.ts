@@ -1,4 +1,5 @@
 import { expect, it, vi } from "vite-plus/test";
+
 import { createRenderScheduler } from "./renderScheduler.ts";
 
 it("coalesces frame and pointer invalidations, then stops scheduling when idle or disposed", () => {

@@ -3,13 +3,15 @@ import * as NodeChildProcess from "node:child_process";
 import * as NodeModule from "node:module";
 import * as NodePath from "node:path";
 import * as NodeUtil from "node:util";
-import { assert, it } from "@effect/vitest";
+
 import * as NodeServices from "@effect/platform-node/NodeServices";
+import { assert, it } from "@effect/vitest";
 import { ProviderInstanceId } from "@t3tools/contracts";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as FileSystem from "effect/FileSystem";
+
 import { withChatGptSessionLock } from "./CodexChatGptSessionLock.ts";
 
 const execFile = NodeUtil.promisify(NodeChildProcess.execFile);

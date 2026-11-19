@@ -133,16 +133,17 @@ vi.mock(import("../files/projectFilesQueryState"), async (original) => ({
 }));
 
 import { scopeProjectRef } from "@t3tools/client-runtime/environment";
+
 import { DraftId, useComposerDraftStore } from "../../composerDraftStore";
 import { appAtomRegistry } from "../../rpc/atomRegistry";
-import { assetEnvironment } from "../../state/assets";
 import { buildSidebarProjectSnapshots } from "../../sidebarProjectGrouping";
+import { assetEnvironment } from "../../state/assets";
 import { ProjectSettingsPanel } from "./ProjectSettingsPanel";
 import { ProjectsSettings } from "./ProjectsSettings";
-import { SettingsScopeProvider } from "./SettingsScopeContext";
-import { SettingsScopeNotice } from "./SettingsScopeNotice";
 import { validateSettingsScopeSearch, type SettingsScopeSearch } from "./settingsScope";
+import { SettingsScopeProvider } from "./SettingsScopeContext";
 import { retainSettingsScope, validateSettingsRouteSearch } from "./settingsScopeNavigation";
+import { SettingsScopeNotice } from "./SettingsScopeNotice";
 
 const primaryId = EnvironmentId.make("primary");
 const remoteId = EnvironmentId.make("remote");

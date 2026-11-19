@@ -1,9 +1,10 @@
 import type { MessageId, ThreadId } from "@t3tools/contracts";
 import { parseUrl } from "@t3tools/shared/url";
 import * as Effect from "effect/Effect";
-import * as Schema from "effect/Schema";
 import { AsyncResult, Atom } from "effect/reactivity";
+import * as Schema from "effect/Schema";
 import type { SetStateAction } from "react";
+
 import type { ChatMessage } from "../../types";
 import { collectUserMessageBlobPreviewUrls } from "../ChatView.logic";
 

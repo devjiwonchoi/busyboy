@@ -1,19 +1,19 @@
 import { T, useGT } from "gt-react-native";
 import { useState } from "react";
 import { View } from "react-native";
-import { WebView } from "react-native-webview";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { WebView } from "react-native-webview";
 
+import { PdfPreview } from "../../components/PdfPreview";
 import { AppActivityIndicator } from "../../components/ui/AppActivityIndicator";
 import { AppText as Text } from "../../components/ui/AppText";
-import { FilePreviewLoading } from "./FilePreviewFeedback";
-import { LoadingStrip } from "../../components/ui/LoadingStrip";
-import { PdfPreview } from "../../components/PdfPreview";
 import { ControlPill } from "../../components/ui/ControlPill";
+import { LoadingStrip } from "../../components/ui/LoadingStrip";
+import { useContentTopInset } from "../../components/ui/useBarInset";
 import { useHardwareBack } from "../../lib/backHandler";
 import { isPdfPreviewUri } from "../../lib/pdfPreview";
 import { webViewDecelerationRate } from "../../lib/webViewDecelerationRate";
-import { useContentTopInset } from "../../components/ui/useBarInset";
+import { FilePreviewLoading } from "./FilePreviewFeedback";
 
 export function WorkspaceFileWebPreview(props: { readonly uri: string | null }) {
   const gt = useGT();

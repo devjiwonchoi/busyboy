@@ -1,10 +1,4 @@
-import * as Schema from "effect/Schema";
 import AppleTranscription from "@react-native-ai/apple/src/NativeAppleTranscription";
-import { File } from "expo-file-system";
-import { msg } from "gt-react-native";
-import { Settings } from "react-native";
-import { m } from "../i18n/messages";
-
 import {
   VoiceTranscriptionError,
   throwIfVoiceTranscriptionAborted,
@@ -12,6 +6,12 @@ import {
   type VoiceTranscriber,
   type VoiceTranscriptionOptions,
 } from "@t3tools/client-runtime/voice-input";
+import * as Schema from "effect/Schema";
+import { File } from "expo-file-system";
+import { msg } from "gt-react-native";
+import { Settings } from "react-native";
+
+import { m } from "../i18n/messages";
 
 const isVoiceTranscriptionError = Schema.is(VoiceTranscriptionError);
 

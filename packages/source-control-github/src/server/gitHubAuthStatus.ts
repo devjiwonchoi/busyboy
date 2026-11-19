@@ -1,6 +1,7 @@
-import type { GitHubSettings } from "../shared/definition.ts";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
+
+import type { GitHubSettings } from "../shared/definition.ts";
 
 const GitHubAuthStatusAccountSchema = Schema.Struct({
   state: Schema.String,

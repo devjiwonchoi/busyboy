@@ -1,8 +1,9 @@
+import { threadHasCaughtUpTo } from "@t3tools/client-runtime/state/threads";
 import * as Option from "effect/Option";
 import { Atom } from "effect/reactivity";
+
 import { scopedThreadKey } from "../lib/scopedEntities";
 import { appAtomRegistry } from "./atom-registry";
-import { threadHasCaughtUpTo } from "@t3tools/client-runtime/state/threads";
 import type { AcknowledgedThreadMessage, QueuedThreadMessage } from "./thread-outbox-model";
 import { environmentThreadDetails } from "./threads";
 

@@ -1,7 +1,7 @@
-import { EnvironmentId, type DeviceDetail, type DeviceSummary } from "@t3tools/contracts";
+import { RegistryContext } from "@effect/atom-react";
 import type { DeviceHubAccess } from "@t3tools/client-runtime/device/hub-access";
 import type { AtomCommandConcurrency } from "@t3tools/client-runtime/state/runtime";
-import { RegistryContext } from "@effect/atom-react";
+import { EnvironmentId, type DeviceDetail, type DeviceSummary } from "@t3tools/contracts";
 import * as Cause from "effect/Cause";
 import { AtomRegistry } from "effect/reactivity";
 import { useEffect } from "react";
@@ -51,6 +51,7 @@ vi.mock(import("./deviceHubApi"), async (original) => ({
 }));
 
 import { deviceDetailReadAtom } from "~/state/device";
+
 import { useDeviceControls, type DeviceControls } from "./useDeviceControls";
 
 const offline = Cause.fail(new Error("Device offline"));

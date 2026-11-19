@@ -1,7 +1,7 @@
 import { getPublicSuffix } from "tldts";
 
-import type { PasskeyBackend, PasskeyCeremonyContext } from "./PasskeyBackend.ts";
 import { authenticatorDataFromAttestation } from "./PasskeyAttestation.ts";
+import type { PasskeyBackend, PasskeyCeremonyContext } from "./PasskeyBackend.ts";
 import type { PasskeyCeremonyResult } from "./PasskeyBridge.ts";
 
 const ES256 = -7;

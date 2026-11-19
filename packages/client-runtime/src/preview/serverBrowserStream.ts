@@ -1,5 +1,5 @@
 // @effect-diagnostics globalTimers:off globalFetch:off - This browser and WebView transport runs without an Effect runtime.
-import { type DeviceHubAccess, withDeviceHubQuery } from "../device/hubAccess.ts";
+
 import {
   PREVIEW_STREAM_HOST_SETUP_CLOSE_CODE,
   type PreviewStreamHostSetup,
@@ -7,6 +7,8 @@ import {
 } from "@t3tools/contracts";
 import { mFallback, msg } from "gt-i18n";
 import type { MFunctionType } from "gt-i18n/types";
+
+import { type DeviceHubAccess, withDeviceHubQuery } from "../device/hubAccess.ts";
 
 export const PREVIEW_STREAM_BASE_PATH = "/api/preview-stream";
 

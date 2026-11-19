@@ -11,7 +11,6 @@ import {
 import * as Effect from "effect/Effect";
 
 import { definition } from "../shared/definition.ts";
-
 import * as OriginCli from "./OriginCli.ts";
 import * as OriginPullRequestProvider from "./OriginPullRequestProvider.ts";
 import * as OriginSourceControlProvider from "./OriginSourceControlProvider.ts";

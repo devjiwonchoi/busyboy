@@ -1,11 +1,9 @@
 import { Branch, T } from "gt-react";
 
 import { RefreshIcon } from "~/components/ui/refresh-icon";
-
 import { cn } from "~/lib/utils";
 
 import { Button } from "../ui/button";
-
 import type { ChangeRequestTermKind } from "./changeRequestTerm";
 
 export function PullRequestActivityUnavailableState({

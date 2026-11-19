@@ -4,17 +4,18 @@ import {
   RelayConnectionTarget,
   type PreparedConnection,
 } from "@t3tools/client-runtime/connection";
-import type * as Effect from "effect/Effect";
 import {
   EnvironmentId,
   type EnvironmentSpeechModel,
   type EnvironmentSpeechStatus,
 } from "@t3tools/contracts";
+import type * as Effect from "effect/Effect";
 import { expect, it, vi } from "vite-plus/test";
 import { userEvent } from "vite-plus/test/browser";
+
 import { render } from "../../../test/render";
-import { __setClientSettingsForTests, getClientSettings } from "../../hooks/useSettings";
 import { readBrowserClientSettings } from "../../clientPersistenceStorage";
+import { __setClientSettingsForTests, getClientSettings } from "../../hooks/useSettings";
 import { chooseRecordingMicrophone } from "../../speech/browserMicrophones";
 import {
   useEnvironmentSpeechInput,

@@ -1,12 +1,14 @@
 import { resolveAssetUrl } from "@t3tools/client-runtime/state/assets";
 import {
+  attachmentUploadError,
+  type AttachmentUploadError,
+} from "@t3tools/client-runtime/state/attachment-uploads";
+import {
   isAssetAttachmentNotFoundFailure,
   runAttachmentUploadCycle,
   verifyPersistedAttachmentUpload,
 } from "@t3tools/client-runtime/state/attachments";
 import { runAtomCommand, squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
-import { msg } from "gt-react-native";
-import { m } from "../i18n/messages";
 import type {
   ChatFileAttachment,
   ChatImageAttachment,
@@ -17,11 +19,14 @@ import {
   AuthOrchestrationOperateScope,
   PROVIDER_SEND_TURN_SUPPORTED_IMAGE_MIME_TYPES,
 } from "@t3tools/contracts";
+import { imageMimeType } from "@t3tools/shared/image";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
+import { msg } from "gt-react-native";
 
-import { appAtomRegistry } from "../state/atom-registry";
+import { m } from "../i18n/messages";
 import { assetEnvironment } from "../state/assets";
+import { appAtomRegistry } from "../state/atom-registry";
 import { attachmentEnvironment } from "../state/attachments";
 import { environmentSession, readEnvironmentScope } from "../state/session";
 import { resolveOwnedComposerAttachmentFileUri } from "./composerAttachmentFiles";
@@ -32,12 +37,7 @@ import {
   type DraftComposerAttachment,
   type DraftComposerImageAttachment,
 } from "./composerImages";
-import { imageMimeType } from "@t3tools/shared/image";
 import { uuidv4 } from "./uuid";
-import {
-  attachmentUploadError,
-  type AttachmentUploadError,
-} from "@t3tools/client-runtime/state/attachment-uploads";
 
 export type UploadedMobileAttachment =
   | UploadChatImageAttachment

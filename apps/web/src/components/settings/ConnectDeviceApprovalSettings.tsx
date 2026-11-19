@@ -1,17 +1,18 @@
 import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
-import type { AuthConnectDevice, EnvironmentId } from "@t3tools/contracts";
 import {
   isAtomCommandInterrupted,
   squashAtomCommandFailure,
 } from "@t3tools/client-runtime/state/runtime";
+import type { AuthConnectDevice, EnvironmentId } from "@t3tools/contracts";
 import * as DateTime from "effect/DateTime";
 import { msg, T, useGT, useMessages, Var } from "gt-react";
 import { useState } from "react";
 
 import type { ServerPairingLinkRecord } from "~/environments/primary";
-import { authEnvironment } from "~/state/auth";
 import { m } from "~/i18n/messages";
+import { authEnvironment } from "~/state/auth";
 import { useAtomCommand } from "~/state/use-atom-command";
+
 import { Button } from "../ui/button";
 import { stackedThreadToast, toastManager } from "../ui/toast";
 import {

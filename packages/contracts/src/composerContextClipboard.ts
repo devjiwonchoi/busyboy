@@ -1,8 +1,8 @@
 import * as Schema from "effect/Schema";
 
 import { EnvironmentId, MessageId, ThreadId } from "./baseSchemas.ts";
-import { COMPOSER_CONTEXT_MAX_RECORDS, ComposerContextRecord } from "./composerContext.ts";
 import { ForwardCompatibleArray } from "./baseSchemas.ts";
+import { COMPOSER_CONTEXT_MAX_RECORDS, ComposerContextRecord } from "./composerContext.ts";
 
 export const COMPOSER_CONTEXT_CLIPBOARD_MIME = "web application/x-t3-context-fragment+json";
 

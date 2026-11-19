@@ -1,16 +1,12 @@
-import { msg, useMessages } from "gt-react-native";
 import { useAtomValue } from "@effect/atom-react";
 import { scopeThreadRef } from "@t3tools/client-runtime/environment";
 import type { EnvironmentId, ThreadId } from "@t3tools/contracts";
+import { msg, useMessages } from "gt-react-native";
 import { useMemo, useCallback, type Dispatch, type SetStateAction } from "react";
 
 import { useProjects, useServerConfigs, useThreadShell } from "../../state/entities";
 import { useEnvironmentQuery } from "../../state/query";
 import { threadFamilies } from "../../state/threads";
-import { createDraft, scheduledTaskDefaultModel } from "./scheduledTaskDraft";
-import { useSettingsEnvironmentFilter } from "./settings-environment-filter";
-import { settingsTargetsForProject } from "./settings-environment-filter.logic";
-
 import {
   scheduledTaskEditorHasChanges,
   scheduledTaskEditorSessionAtom,
@@ -19,6 +15,9 @@ import {
   readScheduledTaskEditor,
   type ScheduledTaskEditor,
 } from "./scheduled-task-editor-state";
+import { createDraft, scheduledTaskDefaultModel } from "./scheduledTaskDraft";
+import { useSettingsEnvironmentFilter } from "./settings-environment-filter";
+import { settingsTargetsForProject } from "./settings-environment-filter.logic";
 
 export const NEW_THREAD_DESTINATION_LABEL = msg("New thread each run");
 

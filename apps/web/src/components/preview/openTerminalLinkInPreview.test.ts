@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test"
 
 import type { OpenPreviewMutation } from "~/browser/openFileInPreview";
 import * as previewRuntime from "~/browser/previewRuntime";
+
 import { openTerminalLinkInPreview } from "./openTerminalLinkInPreview";
 
 vi.mock("~/previewStateStore", () => ({

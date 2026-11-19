@@ -1,10 +1,11 @@
 import { RegistryContext } from "@effect/atom-react";
 import type { ReviewDiffPreviewSource } from "@t3tools/contracts";
 import { EnvironmentId } from "@t3tools/contracts";
-import { AsyncResult, Atom, AtomRegistry } from "effect/reactivity";
 import * as Option from "effect/Option";
+import { AsyncResult, Atom, AtomRegistry } from "effect/reactivity";
 import { expect, it, vi } from "vite-plus/test";
 import { userEvent } from "vite-plus/test/browser";
+
 import { act, render } from "../../../test/render";
 
 type PatchAtom = Atom.Writable<AsyncResult.AsyncResult<ReviewDiffPreviewSource, Error>>;

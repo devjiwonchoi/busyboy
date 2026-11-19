@@ -5,11 +5,11 @@ import { AsyncResult, Atom, AtomRegistry } from "effect/reactivity";
 
 import type { ConnectionCatalogEntry } from "../connection/catalog.ts";
 import { AVAILABLE_CONNECTION_STATE, PrimaryConnectionTarget } from "../connection/model.ts";
+import type { EnvironmentCatalogState } from "./connections.ts";
 import {
   createEnvironmentPresentationAtoms,
   createEnvironmentSummaryAtoms,
 } from "./presentation.ts";
-import type { EnvironmentCatalogState } from "./connections.ts";
 
 const FIRST = EnvironmentId.make("first");
 const SECOND = EnvironmentId.make("second");

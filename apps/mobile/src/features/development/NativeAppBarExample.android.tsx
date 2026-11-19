@@ -1,5 +1,6 @@
-import { View } from "react-native";
 import { Text } from "@expo/ui/jetpack-compose";
+import { View } from "react-native";
+
 import { IconButton } from "../../components/ui/IconButton";
 import { NativeAppBar } from "../../components/ui/NativeAppBar.android";
 

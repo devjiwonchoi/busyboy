@@ -4,9 +4,10 @@ import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 import * as Electron from "electron";
+
 import * as DesktopEnvironment from "../app/DesktopEnvironment.ts";
-import { MacPermissionHelper } from "./MacPermissionHelper.ts";
 import type { MacPermission } from "./MacPermission.ts";
+import { MacPermissionHelper } from "./MacPermissionHelper.ts";
 
 export class MacPermissions extends Context.Service<
   MacPermissions,

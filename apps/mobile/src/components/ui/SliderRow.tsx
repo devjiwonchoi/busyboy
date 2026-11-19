@@ -9,8 +9,8 @@ import * as Haptics from "expo-haptics";
 import { useRef } from "react";
 import { View } from "react-native";
 
-import { AppText } from "./AppText";
 import { SymbolView } from "./AppSymbol";
+import { AppText } from "./AppText";
 import { NativeThemeHost } from "./NativeThemeHost";
 import type { SliderRowProps } from "./SliderRow.types";
 import { useControlTheme } from "./useControlTheme";

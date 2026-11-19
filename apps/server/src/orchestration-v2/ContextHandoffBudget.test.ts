@@ -1,4 +1,3 @@
-import type * as ProviderAdapter from "@t3tools/provider-core/server/ProviderAdapter";
 import { assert, describe, it } from "@effect/vitest";
 import {
   ContextHandoffId,
@@ -13,9 +12,6 @@ import {
   type OrchestrationV2HistoricalMessage,
   type OrchestrationV2ProviderThread,
 } from "@t3tools/contracts";
-import * as DateTime from "effect/DateTime";
-import * as Effect from "effect/Effect";
-import * as Schema from "effect/Schema";
 import {
   contextUsageForHandoff,
   handoffBudget,
@@ -25,8 +21,13 @@ import {
   selectHistory,
   historicalMessage,
 } from "@t3tools/provider-core/server/handoffBudget";
-import { projectContextHandoffForWire } from "./WireProjection.ts";
+import type * as ProviderAdapter from "@t3tools/provider-core/server/ProviderAdapter";
+import * as DateTime from "effect/DateTime";
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
+
 import { deliverContextHandoffs } from "./ContextHandoffDelivery.ts";
+import { projectContextHandoffForWire } from "./WireProjection.ts";
 
 const encodeJson = Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown));
 const decodeHandoff = Schema.decodeUnknownSync(OrchestrationV2ContextHandoff);

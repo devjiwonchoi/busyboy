@@ -1,8 +1,7 @@
-import { RefreshIcon } from "~/components/ui/refresh-icon";
-import { ChevronDownIcon } from "lucide-react";
 import { useAtomValue } from "@effect/atom-react";
-import * as Option from "effect/Option";
-import { useState, type ReactNode } from "react";
+import { sourceControlInstallHintText } from "@t3tools/client-runtime/contract-labels";
+import { isSourceControlProviderOffered } from "@t3tools/client-runtime/operations/projects";
+import { sourceControlClients } from "@t3tools/client-runtime/source-control-clients";
 import type {
   SourceControlDiscoveryResult,
   SourceControlProviderAuth,
@@ -10,14 +9,23 @@ import type {
   VcsDriverKind,
   VcsDiscoveryItem,
 } from "@t3tools/contracts";
-import { useSettingsScope } from "./SettingsScopeContext";
-import { ProjectDefaultsSettings } from "./ProjectDefaultsSettings";
+import * as Option from "effect/Option";
+import { msg, T, useGT, useMessages, Var } from "gt-react";
+import { ChevronDownIcon } from "lucide-react";
+import { useState, type ReactNode } from "react";
+
+import { PullRequestGlyph } from "~/components/pullRequest/pullRequestIcons";
+import { RefreshIcon } from "~/components/ui/refresh-icon";
+import { sourceControlIcon } from "~/sourceControlPresentation";
+
 import { useLiveRefresh } from "../../hooks/useLiveRefresh";
+import { m, type MessageResolver } from "../../i18n/messages";
 import { cn } from "../../lib/utils";
 import { useEnvironmentQuery } from "../../state/query";
 import { serverEnvironment } from "../../state/server";
 import { sourceControlEnvironment } from "../../state/sourceControl";
 import { useAtomCommand } from "../../state/use-atom-command";
+import { GitIcon, JujutsuIcon, type Icon } from "../Icons";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { Collapsible, CollapsibleContent } from "../ui/collapsible";
@@ -32,29 +40,22 @@ import {
 import { Skeleton } from "../ui/skeleton";
 import { Switch } from "../ui/switch";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
-import { msg, T, useGT, useMessages, Var } from "gt-react";
-import { m, type MessageResolver } from "../../i18n/messages";
-
-import { GitIcon, JujutsuIcon, type Icon } from "../Icons";
 import { IssueTrackerSettings } from "./IssueTrackerSettings";
-import { SourceControlHostSettings } from "./SourceControlHostSettings";
-import { SourceControlAccountSettings } from "./SourceControlAccountSettings";
-import { SourceControlAppSignInSettings } from "./SourceControlAppSignInSettings";
-import { SourceControlTokenSettings } from "./SourceControlTokenSettings";
+import { ProjectDefaultsSettings } from "./ProjectDefaultsSettings";
 import { RedactedSensitiveText } from "./RedactedSensitiveText";
-import { SourceControlWritingSettingsSection } from "./SourceControlWritingSettings";
 import {
   SettingsPageContainer,
   SettingsSearchTarget,
   SettingsSection,
   useSettingsSearchTargetId,
 } from "./settingsLayout";
+import { useSettingsScope } from "./SettingsScopeContext";
 import { useSearchableSetting, sourceControlHostSettingsSearchId } from "./settingsSearch";
-import { PullRequestGlyph } from "~/components/pullRequest/pullRequestIcons";
-import { sourceControlInstallHintText } from "@t3tools/client-runtime/contract-labels";
-import { isSourceControlProviderOffered } from "@t3tools/client-runtime/operations/projects";
-import { sourceControlClients } from "@t3tools/client-runtime/source-control-clients";
-import { sourceControlIcon } from "~/sourceControlPresentation";
+import { SourceControlAccountSettings } from "./SourceControlAccountSettings";
+import { SourceControlAppSignInSettings } from "./SourceControlAppSignInSettings";
+import { SourceControlHostSettings } from "./SourceControlHostSettings";
+import { SourceControlTokenSettings } from "./SourceControlTokenSettings";
+import { SourceControlWritingSettingsSection } from "./SourceControlWritingSettings";
 
 const EMPTY_DISCOVERY_RESULT: SourceControlDiscoveryResult = {
   versionControlSystems: [],

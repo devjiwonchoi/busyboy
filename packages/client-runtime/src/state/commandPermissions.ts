@@ -8,6 +8,7 @@ import {
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import { AsyncResult, Atom, AtomRegistry } from "effect/reactivity";
+
 import type { EnvironmentRegistry } from "../connection/registry.ts";
 import { scopeRequiredError } from "../rpc/client.ts";
 import { createEnvironmentSessionAtoms } from "./session.ts";

@@ -1,19 +1,20 @@
-import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
-import { m as resolveMessage } from "~/i18n/messages";
 import { useAtomValue } from "@effect/atom-react";
+import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
 import type { EnvironmentId } from "@t3tools/contracts";
 import { isWindowsAbsolutePath } from "@t3tools/shared/path";
 import { msg, useGT, useMessages } from "gt-react";
 import { useState } from "react";
 
-import type { MessageResolver } from "~/i18n/messages";
-import { primaryServerKeybindingsAtom } from "~/state/server";
 import { useTheme } from "~/hooks/useTheme";
+import { m as resolveMessage } from "~/i18n/messages";
+import type { MessageResolver } from "~/i18n/messages";
 import { getLocalFileManagerName, isWindowsPlatform } from "~/lib/utils";
-import { CommandPaletteContent } from "../CommandPaletteContent";
-import type { CommandPaletteActionItem } from "../CommandPalette.logic";
-import { CommandPaletteResults } from "../CommandPaletteResults";
+import { primaryServerKeybindingsAtom } from "~/state/server";
+
 import { PierreEntryIcon } from "../chat/PierreEntryIcon";
+import type { CommandPaletteActionItem } from "../CommandPalette.logic";
+import { CommandPaletteContent } from "../CommandPaletteContent";
+import { CommandPaletteResults } from "../CommandPaletteResults";
 import {
   getProjectFilePickerMatches,
   PROJECT_FILE_PICKER_RESULT_LIMIT,

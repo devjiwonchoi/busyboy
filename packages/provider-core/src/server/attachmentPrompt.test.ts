@@ -1,10 +1,10 @@
+import { assert, describe, it } from "@effect/vitest";
 import {
   ChatAttachmentId,
   ChatFileAttachment,
   ChatImageAttachment,
   PROVIDER_SEND_TURN_MAX_INPUT_CHARS,
 } from "@t3tools/contracts";
-import { assert, describe, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 
 import { providerMessageTextWithAttachmentPaths } from "./attachmentPrompt.ts";

@@ -1,9 +1,8 @@
-import { msg, T, useGT, useMessages } from "gt-react-native";
-import { NativeScrollView } from "../../native/NativeScrollViewMarker";
 import { LegendList } from "@legendapp/list/react-native";
 import { useNavigation } from "@react-navigation/native";
 import { isListedThreadLineage } from "@t3tools/contracts";
 import * as Haptics from "expo-haptics";
+import { msg, T, useGT, useMessages } from "gt-react-native";
 import { useMemo, useState } from "react";
 import { Platform } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -13,6 +12,7 @@ import { SelectionRow } from "../../components/ui/SelectionRow";
 import { useSearchToolbarInset } from "../../components/ui/useBarInset";
 import { buildModelOptions, groupByProvider } from "../../lib/modelOptions";
 import { resolveProviderOptionDescriptors } from "../../lib/providerOptions";
+import { NativeScrollView } from "../../native/NativeScrollViewMarker";
 import {
   useEnvironmentServerConfig,
   useProjects,

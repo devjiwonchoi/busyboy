@@ -1,4 +1,7 @@
 // @effect-diagnostics nodeBuiltinImport:off - Stands in for an Electron debugger.
+
+import * as NodeEvents from "node:events";
+
 import { describe, expect, it, vi } from "@effect/vitest";
 import { DesktopBrowserEvent } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
@@ -7,7 +10,6 @@ import * as Queue from "effect/Queue";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import * as TestClock from "effect/testing/TestClock";
-import * as NodeEvents from "node:events";
 
 import * as DesktopBrowserHost from "./DesktopBrowserHost.ts";
 

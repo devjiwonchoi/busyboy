@@ -1,17 +1,16 @@
+import { stepTourPosition, stopFilePaths } from "@t3tools/client-runtime/review-guide-tour";
 import type { EnvironmentId, PullRequestRef, PullRequestReviewGuide } from "@t3tools/contracts";
 import { T, Var } from "gt-react";
 import { useEffect, useEffectEvent, useRef, useState, type ReactNode } from "react";
 
+import { isCommandPaletteOpen } from "~/commandPaletteBus";
 import { createPullRequestDiffFileContentsLoader } from "~/lib/diffFileContents";
 import { isEditableFocused } from "~/lib/editableFocus";
 import { pullRequestEnvironment } from "~/state/pullRequests";
 import { useAtomCommand } from "~/state/use-atom-command";
 
-import { isCommandPaletteOpen } from "~/commandPaletteBus";
-
-import { GuideRail } from "./GuideRail";
-import { GuideStop } from "./GuideStop";
 import type { ExcerptCommenting } from "./GuideExcerpt";
+import { GuideRail } from "./GuideRail";
 import {
   guideProgressKey,
   guideRunKey,
@@ -19,7 +18,7 @@ import {
   useGuideRunStore,
   type GuideProgress,
 } from "./guideRunStore";
-import { stepTourPosition, stopFilePaths } from "@t3tools/client-runtime/review-guide-tour";
+import { GuideStop } from "./GuideStop";
 import { useGuideDiffFiles } from "./useGuideDiffFiles";
 
 export function GuideTour({

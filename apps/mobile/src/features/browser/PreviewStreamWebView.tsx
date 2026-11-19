@@ -1,8 +1,4 @@
 import { errorDisplayMessage } from "@t3tools/client-runtime/errors";
-import { Button } from "../../components/ui/Button";
-import { AppActivityIndicator } from "../../components/ui/AppActivityIndicator";
-import * as Dialog from "../../components/ui/Dialog";
-import previewStreamScript from "@t3tools/mobile-preview-stream";
 import {
   previewStreamControlLabel,
   previewStreamHostSetupMessage,
@@ -12,6 +8,9 @@ import {
   type PreviewStreamInput,
 } from "@t3tools/client-runtime/preview/server-browser-stream";
 import type { EnvironmentId, PreviewStreamHostSetup } from "@t3tools/contracts";
+import previewStreamScript from "@t3tools/mobile-preview-stream";
+import * as Clipboard from "expo-clipboard";
+import { msg, useGT, useMessages } from "gt-react-native";
 import {
   useEffectEvent,
   useImperativeHandle,
@@ -20,24 +19,24 @@ import {
   useState,
   type Ref,
 } from "react";
-import { msg, useGT, useMessages } from "gt-react-native";
 import { Platform, Pressable, TextInput, View } from "react-native";
 import { WebView } from "react-native-webview";
-import * as Clipboard from "expo-clipboard";
 
-import { AppText } from "../../components/ui/AppText";
 import { PdfPreview } from "../../components/PdfPreview";
+import { AppActivityIndicator } from "../../components/ui/AppActivityIndicator";
+import { AppText } from "../../components/ui/AppText";
+import { Button } from "../../components/ui/Button";
+import * as Dialog from "../../components/ui/Dialog";
 import { m } from "../../i18n/messages";
 import { downloadAndShareAttachment } from "../../lib/attachmentDownload";
 import { beginForegroundHandoff } from "../../lib/foreground-handoff";
 import { usePreviewStreamAccess } from "../../state/preview";
-import { previewPromptText } from "./previewPromptText";
-
 import {
   previewStreamDocument,
   previewStreamMessage,
   type PreviewStreamConfiguration,
 } from "./preview-stream-document";
+import { previewPromptText } from "./previewPromptText";
 
 export interface PreviewStreamRef {
   readonly command: (input: PreviewStreamInput) => void;

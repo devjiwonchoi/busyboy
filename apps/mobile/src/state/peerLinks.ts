@@ -10,8 +10,8 @@ import { useEffect, useEffectEvent, useMemo } from "react";
 
 import { connectionAtomRuntime } from "../connection/runtime";
 import { useEnvironments } from "./environments";
-import { relayEnvironmentDiscovery } from "./relay";
 import { useEnvironmentQuery } from "./query";
+import { relayEnvironmentDiscovery } from "./relay";
 import { useAtomCommand } from "./use-atom-command";
 
 export const peerLinkEnvironment = createPeerLinkEnvironmentAtoms(connectionAtomRuntime);

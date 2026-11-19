@@ -15,16 +15,15 @@ import {
   TerminalAttachInput,
   type TerminalSummary,
 } from "@t3tools/contracts";
-
 import * as Option from "effect/Option";
-import * as Schema from "effect/Schema";
 import { AsyncResult, Atom } from "effect/reactivity";
-
-import { formatEnvironmentQueryError } from "./query";
-import { terminalEnvironment } from "./terminal";
-import { environmentSession, sessionHasScope, useEnvironmentScope } from "./session";
+import * as Schema from "effect/Schema";
 import { msg } from "gt-react";
+
 import { m } from "../i18n/messages";
+import { formatEnvironmentQueryError } from "./query";
+import { environmentSession, sessionHasScope, useEnvironmentScope } from "./session";
+import { terminalEnvironment } from "./terminal";
 
 const EMPTY_KNOWN_TERMINAL_SESSIONS = Object.freeze<ReadonlyArray<KnownTerminalSession>>([]);
 

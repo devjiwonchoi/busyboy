@@ -14,11 +14,10 @@ import type { ResolvedSharePayload, SharePayload } from "expo-sharing";
 import { msg } from "gt-react-native";
 
 import { m } from "../../i18n/messages";
-
+import { estimateBase64ByteSize } from "../../lib/base64";
 import { DraftComposerAttachmentSchema } from "../../lib/composer-image-schema";
 import { fitComposerImage } from "../../lib/composerImageFit";
 import type { DraftComposerAttachment } from "../../lib/composerImages";
-import { estimateBase64ByteSize } from "../../lib/base64";
 
 export interface IncomingShareDraft {
   readonly schemaVersion: 1;

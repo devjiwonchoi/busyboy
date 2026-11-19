@@ -4,11 +4,12 @@ import {
   type DeviceModelSource,
 } from "@t3tools/client-runtime/device/model";
 import type { DevicePlatform } from "@t3tools/contracts";
-import iphoneDuo from "./models/iphone-duo.glb?url";
-import iphone18Pro from "./models/iphone-18-pro.glb?url";
-import iphone18ProMax from "./models/iphone-18-pro-max.glb?url";
+
 import magicKeyboard from "./models/ipad-pro-13-m5-magic-keyboard.glb?url";
 import ipadPro13M5 from "./models/ipad-pro-13-m5.glb?url";
+import iphone18ProMax from "./models/iphone-18-pro-max.glb?url";
+import iphone18Pro from "./models/iphone-18-pro.glb?url";
+import iphoneDuo from "./models/iphone-duo.glb?url";
 
 const models: Record<DeviceModelSource["id"], DeviceModelSource> = {
   "iphone-duo": { id: "iphone-duo", url: iphoneDuo },

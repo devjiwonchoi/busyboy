@@ -1,11 +1,10 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, describe, it } from "@effect/vitest";
+import type { DesktopUpdateCheckResult, DesktopUpdateState } from "@t3tools/contracts";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
-
-import type { DesktopUpdateCheckResult, DesktopUpdateState } from "@t3tools/contracts";
 import * as Electron from "electron";
 import { vi } from "vite-plus/test";
 
@@ -13,14 +12,14 @@ vi.mock("electron", () => ({
   webContents: { getAllWebContents: vi.fn(() => []) },
 }));
 
+import * as DesktopConfig from "../app/DesktopConfig.ts";
+import * as DesktopEnvironment from "../app/DesktopEnvironment.ts";
 import * as ElectronApp from "../electron/ElectronApp.ts";
 import * as ElectronDialog from "../electron/ElectronDialog.ts";
 import * as ElectronMenu from "../electron/ElectronMenu.ts";
-import * as DesktopApplicationMenu from "./DesktopApplicationMenu.ts";
-import * as DesktopConfig from "../app/DesktopConfig.ts";
-import * as DesktopEnvironment from "../app/DesktopEnvironment.ts";
 import * as DesktopUpdates from "../updates/DesktopUpdates.ts";
 import { createInitialDesktopUpdateState } from "../updates/updateMachine.ts";
+import * as DesktopApplicationMenu from "./DesktopApplicationMenu.ts";
 import * as DesktopWindow from "./DesktopWindow.ts";
 
 const environmentInput = {

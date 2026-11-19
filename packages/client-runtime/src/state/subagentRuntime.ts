@@ -1,5 +1,3 @@
-import { groupBy } from "effect/Array";
-import * as DateTime from "effect/DateTime";
 import type {
   ModelSelection,
   OrchestrationV2AppThread,
@@ -8,6 +6,8 @@ import type {
   OrchestrationV2TurnItem,
 } from "@t3tools/contracts";
 import { isOrchestrationV2WorkActive, isProviderNativeSubagentThread } from "@t3tools/contracts";
+import { groupBy } from "effect/Array";
+import * as DateTime from "effect/DateTime";
 import { mFallback, msg } from "gt-i18n";
 import type { MFunctionType } from "gt-i18n/types";
 

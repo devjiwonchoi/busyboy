@@ -3,12 +3,14 @@ import { EnvironmentId } from "@t3tools/contracts";
 import * as Option from "effect/Option";
 import { expect, it, vi } from "vite-plus/test";
 import { page, userEvent } from "vite-plus/test/browser";
+
 import { render } from "../../../test/render";
+
 import "~/index.css";
 import { chooseAudioDestination } from "../../speech/voiceConsent";
 import { useEnvironmentScope, usePreparedConnection } from "../../state/session";
-import { VoiceSettingsPanel } from "./VoiceSettingsPanel";
 import { SettingsScopeProvider } from "./SettingsScopeContext";
+import { VoiceSettingsPanel } from "./VoiceSettingsPanel";
 
 vi.mock(import("../../state/session"), { spy: true });
 vi.mock("../../env", async (original) => ({

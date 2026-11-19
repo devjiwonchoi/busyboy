@@ -1,8 +1,12 @@
+import { useAtomValue } from "@effect/atom-react";
+import type { DeviceScreenSize } from "@t3tools/client-runtime/device/stream";
+import { scopedThreadKey } from "@t3tools/client-runtime/environment";
 import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
-import { m } from "~/i18n/messages";
+import type { PreviewStreamViewport } from "@t3tools/client-runtime/preview/server-browser-stream";
 import { FILL_PREVIEW_VIEWPORT, type ScopedThreadRef } from "@t3tools/contracts";
 import { previewPdfAssetUrl } from "@t3tools/shared/preview";
-import { useEnvironmentHttpBaseUrl } from "~/state/environments";
+import { Atom } from "effect/reactivity";
+import { T, useGT } from "gt-react";
 import { PanelRightIcon, PictureInPicture2, XIcon } from "lucide-react";
 import {
   type PointerEvent as ReactPointerEvent,
@@ -12,23 +16,17 @@ import {
   useRef,
   useState,
 } from "react";
-import { T, useGT } from "gt-react";
 import { create } from "zustand";
-import { useAtomValue } from "@effect/atom-react";
-import { scopedThreadKey } from "@t3tools/client-runtime/environment";
 
-import { useChatCanvas } from "../chat/ChatCanvasContext";
-import type { ChatCanvasPreview } from "../chat/chatCanvasLayout";
-import { BrowserSurfaceSlot } from "~/browser/BrowserSurfaceSlot";
 import {
   findActiveBrowserRecordingRuntimeTabId,
   useActiveBrowserRecordingTabIds,
 } from "~/browser/browserRecording";
+import { BrowserSurfaceSlot } from "~/browser/BrowserSurfaceSlot";
 import { useBrowserSurfaceStore } from "~/browser/browserSurfaceStore";
 import type { BrowserViewportResizeDirection } from "~/browser/browserViewportLayout";
-import { previewRuntimeTabId } from "~/browser/previewRuntimeTabId";
 import { rendersServerTabNatively } from "~/browser/previewRuntime";
-import { primaryEnvironmentIdAtom } from "~/state/primaryEnvironment";
+import { previewRuntimeTabId } from "~/browser/previewRuntimeTabId";
 import { type ServerBrowserHandle, ServerBrowserSurface } from "~/browser/ServerBrowserSurface";
 import {
   closeServerPictureInPicture,
@@ -41,8 +39,8 @@ import { useBrowserLayoutZoomFactor } from "~/browser/useBrowserLayoutZoomFactor
 import { Button } from "~/components/ui/button";
 import { toastManager } from "~/components/ui/toast";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
+import { m } from "~/i18n/messages";
 import { cn } from "~/lib/utils";
-import { useThreadPreviewState } from "~/previewStateStore";
 import {
   type PreviewMiniPlayerSize,
   type PreviewMiniPlayerSource,
@@ -51,17 +49,17 @@ import {
   previewMiniPlayerSourceKey,
   usePreviewMiniPlayerStore,
 } from "~/previewMiniPlayerStore";
+import { useThreadPreviewState } from "~/previewStateStore";
 import { useRightPanelStore } from "~/rightPanelStore";
 import { useDeviceState } from "~/state/device";
+import { useEnvironmentHttpBaseUrl } from "~/state/environments";
+import { primaryEnvironmentIdAtom } from "~/state/primaryEnvironment";
 
-import { DeviceStreamView } from "../device/DeviceStreamView";
-import type { DeviceScreenSize } from "@t3tools/client-runtime/device/stream";
-import { Atom } from "effect/reactivity";
+import { useChatCanvas } from "../chat/ChatCanvasContext";
+import type { ChatCanvasPreview } from "../chat/chatCanvasLayout";
 import { deviceScreenKey, deviceStreamScreenAtom } from "../device/deviceStreamSession";
-import type { PreviewStreamViewport } from "@t3tools/client-runtime/preview/server-browser-stream";
+import { DeviceStreamView } from "../device/DeviceStreamView";
 import { previewBridge } from "./previewBridge";
-import { PreviewUnreachable } from "./PreviewUnreachable";
-import { showPreviewPopup } from "./showPreviewPopup";
 import {
   type PreviewMiniPlayerGesture,
   settlePreviewMiniPlayerResize,
@@ -75,6 +73,8 @@ import {
   resolveDeviceMiniPlayerSourceSize,
   resolvePreviewMiniPlayerSourceSize,
 } from "./previewMiniPlayerLayout";
+import { PreviewUnreachable } from "./PreviewUnreachable";
+import { showPreviewPopup } from "./showPreviewPopup";
 
 interface Props {
   readonly threadRef: ScopedThreadRef;

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
-import ghosttyKeyHeader from "../../../../../native/libghostty-vt/include/ghostty/vt/key/event.h?raw";
 
+import ghosttyKeyHeader from "../../../../../native/libghostty-vt/include/ghostty/vt/key/event.h?raw";
 import {
   ghosttyConsumedMods,
   ghosttyKeyForCode,

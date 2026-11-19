@@ -2,10 +2,10 @@
 // against the in-process environment in fakeEnvironment.ts. Counts cover ChatView, the
 // chat and settings routes, the sidebar and the right panel, through the same stores and
 // atoms the app reads. See renderScenarios.renders.tsx for the counting rules.
-import { createMemoryHistory } from "@tanstack/react-router";
 import { scopeProjectRef, scopeThreadRef } from "@t3tools/client-runtime/environment";
 import { NodeId, RuntimeRequestId, TurnItemId, type ThreadId } from "@t3tools/contracts";
 import { DEFAULT_CLIENT_SETTINGS } from "@t3tools/contracts/settings";
+import { createMemoryHistory } from "@tanstack/react-router";
 import type * as Context from "effect/Context";
 import * as DateTime from "effect/DateTime";
 import { AsyncResult } from "effect/reactivity";
@@ -21,6 +21,7 @@ import { useRightPanelStore } from "~/rightPanelStore";
 import { getRouter, type AppRouter } from "~/router";
 import { appAtomRegistry } from "~/rpc/atomRegistry";
 import { vcsEnvironment } from "~/state/vcs";
+
 import {
   ENVIRONMENT_ID,
   PROJECT_ID,
@@ -36,8 +37,8 @@ import {
   type FakeDriver,
   type FakeThread,
 } from "./fakeEnvironment";
-import { commitsSoFar, startCounting, stopCounting, type RenderReport } from "./renderCounter";
 import { act, fakeTimers, render } from "./render";
+import { commitsSoFar, startCounting, stopCounting, type RenderReport } from "./renderCounter";
 
 // The socket is the only fake layer: client-runtime's driver hands every connection the
 // in-process session. A string path, since a typed import pulls client-runtime's sources

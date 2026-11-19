@@ -1,11 +1,12 @@
-import { SourceControlProviderKind } from "@t3tools/contracts";
 import { expect, it } from "@effect/vitest";
-import * as Effect from "effect/Effect";
-import * as Schema from "effect/Schema";
-import * as Layer from "effect/Layer";
+import { SourceControlProviderKind } from "@t3tools/contracts";
 import { SourceControlProviderError } from "@t3tools/contracts";
-import { resolveThreadTitleLinks } from "./ThreadTitleLinks.ts";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Schema from "effect/Schema";
+
 import * as SourceControlProviderRegistry from "../sourceControl/SourceControlProviderRegistry.ts";
+import { resolveThreadTitleLinks } from "./ThreadTitleLinks.ts";
 
 const layerRegistry = Layer.mock(SourceControlProviderRegistry.SourceControlProviderRegistry);
 const encodeSubject = Schema.encodeSync(

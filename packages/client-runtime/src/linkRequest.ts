@@ -1,4 +1,3 @@
-import { errorDisplayMessage } from "./errors/translatable.ts";
 import {
   type AuthMcpClientAccess,
   type EnvironmentId,
@@ -11,12 +10,13 @@ import {
 } from "@t3tools/contracts";
 import { isLocalLoopbackHost } from "@t3tools/shared/hostClassification";
 import * as Option from "effect/Option";
+import { mFallback, msg } from "gt-i18n";
+import type { MFunctionType } from "gt-i18n/types";
 
 import type { EnvironmentPresentation } from "./connection/presentation.ts";
 import { connectionRoutes, routeHttpBaseUrl } from "./connection/routes.ts";
+import { errorDisplayMessage } from "./errors/translatable.ts";
 import type { RelayDiscoveredEnvironment } from "./relay/discovery.ts";
-import { mFallback, msg } from "gt-i18n";
-import type { MFunctionType } from "gt-i18n/types";
 
 export type LinkRequestItem = Extract<OrchestrationV2TurnItem, { readonly type: "link_request" }>;
 

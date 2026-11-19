@@ -2,7 +2,6 @@ import { useGT } from "gt-react";
 import { lazy, memo, Suspense, useLayoutEffect, useRef, useState } from "react";
 
 import { observeResize } from "../../lib/observeResize";
-
 import { RenderErrorBoundary } from "../RenderErrorBoundary";
 
 const MathTypeset = lazy(() => import("./MathTypeset"));

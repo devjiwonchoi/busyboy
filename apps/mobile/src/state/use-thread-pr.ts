@@ -1,9 +1,9 @@
 import { useAtomValue } from "@effect/atom-react";
-import type { EnvironmentThreadShell } from "@t3tools/client-runtime/state/shell";
 import {
   createLinkedPullRequestSummaryAtomFamily,
   pullRequestDetailToVcsStatus,
 } from "@t3tools/client-runtime/state/pull-requests";
+import type { EnvironmentThreadShell } from "@t3tools/client-runtime/state/shell";
 import type { EnvironmentId, PullRequestSummary } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import { Atom } from "effect/reactivity";
@@ -12,9 +12,8 @@ import { use, useMemo } from "react";
 
 import { connectionAtomRuntime } from "../connection/runtime";
 import { appAtomRegistry } from "./atom-registry";
-import { serverEnvironment } from "./server";
-import { environmentThreadShells } from "./threads";
 import { useEnvironmentQuery } from "./query";
+import { serverEnvironment } from "./server";
 import { ThreadPrDemandContext } from "./thread-pr-demand";
 import {
   knownPullRequestSummary,
@@ -23,6 +22,7 @@ import {
   presentThreadPr,
   type ThreadPrPresentation,
 } from "./thread-pr-presentation";
+import { environmentThreadShells } from "./threads";
 
 const MAX_PULL_REQUEST_SNAPSHOTS = 500;
 

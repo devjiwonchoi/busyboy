@@ -1,19 +1,25 @@
-import { useGT } from "gt-react-native";
-import { SymbolView } from "./ui/AppSymbol";
-import { AppText } from "./ui/AppText";
-import { Image } from "expo-image";
-import { memo, useLayoutEffect, useMemo, useState } from "react";
-import { View } from "react-native";
+import { useAtomValue } from "@effect/atom-react";
 import type { EnvironmentId, ProjectIconOverride } from "@t3tools/contracts";
 import {
   getProjectFaviconCacheKey,
   getProjectFaviconResourceKey,
   isProjectFaviconFallbackUrl,
 } from "@t3tools/shared/projectFavicon";
-import { useAtomValue } from "@effect/atom-react";
 import { Atom } from "effect/reactivity";
+import { Image } from "expo-image";
+import { useGT } from "gt-react-native";
+import { memo, useLayoutEffect, useMemo, useState } from "react";
+import { View } from "react-native";
+
 import { useAppearancePreferences } from "../features/settings/appearance/AppearancePreferencesProvider";
-import { projectFaviconUrlAtom } from "../state/assets";
+import { resolveProjectFaviconColorScheme } from "../lib/projectFaviconColorScheme";
+import {
+  beginProjectFaviconRequest,
+  createProjectFaviconRequest,
+  hasLoadedProjectFavicon,
+  markProjectFaviconFailed,
+  markProjectFaviconLoaded,
+} from "../lib/projectFaviconRequests";
 import {
   countGlyphs,
   projectAutoMonogram,
@@ -22,15 +28,9 @@ import {
   resolveProjectIconSymbol,
   type ProjectIconGlyph,
 } from "../lib/projectIcon";
-import { resolveProjectFaviconColorScheme } from "../lib/projectFaviconColorScheme";
-
-import {
-  beginProjectFaviconRequest,
-  createProjectFaviconRequest,
-  hasLoadedProjectFavicon,
-  markProjectFaviconFailed,
-  markProjectFaviconLoaded,
-} from "../lib/projectFaviconRequests";
+import { projectFaviconUrlAtom } from "../state/assets";
+import { SymbolView } from "./ui/AppSymbol";
+import { AppText } from "./ui/AppText";
 
 const EMPTY_FAVICON_URL = Atom.make<string | null>(null);
 

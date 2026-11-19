@@ -26,30 +26,31 @@ import type {
   ThreadContextRecord,
   ThreadId,
 } from "@t3tools/contracts";
-import { decodeMsg, msg } from "gt-react";
-import { upgradeLegacyContextMessage } from "@t3tools/shared/composerContextLegacy";
 import { encodeComposerContextFragment } from "@t3tools/shared/composerContextClipboard";
+import { upgradeLegacyContextMessage } from "@t3tools/shared/composerContextLegacy";
 import {
   collectComposerContextReferences,
   sanitizeComposerContextLabel,
   toKindScopedComposerContextId,
 } from "@t3tools/shared/composerContextReferences";
+import { decodeMsg, msg } from "gt-react";
 
+import { changeRequestTermKind } from "~/components/pullRequest/changeRequestTerm";
+import type { ComposerFileAttachment, ComposerImageAttachment } from "~/composerDraftStore";
+import type { MessageResolver } from "~/i18n/messages";
+import type { ReviewCommentContext } from "~/reviewCommentContext";
+
+import type { AttachmentUploadState } from "./attachmentUploadState";
 import {
   type ComposerContextReference,
   producerIdFromComposerContextId,
 } from "./composerContextReferences";
-import type { ComposerFileAttachment, ComposerImageAttachment } from "~/composerDraftStore";
-import type { AttachmentUploadState } from "./attachmentUploadState";
 import { normalizeElementContextSelection } from "./elementContext";
 import {
   formatTerminalContextLabel,
   normalizeTerminalContextText,
   type TerminalContextDraft,
 } from "./terminalContext";
-import type { ReviewCommentContext } from "~/reviewCommentContext";
-import type { MessageResolver } from "~/i18n/messages";
-import { changeRequestTermKind } from "~/components/pullRequest/changeRequestTerm";
 
 const PREVIEW_LABEL_MAX_CHARS = 48;
 const RESPONSE_LABEL_MAX_CHARS = 64;

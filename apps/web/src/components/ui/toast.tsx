@@ -1,16 +1,6 @@
-import { Spinner } from "~/components/ui/spinner";
-
 import { Toast } from "@base-ui/react/toast";
-import { msg, useGT } from "gt-react";
-import {
-  useEffect,
-  useState,
-  type CSSProperties,
-  type ComponentPropsWithoutRef,
-  type KeyboardEvent,
-  type ReactNode,
-} from "react";
 import { type ScopedThreadRef, type ThreadId } from "@t3tools/contracts";
+import { msg, useGT } from "gt-react";
 import {
   CircleAlertIcon,
   CircleCheckIcon,
@@ -22,11 +12,22 @@ import {
   ChevronUpIcon,
   CopyIcon,
 } from "lucide-react";
+import {
+  useEffect,
+  useState,
+  type CSSProperties,
+  type ComponentPropsWithoutRef,
+  type KeyboardEvent,
+  type ReactNode,
+} from "react";
 
-import { cn } from "~/lib/utils";
 import { Button, buttonVariants } from "~/components/ui/button";
+import { Spinner } from "~/components/ui/spinner";
 import { useComposerDraftStore } from "~/composerDraftStore";
 import { useCopyToClipboard } from "~/hooks/useCopyToClipboard";
+import { useThreadRouteTarget } from "~/hooks/useThreadRouteTarget";
+import { cn } from "~/lib/utils";
+
 import {
   buildVisibleToastLayout,
   hasVisibleToastAction,
@@ -34,7 +35,6 @@ import {
   shouldRenderThreadScopedToast,
 } from "./toast.logic";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "./tooltip";
-import { useThreadRouteTarget } from "~/hooks/useThreadRouteTarget";
 
 export type ThreadToastData = {
   threadRef?: ScopedThreadRef | null;

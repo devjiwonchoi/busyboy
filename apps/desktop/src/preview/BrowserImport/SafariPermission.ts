@@ -1,5 +1,6 @@
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+
 import { safariAccessGranted } from "./SafariCookies.ts";
 import {
   BROWSER_IMPORT_SOURCES,

@@ -1,8 +1,8 @@
 /// <reference types="mdast-util-to-hast" />
 import type { Root } from "mdast";
+import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import remarkParse from "remark-parse";
-import remarkGfm from "remark-gfm";
 import { unified } from "unified";
 
 const mathParser = unified()

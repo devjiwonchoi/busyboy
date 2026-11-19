@@ -1,4 +1,3 @@
-import { resolveProviderProbeTimeoutMs } from "@t3tools/provider-core/server/snapshotProbe";
 import {
   AcpRegistryListProvidersResult,
   AcpRegistryOperationError,
@@ -11,21 +10,7 @@ import {
   type ServerProviderSkill,
   type ServerProviderSlashCommand,
 } from "@t3tools/contracts";
-import { AcpRegistrySettings } from "../settings.ts";
-import * as SecureRandom from "effect/crypto/SecureRandom";
-import * as Deferred from "effect/Deferred";
-import * as Duration from "effect/Duration";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import * as Option from "effect/Option";
-import * as Ref from "effect/Ref";
-import * as Result from "effect/Result";
-import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
-import type * as EffectAcpErrors from "effect-acp/errors";
-import type * as EffectAcpSchema from "effect-acp/compat";
-
-import * as PtyAdapter from "@t3tools/shared/PtyAdapter";
-import * as AcpRegistrySupport from "./AcpRegistrySupport.ts";
+import * as AcpSessionRuntime from "@t3tools/provider-acp/server/AcpSessionRuntime";
 import {
   findModelConfigOption,
   parseSessionModeState,
@@ -35,8 +20,23 @@ import {
   flattenSelectChoices,
   isAcpThoughtLevelOption,
 } from "@t3tools/provider-acp/server/sessionConfig";
+import { resolveProviderProbeTimeoutMs } from "@t3tools/provider-core/server/snapshotProbe";
+import * as PtyAdapter from "@t3tools/shared/PtyAdapter";
+import type * as EffectAcpSchema from "effect-acp/compat";
+import type * as EffectAcpErrors from "effect-acp/errors";
+import * as SecureRandom from "effect/crypto/SecureRandom";
+import * as Deferred from "effect/Deferred";
+import * as Duration from "effect/Duration";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
+import * as Ref from "effect/Ref";
+import * as Result from "effect/Result";
+
+import { AcpRegistrySettings } from "../settings.ts";
 import * as AcpRegistryRuntimeCoordinator from "./AcpRegistryRuntimeCoordinator.ts";
-import * as AcpSessionRuntime from "@t3tools/provider-acp/server/AcpSessionRuntime";
+import * as AcpRegistrySupport from "./AcpRegistrySupport.ts";
 
 const MAX_AUTH_METHODS = 32;
 const MAX_MODELS = 256;

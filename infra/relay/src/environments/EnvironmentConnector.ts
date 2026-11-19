@@ -1,3 +1,4 @@
+import { makeEnvironmentHttpApiClient } from "@t3tools/client-runtime/rpc";
 import {
   EnvironmentHttpBadRequestError,
   EnvironmentHttpConflictError,
@@ -5,7 +6,6 @@ import {
   EnvironmentHttpInternalServerError,
   EnvironmentHttpUnauthorizedError,
 } from "@t3tools/contracts";
-import { makeEnvironmentHttpApiClient } from "@t3tools/client-runtime/rpc";
 import {
   RelayCloudEnvironmentHealthProofPayload,
   RelayEnvironmentHealthResponse,
@@ -34,20 +34,20 @@ import * as Signature from "effect/crypto/Signature";
 import * as DateTime from "effect/DateTime";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientError from "effect/http/HttpClientError";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
-import * as FetchHttpClient from "effect/http/FetchHttpClient";
-import * as HttpClient from "effect/http/HttpClient";
-import * as HttpClientError from "effect/http/HttpClientError";
 
+import * as CloudMintSigner from "../auth/CloudMintSigner.ts";
+import * as RelayConfiguration from "../Config.ts";
+import { isManagedEndpointHostname } from "../deploymentConfig.ts";
 import { diagnoseEndpointFailure } from "./endpointFailure.ts";
 import * as EnvironmentLinks from "./EnvironmentLinks.ts";
 import * as ManagedEndpointAllocations from "./ManagedEndpointAllocations.ts";
-import * as RelayConfiguration from "../Config.ts";
-import * as CloudMintSigner from "../auth/CloudMintSigner.ts";
-import { isManagedEndpointHostname } from "../deploymentConfig.ts";
 
 function environmentConnectNotAuthorizedReasonMessage(
   reason: RelayEnvironmentConnectNotAuthorizedReason,

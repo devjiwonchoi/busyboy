@@ -12,7 +12,6 @@ import * as Path from "effect/Path";
 import * as SqlClient from "effect/sql/SqlClient";
 
 import { parseRateTable, priceUsage } from "../../usage/usagePricing.ts";
-
 import { makeAntigravityUsageCache, readAntigravityUsage } from "./antigravityUsageReader.ts";
 
 const openDatabase = Effect.fn("openDatabase")(function* (filename: string) {

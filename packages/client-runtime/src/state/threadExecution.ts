@@ -1,11 +1,4 @@
 import {
-  latestExecutedRun,
-  latestRootProviderFailure,
-  latestUnheldRun,
-  threadErrorSummary,
-  usageLimitRunPresentedAsLatest,
-} from "@t3tools/shared/orchestrationV2ThreadError";
-import {
   isOrchestrationV2WorkActive,
   isProviderNativeSubagentThread,
   latestProviderTurnForAttempt,
@@ -25,10 +18,6 @@ import {
   type ThreadId,
 } from "@t3tools/contracts";
 import {
-  backgroundWorkHoldsCompletion,
-  derivePendingBackgroundWork,
-} from "@t3tools/shared/orchestrationV2PendingBackgroundWork";
-import {
   getModelSelectionStringOptionValue,
   getProviderOptionCurrentLabel,
   getProviderOptionStatedValue,
@@ -36,8 +25,23 @@ import {
   withLegacyUltracodeEffort,
 } from "@t3tools/shared/model";
 import { formatDuration } from "@t3tools/shared/orchestrationTiming";
+import {
+  backgroundWorkHoldsCompletion,
+  derivePendingBackgroundWork,
+} from "@t3tools/shared/orchestrationV2PendingBackgroundWork";
+import {
+  latestExecutedRun,
+  latestRootProviderFailure,
+  latestUnheldRun,
+  threadErrorSummary,
+  usageLimitRunPresentedAsLatest,
+} from "@t3tools/shared/orchestrationV2ThreadError";
 import * as DateTime from "effect/DateTime";
+import { mFallback, msg } from "gt-i18n";
+import type { MFunctionType } from "gt-i18n/types";
 
+import { markedTextEnglish } from "../errors/translatable.ts";
+import { commandDisplayText } from "../work-log/commandLabel.ts";
 import {
   threadRuntimeIsActive,
   type ThreadRunSummary,
@@ -46,11 +50,7 @@ import {
   type ThreadStructureRuntime,
   type ThreadStructureTurnItem,
 } from "./models.ts";
-import { commandDisplayText } from "../work-log/commandLabel.ts";
 import { formatSubagentDisplayTitle } from "./subagentDisplay.ts";
-import { mFallback, msg } from "gt-i18n";
-import { markedTextEnglish } from "../errors/translatable.ts";
-import type { MFunctionType } from "gt-i18n/types";
 
 const ACTIVITY_RUN_STATUSES = new Set(["preparing", "starting", "running", "waiting"]);
 const INTERRUPTIBLE_RUN_STATUSES = new Set(["preparing", "starting", "running"]);

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
+
 import { createDeferredNavigation } from "./deferred-navigation";
 
 describe("workspace mutation navigation", () => {

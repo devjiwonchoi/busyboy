@@ -1,6 +1,7 @@
 import { LegendList, type LegendListRef } from "@legendapp/list/react";
 import { createRef, useState, type RefObject } from "react";
 import { expect, it, vi } from "vite-plus/test";
+
 import { act, render } from "../../test/render";
 import { useLegendListRef } from "./useLegendListRef";
 

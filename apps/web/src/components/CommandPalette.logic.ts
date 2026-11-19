@@ -1,24 +1,14 @@
 import { errorDisplayMessage } from "@t3tools/client-runtime/errors";
 import {
-  foldSearchQuery,
-  PALETTE_SECONDARY_LIMIT,
-  PALETTE_THREAD_LIMIT,
-  rankSearchGroups,
-  scoreSearchTerms,
-  scoreThreadSearch,
-  type SearchMatchHint,
-  type SearchRange,
-  type ThreadSearchSubject,
-} from "@t3tools/shared/paletteSearch";
-import { threadSearchSubject } from "@t3tools/client-runtime/state/thread-search";
-import type { CommandPaletteLinkedThreads } from "../commandPaletteBus";
-import {
   addProjectRemoteSourceLabel,
   addProjectRemoteSourcePathHint,
   buildAddProjectRemoteSourceReadiness,
   type AddProjectRemoteSource,
   type AddProjectRemoteSourceReadiness,
 } from "@t3tools/client-runtime/operations/projects";
+import { filterFilesystemBrowseEntries } from "@t3tools/client-runtime/state/filesystem";
+import { threadSearchSubject } from "@t3tools/client-runtime/state/thread-search";
+import { isShownUnderParent } from "@t3tools/client-runtime/state/threads";
 import {
   type ScopedThreadRef,
   type EnvironmentId,
@@ -30,10 +20,21 @@ import {
   type SourceControlRepositoryInfo,
   THREAD_JUMP_KEYBINDING_COMMANDS,
 } from "@t3tools/contracts";
-import { filterFilesystemBrowseEntries } from "@t3tools/client-runtime/state/filesystem";
-import { isShownUnderParent } from "@t3tools/client-runtime/state/threads";
-import { type ReactNode } from "react";
+import {
+  foldSearchQuery,
+  PALETTE_SECONDARY_LIMIT,
+  PALETTE_THREAD_LIMIT,
+  rankSearchGroups,
+  scoreSearchTerms,
+  scoreThreadSearch,
+  type SearchMatchHint,
+  type SearchRange,
+  type ThreadSearchSubject,
+} from "@t3tools/shared/paletteSearch";
 import { msg } from "gt-react";
+import { type ReactNode } from "react";
+
+import type { CommandPaletteLinkedThreads } from "../commandPaletteBus";
 import { m, type MessageResolver } from "../i18n/messages";
 import { formatRelativeTimeLabel } from "../timestampFormat";
 import { type Project, type SidebarThreadSummary, type Thread } from "../types";

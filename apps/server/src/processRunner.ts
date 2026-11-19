@@ -1,20 +1,20 @@
+import {
+  collectUint8StreamText,
+  decodeUtf8,
+  type CollectedUint8StreamText,
+} from "@t3tools/provider-core/server/collectStreamText";
+import { resolveSpawnCommand } from "@t3tools/shared/shell";
 import * as Context from "effect/Context";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as PlatformError from "effect/PlatformError";
+import * as ChildProcess from "effect/process/ChildProcess";
+import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
-import * as ChildProcess from "effect/process/ChildProcess";
-import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
-import { resolveSpawnCommand } from "@t3tools/shared/shell";
-import {
-  collectUint8StreamText,
-  decodeUtf8,
-  type CollectedUint8StreamText,
-} from "@t3tools/provider-core/server/collectStreamText";
 
 export interface ProcessRunInput {
   readonly command: string;

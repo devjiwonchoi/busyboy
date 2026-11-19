@@ -1,16 +1,8 @@
-import { T, useGT, useMessages, Var } from "gt-react";
+import { parseScopedThreadKey } from "@t3tools/client-runtime/environment";
+import type { WorkflowOpening } from "@t3tools/client-runtime/state/subagentRuntime";
 import { threadErrorText } from "@t3tools/client-runtime/state/threads";
-import { threadEnvironment } from "../../state/threads";
-import { useAtomCommand } from "../../state/use-atom-command";
-import type { ToolCallDiffTarget } from "../../diffPanelStore";
-import { AudioPreviewUnmountContext } from "../files/AudioPreview";
-import { ThreadFindTimelineContext } from "./ThreadFindProvider";
-import { MarkdownFindContext } from "./markdownFindContext";
-import { useChatCanvas } from "./ChatCanvasContext";
-import { WorkLogBlock } from "./WorkLog";
-import { TimelinePendingApprovalRow } from "./TimelinePendingApprovalRow";
+import { resolveWorkGroupScrollAnchor } from "@t3tools/client-runtime/work-log/scroll-anchor";
 import type { WorktreeSetupSnapshot } from "@t3tools/contracts";
-import { deriveTimelineMinimapItems } from "./timelineMinimapItems";
 import {
   type AssistantCitation,
   type EnvironmentId,
@@ -21,11 +13,21 @@ import {
   type RunId,
   ThreadId,
 } from "@t3tools/contracts";
-import { parseScopedThreadKey } from "@t3tools/client-runtime/environment";
-import { resolveWorkGroupScrollAnchor } from "@t3tools/client-runtime/work-log/scroll-anchor";
-import type { WorkflowOpening } from "@t3tools/client-runtime/state/subagentRuntime";
-import { observeResize } from "~/lib/observeResize";
+import { T, useGT, useMessages, Var } from "gt-react";
+
 import { useStableCallback } from "~/hooks/useStableCallback";
+import { observeResize } from "~/lib/observeResize";
+
+import type { ToolCallDiffTarget } from "../../diffPanelStore";
+import { threadEnvironment } from "../../state/threads";
+import { useAtomCommand } from "../../state/use-atom-command";
+import { AudioPreviewUnmountContext } from "../files/AudioPreview";
+import { useChatCanvas } from "./ChatCanvasContext";
+import { MarkdownFindContext } from "./markdownFindContext";
+import { ThreadFindTimelineContext } from "./ThreadFindProvider";
+import { deriveTimelineMinimapItems } from "./timelineMinimapItems";
+import { TimelinePendingApprovalRow } from "./TimelinePendingApprovalRow";
+import { WorkLogBlock } from "./WorkLog";
 
 const NOOP_USE_ARTIFACT_TEMPLATE = () => {};
 const EMPTY_PENDING_APPROVALS: ReadonlyArray<PendingApproval> = [];
@@ -33,8 +35,24 @@ const EMPTY_RESPONDING_REQUEST_IDS: TimelineRowSharedState["respondingRequestIds
 
 const NOOP_OPEN_ATTACHMENT = (_attachment: ChatFileAttachment) => {};
 
+import {
+  LegendList,
+  type LegendListRef,
+  type MaintainScrollAtEndOptions,
+} from "@legendapp/list/react";
+import { worktreeSetupAgentStarted } from "@t3tools/client-runtime/worktree-setup";
+import { type TimestampFormat } from "@t3tools/contracts/settings";
 import { resolveChatListAnchoredEndSpace } from "@t3tools/shared/chatList";
-import { observeVisibleAnimation } from "../../lib/visibleAnimation";
+import type { CodexArtifactTemplate } from "@t3tools/shared/codexArtifactTemplates";
+import {
+  ArrowRightIcon,
+  BotIcon,
+  CircleAlertIcon,
+  MessagesSquareIcon,
+  Minimize2Icon,
+  ChevronDownIcon,
+  ChevronRightIcon,
+} from "lucide-react";
 import {
   memo,
   use,
@@ -47,38 +65,22 @@ import {
   type ReactNode,
   type SyntheticEvent,
 } from "react";
-import {
-  LegendList,
-  type LegendListRef,
-  type MaintainScrollAtEndOptions,
-} from "@legendapp/list/react";
-import { type PendingApproval, type TimelineEntry } from "../../session-logic";
-import type { CodexArtifactTemplate } from "@t3tools/shared/codexArtifactTemplates";
-import { type ChatFileAttachment, type TurnDiffSummary } from "../../types";
-import {
-  ArrowRightIcon,
-  BotIcon,
-  CircleAlertIcon,
-  MessagesSquareIcon,
-  Minimize2Icon,
-  ChevronDownIcon,
-  ChevronRightIcon,
-} from "lucide-react";
-import { Skeleton } from "../ui/skeleton";
-import { ExpandedImagePreview } from "./ExpandedImagePreview";
-import {
-  CHAT_TIMELINE_ANCHOR_OFFSET,
-  readTimelinePosition,
-  type RememberedTimelinePosition,
-  rememberTimelinePosition,
-  resolveDisclosureRevealScrollDelta,
-} from "./timelineScrollAnchoring";
-import { AssistantSelectionToolbar } from "./AssistantSelectionToolbar";
+
+import { useMediaQuery } from "~/hooks/useMediaQuery";
 import type { AssistantCitationSourceAnchor } from "~/lib/assistantTextSelection";
+import { useOpenPrLink } from "~/lib/openPullRequestLink";
+import { cn } from "~/lib/utils";
+
+import { useClientSettings } from "../../hooks/useSettings";
+import { observeVisibleAnimation } from "../../lib/visibleAnimation";
+import { type PendingApproval, type TimelineEntry } from "../../session-logic";
+import { type ChatFileAttachment, type TurnDiffSummary } from "../../types";
+import { Skeleton } from "../ui/skeleton";
+import { TooltipScrollDismissArea } from "../ui/tooltip";
 import { type AssistantCitationRequest } from "./AssistantCitationSource";
-import { useAssistantCitationTarget } from "./useAssistantCitationTarget";
-import { worktreeSetupAgentStarted } from "@t3tools/client-runtime/worktree-setup";
+import { AssistantSelectionToolbar } from "./AssistantSelectionToolbar";
 import { resolveCitationPhase, type CitedHistory } from "./citationProcedure";
+import { ExpandedImagePreview } from "./ExpandedImagePreview";
 import {
   resolveTimelineIsAtEnd,
   resolveTimelineMinimapHasPersistentGutter,
@@ -92,19 +94,18 @@ import {
   type MessagesTimelineRow,
   type TimelineLatestRun,
 } from "./MessagesTimeline.logic";
+import { ThreadActivityAnnouncer } from "./ThreadActivityAnnouncer";
 import { type ThreadFindMatch } from "./threadFind";
-import { useThreadFindNavigation } from "./useThreadFindNavigation";
-import { TooltipScrollDismissArea } from "../ui/tooltip";
-import { WorktreeSetupCard } from "./WorktreeSetupCard";
-import { useOpenPrLink } from "~/lib/openPullRequestLink";
-import { useMediaQuery } from "~/hooks/useMediaQuery";
-import { cn } from "~/lib/utils";
-import { type TimestampFormat } from "@t3tools/contracts/settings";
-import { type HandoffTimelineRun } from "./V2LifecycleRow";
-import { TimelineSystemDivider } from "./TimelineSystemDivider";
-
-import { forwardWheelToTimeline } from "./timelineMinimapWheel";
+import {
+  AssistantTimelineRow,
+  AssistantMetaTimelineRow,
+  ProposedPlanTimelineRow,
+  HtmlRenderTimelineRow,
+  SentMessageTimelineRow,
+  McpAppTimelineRow,
+} from "./TimelineAssistantRows";
 import { TimelineMinimap } from "./TimelineMinimap";
+import { forwardWheelToTimeline } from "./timelineMinimapWheel";
 import {
   type TimelineRowSharedState,
   type TimelineRowActivityState,
@@ -115,34 +116,36 @@ import {
 } from "./timelineRowContext";
 import { TimelineRowTimestamp, ActivityShimmerOverlay } from "./TimelineRowParts";
 import {
-  WorkGroupSection,
-  WorkingTimelineRow,
-  ThinkingTimelineRow,
-  LiveWorkEntryTimelineRow,
-  WorkGroupToggleTimelineRow,
-} from "./TimelineWorkGroupRows";
-import { ViewedImagesTimelineRow } from "./TimelineWorkEntryRow";
+  CHAT_TIMELINE_ANCHOR_OFFSET,
+  readTimelinePosition,
+  type RememberedTimelinePosition,
+  rememberTimelinePosition,
+  resolveDisclosureRevealScrollDelta,
+} from "./timelineScrollAnchoring";
+import { TimelineSystemDivider } from "./TimelineSystemDivider";
 import { UserMessageRow } from "./TimelineUserMessageRow";
-import {
-  AssistantTimelineRow,
-  AssistantMetaTimelineRow,
-  ProposedPlanTimelineRow,
-  HtmlRenderTimelineRow,
-  SentMessageTimelineRow,
-  McpAppTimelineRow,
-} from "./TimelineAssistantRows";
 import { V2EventTimelineRow } from "./TimelineV2EventRow";
-import { startTimelinePositionRestore } from "./useTimelinePositionRestore";
 import {
   attachTimelineViewport,
   nextListOpening,
   type TimelineListOpening,
   type TimelineViewport,
 } from "./timelineViewport";
+import { ViewedImagesTimelineRow } from "./TimelineWorkEntryRow";
+import {
+  WorkGroupSection,
+  WorkingTimelineRow,
+  ThinkingTimelineRow,
+  LiveWorkEntryTimelineRow,
+  WorkGroupToggleTimelineRow,
+} from "./TimelineWorkGroupRows";
+import { useAssistantCitationTarget } from "./useAssistantCitationTarget";
+import { useThreadFindNavigation } from "./useThreadFindNavigation";
 import { useThreadFindPositionReader } from "./useThreadFindPositionReader";
-import { ThreadActivityAnnouncer } from "./ThreadActivityAnnouncer";
+import { startTimelinePositionRestore } from "./useTimelinePositionRestore";
 import { useStableHandoffRuns, useIncrementalTimelineRows, useStableRows } from "./useTimelineRows";
-import { useClientSettings } from "../../hooks/useSettings";
+import { type HandoffTimelineRun } from "./V2LifecycleRow";
+import { WorktreeSetupCard } from "./WorktreeSetupCard";
 
 function timelineListStateFor(identity: string): {
   readonly identity: string;

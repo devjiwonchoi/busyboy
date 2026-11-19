@@ -1,12 +1,12 @@
 import { Editor, Node, type Extensions, type JSONContent } from "@tiptap/core";
-import StarterKit from "@tiptap/starter-kit";
 import { TextSelection } from "@tiptap/pm/state";
+import StarterKit from "@tiptap/starter-kit";
 import { expect, it, vi } from "vite-plus/test";
 
+import { ComposerMarkdownSourceExtension } from "../composer-markdown-source";
 import { serializeEditorDoc } from "../composer-rich-text-doc";
 import { formatInlineContextReference } from "../lib/composerContextReferences";
 import { captureComposerAttachmentInsertion } from "./composerAttachmentInsertion";
-import { ComposerMarkdownSourceExtension } from "../composer-markdown-source";
 
 const image = { kind: "image", contextId: "image_pending", label: "picture.png" } as const;
 

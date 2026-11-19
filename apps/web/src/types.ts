@@ -1,4 +1,9 @@
-import { imageMimeType } from "@t3tools/shared/image";
+import type {
+  EnvironmentProject,
+  EnvironmentThreadShell,
+  ThreadRuntimeSummary,
+} from "@t3tools/client-runtime/state/shell";
+import type { ThreadCheckpointSummary } from "@t3tools/client-runtime/state/thread-checkpoints";
 import type {
   ChatFileAttachment as ContractChatFileAttachment,
   ChatImageAttachment as ContractChatImageAttachment,
@@ -17,12 +22,7 @@ import type {
   ScheduledTaskId,
   ThreadId,
 } from "@t3tools/contracts";
-import type {
-  EnvironmentProject,
-  EnvironmentThreadShell,
-  ThreadRuntimeSummary,
-} from "@t3tools/client-runtime/state/shell";
-import type { ThreadCheckpointSummary } from "@t3tools/client-runtime/state/thread-checkpoints";
+import { imageMimeType } from "@t3tools/shared/image";
 import { videoMimeType } from "@t3tools/shared/video";
 
 export { videoMimeType } from "@t3tools/shared/video";

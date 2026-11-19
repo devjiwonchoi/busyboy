@@ -3,15 +3,15 @@ import type { OrchestrationV2ThreadProjection, ProviderReplayTranscript } from "
 
 import type { OrchestratorV2ScenarioResult } from "../../OrchestratorScenario.ts";
 import {
-  assertSemanticProjectionIntegrity,
-  backgroundNotifications,
-  projectionFor,
-} from "../shared.ts";
-import {
   CLAUDE_BACKGROUND_SUBAGENT_LIFECYCLE_FINAL_PROMPT,
   CLAUDE_BACKGROUND_SUBAGENT_LIFECYCLE_RESUME_PROMPT,
   CLAUDE_BACKGROUND_SUBAGENT_LIFECYCLE_STOP_PROMPT,
 } from "../claude_background_subagent_lifecycle/input.ts";
+import {
+  assertSemanticProjectionIntegrity,
+  backgroundNotifications,
+  projectionFor,
+} from "../shared.ts";
 import { CLAUDE_BACKGROUND_WAKE_BEFORE_QUEUED_PROMPT_LAUNCH_PROMPT } from "./input.ts";
 
 const STOP_WAKE_REPLY =

@@ -1,9 +1,12 @@
 #!/usr/bin/env node
 
+import * as NodeOS from "node:os";
+
 import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import * as NodeOS from "node:os";
+import * as NodeSqliteClient from "@t3tools/shared/nodeSqliteClient";
 import { fromJsonStringPretty } from "@t3tools/shared/schemaJson";
+import { Argument, Command, Flag } from "effect/cli";
 import * as Console from "effect/Console";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
@@ -12,9 +15,6 @@ import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 import * as SqlClient from "effect/sql/SqlClient";
-import { Argument, Command, Flag } from "effect/cli";
-
-import * as NodeSqliteClient from "@t3tools/shared/nodeSqliteClient";
 
 export const SqliteStateOperation = Schema.Literals(["query", "exec"]);
 export type SqliteStateOperation = typeof SqliteStateOperation.Type;

@@ -1,5 +1,6 @@
 import { useAtom, useAtomValue } from "@effect/atom-react";
 import { LegendList, type LegendListRef } from "@legendapp/list/react-native";
+import { useNavigation } from "@react-navigation/native";
 import {
   continueIssuePage,
   groupIssues,
@@ -24,7 +25,6 @@ import { use, useRef, useState, type ReactNode } from "react";
 import { Keyboard, Platform, ScrollView, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { useNavigation } from "@react-navigation/native";
 import { AppActivityIndicator } from "../../components/ui/AppActivityIndicator";
 import { AppText as Text } from "../../components/ui/AppText";
 import { Button } from "../../components/ui/Button";
@@ -34,8 +34,8 @@ import { usePaneRole } from "../../components/ui/Pane";
 import { RefreshControl } from "../../components/ui/RefreshControl";
 import { useContentTopInset } from "../../components/ui/useBarInset";
 import { m, type MessageResolver } from "../../i18n/messages";
-import { NativeScrollView } from "../../native/NativeScrollViewMarker";
 import { useNativeColumnLayoutMetrics } from "../../native/native-layout-metrics";
+import { NativeScrollView } from "../../native/NativeScrollViewMarker";
 import { NativePrimaryColumnContext } from "../../native/v5-workspace-context";
 import { useProjects } from "../../state/entities";
 import { issueEnvironment, useIssueList } from "../../state/issues";
@@ -44,16 +44,16 @@ import { environmentServerConfigsAtom } from "../../state/server";
 import { useAtomCommand } from "../../state/use-atom-command";
 import { useWorkspaceState } from "../../state/workspace";
 import { ListFilterMenu } from "../layout/workspace/ListFilterMenu";
+import { SavedViewsMenu } from "../layout/workspace/SavedViewsMenu";
 import { useSearchScrollRestoration } from "../layout/workspace/useSearchScrollRestoration";
 import { useSelectWorkspaceDetail } from "../layout/workspace/useSelectWorkspaceDetail";
 import { useWorkspaceTabs } from "../layout/workspace/WorkspaceTabsContext";
-import { issueParamsKey } from "./issueParams";
-import { IssueListRow } from "./IssueListRow";
 import type { PullRequestFilterMenu } from "../pull-requests/PullRequestListFilters";
-import { issueListFiltersAtom } from "./issueListFilters";
-import { issueViewMatches } from "./issueSavedViews";
-import { SavedViewsMenu } from "../layout/workspace/SavedViewsMenu";
 import { useAppearancePreferences } from "../settings/appearance/AppearancePreferencesProvider";
+import { issueListFiltersAtom } from "./issueListFilters";
+import { IssueListRow } from "./IssueListRow";
+import { issueParamsKey } from "./issueParams";
+import { issueViewMatches } from "./issueSavedViews";
 
 const DEFAULT_ISSUE_LIST_INPUT = { state: "open", involvement: "all", limit: 50 } as const;
 const STATES = {

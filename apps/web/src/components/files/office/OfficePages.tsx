@@ -1,6 +1,5 @@
 /* oxlint-disable react/no-array-index-key -- A page keeps its ordinal throughout incremental layout. */
 import { useGT } from "gt-react";
-import { observeResize } from "~/lib/observeResize";
 import {
   useEffect,
   useImperativeHandle,
@@ -9,6 +8,8 @@ import {
   type ReactNode,
   type RefObject,
 } from "react";
+
+import { observeResize } from "~/lib/observeResize";
 
 export type PageSize = {
   readonly width: number;

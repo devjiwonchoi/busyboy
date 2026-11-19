@@ -4,7 +4,6 @@ import type {
   UsageModelPriceOverride,
   UsageTokenTotals,
 } from "@t3tools/contracts";
-
 import type { UsageRecord, UsageSpeed } from "@t3tools/provider-core/server/usage";
 
 export interface TokenRates {

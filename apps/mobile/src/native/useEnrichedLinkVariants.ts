@@ -1,24 +1,17 @@
-import { modelChipIcon } from "../lib/contextChipIconSource";
-import { useMemo } from "react";
+import type { ComposerContextRecord } from "@t3tools/contracts";
 import {
   assistantCitationLabel,
   parseAssistantCitationHref,
 } from "@t3tools/shared/assistantCitations";
+import { formatProviderSkillDisplayName } from "@t3tools/shared/inlineSkills";
+import { useMemo } from "react";
 import { Image } from "react-native";
 import type { LinkPillContent, MarkdownStyle } from "react-native-enriched-markdown";
-import type { ComposerContextRecord } from "@t3tools/contracts";
+
 import { contextChipAccent, contextChipPresentation } from "../lib/composerChipPresentation";
 import { CONTEXT_CHIP_ICON_SOURCES } from "../lib/contextChipIcons.generated";
-import { FONT_FAMILIES } from "../lib/fontFamilies";
+import { modelChipIcon } from "../lib/contextChipIconSource";
 import { contextChipIconSource } from "../lib/contextChipIconSource";
-import { markdownFileIconSource } from "../lib/markdownFileIcons";
-import { markdownLinkIcon } from "../lib/markdownLinkIcons";
-import { useUniwindTheme } from "../lib/useUniwindTheme";
-import { resolveMarkdownFileIcon, resolveMarkdownLinkPresentation } from "../lib/markdownLinks";
-import type {
-  MarkdownLinkCustomization,
-  SelectableMarkdownTextProps,
-} from "./SelectableMarkdownText.types";
 import {
   enrichedContextLinkPresentation,
   enrichedLinkVariantPattern,
@@ -26,7 +19,15 @@ import {
   enrichedSkillReference,
   enrichedThreadLinkPresentation,
 } from "../lib/enrichedLinkPresentation";
-import { formatProviderSkillDisplayName } from "@t3tools/shared/inlineSkills";
+import { FONT_FAMILIES } from "../lib/fontFamilies";
+import { markdownFileIconSource } from "../lib/markdownFileIcons";
+import { markdownLinkIcon } from "../lib/markdownLinkIcons";
+import { resolveMarkdownFileIcon, resolveMarkdownLinkPresentation } from "../lib/markdownLinks";
+import { useUniwindTheme } from "../lib/useUniwindTheme";
+import type {
+  MarkdownLinkCustomization,
+  SelectableMarkdownTextProps,
+} from "./SelectableMarkdownText.types";
 
 function chipCustomization(
   chip: ReturnType<typeof enrichedContextLinkPresentation>,

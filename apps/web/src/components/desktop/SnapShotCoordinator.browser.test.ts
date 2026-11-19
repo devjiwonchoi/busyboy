@@ -9,6 +9,12 @@ import {
 } from "../../composerDraftStore";
 import * as imageCompression from "../../lib/imageCompression";
 import {
+  beginSnapShotAnimation,
+  dismissAllSnapShotAnimations,
+  getPendingSnapShotAnimations,
+  scheduleSnapShotAnimationDestination,
+} from "../../lib/snapShotAnimation";
+import {
   questionAttachmentDraftId,
   trackOpenQuestionAttachmentDraft,
 } from "../../questionAttachments";
@@ -20,12 +26,6 @@ import {
   resolveSnapShotAttachmentTarget,
   resolveSnapShotDeliveryTarget,
 } from "./SnapShotCoordinator";
-import {
-  beginSnapShotAnimation,
-  dismissAllSnapShotAnimations,
-  getPendingSnapShotAnimations,
-  scheduleSnapShotAnimationDestination,
-} from "../../lib/snapShotAnimation";
 
 vi.mock(import("../../hooks/useSettings"), { spy: true });
 vi.mock(import("../../hooks/useHandleNewThread"), { spy: true });

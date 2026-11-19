@@ -12,8 +12,8 @@ import {
 } from "@t3tools/contracts/relay";
 import * as Arr from "effect/Array";
 import * as Context from "effect/Context";
-import * as DateTime from "effect/DateTime";
 import * as Mac from "effect/crypto/Mac";
+import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
@@ -21,13 +21,23 @@ import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 
+import * as RelayConfiguration from "../Config.ts";
+import { withSpanAttributes } from "../observability.ts";
+import { makeAggregateState, statusForPhase } from "./agentActivityAggregate.ts";
+import {
+  alertForAttentionTransition,
+  alertForNewlyTerminal,
+  alertForTerminalAggregate,
+  rowPhasesChanged,
+  shouldAlertForActivity,
+} from "./agentActivityAlerts.ts";
 import {
   isExpiredAgentActivityState,
   notificationForActivity,
   sanitizeAgentActivityAggregateState,
   sanitizeApnsNotificationPayload,
 } from "./agentActivityPayloads.ts";
-import { makeAggregateState, statusForPhase } from "./agentActivityAggregate.ts";
+import * as AgentActivityRows from "./AgentActivityRows.ts";
 import * as Apns from "./ApnsClient.ts";
 import {
   ApnsDeliveryJobLiveActivityAggregateMissing,
@@ -39,20 +49,9 @@ import {
   verifySignedApnsDeliveryJob,
   type ApnsDeliveryJobVerificationError,
 } from "./apnsDeliveryJobs.ts";
-import * as AgentActivityRows from "./AgentActivityRows.ts";
+import * as ApnsDeliveryQueue from "./ApnsDeliveryQueue.ts";
 import * as DeliveryAttempts from "./DeliveryAttempts.ts";
 import * as LiveActivities from "./LiveActivities.ts";
-import * as RelayConfiguration from "../Config.ts";
-import * as ApnsDeliveryQueue from "./ApnsDeliveryQueue.ts";
-import { withSpanAttributes } from "../observability.ts";
-
-import {
-  alertForAttentionTransition,
-  alertForNewlyTerminal,
-  alertForTerminalAggregate,
-  rowPhasesChanged,
-  shouldAlertForActivity,
-} from "./agentActivityAlerts.ts";
 const MIN_LIVE_ACTIVITY_UPDATE_INTERVAL_MS = 15_000;
 const FRESHLY_ARMED_GRACE_MS = 2 * 60 * 1_000;
 const PERMANENT_APNS_TOKEN_REASONS = new Set([

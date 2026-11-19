@@ -4,11 +4,12 @@ import {
 } from "@t3tools/client-runtime/operations/projects";
 import { sourceControlClients } from "@t3tools/client-runtime/source-control-clients";
 import type { SourceControlProviderKind } from "@t3tools/contracts";
+import { T, useGT } from "gt-react";
 import { FolderGit2Icon, LinkIcon } from "lucide-react";
 import { type ReactNode, useState } from "react";
-import { T, useGT } from "gt-react";
 
 import { sourceControlIcon } from "~/sourceControlPresentation";
+
 import { ITEM_ICON_CLASS } from "./CommandPalette.logic";
 import { CommandPaletteTitleIcon } from "./CommandPaletteResults";
 import { Button } from "./ui/button";

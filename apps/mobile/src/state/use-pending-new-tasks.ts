@@ -1,10 +1,11 @@
 import { useAtomValue } from "@effect/atom-react";
+import { threadKey } from "@t3tools/client-runtime/state/entities";
+import type { EnvironmentThreadShell } from "@t3tools/client-runtime/state/shell";
 import { AuthOrchestrationOperateScope } from "@t3tools/contracts";
 import { Atom } from "effect/reactivity";
 import { useMessages } from "gt-react-native";
 import { useMemo } from "react";
-import { threadKey } from "@t3tools/client-runtime/state/entities";
-import type { EnvironmentThreadShell } from "@t3tools/client-runtime/state/shell";
+
 import {
   buildPendingNewTasks,
   isQueuedCreationSending,
@@ -12,6 +13,7 @@ import {
   type ThreadOutboxSendGate,
 } from "./pending-new-tasks-model";
 import { pendingThreadCreationOutcomesAtom, withLaunchingThreads } from "./pending-thread-creation";
+import { environmentSession, sessionHasScope } from "./session";
 import { flattenQueuedThreadMessages } from "./thread-outbox-model";
 import { environmentThreadShells } from "./threads";
 import { newTaskComposerDraftsAtom } from "./use-composer-drafts";
@@ -20,7 +22,6 @@ import {
   threadOutboxShellStatusesAtom,
   useThreadOutboxMessages,
 } from "./use-thread-outbox";
-import { environmentSession, sessionHasScope } from "./session";
 import { workspaceConnections } from "./workspace";
 
 export type {

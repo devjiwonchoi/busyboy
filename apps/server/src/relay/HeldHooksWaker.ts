@@ -3,8 +3,8 @@ import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 
-import * as CloudManagedEndpointRuntime from "../cloud/ManagedEndpointRuntime.ts";
 import { readHoldWebhooksWhileOffline, readRelayConnection } from "../cloud/config.ts";
+import * as CloudManagedEndpointRuntime from "../cloud/ManagedEndpointRuntime.ts";
 import * as ServerEnvironment from "../environment/ServerEnvironment.ts";
 import { makeRelayEnvironmentClient } from "./relayEnvironmentClient.ts";
 

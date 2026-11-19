@@ -1,9 +1,3 @@
-import { useLayoutEffect } from "react";
-import { expect, it, vi } from "vite-plus/test";
-import { page, userEvent } from "vite-plus/test/browser";
-import * as Deferred from "effect/Deferred";
-import * as Effect from "effect/Effect";
-import * as Option from "effect/Option";
 import type { PreparedConnection } from "@t3tools/client-runtime/connection";
 import { getEnvironmentSpeechModels } from "@t3tools/client-runtime/voice-input";
 import {
@@ -16,8 +10,15 @@ import {
   type SpeechPostProcessingOptions,
   type SpeechTranscriptionOptions,
 } from "@t3tools/contracts";
+import * as Deferred from "effect/Deferred";
+import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
+import { useLayoutEffect } from "react";
+import { expect, it, vi } from "vite-plus/test";
+import { page, userEvent } from "vite-plus/test/browser";
 
 import { act, render, stubGlobal } from "../../test/render";
+import { writeBrowserClientSettings } from "../clientPersistenceStorage";
 import { AppRouteModal } from "../components/AppRouteModal";
 import { GlobalVoiceInputIndicator } from "../components/chat/GlobalVoiceInputIndicator";
 import { VoiceInputSetup } from "../components/chat/VoiceInputSetup";
@@ -29,7 +30,6 @@ import {
   bindAudioGrant,
   pendingCloudAudioChoice,
 } from "./voiceConsent";
-import { writeBrowserClientSettings } from "../clientPersistenceStorage";
 
 const mocks = vi.hoisted(() => ({
   voice: undefined as unknown as ReturnType<typeof useEnvironmentSpeechInput>,

@@ -7,9 +7,9 @@ import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import { HttpServerRequest, HttpTraceContext } from "effect/http";
 import * as Option from "effect/Option";
 import * as Tracer from "effect/Tracer";
-import { HttpServerRequest, HttpTraceContext } from "effect/http";
 
 export const traceRelayRequest = <A, E, R>(
   effect: Effect.Effect<A, E, R>,

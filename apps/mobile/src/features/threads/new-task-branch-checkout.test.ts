@@ -1,5 +1,5 @@
-import { AsyncResult, AtomRegistry } from "effect/reactivity";
 import * as Cause from "effect/Cause";
+import { AsyncResult, AtomRegistry } from "effect/reactivity";
 import { describe, expect, it, vi } from "vite-plus/test";
 
 import { appAtomRegistry } from "../../state/atom-registry";

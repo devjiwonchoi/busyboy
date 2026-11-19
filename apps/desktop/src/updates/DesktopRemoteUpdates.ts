@@ -3,15 +3,15 @@ import type {
   DesktopUpdateRemoteOutcome,
   DesktopUpdateState,
 } from "@t3tools/contracts";
-import * as Duration from "effect/Duration";
+import { desktopUpdateChannelOf } from "@t3tools/shared/cliRelease";
+import { compareSemverVersions } from "@t3tools/shared/semver";
 import * as Clock from "effect/Clock";
 import * as Deferred from "effect/Deferred";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Queue from "effect/Queue";
 import * as Ref from "effect/Ref";
-import { desktopUpdateChannelOf } from "@t3tools/shared/cliRelease";
-import { compareSemverVersions } from "@t3tools/shared/semver";
 import type * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 

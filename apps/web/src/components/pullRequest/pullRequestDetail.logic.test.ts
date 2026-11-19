@@ -12,15 +12,17 @@ import {
   type RepositoryIdentity,
   type ThreadPullRequestLink,
 } from "@t3tools/contracts";
-import { describe, expect, it } from "vite-plus/test";
 import {
   formatComposerContextReference,
   projectComposerContextForProvider,
 } from "@t3tools/shared/composerContextReferences";
+import { describe, expect, it } from "vite-plus/test";
+
 import {
   reviewCommentContextLabel,
   reviewCommentContextRecord,
 } from "~/lib/composerContextRecords";
+import type { ReviewCommentContext } from "~/reviewCommentContext";
 
 import {
   buildAddSelectionToAgentHandoff,
@@ -61,7 +63,6 @@ import {
   writePullRequestDetailSnapshot,
   readableFailure,
 } from "./pullRequestDetail.logic";
-import type { ReviewCommentContext } from "~/reviewCommentContext";
 
 describe("pull request checkout commands", () => {
   it("quotes shell metacharacters in Forgejo repository URLs", () => {

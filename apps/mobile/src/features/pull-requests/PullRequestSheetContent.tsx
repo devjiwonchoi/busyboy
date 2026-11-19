@@ -1,8 +1,9 @@
-import { SheetHeader } from "../../components/ui/SheetHeader";
 import { useNavigation } from "@react-navigation/native";
 import type { ReactNode } from "react";
 import { View } from "react-native";
+
 import { FitSheet } from "../../components/ui/FitSheet";
+import { SheetHeader } from "../../components/ui/SheetHeader";
 
 export function PullRequestSheetContent(props: {
   readonly title: string;

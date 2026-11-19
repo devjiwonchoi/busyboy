@@ -14,9 +14,9 @@ import {
   type ScopedThreadRef,
 } from "@t3tools/contracts";
 import { msg, useGT } from "gt-react-native";
-import { m } from "../../i18n/messages";
 
 import * as Dialog from "../../components/ui/Dialog";
+import { m } from "../../i18n/messages";
 import { uuidv4 } from "../../lib/uuid";
 import { appAtomRegistry } from "../../state/atom-registry";
 import { environmentThreadShells, threadEnvironment } from "../../state/threads";

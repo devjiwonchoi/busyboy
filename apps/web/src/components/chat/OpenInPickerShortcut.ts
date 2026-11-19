@@ -7,10 +7,10 @@ import {
 import { msg } from "gt-react";
 import { useEffect } from "react";
 
-import { usePreferredEditor } from "../../editorPreferences";
 import { editorLabelForPlatform } from "../../editorLabels";
-import { isOpenFavoriteEditorShortcut } from "../../keybindings";
+import { usePreferredEditor } from "../../editorPreferences";
 import { m } from "../../i18n/messages";
+import { isOpenFavoriteEditorShortcut } from "../../keybindings";
 import { announce } from "../../lib/announce";
 import { openRemoteEditorUrl, useRemoteCapableEditors, useRemoteOpenState } from "../../remoteOpen";
 import { registerCommands } from "../../shortcuts/dispatcher";

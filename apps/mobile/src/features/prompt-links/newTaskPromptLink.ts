@@ -1,11 +1,10 @@
-import { errorDisplayMessage } from "@t3tools/client-runtime/errors";
-import * as Dialog from "../../components/ui/Dialog";
 import {
   StackActions,
   type NavigationState,
   type PartialState,
   type StackActionType,
 } from "@react-navigation/native";
+import { errorDisplayMessage } from "@t3tools/client-runtime/errors";
 import { availableScratchWorkspaceRoot } from "@t3tools/client-runtime/operations/projects";
 import {
   findPromptLinkProjects,
@@ -29,6 +28,7 @@ import { parseNewThreadLink } from "@t3tools/shared/promptLinksCopy";
 import { Atom, type AsyncResult } from "effect/reactivity";
 import { msg } from "gt-react-native";
 
+import * as Dialog from "../../components/ui/Dialog";
 import { m } from "../../i18n/messages";
 import { findLinkedRoute, findStackRoute, updateLinkedRoute } from "../../lib/appLinking";
 import { rootNavigationRef } from "../../lib/rootNavigation";

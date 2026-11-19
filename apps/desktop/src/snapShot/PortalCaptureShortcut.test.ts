@@ -1,7 +1,9 @@
 // @effect-diagnostics nodeBuiltinImport:off -- Event-driven fake of the portal transport.
 import * as NodeEvents from "node:events";
+
 import { DBusError, Message, MessageType, Variant, type MessageBus } from "dbus-next";
 import { afterEach, expect, it, vi } from "vite-plus/test";
+
 import { PortalCaptureShortcut, portalShortcutTrigger } from "./PortalCaptureShortcut.ts";
 
 const chord = {

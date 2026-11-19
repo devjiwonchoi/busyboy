@@ -1,8 +1,3 @@
-import * as HostProcess from "@t3tools/shared/HostProcess";
-import * as Effect from "effect/Effect";
-import * as HttpClient from "effect/http/HttpClient";
-import * as HttpClientRequest from "effect/http/HttpClientRequest";
-
 import {
   homebrewOwnershipFromCommandPath,
   isNixStoreCommandPath,
@@ -13,6 +8,11 @@ import {
   resolveMiseProviderMaintenance,
   type ProviderMaintenanceCapabilitiesResolver,
 } from "@t3tools/provider-core/server/maintenanceResolver";
+import * as HostProcess from "@t3tools/shared/HostProcess";
+import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
+
 import { FX_DRIVER_KIND } from "./acpSupport.ts";
 
 /** The stable release `fx upgrade` and fx's setup script install. */

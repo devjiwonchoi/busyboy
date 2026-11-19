@@ -9,8 +9,8 @@ import {
   HTML_RENDER_THEME_GUIDE,
   HTML_RENDER_TOOL_NAME,
 } from "@t3tools/shared/htmlRender";
-import * as Schema from "effect/Schema";
 import { McpSchema, Tool, Toolkit } from "effect/ai";
+import * as Schema from "effect/Schema";
 
 import * as HtmlRender from "../../../htmlRender/HtmlRender.ts";
 import * as ThreadManagementService from "../../../orchestration-v2/ThreadManagementService.ts";

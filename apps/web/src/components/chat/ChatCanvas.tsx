@@ -1,11 +1,12 @@
+import type { ScopedThreadRef } from "@t3tools/contracts";
 import { useLayoutEffect, useRef, useState, type ComponentProps, type CSSProperties } from "react";
 import { useStore } from "zustand";
+
+import { observeResize } from "../../lib/observeResize";
+import { selectThreadPanelOpen, useRightPanelStore } from "../../rightPanelStore";
+import { resolveChatCanvasModel, type ChatCanvasStore } from "./canvasStore";
 import { ChatCanvasContext } from "./ChatCanvasContext";
 import type { ChatCanvasPreview } from "./chatCanvasLayout";
-import { resolveChatCanvasModel, type ChatCanvasStore } from "./canvasStore";
-import { selectThreadPanelOpen, useRightPanelStore } from "../../rightPanelStore";
-import { observeResize } from "../../lib/observeResize";
-import type { ScopedThreadRef } from "@t3tools/contracts";
 
 function panelWidthTransitions(element: HTMLElement) {
   const panels = element

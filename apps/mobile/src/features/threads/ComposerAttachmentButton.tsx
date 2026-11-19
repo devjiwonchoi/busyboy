@@ -2,9 +2,9 @@ import type { MenuAction } from "@react-native-menu/menu";
 import { msg, useGT, useMessages } from "gt-react-native";
 import { Pressable } from "react-native";
 
-import { useAndroidControlSizing } from "../../components/ui/useAndroidControlSizing";
 import { SymbolView } from "../../components/ui/AppSymbol";
 import { Menu } from "../../components/ui/Menu";
+import { useAndroidControlSizing } from "../../components/ui/useAndroidControlSizing";
 
 const ATTACHMENT_MENU_ACTIONS: MenuAction[] = [
   { id: "photos", title: msg("Photo Library"), image: "photo" },

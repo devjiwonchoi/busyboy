@@ -1,16 +1,3 @@
-import type { ChatComposerProps } from "./ChatComposer";
-import type { PromptUltrathink } from "./TraitsPicker";
-import type { ProviderInstanceEntry } from "../../providerInstances";
-import { type AppModelOption } from "../../modelSelection";
-import { useGT, useMessages } from "gt-react";
-import { CircleAlertIcon } from "lucide-react";
-import { CompactComposerControlsMenu } from "./CompactComposerControlsMenu";
-import { ComposerControl } from "./ComposerControl";
-import {
-  ComposerFooterModeControls,
-  ComposerModelPicker,
-  type RuntimeModeOption,
-} from "./ComposerFooterControls";
 import {
   type EnvironmentId,
   type ModelSelection,
@@ -20,17 +7,32 @@ import {
   type ServerProvider,
 } from "@t3tools/contracts";
 import type { EffortDisplay } from "@t3tools/contracts/settings";
+import { useGT, useMessages } from "gt-react";
+import { CircleAlertIcon } from "lucide-react";
+
 import { cn } from "~/lib/utils";
-import { resolveComposerTraitsInput } from "./composerProviderState";
-import { useApplyThreadModelPick } from "./useApplyThreadModelPick";
+
 import { useStableCallback } from "../../hooks/useStableCallback";
+import { type AppModelOption } from "../../modelSelection";
+import type { ProviderInstanceEntry } from "../../providerInstances";
+import type { ChatComposerProps } from "./ChatComposer";
+import { CompactComposerControlsMenu } from "./CompactComposerControlsMenu";
+import { ComposerControl } from "./ComposerControl";
+import { resolveComposerControlsOwnership } from "./composerControlsOwnership";
+import {
+  ComposerFooterModeControls,
+  ComposerModelPicker,
+  type RuntimeModeOption,
+} from "./ComposerFooterControls";
 import {
   ComposerEffortColumn,
   ComposerPickerFooter,
   describeComposerEffort,
 } from "./ComposerModelEffort";
+import { resolveComposerTraitsInput } from "./composerProviderState";
+import type { PromptUltrathink } from "./TraitsPicker";
+import { useApplyThreadModelPick } from "./useApplyThreadModelPick";
 import type { useComposerProviderModel } from "./useComposerProviderModel";
-import { resolveComposerControlsOwnership } from "./composerControlsOwnership";
 
 /**
  * The composer footer controls: the model picker (which also holds effort, speed and

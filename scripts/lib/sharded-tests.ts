@@ -1,5 +1,6 @@
 // @effect-diagnostics nodeBuiltinImport:off - Vitest discovery runs outside the application runtime.
 import * as NodePath from "node:path";
+
 import { createVitest } from "vite-plus/test/node";
 
 export async function shardedTestFiles(root: string, shard: string) {

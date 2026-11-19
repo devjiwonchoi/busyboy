@@ -1,12 +1,13 @@
 import type { ScopedThreadRef } from "@t3tools/contracts";
 import { flushSync } from "react-dom";
+
 import { dispatchCommandPalette } from "../commandPaletteStore";
-import { SidebarPointerSensor } from "./Sidebar.pointer";
 import {
   dropThreadContext,
   endThreadContextDrag,
   moveThreadContextDrag,
 } from "./chat/threadContextDrag";
+import { SidebarPointerSensor } from "./Sidebar.pointer";
 
 export function startPaletteThreadDrag(
   event: PointerEvent,

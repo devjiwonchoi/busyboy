@@ -5,8 +5,8 @@ import { Platform } from "react-native";
 import { useMobileNavigationTheme } from "../../lib/useMobileNavigationTheme";
 import { useUniwindTheme } from "../../lib/useUniwindTheme";
 import { createV5StackNavigator } from "../../native/createV5StackNavigator";
-import { NATIVE_LIQUID_GLASS_SUPPORTED } from "../../native/native-glass";
 import type { AppScreenOptions } from "../../native/glass-header-options";
+import { NATIVE_LIQUID_GLASS_SUPPORTED } from "../../native/native-glass";
 import { pageRoute } from "./route-options";
 
 /**

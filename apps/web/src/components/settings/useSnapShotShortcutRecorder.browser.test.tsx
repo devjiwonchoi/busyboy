@@ -1,7 +1,8 @@
-import { act, render } from "../../../test/render";
 import { DEFAULT_CLIENT_SETTINGS } from "@t3tools/contracts";
-import { userEvent } from "vite-plus/test/browser";
 import { expect, it, vi } from "vite-plus/test";
+import { userEvent } from "vite-plus/test/browser";
+
+import { act, render } from "../../../test/render";
 
 const suppress = vi.hoisted(() => vi.fn<(enabled: boolean) => Promise<void>>());
 vi.mock(import("../../lib/desktopSnapShot"), async (original) => ({

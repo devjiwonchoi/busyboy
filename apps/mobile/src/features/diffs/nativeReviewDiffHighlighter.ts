@@ -1,7 +1,7 @@
 import { tokenizeCode, type HighlightScheme, type TokenizedCode } from "../../lib/highlights";
-import type { NativeReviewDiffFile, NativeReviewDiffSource } from "./nativeReviewDiffTypes";
 import type { NativeReviewDiffRow, NativeReviewDiffToken } from "./nativeReviewDiffSurface";
 import { diffHighlightTraceId, traceDiffHighlight } from "./nativeReviewDiffTrace";
+import type { NativeReviewDiffFile, NativeReviewDiffSource } from "./nativeReviewDiffTypes";
 
 interface NativeReviewDiffLineRow extends NativeReviewDiffRow {
   readonly kind: "line";

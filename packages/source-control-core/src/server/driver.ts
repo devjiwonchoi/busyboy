@@ -13,7 +13,6 @@ import * as Layer from "effect/Layer";
 import type * as Scope from "effect/Scope";
 
 import type { SourceControlDefinition } from "../shared/definition.ts";
-
 import type { SourceControlProviderDiscoverySpec } from "./discovery.ts";
 import type { IssueTrackerApi } from "./IssueTracker.ts";
 import type { PullRequestProviderApi } from "./PullRequestProvider.ts";

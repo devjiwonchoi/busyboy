@@ -9,12 +9,13 @@ import * as Option from "effect/Option";
 import { msg, useMessages } from "gt-react";
 import type { ReactNode } from "react";
 
+import { isDesktopLocalConnectionTarget } from "~/connection/desktopLocal";
 import { cn } from "~/lib/utils";
 import type { EnvironmentPresentation } from "~/state/environments";
 import { usePreparedConnection } from "~/state/session";
-import { isDesktopLocalConnectionTarget } from "~/connection/desktopLocal";
-import { EnvironmentMachineIcon } from "../EnvironmentMachineIcon";
+
 import { m, type MessageResolver } from "../../i18n/messages";
+import { EnvironmentMachineIcon } from "../EnvironmentMachineIcon";
 
 const T3_CONNECT_NAME = "T3 Connect";
 

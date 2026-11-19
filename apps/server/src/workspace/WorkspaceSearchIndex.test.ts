@@ -1,3 +1,5 @@
+import * as NodeServices from "@effect/platform-node/NodeServices";
+import { afterEach, expect, it } from "@effect/vitest";
 import {
   FileFinder,
   type FileItem,
@@ -6,17 +8,15 @@ import {
   type GrepResult,
   type WatchEvent,
 } from "@ff-labs/fff-node";
-import * as NodeServices from "@effect/platform-node/NodeServices";
-import { afterEach, expect, it } from "@effect/vitest";
 import * as HostProcess from "@t3tools/shared/HostProcess";
 import { PROJECT_FAVICON_EXTENSIONS, isProjectFaviconPath } from "@t3tools/shared/projectFavicon";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
-import { ChildProcessSpawner } from "effect/process";
 import * as Fiber from "effect/Fiber";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
+import { ChildProcessSpawner } from "effect/process";
 import * as TestClock from "effect/testing/TestClock";
 import { vi } from "vite-plus/test";
 

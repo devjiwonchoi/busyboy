@@ -1,11 +1,10 @@
-import { describe, expect, it } from "vite-plus/test";
-
 import {
   EnvironmentId,
   retainedTerminalHistory,
   TerminalSessionSnapshot,
   ThreadId,
 } from "@t3tools/contracts";
+import { describe, expect, it } from "vite-plus/test";
 
 import {
   applyTerminalAttachStreamEvent,

@@ -1,19 +1,20 @@
 // Generate endpoints return 403 on the free tier; use and remove a temporary prompt session.
+import * as NodeURL from "node:url";
+
 import { AbsolutePath, Location, Model, Provider, Session } from "@opencode/client/effect";
 import { TextGenerationError } from "@t3tools/contracts";
+import { isProviderNativeImageAttachment } from "@t3tools/provider-core/server/attachmentPrompt";
+import * as ProviderHost from "@t3tools/provider-core/server/ProviderHost";
+import * as TextGenerationOperations from "@t3tools/provider-core/server/textGenerationOperations";
 import { getModelSelectionStringOptionValue } from "@t3tools/shared/model";
-import * as NodeURL from "node:url";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 
-import { isProviderNativeImageAttachment } from "@t3tools/provider-core/server/attachmentPrompt";
-import * as ProviderHost from "@t3tools/provider-core/server/ProviderHost";
-import * as OpenCode2Server from "./OpenCode2Server.ts";
 import * as OpenCodeRuntime from "../OpenCodeRuntime.ts";
-import * as TextGenerationOperations from "@t3tools/provider-core/server/textGenerationOperations";
+import * as OpenCode2Server from "./OpenCode2Server.ts";
 
 const isTextGenerationError = Schema.is(TextGenerationError);
 

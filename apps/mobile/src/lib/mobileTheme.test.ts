@@ -1,4 +1,3 @@
-import { describe, expect, it } from "vite-plus/test";
 import {
   BUILT_IN_THEME_IDS,
   BUILT_IN_THEMES,
@@ -8,11 +7,7 @@ import {
   MOBILE_THEME_IDS,
   getThemeColorsForAppearance,
 } from "@t3tools/shared/themePalettes";
-import {
-  readDefaultMobileThemeVariables,
-  readGeneratedMobileThemeVariables,
-} from "./mobileTheme.test-support";
-import { getMobileThemeRuntimeVariables } from "./mobileThemeVariables";
+import { describe, expect, it } from "vite-plus/test";
 
 import {
   createMobileThemeSelectionPatch,
@@ -24,6 +19,11 @@ import {
   themeColorWithAlpha,
   themeColorToNativeColor,
 } from "./mobileTheme";
+import {
+  readDefaultMobileThemeVariables,
+  readGeneratedMobileThemeVariables,
+} from "./mobileTheme.test-support";
+import { getMobileThemeRuntimeVariables } from "./mobileThemeVariables";
 
 function relativeLuminance(hex: string): number {
   const channels = hex

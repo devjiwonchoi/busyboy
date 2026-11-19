@@ -1,6 +1,6 @@
-import { describe, expect, it } from "vite-plus/test";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
+import { describe, expect, it } from "vite-plus/test";
 
 import {
   COMPOSER_CONTEXT_KINDS,

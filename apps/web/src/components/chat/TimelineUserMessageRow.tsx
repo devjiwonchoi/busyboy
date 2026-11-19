@@ -1,12 +1,5 @@
-import { copySnapshot as copySnapshotToClipboard } from "./copySnapshot";
-import { InlineAudioPreview } from "../files/InlineAudioPreview";
-import { filePreviewKind } from "@t3tools/shared/filePreview";
-import {
-  CHAT_USER_MARKDOWN_REMARK_PLUGINS,
-  remarkEnableOrderedListNumbers,
-} from "@t3tools/shared/markdownPipeline";
-import { T, useGT, useMessages, Var } from "gt-react";
-import { findRevealRef } from "./markdownFindContext";
+import { scopeThreadRef } from "@t3tools/client-runtime/environment";
+import { resolveUserMessagePresentation } from "@t3tools/client-runtime/user-message";
 import {
   type EnvironmentId,
   type MessageId,
@@ -14,26 +7,23 @@ import {
   type ServerProviderSkill,
   ThreadId,
 } from "@t3tools/contracts";
-import { scopeThreadRef } from "@t3tools/client-runtime/environment";
-import { resolveUserMessagePresentation } from "@t3tools/client-runtime/user-message";
-import { Link } from "@tanstack/react-router";
-import { useQuietThreadShell } from "../../state/entities";
-import { useEnvironment } from "../../state/environments";
-import { useEnvironmentQuery } from "../../state/query";
-import { serverEnvironment } from "../../state/server";
+import {
+  COMPOSER_CONTEXT_CLIPBOARD_MIME,
+  encodeComposerContextClipboardHtml,
+  encodeComposerContextFragment,
+} from "@t3tools/shared/composerContextClipboard";
 import { replaceComposerContextReferences } from "@t3tools/shared/composerContextReferences";
-import { memo, use, useState, type ReactNode } from "react";
 import {
-  createMessageAttachmentPreviewProjector,
-  selectMessageImageResources,
-} from "../../session-logic";
+  collectComposerContextReferences,
+  formatComposerContextReference,
+} from "@t3tools/shared/composerContextReferences";
+import { filePreviewKind } from "@t3tools/shared/filePreview";
 import {
-  type ChatFileAttachment,
-  isFileAttachment,
-  isImageAttachment,
-  isVideoAttachment,
-} from "../../types";
-import ChatMarkdown from "../ChatMarkdown";
+  CHAT_USER_MARKDOWN_REMARK_PLUGINS,
+  remarkEnableOrderedListNumbers,
+} from "@t3tools/shared/markdownPipeline";
+import { Link } from "@tanstack/react-router";
+import { T, useGT, useMessages, Var } from "gt-react";
 import {
   CalendarClockIcon,
   ChevronDownIcon,
@@ -45,59 +35,71 @@ import {
   PencilIcon,
   LinkIcon,
 } from "lucide-react";
-import { Button, InlineButton } from "../ui/button";
-import { FreshSessionRow, ModelSwitchRow } from "./V2LifecycleRow";
-import { useAssetUrlRefresh, useAssetUrls, useAssetUrlState } from "../../assets/assetUrls";
-import { AttachmentImage } from "../media/AttachmentImage";
-import { MediaVideoPlayer } from "../media/MediaVideoPlayer";
-import {
-  buildAttachmentVideoAsset,
-  buildAttachmentVideoPreview,
-  buildExpandedImagePreview,
-} from "./ExpandedImagePreview";
-import {
-  SNAP_SHOT_ATTACHMENT_FRAME_CLASS,
-  SnapShotAttachmentDetails,
-} from "./SnapShotAttachmentDetails";
-import { GuestMessageName, guestBubbleClassName } from "./guestMessageStyle";
-import { MessageCopyButton } from "./MessageCopyButton";
-import { promptLinkFor } from "../promptLinks/copyPromptLink";
-import { PierreEntryIcon } from "./PierreEntryIcon";
-import { formatBytes } from "../../lib/formatBytes";
-import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
+import { memo, use, useState, type ReactNode } from "react";
+
+import { useMediaQuery } from "~/hooks/useMediaQuery";
 import {
   asKnownContextRecord,
   resolveUserMessageContext,
   selectedMessageContextFragment,
 } from "~/lib/composerContextRecords";
-import {
-  collectComposerContextReferences,
-  formatComposerContextReference,
-} from "@t3tools/shared/composerContextReferences";
-import {
-  COMPOSER_CONTEXT_CLIPBOARD_MIME,
-  encodeComposerContextClipboardHtml,
-  encodeComposerContextFragment,
-} from "@t3tools/shared/composerContextClipboard";
-import { chatMarkdownClipboardPayload } from "../../markdown-clipboard";
-import type { ChatMarkdownContextReference } from "../ChatMarkdown";
 import { cn } from "~/lib/utils";
 import { markdownProseDirection } from "~/textDirection";
-import { useMediaQuery } from "~/hooks/useMediaQuery";
+
+import { useAssetUrlRefresh, useAssetUrls, useAssetUrlState } from "../../assets/assetUrls";
+import { formatBytes } from "../../lib/formatBytes";
+import { chatMarkdownClipboardPayload } from "../../markdown-clipboard";
+import {
+  createMessageAttachmentPreviewProjector,
+  selectMessageImageResources,
+} from "../../session-logic";
+import { useQuietThreadShell } from "../../state/entities";
+import { useEnvironment } from "../../state/environments";
+import { useEnvironmentQuery } from "../../state/query";
+import { serverEnvironment } from "../../state/server";
 import { formatChatTimestampTooltip, formatDayAwareTimestamp } from "../../timestampFormat";
-import { WorkflowOpeningBlock } from "./WorkflowOpeningBlock";
-import { useTallEnoughToFold } from "./useTallEnoughToFold";
+import {
+  type ChatFileAttachment,
+  isFileAttachment,
+  isImageAttachment,
+  isVideoAttachment,
+} from "../../types";
+import ChatMarkdown from "../ChatMarkdown";
+import type { ChatMarkdownContextReference } from "../ChatMarkdown";
+import { InlineAudioPreview } from "../files/InlineAudioPreview";
+import { AttachmentImage } from "../media/AttachmentImage";
+import { MediaVideoPlayer } from "../media/MediaVideoPlayer";
+import { promptLinkFor } from "../promptLinks/copyPromptLink";
+import { Button, InlineButton } from "../ui/button";
+import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
+import { copySnapshot as copySnapshotToClipboard } from "./copySnapshot";
+import {
+  buildAttachmentVideoAsset,
+  buildAttachmentVideoPreview,
+  buildExpandedImagePreview,
+} from "./ExpandedImagePreview";
+import { GuestMessageName, guestBubbleClassName } from "./guestMessageStyle";
+import { findRevealRef } from "./markdownFindContext";
+import { MessageCopyButton } from "./MessageCopyButton";
+import { PierreEntryIcon } from "./PierreEntryIcon";
+import {
+  SNAP_SHOT_ATTACHMENT_FRAME_CLASS,
+  SnapShotAttachmentDetails,
+} from "./SnapShotAttachmentDetails";
 import { TimelineRowCtx, TimelineRowActivityCtx, type TimelineRow } from "./timelineRowContext";
 import {
   MESSAGE_HEADING_LEVEL,
   MessageAuthorHeading,
   TimelineRowTimestamp,
 } from "./TimelineRowParts";
-import { UserMessageContextReferenceChip } from "./UserMessageContextChips";
 import {
   resolvePreviewAnnotationImage,
   userMessageFileLabel,
 } from "./TimelineUserMessageRow.logic";
+import { UserMessageContextReferenceChip } from "./UserMessageContextChips";
+import { useTallEnoughToFold } from "./useTallEnoughToFold";
+import { FreshSessionRow, ModelSwitchRow } from "./V2LifecycleRow";
+import { WorkflowOpeningBlock } from "./WorkflowOpeningBlock";
 
 // Drawn inside the media so dark screenshots keep an edge on the dark background.
 const MEDIA_EDGE_CLASS_NAME =

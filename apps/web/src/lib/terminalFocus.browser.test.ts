@@ -4,7 +4,6 @@ import { describe, expect, it } from "vite-plus/test";
 
 import { useRightPanelStore } from "../rightPanelStore";
 import { useTerminalUiStateStore } from "../terminalUiStateStore";
-
 import {
   consumePendingTerminalFocus,
   focusTerminal,
