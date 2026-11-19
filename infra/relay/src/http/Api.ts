@@ -1609,11 +1609,13 @@ type CatchTagCases<E, Cases> = {
   readonly [K in TaggedErrorTag<E>]+?: (
     error: Extract<E, { readonly _tag: K }>,
   ) => Effect.Effect<never, MappedTagError<Cases>>;
+  // oxlint-disable-next-line typescript/no-empty-object-type -- `{}` keeps the intersection inferable where `unknown` breaks mapErrorTags' overloads
 } & (unknown extends E ? {} : { readonly [K in Exclude<keyof Cases, TaggedErrorTag<E>>]: never });
 
 function mapErrorTags<
   E,
   Cases extends MapErrorTagCases<E> &
+    // oxlint-disable-next-line typescript/no-empty-object-type -- `{}` keeps the intersection inferable where `unknown` breaks mapErrorTags' overloads
     (unknown extends E ? {} : { readonly [K in Exclude<keyof Cases, TaggedErrorTag<E>>]: never }),
 >(cases: Cases) {
   const catchCases = Record.map(

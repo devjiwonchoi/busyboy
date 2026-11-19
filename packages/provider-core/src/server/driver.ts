@@ -127,7 +127,9 @@ export interface ProviderDriver<Config, R = never, UsageR = never> {
   readonly usage?: ProviderUsageReader<Config, UsageR>;
 }
 
+// oxlint-disable-next-line typescript/no-explicit-any -- Config appears in both input and output positions, so only any accepts every driver
 export type AnyProviderDriver<R = never, UsageR = unknown> = ProviderDriver<any, R, UsageR>;
 
 export type ProviderUsageReaderEnv<Driver> =
+  // oxlint-disable-next-line typescript/no-explicit-any -- Config appears in both input and output positions, so only any accepts every driver
   Driver extends ProviderDriver<any, any, infer UsageR> ? UsageR : never;

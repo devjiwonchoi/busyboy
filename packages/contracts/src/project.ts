@@ -381,6 +381,7 @@ export class ProjectSearchEntriesError extends Schema.TaggedError<ProjectSearchE
       message:
         decodedProjectErrorMessage(props) ??
         `Failed to search workspace entries in '${props.cwd}'.`,
+      // oxlint-disable-next-line typescript/no-explicit-any -- the error's constructor adds the derived message, which its Schema props type does not list
     } as any);
   }
 }
@@ -412,6 +413,7 @@ export class ProjectSearchContentsError extends Schema.TaggedError<ProjectSearch
       message:
         decodedProjectErrorMessage(props) ??
         `Failed to search workspace contents in '${props.cwd}'.`,
+      // oxlint-disable-next-line typescript/no-explicit-any -- the error's constructor adds the derived message, which its Schema props type does not list
     } as any);
   }
 }
@@ -434,6 +436,7 @@ export class ProjectListEntriesError extends Schema.TaggedError<ProjectListEntri
       ...props,
       message:
         decodedProjectErrorMessage(props) ?? `Failed to list workspace entries in '${props.cwd}'.`,
+      // oxlint-disable-next-line typescript/no-explicit-any -- the error's constructor adds the derived message, which its Schema props type does not list
     } as any);
   }
 }
@@ -510,6 +513,7 @@ export class ProjectReadFileError extends Schema.TaggedError<ProjectReadFileErro
       message:
         decodedProjectErrorMessage(props) ??
         `Failed to read workspace file '${props.relativePath}' in '${props.cwd}'.`,
+      // oxlint-disable-next-line typescript/no-explicit-any -- the error's constructor adds the derived message, which its Schema props type does not list
     } as any);
   }
 }
@@ -575,6 +579,7 @@ export class ProjectWriteFileError extends Schema.TaggedError<ProjectWriteFileEr
       message:
         decodedProjectErrorMessage(props) ??
         `Failed to write workspace file '${props.relativePath}' in '${props.cwd}'.`,
+      // oxlint-disable-next-line typescript/no-explicit-any -- the error's constructor adds the derived message, which its Schema props type does not list
     } as any);
   }
 }

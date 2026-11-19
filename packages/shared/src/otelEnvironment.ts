@@ -12,7 +12,9 @@ import { OtlpHeadersFromString, OtlpProtocol, type SignalExport } from "./observ
 type OtlpSignalName = "TRACES" | "METRICS" | "LOGS";
 
 export type OtelSignal = Data.TaggedEnum<{
+  // oxlint-disable-next-line typescript/no-empty-object-type -- Data.TaggedEnum spells a case with no fields as `{}`
   Unset: {};
+  // oxlint-disable-next-line typescript/no-empty-object-type -- Data.TaggedEnum spells a case with no fields as `{}`
   Off: {};
   Export: {
     readonly url: string;

@@ -89,6 +89,7 @@ const decodePullRequestActivityJson = through(
   toPullRequestActivityPage,
 );
 const decodePullRequestCoreJson = through(PullRequestCore.result, toPullRequestCore);
+// oxlint-disable-next-line typescript/no-explicit-any -- fixtures build loose GitHub JSON probed by optional chains
 type Json = Record<string, any>;
 const LAST_PAGE = { hasNextPage: false, endCursor: null };
 const nodesIn = (connection: Json | null | undefined): ReadonlyArray<Json> =>

@@ -30,10 +30,12 @@ export class ElectronPowerMonitor extends Context.Service<
 const onSimpleEvent: ElectronPowerMonitor["Service"]["onSimpleEvent"] = (eventName, listener) =>
   Effect.acquireRelease(
     Effect.sync(() => {
+      // oxlint-disable-next-line typescript/no-explicit-any -- Electron types `on` as one overload per event name; this helper forwards any of them
       Electron.powerMonitor.on(eventName as any, listener as any);
     }),
     () =>
       Effect.sync(() => {
+        // oxlint-disable-next-line typescript/no-explicit-any -- Electron types `on` as one overload per event name; this helper forwards any of them
         Electron.powerMonitor.removeListener(eventName as any, listener as any);
       }),
   ).pipe(Effect.asVoid);

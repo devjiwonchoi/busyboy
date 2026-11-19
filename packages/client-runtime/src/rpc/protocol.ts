@@ -5,7 +5,7 @@ import { RpcClient } from "effect/rpc";
 export const makeWsRpcProtocolClient = RpcClient.make(WsRpcGroup);
 type RpcClientFactory = typeof makeWsRpcProtocolClient;
 export type WsRpcProtocolClient =
-  RpcClientFactory extends Effect.Effect<infer Client, any, any> ? Client : never;
+  RpcClientFactory extends Effect.Effect<infer Client, unknown, unknown> ? Client : never;
 
 // Pings go out every 5 seconds, and a server busy for a few seconds stops
 // answering them. Allow 15 seconds without any frame before dropping the socket.

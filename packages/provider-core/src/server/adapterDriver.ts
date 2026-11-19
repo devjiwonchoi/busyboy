@@ -34,4 +34,5 @@ export interface ProviderAdapterDriver<Config, R = never> {
   >;
 }
 
+// oxlint-disable-next-line typescript/no-explicit-any -- Config appears in both input and output positions, so only any accepts every driver
 export type AnyProviderAdapterDriver<R = never> = ProviderAdapterDriver<any, R>;

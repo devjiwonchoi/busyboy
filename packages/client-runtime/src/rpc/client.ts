@@ -145,22 +145,34 @@ export const subscriptionRetryDelay = (base: Duration.Input, retries: number) =>
 export type EnvironmentRpcInput<TTag extends EnvironmentRpcTag> = Parameters<RpcMethod<TTag>>[0];
 
 export type EnvironmentRpcSuccess<TTag extends EnvironmentUnaryRpcTag> =
-  RpcMethod<TTag> extends (input: any, options?: any) => Effect.Effect<infer A, any, any>
+  RpcMethod<TTag> extends (
+    input: never,
+    options?: never,
+  ) => Effect.Effect<infer A, unknown, unknown>
     ? A
     : never;
 
 export type EnvironmentRpcFailure<TTag extends EnvironmentUnaryRpcTag> =
-  RpcMethod<TTag> extends (input: any, options?: any) => Effect.Effect<any, infer E, any>
+  RpcMethod<TTag> extends (
+    input: never,
+    options?: never,
+  ) => Effect.Effect<unknown, infer E, unknown>
     ? E
     : never;
 
 export type EnvironmentRpcStreamValue<TTag extends EnvironmentStreamRpcTag> =
-  RpcMethod<TTag> extends (input: any, options?: any) => Stream.Stream<infer A, any, any>
+  RpcMethod<TTag> extends (
+    input: never,
+    options?: never,
+  ) => Stream.Stream<infer A, unknown, unknown>
     ? A
     : never;
 
 export type EnvironmentRpcStreamFailure<TTag extends EnvironmentStreamRpcTag> =
-  RpcMethod<TTag> extends (input: any, options?: any) => Stream.Stream<any, infer E, any>
+  RpcMethod<TTag> extends (
+    input: never,
+    options?: never,
+  ) => Stream.Stream<unknown, infer E, unknown>
     ? E
     : never;
 

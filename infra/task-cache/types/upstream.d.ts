@@ -4,6 +4,7 @@ import type * as Cloudflare from "@cloudflare/workers-types";
 import type { ProtocolBindings } from "../src/protocolTypes.ts";
 
 declare global {
+  // oxlint-disable-next-line typescript/no-empty-object-type -- augments the global Env interface Wrangler would generate
   interface Env extends ProtocolBindings {}
   type D1Database = Cloudflare.D1Database;
   type D1Result<T = unknown> = Cloudflare.D1Result<T>;

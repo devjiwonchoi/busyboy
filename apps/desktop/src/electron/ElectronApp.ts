@@ -86,10 +86,12 @@ const addScopedAppListener = <Args extends ReadonlyArray<unknown>>(
 ): Effect.Effect<void, never, Scope.Scope> =>
   Effect.acquireRelease(
     Effect.sync(() => {
+      // oxlint-disable-next-line typescript/no-explicit-any -- Electron types `on` as one overload per event name; this helper forwards any of them
       Electron.app.on(eventName as any, listener as any);
     }),
     () =>
       Effect.sync(() => {
+        // oxlint-disable-next-line typescript/no-explicit-any -- Electron types `on` as one overload per event name; this helper forwards any of them
         Electron.app.removeListener(eventName as any, listener as any);
       }),
   ).pipe(Effect.asVoid);

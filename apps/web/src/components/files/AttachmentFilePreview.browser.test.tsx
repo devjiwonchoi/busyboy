@@ -1178,7 +1178,7 @@ describe("attachment HTML preview recovery", () => {
 
   it("can return to rendered HTML after local source decoding fails", async () => {
     setup();
-    let now = 0;
+    const now = 0;
     using _now = vi.spyOn(Date, "now").mockImplementation(() => now);
     using _fetch = stubGlobal(
       "fetch",

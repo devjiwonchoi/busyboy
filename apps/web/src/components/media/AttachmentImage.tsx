@@ -2,26 +2,30 @@ import { useEffect, useRef, useState, type ComponentProps, type SyntheticEvent }
 
 import { isHeicImageFile } from "../../lib/imageCompression";
 
-type AttachmentImageProps = ComponentProps<"img"> & { name: string; mimeType?: string | undefined };
+type AttachmentImageProps = ComponentProps<"img"> & {
+  alt: string;
+  name: string;
+  mimeType?: string | undefined;
+};
 
 // Keep import expressions outside hooks until React Compiler supports them.
 const loadImageDecoder = () => import("../files/decodeImagePreview");
 
-export function AttachmentImage({ name, mimeType, ...props }: AttachmentImageProps) {
+export function AttachmentImage({ alt, name, mimeType, ...props }: AttachmentImageProps) {
   const fallback =
     isHeicImageFile({ name, type: mimeType ?? "" }) ||
     /\.tiff?$/i.test(name) ||
     /^image\/tiff$/i.test(mimeType ?? "");
   return fallback ? (
-    <DecodedImage key={props.src} {...props} name={name} mimeType={mimeType} />
+    <DecodedImage key={props.src} {...props} alt={alt} name={name} mimeType={mimeType} />
   ) : (
-    <img {...props} />
+    <img {...props} alt={alt} />
   );
 }
 
 type DecodeAttempt = { readonly controller: AbortController; objectUrl?: string };
 
-function DecodedImage({ name, mimeType, src, onError, ...props }: AttachmentImageProps) {
+function DecodedImage({ alt, name, mimeType, src, onError, ...props }: AttachmentImageProps) {
   const [previewUrl, setPreviewUrl] = useState<string>();
   // One decode per mount; the parent keys this component by src.
   const decodeRef = useRef<DecodeAttempt | null>(null);
@@ -60,5 +64,5 @@ function DecodedImage({ name, mimeType, src, onError, ...props }: AttachmentImag
     [],
   );
 
-  return <img {...props} src={previewUrl ?? src} onError={decode} />;
+  return <img {...props} alt={alt} src={previewUrl ?? src} onError={decode} />;
 }

@@ -49,7 +49,12 @@ it.each([
     using _createUrl = vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:jpeg");
     using _revokeUrl = vi.spyOn(URL, "revokeObjectURL").mockImplementation(revokeUrl);
     await using screen = await render(
-      <AttachmentImage src="https://environment.test/photo" name={name} mimeType={mimeType} />,
+      <AttachmentImage
+        src="https://environment.test/photo"
+        alt=""
+        name={name}
+        mimeType={mimeType}
+      />,
     );
     expect(decodeImagePreview).not.toHaveBeenCalled();
     await failDecode(screen);
@@ -70,7 +75,7 @@ it("leaves PNG errors to the caller without fetching or converting", async () =>
   using _revokeUrl = vi.spyOn(URL, "revokeObjectURL").mockImplementation(revokeUrl);
   const onError = vi.fn();
   await using screen = await render(
-    <AttachmentImage src="blob:png" name="photo.png" onError={onError} />,
+    <AttachmentImage src="blob:png" alt="" name="photo.png" onError={onError} />,
   );
   expectDecodeErrorFor(onError, await failDecode(screen));
   expect(decodeImagePreview).not.toHaveBeenCalled();
@@ -83,7 +88,7 @@ it("reports failed HEIC conversion through the existing error handler", async ()
   const onError = vi.fn();
   vi.mocked(decodeImagePreview).mockRejectedValue(new Error("unreadable"));
   await using screen = await render(
-    <AttachmentImage src="blob:heic" name="photo.heif" onError={onError} />,
+    <AttachmentImage src="blob:heic" alt="" name="photo.heif" onError={onError} />,
   );
   expectDecodeErrorFor(onError, await failDecode(screen));
   expect(URL.createObjectURL).not.toHaveBeenCalled();
@@ -99,10 +104,10 @@ it("discards an old decode when navigating to a different source", async () => {
       finishDecode = resolve;
     }),
   );
-  await using screen = await render(<AttachmentImage src="blob:first" name="photo.heic" />);
+  await using screen = await render(<AttachmentImage src="blob:first" alt="" name="photo.heic" />);
   await failDecode(screen);
   const secondSource = "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg'/>";
-  await screen.rerender(<AttachmentImage src={secondSource} name="photo.heic" />);
+  await screen.rerender(<AttachmentImage src={secondSource} alt="" name="photo.heic" />);
   await act(() => finishDecode(bitmap));
   expect(image(screen).getAttribute("src")).toBe(secondSource);
   expect(URL.createObjectURL).not.toHaveBeenCalled();

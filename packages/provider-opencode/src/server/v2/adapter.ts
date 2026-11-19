@@ -1304,7 +1304,7 @@ export const make = Effect.fn("OpenCode2Adapter.make")(function* (instanceId: Pr
       });
     });
 
-    // Todo updates share the provider event span.
+    // To-do list updates share the provider event span.
     const emitTodo = Effect.fnUntraced(function* (
       state: ThreadState,
       turn: ActiveTurn,

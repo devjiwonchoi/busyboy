@@ -233,7 +233,7 @@ function prLookupFailureTtl(consecutiveFailures: number): Duration.Duration {
   const backoffMs = Duration.toMillis(PR_LOOKUP_FAILURE_BASE_TTL) * Math.pow(2, exponent);
   return Duration.min(Duration.millis(backoffMs), PR_LOOKUP_FAILURE_MAX_TTL);
 }
-type StripProgressContext<T> = T extends any ? Omit<T, "actionId" | "cwd" | "action"> : never;
+type StripProgressContext<T> = T extends unknown ? Omit<T, "actionId" | "cwd" | "action"> : never;
 type GitActionProgressPayload = StripProgressContext<GitActionProgressEvent>;
 type GitActionProgressEmitter = (event: GitActionProgressPayload) => Effect.Effect<void, never>;
 
