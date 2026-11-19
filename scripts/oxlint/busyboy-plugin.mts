@@ -383,6 +383,258 @@ const flatTests = {
   },
 };
 
+const allowedTestImports = new Map([
+  ["@e2e-dev/web", new Set(["describe", "test", "beforeEach"])],
+  ["e2e", new Set(["expect"])],
+]);
+const testHelperImport = /^\.\/utils\/[a-z0-9-]+$/;
+const allowedFixtures = new Set(["app", "agent", "screen"]);
+const reservedTestNames = new Set([...allowedFixtures, "expect"]);
+const locatorQueries = new Set([
+  "getByRole",
+  "getByText",
+  "getByLabel",
+  "getByPlaceholder",
+  "getByTestId",
+  "getByDisplayValue",
+]);
+const locatorNarrowers = new Set(["filter", "first", "last", "nth"]);
+const locatorMatchers = new Set([
+  "toBeVisible",
+  "toBeHidden",
+  "toBeEnabled",
+  "toBeDisabled",
+  "toBeChecked",
+  "toBeFocused",
+  "toBeAttached",
+  "toHaveText",
+  "toContainText",
+  "toHaveValue",
+  "toHaveAttribute",
+  "toHaveCount",
+  "toHaveAccessibleName",
+  "toBeExpanded",
+  "toBeSelected",
+]);
+const agentJudgments = new Set(["assert", "waitFor", "extract"]);
+
+const allowedTestSyntax =
+  'e2e tests allow only app.open("<path>"), agent.act("<goal>", { params }), expect(screen.getBy…(…)).<locator matcher>(…), and tests/utils helpers, with literal arguments, inside describe, beforeEach, and test.';
+const driveWithAgent =
+  'Drive the UI with agent.act("<goal>") and check the result with expect(screen.getBy…(…)). Locator actions and waits are not allowed in e2e tests.';
+const checkWithLocator =
+  "Check results with expect(screen.getBy…(…)).<locator matcher>(…). agent.assert, agent.waitFor, and agent.extract call the model on every run.";
+
+type Problem = { node: Node; message: string };
+
+function identifierName(node: Node | undefined) {
+  return node?.type === "Identifier" ? (node.name as string) : undefined;
+}
+
+function memberCall(node: Node) {
+  if (node.type !== "CallExpression") return undefined;
+  const callee = node.callee as Node;
+  if (callee.type !== "MemberExpression" || callee.computed) return undefined;
+  return {
+    object: callee.object as Node,
+    name: identifierName(callee.property as Node),
+    args: node.arguments as Node[],
+  };
+}
+
+function isLiteralValue(node: Node): boolean {
+  if (node.type === "Literal") return true;
+  if (node.type === "TemplateLiteral") return (node.expressions as Node[]).length === 0;
+  if (node.type === "ArrayExpression")
+    return (node.elements as (Node | null)[]).every(
+      (element) => element && isLiteralValue(element),
+    );
+  if (node.type !== "ObjectExpression") return false;
+  return (node.properties as Node[]).every(
+    (property) =>
+      property.type === "Property" &&
+      !property.computed &&
+      property.kind === "init" &&
+      !property.method &&
+      isLiteralValue(property.value as Node),
+  );
+}
+
+function isStringLiteral(node: Node | undefined) {
+  if (node?.type === "Literal") return typeof node.value === "string";
+  return node?.type === "TemplateLiteral" && (node.expressions as Node[]).length === 0;
+}
+
+function isActOptions(node: Node | undefined) {
+  if (!node) return true;
+  if (node.type !== "ObjectExpression") return false;
+  return (node.properties as Node[]).every(
+    (property) => property.type === "Property" && identifierName(property.key as Node) === "params",
+  );
+}
+
+function isLocator(node: Node): boolean {
+  const call = memberCall(node);
+  if (!call?.name || !call.args.every(isLiteralValue)) return false;
+  if (locatorQueries.has(call.name)) return identifierName(call.object) === "screen";
+  return locatorNarrowers.has(call.name) && isLocator(call.object);
+}
+
+function isExpectOfLocator(node: Node): boolean {
+  if (node.type === "MemberExpression" && identifierName(node.property as Node) === "not")
+    return isExpectOfLocator(node.object as Node);
+  if (node.type !== "CallExpression" || identifierName(node.callee as Node) !== "expect")
+    return false;
+  const [subject, ...rest] = node.arguments as Node[];
+  return Boolean(subject) && rest.length === 0 && isLocator(subject);
+}
+
+function stepProblem(expression: Node, helpers: Set<string>): string | undefined {
+  const call = expression.type === "AwaitExpression" ? (expression.argument as Node) : expression;
+  if (call.type !== "CallExpression") return allowedTestSyntax;
+  const args = call.arguments as Node[];
+  if (!args.every(isLiteralValue)) return allowedTestSyntax;
+
+  const helper = identifierName(call.callee as Node);
+  if (helper) return helpers.has(helper) ? undefined : allowedTestSyntax;
+  if (expression.type !== "AwaitExpression") return allowedTestSyntax;
+
+  const member = memberCall(call);
+  const owner = member && identifierName(member.object);
+  if (owner === "app" && member?.name === "open" && args.length === 1 && isStringLiteral(args[0]))
+    return undefined;
+  if (
+    owner === "agent" &&
+    member?.name === "act" &&
+    args.length <= 2 &&
+    isStringLiteral(args[0]) &&
+    isActOptions(args[1])
+  )
+    return undefined;
+  if (owner === "agent" && member?.name && agentJudgments.has(member.name)) return checkWithLocator;
+  if (member?.name && locatorMatchers.has(member.name) && isExpectOfLocator(member.object))
+    return undefined;
+  if (member && (isLocator(member.object) || owner === "screen" || owner === "browser"))
+    return driveWithAgent;
+  return allowedTestSyntax;
+}
+
+function callbackProblems(
+  call: Node,
+  callback: Node | undefined,
+  helpers: Set<string>,
+  problems: Problem[],
+) {
+  if (
+    callback?.type !== "ArrowFunctionExpression" ||
+    (callback.body as Node).type !== "BlockStatement"
+  ) {
+    problems.push({ node: callback ?? call, message: allowedTestSyntax });
+    return;
+  }
+  const [fixtures, ...extra] = callback.params as Node[];
+  const fixturesAllowed =
+    !fixtures ||
+    (fixtures.type === "ObjectPattern" &&
+      (fixtures.properties as Node[]).every(
+        (property) =>
+          property.type === "Property" &&
+          property.shorthand &&
+          (property.value as Node).type === "Identifier" &&
+          allowedFixtures.has(identifierName(property.key as Node) ?? ""),
+      ));
+  if (!fixturesAllowed || extra.length)
+    problems.push({ node: callback, message: allowedTestSyntax });
+
+  for (const statement of (callback.body as Node).body as Node[]) {
+    const message =
+      statement.type === "ExpressionStatement"
+        ? stepProblem(statement.expression as Node, helpers)
+        : allowedTestSyntax;
+    if (message) problems.push({ node: statement, message });
+  }
+}
+
+function blockProblems(
+  statement: Node,
+  allowed: Set<string>,
+  helpers: Set<string>,
+  problems: Problem[],
+) {
+  const call =
+    statement.type === "ExpressionStatement" ? (statement.expression as Node) : undefined;
+  const name = call?.type === "CallExpression" ? identifierName(call.callee as Node) : undefined;
+  if (!call || !name || !allowed.has(name)) {
+    problems.push({ node: statement, message: allowedTestSyntax });
+    return;
+  }
+  const args = call.arguments as Node[];
+  const [title, body] = name === "beforeEach" ? [undefined, args[0]] : args;
+  const titleAllowed =
+    name === "beforeEach" ? args.length === 1 : args.length === 2 && isStringLiteral(title);
+  if (!titleAllowed) problems.push({ node: call, message: allowedTestSyntax });
+
+  if (name !== "describe") {
+    callbackProblems(call, body, helpers, problems);
+    return;
+  }
+  if (
+    body?.type !== "ArrowFunctionExpression" ||
+    (body.params as Node[]).length ||
+    (body.body as Node).type !== "BlockStatement"
+  ) {
+    problems.push({ node: call, message: allowedTestSyntax });
+    return;
+  }
+  for (const inner of (body.body as Node).body as Node[])
+    blockProblems(inner, new Set(["beforeEach", "test"]), helpers, problems);
+}
+
+function importProblem(statement: Node, helpers: Set<string>) {
+  const source = (statement.source as Node).value as string;
+  const specifiers = statement.specifiers as Node[];
+  const named = specifiers.every(
+    (specifier) =>
+      specifier.type === "ImportSpecifier" &&
+      specifier.importKind !== "type" &&
+      identifierName(specifier.imported as Node) === identifierName(specifier.local as Node),
+  );
+  if (statement.importKind === "type" || !named || !specifiers.length) return true;
+
+  const names = specifiers.map((specifier) => identifierName(specifier.local as Node) ?? "");
+  if (testHelperImport.test(source)) {
+    if (names.some((name) => reservedTestNames.has(name))) return true;
+    for (const name of names) helpers.add(name);
+    return false;
+  }
+  const allowed = allowedTestImports.get(source);
+  return !allowed || !names.every((name) => allowed.has(name));
+}
+
+const agenticTests = {
+  meta: { type: "problem" },
+  create(context: Context) {
+    const path = repositoryPath(context);
+    if (!path.startsWith(testsDirectory + sep) || !e2eTestFile.test(path)) return {};
+    return {
+      Program(program: Node) {
+        const helpers = new Set<string>();
+        const problems: Problem[] = [];
+        const statements = program.body as Node[];
+        for (const statement of statements) {
+          if (statement.type === "ImportDeclaration" && importProblem(statement, helpers))
+            problems.push({ node: statement, message: allowedTestSyntax });
+        }
+        for (const statement of statements) {
+          if (statement.type !== "ImportDeclaration")
+            blockProblems(statement, new Set(["describe"]), helpers, problems);
+        }
+        for (const problem of problems) context.report(problem);
+      },
+    };
+  },
+};
+
 const busyboyPlugin = {
   meta: { name: "busyboy" },
   rules: {
@@ -394,6 +646,7 @@ const busyboyPlugin = {
     "no-empty-loading": noEmptyLoading,
     "no-negated-predicate": noNegatedPredicate,
     "flat-tests": flatTests,
+    "agentic-tests": agenticTests,
   },
 };
 

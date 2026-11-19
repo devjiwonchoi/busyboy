@@ -27,6 +27,7 @@
     "busyboy/no-empty-loading": "error",
     "busyboy/no-negated-predicate": "error",
     "busyboy/flat-tests": "error",
+    "busyboy/agentic-tests": "error",
     "no-restricted-imports": [
       "error",
       {
