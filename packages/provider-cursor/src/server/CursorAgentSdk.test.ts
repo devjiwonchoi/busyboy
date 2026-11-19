@@ -354,7 +354,11 @@ describe("CursorAgentSdkRunner", () => {
   it.effect("forwards the agent's own shell stream output as shell-output-delta", () =>
     Effect.gen(function* () {
       const publish = (conversationId: string, data: string) =>
-        (Reflect.get(globalThis, Symbol.for("@cursor/sdk.shellStreamOutput")) as Function)({
+        (
+          Reflect.get(globalThis, Symbol.for("@cursor/sdk.shellStreamOutput")) as (
+            event: unknown,
+          ) => void
+        )({
           conversationId,
           toolCallId: "tool-shell",
           event: { case: "stdout", value: { data } },

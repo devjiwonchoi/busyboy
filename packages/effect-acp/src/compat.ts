@@ -186,7 +186,7 @@ export interface LoadSessionResponse {
 }
 
 export type ResumeSessionResponse = LoadSessionResponse;
-export interface ForkSessionResponse extends NewSessionResponse {}
+export type ForkSessionResponse = NewSessionResponse;
 
 export type SessionConfigSelectOption = V2.SessionConfigSelectOption;
 export type SessionConfigSelectOptions =
@@ -407,6 +407,7 @@ export interface WriteTextFileRequest {
   readonly path: string;
   readonly content: string;
 }
+// oxlint-disable-next-line typescript/no-empty-object-type -- mirrors an ACP response schema with no fields
 export interface WriteTextFileResponse {}
 export interface CreateTerminalRequest {
   readonly sessionId: string;
@@ -432,8 +433,10 @@ export interface TerminalOutputResponse {
 export type WaitForTerminalExitRequest = TerminalRequest;
 export type WaitForTerminalExitResponse = TerminalExitStatus;
 export type KillTerminalRequest = TerminalRequest;
+// oxlint-disable-next-line typescript/no-empty-object-type -- mirrors an ACP response schema with no fields
 export interface KillTerminalResponse {}
 export type ReleaseTerminalRequest = TerminalRequest;
+// oxlint-disable-next-line typescript/no-empty-object-type -- mirrors an ACP response schema with no fields
 export interface ReleaseTerminalResponse {}
 
 // Older v1 agents still advertise and select models through this removed unstable API.

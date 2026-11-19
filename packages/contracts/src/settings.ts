@@ -661,6 +661,7 @@ export interface ProviderSettingsFormSchemaAnnotation {
 }
 
 declare module "effect/Schema" {
+  // oxlint-disable-next-line typescript/no-namespace -- augments Effect Schema's Annotations namespace
   namespace Annotations {
     interface Annotations {
       /** Store this credential separately and expose only whether it is configured to clients. */

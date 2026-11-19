@@ -1213,7 +1213,7 @@ export class AcpSessionRuntime extends Context.Service<
   }
 >()("@t3tools/provider-acp/server/AcpSessionRuntime") {}
 
-interface AcpStartedState extends AcpSessionRuntimeStartResult {}
+type AcpStartedState = AcpSessionRuntimeStartResult;
 
 type AcpStartState =
   | { readonly _tag: "NotStarted" }

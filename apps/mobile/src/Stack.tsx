@@ -930,5 +930,6 @@ const navigationPathConfig = {
 };
 
 declare module "@react-navigation/native" {
+  // oxlint-disable-next-line typescript/no-empty-object-type -- React Navigation reads the root stack type through interface merging
   interface RootNavigator extends RootStackType {}
 }

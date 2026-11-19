@@ -110,6 +110,7 @@ const ApnsDeliveryJobSigningSecret = Alchemy.makeRandom("ApnsDeliveryJobSigningS
   bytes: 32,
 });
 
+// oxlint-disable-next-line typescript/no-empty-object-type -- Alchemy's Worker takes `{}` for a worker with no extra bindings
 export class Api extends Cloudflare.Worker<Api, {}>()("Api") {}
 
 export const layer = Api.make(

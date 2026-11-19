@@ -136,6 +136,7 @@ describe("Claude Agent SDK replay fixtures", () => {
       const toolIndex = entries.findIndex(
         (entry) =>
           entry.type === "emit_inbound" &&
+          // oxlint-disable-next-line typescript/no-explicit-any -- recorded Claude frames are untyped JSON probed by optional chains
           (entry.frame as Record<string, any>).message?.content?.[0]?.id === OPEN_TOOL_ID,
       );
       const resultIndex = entries.findIndex(
@@ -175,6 +176,7 @@ describe("Claude Agent SDK replay fixtures", () => {
         transformTranscript: (transcript) => {
           const isBashFrame = (entry: ProviderReplayEntry) => {
             if (entry.type !== "emit_inbound") return false;
+            // oxlint-disable-next-line typescript/no-explicit-any -- recorded Claude frames are untyped JSON probed by optional chains
             const frame = entry.frame as Record<string, any>;
             return (
               frame.message?.content?.[0]?.id === SUBAGENT_BASH_ID ||
@@ -184,6 +186,7 @@ describe("Claude Agent SDK replay fixtures", () => {
           };
           // Recorded without the structured result the replay writes output files from.
           const bashFrames = transcript.entries.filter(isBashFrame).map((entry) => {
+            // oxlint-disable-next-line typescript/no-explicit-any -- recorded Claude frames are untyped JSON probed by optional chains
             const frame = (entry as { readonly frame: Record<string, any> }).frame;
             return frame.type === "user"
               ? {
@@ -262,6 +265,7 @@ describe("Claude Agent SDK replay fixtures", () => {
               opens === "before root settles",
               transcript.entries.flatMap((entry): ReadonlyArray<ProviderReplayEntry> => {
                 if (entry.type !== "emit_inbound") return [entry];
+                // oxlint-disable-next-line typescript/no-explicit-any -- recorded Claude frames are untyped JSON probed by optional chains
                 const frame = entry.frame as Record<string, any>;
                 if (
                   frame.type === "assistant" &&

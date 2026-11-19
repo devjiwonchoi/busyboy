@@ -87,6 +87,7 @@ export class FilesystemBrowseError extends Schema.TaggedError<FilesystemBrowseEr
       message:
         decodedFilesystemBrowseErrorMessage(props) ??
         `Failed to browse filesystem path '${props.partialPath}'${cwd}.`,
+      // oxlint-disable-next-line typescript/no-explicit-any -- the error's constructor adds the derived message, which its Schema props type does not list
     } as any);
   }
 }

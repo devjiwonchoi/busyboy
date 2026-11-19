@@ -321,6 +321,7 @@ type WorkerStartup =
   | ({ readonly type: "unavailable" } & WorkerFailure);
 
 type WorkerReply =
+  // oxlint-disable-next-line typescript/no-explicit-any -- SqlClient's row transforms take ReadonlyArray<any>, which unknown rows do not satisfy
   | { readonly id: number; readonly rows: ReadonlyArray<any>; readonly more?: boolean }
   | {
       readonly id: number;
@@ -444,6 +445,7 @@ const makeWorkerConnection = Effect.fnUntraced(function* (options: {
     worker.on("exit", (code) => stop(`${label} exited with code ${code}`));
 
     const request = (input: WorkerRequest) =>
+      // oxlint-disable-next-line typescript/no-explicit-any -- SqlClient's row transforms take ReadonlyArray<any>, which unknown rows do not satisfy
       Effect.withFiber<ReadonlyArray<any>, SqlError>((fiber) => {
         // A COMMIT that never reached a writer must fail; only its ROLLBACK is moot.
         const endsTransaction = readOnly
@@ -455,6 +457,7 @@ const makeWorkerConnection = Effect.fnUntraced(function* (options: {
             : Effect.fail(failedWith({ message: stoppedMessage }, "execute"));
         }
         const safeIntegers = Boolean(Context.get(fiber.context, Client.SafeIntegers));
+        // oxlint-disable-next-line typescript/no-explicit-any -- SqlClient's row transforms take ReadonlyArray<any>, which unknown rows do not satisfy
         const reply = Effect.callback<ReadonlyArray<any>, SqlError>((resume) => {
           const id = nextRequestId++;
           const received = new Int32Array(new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT));
@@ -844,6 +847,7 @@ const make = Effect.fn("makeWithDatabase")(function* (
       params: ReadonlyArray<unknown>,
       mode: "rows" | "raw" | "values" = "rows",
     ) =>
+      // oxlint-disable-next-line typescript/no-explicit-any -- SqlClient's row transforms take ReadonlyArray<any>, which unknown rows do not satisfy
       Effect.withFiber<ReadonlyArray<any>, SqlError>((fiber) => {
         let arrays = false;
         let result: Exit.Exit<ReadonlyArray<unknown>, SqlError>;
@@ -852,9 +856,11 @@ const make = Effect.fn("makeWithDatabase")(function* (
           if (hasRows(statement)) {
             arrays = mode === "values";
             if (arrays) statement.setReturnArrays(true);
-            result = Exit.succeed(statement.all(...(params as any)));
+            result = Exit.succeed(
+              statement.all(...(params as ReadonlyArray<NodeSqlite.SQLInputValue>)),
+            );
           } else {
-            const value = statement.run(...(params as any));
+            const value = statement.run(...(params as ReadonlyArray<NodeSqlite.SQLInputValue>));
             result = Exit.succeed(
               mode === "raw" ? (value as unknown as ReadonlyArray<unknown>) : [],
             );

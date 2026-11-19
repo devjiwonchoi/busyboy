@@ -52,7 +52,7 @@ export interface ProjectUpdateInput extends ProjectUpdatePayload {
   readonly projectId: ProjectId;
 }
 
-export interface ProjectBootstrapInput extends ProjectCreateInput {}
+export type ProjectBootstrapInput = ProjectCreateInput;
 
 export interface ProjectDeleteInput {
   readonly commandId: CommandId;

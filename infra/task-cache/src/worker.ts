@@ -15,6 +15,7 @@ import type { ProtocolBindings } from "./protocolTypes.ts";
 import * as Resources from "./resources.ts";
 import * as Savings from "./Savings.ts";
 
+// oxlint-disable-next-line typescript/no-empty-object-type -- Alchemy's Worker takes `{}` for a worker with no extra bindings
 export class Worker extends Cloudflare.Worker<Worker, {}>()("Cache") {}
 
 export const layer = Worker.make(
