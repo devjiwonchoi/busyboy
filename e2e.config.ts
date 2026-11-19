@@ -36,7 +36,11 @@ export default {
           ],
           env: {
             BUSYBOY_HOME: home,
-            BUSYBOY_CLAUDE_PATH: resolve("tests/utils/fake-claude.mjs"),
+            BUSYBOY_CLAUDE_PATH: resolve("tests/utils/claude.mjs"),
+            E2E_CLAUDE_MODE: process.env.E2E_CLAUDE_MODE ?? "replay",
+            E2E_CLAUDE_TAPE:
+              process.env.E2E_CLAUDE_TAPE ?? resolve("tests/utils/claude-tape.ndjson"),
+            E2E_CLAUDE_GATES: join(home, "claude-gates"),
           },
           startupTimeout: 120_000,
           log: ".e2e/logs/app.log",

@@ -11,10 +11,11 @@
     "dev:desktop": "pnpm --filter @busyboy/native dev",
     "build:desktop": "pnpm --filter @busyboy/native build:desktop",
     "typecheck": "pnpm --filter @busyboy/web --filter @busyboy/native typecheck && tsc -p tsconfig.json",
-    "lint": "oxlint && knip && node scripts/check-no-korean.mts",
+    "lint": "oxlint && knip && node scripts/check-no-korean.mts && node scripts/check-claude-tape.mts",
     "format": "oxfmt",
     "format:check": "oxfmt --check",
-    "test:e2e": "e2e run"
+    "test:e2e": "e2e run",
+    "record:claude": "node scripts/record-claude.mts"
   },
   "devDependencies": {
     "@ai-sdk/anthropic": "4.0.106",
