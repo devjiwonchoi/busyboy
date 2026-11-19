@@ -5,7 +5,10 @@ import {
   ProviderInstanceId,
   ProviderSetupError,
 } from "@t3tools/contracts";
+import type * as AcpSessionRuntime from "@t3tools/provider-acp/server/AcpSessionRuntime";
 import { symlinksSupported } from "@t3tools/shared/testing/symlinks";
+import type * as AcpSchema from "effect-acp/compat";
+import { type AcpError, AcpRequestError } from "effect-acp/errors";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
@@ -16,13 +19,9 @@ import * as Queue from "effect/Queue";
 import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
-import { type AcpError, AcpRequestError } from "effect-acp/errors";
-import type * as AcpSchema from "effect-acp/compat";
 import { expect } from "vite-plus/test";
 
-import type * as AcpSessionRuntime from "@t3tools/provider-acp/server/AcpSessionRuntime";
 import { removeAntigravitySessionFiles } from "../provider/acp/AntigravitySessionFiles.ts";
-
 import {
   type AntigravityTextGenerationOptions,
   isAntigravityTextGenerationAvailable,

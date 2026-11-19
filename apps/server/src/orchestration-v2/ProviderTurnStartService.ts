@@ -1,6 +1,3 @@
-import { modelSelectionsEqual } from "@t3tools/shared/model";
-import { projectComposerContextForProvider } from "@t3tools/shared/composerContextReferences";
-import { expandAssistantCitationsForProvider } from "@t3tools/shared/assistantCitations";
 import {
   CommandId,
   PROVIDER_SEND_TURN_MAX_INPUT_CHARS,
@@ -20,6 +17,26 @@ import {
   NodeId,
   ThreadId,
 } from "@t3tools/contracts";
+import {
+  ContextHandoffBackgroundWorkError,
+  knownProviderFailureMessage,
+  makeProviderFailure,
+} from "@t3tools/provider-core/server/failure";
+import {
+  DEFAULT_HANDOFF_TOKEN_CAP,
+  handoffTokenCapConfig,
+  handoffBudget,
+  attachmentTokenAllowance,
+  estimateTextTokens,
+  contextUsageForHandoff,
+  historicalMessage,
+  latestNativeContextUsage,
+} from "@t3tools/provider-core/server/handoffBudget";
+import * as IdAllocator from "@t3tools/provider-core/server/IdAllocator";
+import * as ProviderAdapter from "@t3tools/provider-core/server/ProviderAdapter";
+import { expandAssistantCitationsForProvider } from "@t3tools/shared/assistantCitations";
+import { projectComposerContextForProvider } from "@t3tools/shared/composerContextReferences";
+import { modelSelectionsEqual } from "@t3tools/shared/model";
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
 import * as DateTime from "effect/DateTime";
@@ -32,50 +49,33 @@ import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
 
 import * as ServerConfig from "../config.ts";
-import {
-  CLAUDE_PROVIDER,
-  CLAUDE_QUERY_ENDED_BEFORE_TURN_DETAIL,
-} from "./Adapters/ClaudeAdapterV2.ts";
-import { withTurnStartReservation, withWorkspaceLease } from "../workspace/workspaceLease.ts";
 import * as GitWorkflowService from "../git/GitWorkflowService.ts";
 import * as ProjectService from "../project/ProjectService.ts";
 import * as ProviderAuthService from "../provider/ProviderAuthService.ts";
 import * as ServerSettings from "../serverSettings.ts";
-import { makeRestoreMissingWorktree } from "../workspace/restoreMissingWorktree.ts";
-import * as EventSink from "./EventSink.ts";
 import * as ProviderUsageAnalytics from "../telemetry/ProviderUsageAnalytics.ts";
-import * as ContextHandoffService from "./ContextHandoffService.ts";
+import { makeRestoreMissingWorktree } from "../workspace/restoreMissingWorktree.ts";
+import { withTurnStartReservation, withWorkspaceLease } from "../workspace/workspaceLease.ts";
+import {
+  CLAUDE_PROVIDER,
+  CLAUDE_QUERY_ENDED_BEFORE_TURN_DETAIL,
+} from "./Adapters/ClaudeAdapterV2.ts";
 import { canForkBusySourceNatively, isActiveRun } from "./CommandPolicy.ts";
 import { contextBoundaryOrdinal } from "./contextBoundary.ts";
-import {
-  DEFAULT_HANDOFF_TOKEN_CAP,
-  handoffTokenCapConfig,
-  handoffBudget,
-  attachmentTokenAllowance,
-  estimateTextTokens,
-  contextUsageForHandoff,
-  historicalMessage,
-  latestNativeContextUsage,
-} from "@t3tools/provider-core/server/handoffBudget";
 import { deliverContextHandoffs, withInlineContext } from "./ContextHandoffDelivery.ts";
-import * as ProviderAdapter from "@t3tools/provider-core/server/ProviderAdapter";
-import * as IdAllocator from "@t3tools/provider-core/server/IdAllocator";
-import * as ProjectionStore from "./ProjectionStore.ts";
+import * as ContextHandoffService from "./ContextHandoffService.ts";
+import * as EventSink from "./EventSink.ts";
 import { unsentManualContinuationSource } from "./manualContinuation.ts";
+import * as ProjectionStore from "./ProjectionStore.ts";
 import * as ProviderSessionManager from "./ProviderSessionManager.ts";
-import {
-  ContextHandoffBackgroundWorkError,
-  knownProviderFailureMessage,
-  makeProviderFailure,
-} from "@t3tools/provider-core/server/failure";
-import * as RunExecutionService from "./RunExecutionService.ts";
-import * as RuntimePolicy from "./RuntimePolicy.ts";
-import * as TurnItemPositionStore from "./TurnItemPositionStore.ts";
 import {
   isRestartNoteContinuation,
   pendingRestartCancelledBackgroundWork,
   restartCancelledBackgroundWorkNote,
 } from "./RestartBackgroundNote.ts";
+import * as RunExecutionService from "./RunExecutionService.ts";
+import * as RuntimePolicy from "./RuntimePolicy.ts";
+import * as TurnItemPositionStore from "./TurnItemPositionStore.ts";
 
 export class ProviderTurnStartError extends Schema.TaggedError<ProviderTurnStartError>()(
   "ProviderTurnStartError",

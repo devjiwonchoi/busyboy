@@ -1,13 +1,13 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import { PGlite } from "@electric-sql/pglite";
-import { drizzle } from "drizzle-orm/pglite";
-import * as FileSystem from "effect/FileSystem";
-import * as Path from "effect/Path";
 import { describe, expect, it } from "@effect/vitest";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
+import { PGlite } from "@electric-sql/pglite";
 import type { SQL } from "drizzle-orm";
 import { PgDialect } from "drizzle-orm/pg-core";
+import { drizzle } from "drizzle-orm/pglite";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Layer from "effect/Layer";
+import * as Path from "effect/Path";
 
 import * as RelayDb from "../db.ts";
 import { relayEnvironmentLinks } from "../persistence/schema.ts";

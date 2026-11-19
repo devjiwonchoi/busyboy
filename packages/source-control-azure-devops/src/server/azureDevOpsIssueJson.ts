@@ -1,13 +1,3 @@
-/**
- * Decoders for Azure DevOps work items as `az boards` and the `wit` REST area answer them. Azure
- * keeps everything under `fields`, keyed by reference name, and a project may add fields of its
- * own, so only the ones every work item type carries are read.
- *
- * @module source-control-azure-devops/server/azureDevOpsIssueJson
- */
-import * as Exit from "effect/Exit";
-import * as Result from "effect/Result";
-import * as Schema from "effect/Schema";
 import type {
   IssueActor,
   IssueComment,
@@ -19,6 +9,16 @@ import type {
 } from "@t3tools/contracts";
 import { decodeJsonResult } from "@t3tools/shared/schemaJson";
 import type { TrackerIssueSummary } from "@t3tools/source-control-core/server/IssueTracker";
+/**
+ * Decoders for Azure DevOps work items as `az boards` and the `wit` REST area answer them. Azure
+ * keeps everything under `fields`, keyed by reference name, and a project may add fields of its
+ * own, so only the ones every work item type carries are read.
+ *
+ * @module source-control-azure-devops/server/azureDevOpsIssueJson
+ */
+import * as Exit from "effect/Exit";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
 
 /** Lowercased names of the states a project treats as finished, read by `closedStateNames`. */
 export type ClosedStates = ReadonlySet<string>;

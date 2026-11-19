@@ -1,4 +1,4 @@
-import { vi } from "vite-plus/test";
+import { describe, expect, it } from "@effect/vitest";
 import {
   EnvironmentId,
   AuthSourceControlWriteScope,
@@ -9,7 +9,6 @@ import {
   type VcsStatusResult,
   type ServerConfig,
 } from "@t3tools/contracts";
-import { describe, expect, it } from "@effect/vitest";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
@@ -17,11 +16,12 @@ import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
 import * as Option from "effect/Option";
 import * as Queue from "effect/Queue";
+import { AsyncResult, Atom, AtomRegistry } from "effect/reactivity";
 import * as Ref from "effect/Ref";
 import * as Stream from "effect/Stream";
 import * as SubscriptionRef from "effect/SubscriptionRef";
 import * as TestClock from "effect/testing/TestClock";
-import { AsyncResult, Atom, AtomRegistry } from "effect/reactivity";
+import { vi } from "vite-plus/test";
 
 import {
   AVAILABLE_CONNECTION_STATE,
@@ -36,7 +36,6 @@ import { EnvironmentRpcUnavailableError } from "../rpc/client.ts";
 import type { WsRpcProtocolClient } from "../rpc/protocol.ts";
 import type { RpcSession } from "../rpc/session.ts";
 import { createGitEnvironmentAtoms } from "./git.ts";
-
 import {
   commitVcsRefsRefresh,
   createVcsEnvironmentAtoms,

@@ -1,4 +1,5 @@
 import { useGT } from "gt-react-native";
+
 import {
   MAX_TERMINAL_FONT_SIZE,
   MIN_TERMINAL_FONT_SIZE,

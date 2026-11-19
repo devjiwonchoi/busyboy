@@ -1,6 +1,7 @@
 import type { ProjectScript, ResolvedKeybindingsConfig } from "@t3tools/contracts";
 import { T, useGT } from "gt-react";
 import { SettingsIcon } from "lucide-react";
+
 import { shortcutLabelForCommand } from "../../keybindings";
 import { commandForProjectScript } from "../../projectScripts";
 import { ScriptIcon } from "../projectScriptEditor";

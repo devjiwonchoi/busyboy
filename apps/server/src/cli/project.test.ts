@@ -1,5 +1,5 @@
-import * as OtelEnvironment from "@t3tools/shared/otelEnvironment";
 import { DEFAULT_SIGNAL_EXPORT } from "@t3tools/shared/observability";
+import * as OtelEnvironment from "@t3tools/shared/otelEnvironment";
 // @effect-diagnostics nodeBuiltinImport:off - CLI integration uses temporary Node paths.
 import * as NodeFS from "node:fs";
 import * as NodeOS from "node:os";
@@ -17,15 +17,15 @@ import {
   type ProjectId,
 } from "@t3tools/contracts";
 import * as NetService from "@t3tools/shared/Net";
+import { Command } from "effect/cli";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as FileSystem from "effect/FileSystem";
+import { FetchHttpClient } from "effect/http";
 import * as Layer from "effect/Layer";
 import * as References from "effect/References";
 import * as Stream from "effect/Stream";
-import { Command } from "effect/cli";
-import { FetchHttpClient } from "effect/http";
 import * as TestClock from "effect/testing/TestClock";
 
 import * as ServerSecretStore from "../auth/ServerSecretStore.ts";
@@ -36,6 +36,7 @@ import * as EventStore from "../orchestration-v2/EventStore.ts";
 import * as ProjectionStore from "../orchestration-v2/ProjectionStore.ts";
 import * as RuntimeLayer from "../orchestration-v2/runtimeLayer.ts";
 import * as SqlitePersistence from "../persistence/Sqlite.ts";
+import * as ManagedPolicy from "../policy/ManagedPolicy.ts";
 import * as ProjectEnrichmentService from "../project/ProjectEnrichmentService.ts";
 import * as ProjectFaviconResolver from "../project/ProjectFaviconResolver.ts";
 import * as ProjectService from "../project/ProjectService.ts";
@@ -46,7 +47,6 @@ import {
   persistServerRuntimeState,
 } from "../serverRuntimeState.ts";
 import * as ServerSettings from "../serverSettings.ts";
-import * as ManagedPolicy from "../policy/ManagedPolicy.ts";
 import * as WorkspacePaths from "../workspace/WorkspacePaths.ts";
 
 const layerCliRuntime = Layer.mergeAll(NodeServices.layer, NodeCrypto.layer, NetService.layer);

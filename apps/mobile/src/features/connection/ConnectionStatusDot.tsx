@@ -1,8 +1,8 @@
 import { View } from "react-native";
 
 import type { RemoteClientConnectionState } from "../../lib/connection";
-import { useAppearancePreferences } from "../settings/appearance/AppearancePreferencesProvider";
 import { themeColorWithAlpha, type MobileThemeVariables } from "../../lib/mobileTheme";
+import { useAppearancePreferences } from "../settings/appearance/AppearancePreferencesProvider";
 
 export type ConnectionStatusDotState = RemoteClientConnectionState;
 

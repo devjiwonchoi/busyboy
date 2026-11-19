@@ -2,15 +2,15 @@ import * as NodeServices from "@effect/platform-node/NodeServices";
 import { expect, it } from "@effect/vitest";
 import type { NotificationHandler } from "@muse-code/sdk";
 import { ProviderInstanceId, type ServerProviderModel } from "@t3tools/contracts";
-import { MuseSettings } from "../settings.ts";
 import { createModelSelection } from "@t3tools/shared/model";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as Schema from "effect/Schema";
 import { vi } from "vite-plus/test";
 
-import type { MuseSdkHost } from "./sdk.ts";
+import { MuseSettings } from "../settings.ts";
 import { museModelCapabilities } from "./modelCatalog.ts";
+import type { MuseSdkHost } from "./sdk.ts";
 import { makeMuseTextGeneration } from "./textGeneration.ts";
 
 const settings = Schema.decodeSync(MuseSettings)({ enabled: true });

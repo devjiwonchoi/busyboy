@@ -1,7 +1,9 @@
 // @effect-diagnostics globalJsonInEffect:off - JSON string literals safely embed paths and arguments in generated JavaScript.
-import * as Schema from "effect/Schema";
+
 import * as Effect from "effect/Effect";
 import * as Path from "effect/Path";
+import * as Schema from "effect/Schema";
+
 import * as ProcessRunner from "../processRunner.ts";
 import { AGENT_DEVICE_VERSION, DEVICE_HUB_VERSION } from "./DeviceToolchain.ts";
 

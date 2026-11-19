@@ -9,32 +9,32 @@ import {
   ThreadId,
   type AntigravitySettings,
 } from "@t3tools/contracts";
+import * as IdAllocator from "@t3tools/provider-core/server/IdAllocator";
+import * as McpProviderSessions from "@t3tools/provider-core/server/McpProviderSessions";
+import * as ProviderAdapter from "@t3tools/provider-core/server/ProviderAdapter";
+import * as ProviderEventLoggers from "@t3tools/provider-core/server/ProviderEventLoggers";
 import * as HostProcess from "@t3tools/shared/HostProcess";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import { HttpClient } from "effect/http";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
+import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
-import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
-import { HttpClient } from "effect/http";
 
+import * as ServerSecretStore from "../../auth/ServerSecretStore.ts";
 import * as BackgroundPolicy from "../../background/BackgroundPolicy.ts";
 import * as ServerConfig from "../../config.ts";
 import * as ServerSettings from "../../serverSettings.ts";
-import * as AntigravityInstallation from "../AntigravityInstallation.ts";
 import {
   ANTIGRAVITY_AUTH_STDOUT_PREFIX,
   resolveAntigravityInstanceDirectories,
 } from "../antigravityAuthSupport.ts";
-import * as ProviderEventLoggers from "@t3tools/provider-core/server/ProviderEventLoggers";
-import * as McpProviderSessions from "@t3tools/provider-core/server/McpProviderSessions";
+import * as AntigravityInstallation from "../AntigravityInstallation.ts";
 import * as ModelManifest from "../ModelManifest.ts";
-import * as IdAllocator from "@t3tools/provider-core/server/IdAllocator";
-import * as ProviderAdapter from "@t3tools/provider-core/server/ProviderAdapter";
-import { AntigravityDriver } from "./AntigravityDriver.ts";
 import * as ProviderHostLive from "../ProviderHostLive.ts";
-import * as ServerSecretStore from "../../auth/ServerSecretStore.ts";
+import { AntigravityDriver } from "./AntigravityDriver.ts";
 
 const hostPlatform = HostProcess.Platform.defaultValue();
 const windowsHost = hostPlatform === "win32";

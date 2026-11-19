@@ -1,14 +1,14 @@
-import { Button } from "../../../components/ui/Button";
-import type { PullRequestReviewGuide } from "@t3tools/contracts";
 import { stopFilePaths } from "@t3tools/client-runtime/review-guide-tour";
+import type { PullRequestReviewGuide } from "@t3tools/contracts";
 import { useGT } from "gt-react-native";
 import { Pressable, View } from "react-native";
-import { AppText as Text } from "../../../components/ui/AppText";
-import { SymbolView } from "../../../components/ui/AppSymbol";
-import { PullRequestMarkdown } from "../PullRequestMarkdown";
-import { Menu } from "../../../components/ui/Menu";
 
+import { SymbolView } from "../../../components/ui/AppSymbol";
+import { AppText as Text } from "../../../components/ui/AppText";
+import { Button } from "../../../components/ui/Button";
+import { Menu } from "../../../components/ui/Menu";
 import { useAppearancePreferences } from "../../settings/appearance/AppearancePreferencesProvider";
+import { PullRequestMarkdown } from "../PullRequestMarkdown";
 
 export function GuideOutline({
   guide,

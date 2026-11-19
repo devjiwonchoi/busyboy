@@ -1,6 +1,3 @@
-import { msg, useGT, useMessages } from "gt-react-native";
-import { ListChoiceRow } from "../../components/ui/ListChoiceRow";
-import * as Dialog from "../../components/ui/Dialog";
 import { useAtomValue } from "@effect/atom-react";
 import {
   connectionCatalogDisplayUrl,
@@ -8,11 +5,14 @@ import {
   pullRequestRoutingPermissionFor,
   type PullRequestRoutingPermission,
 } from "@t3tools/client-runtime/connection";
+import { msg, useGT, useMessages } from "gt-react-native";
 import { useState } from "react";
 import { Pressable, View } from "react-native";
 
-import { AppText as Text } from "../../components/ui/AppText";
 import { SymbolView } from "../../components/ui/AppSymbol";
+import { AppText as Text } from "../../components/ui/AppText";
+import * as Dialog from "../../components/ui/Dialog";
+import { ListChoiceRow } from "../../components/ui/ListChoiceRow";
 import { environmentCatalog } from "../../connection/catalog";
 import { useAtomCommand } from "../../state/use-atom-command";
 import { SettingsSection } from "../settings/components/SettingsSection";

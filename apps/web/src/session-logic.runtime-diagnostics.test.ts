@@ -2,11 +2,11 @@ import { RunId, ThreadId, TurnItemId, type OrchestrationV2TurnItem } from "@t3to
 import * as DateTime from "effect/DateTime";
 import { describe, expect, it } from "vite-plus/test";
 
-import { deriveTimelineEntriesFromVisibleTurnItems } from "./session-logic";
 import {
   deriveMessagesTimelineRows,
   workEntryDisplayLabel,
 } from "./components/chat/MessagesTimeline.logic";
+import { deriveTimelineEntriesFromVisibleTurnItems } from "./session-logic";
 
 const retainedMessage =
   "2026-03-14T16:11:12.550224Z ERROR codex_core::codex: failed to load skill /home/sebherrerabe/repos/devsuite/.agent/skills/monorepo-scaffolding/SKILL.md: invalid YAML: mapping va...";

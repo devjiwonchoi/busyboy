@@ -1,5 +1,6 @@
 import { RunId } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
+
 import { deriveMessagesTimelineRows, liveWorkEntryLabel } from "./MessagesTimeline.logic";
 
 describe("long active tool groups", () => {

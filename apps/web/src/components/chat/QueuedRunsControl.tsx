@@ -1,14 +1,11 @@
 import { scopeThreadRef } from "@t3tools/client-runtime/environment";
+import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
 import {
   isAtomCommandInterrupted,
   squashAtomCommandFailure,
 } from "@t3tools/client-runtime/state/runtime";
 import { deriveThreadQueueWorkflowState } from "@t3tools/client-runtime/state/thread-workflows";
-import { assistantCitationsToPlainText } from "@t3tools/shared/assistantCitations";
-import {
-  isAttachmentOnlyBootstrapPrompt,
-  replaceComposerContextReferences,
-} from "@t3tools/shared/composerContextReferences";
+import { resolveUserMessagePresentation } from "@t3tools/client-runtime/user-message";
 import type {
   ChatAttachment as ContractChatAttachment,
   EnvironmentId,
@@ -16,8 +13,15 @@ import type {
   RunId,
   ThreadId,
 } from "@t3tools/contracts";
-import { resolveUserMessagePresentation } from "@t3tools/client-runtime/user-message";
+import type { TimestampFormat } from "@t3tools/contracts/settings";
+import { assistantCitationsToPlainText } from "@t3tools/shared/assistantCitations";
+import {
+  isAttachmentOnlyBootstrapPrompt,
+  replaceComposerContextReferences,
+} from "@t3tools/shared/composerContextReferences";
 import { Link } from "@tanstack/react-router";
+import * as DateTime from "effect/DateTime";
+import { msg, T, useGT, useMessages } from "gt-react";
 import {
   ArrowUpIcon,
   CalendarClockIcon,
@@ -27,27 +31,24 @@ import {
   PencilIcon,
   XIcon,
 } from "lucide-react";
-import * as DateTime from "effect/DateTime";
-import { msg, T, useGT, useMessages } from "gt-react";
-import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
 import { useId, useImperativeHandle, useRef, useState, type ReactNode, type Ref } from "react";
 
+import { cn } from "~/lib/utils";
+
 import { useAssetUrls } from "../../assets/assetUrls";
-import { threadEnvironment } from "../../state/threads";
+import { m } from "../../i18n/messages";
 import { useQuietThreadProjection, useQuietThreadShell } from "../../state/entities";
 import { useEnvironment } from "../../state/environments";
+import { threadEnvironment } from "../../state/threads";
 import { useAtomCommand } from "../../state/use-atom-command";
 import { isImageAttachment, type ChatImageAttachment, type ChatMessage } from "../../types";
-import { cn } from "~/lib/utils";
 import { Button, InlineButton } from "../ui/button";
 import { toastManager } from "../ui/toast";
-import { m } from "../../i18n/messages";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
-import type { TimestampFormat } from "@t3tools/contracts/settings";
+import { buildExpandedImagePreview, type ExpandedImagePreview } from "./ExpandedImagePreview";
 import { GuestMessageName } from "./guestMessageStyle";
 import { TimelineRowTimestamp } from "./TimelineRowParts";
 import { FoldedMessageHeader, useScheduledTaskTitle } from "./TimelineUserMessageRow";
-import { buildExpandedImagePreview, type ExpandedImagePreview } from "./ExpandedImagePreview";
 
 export interface EditQueuedRunRequest {
   readonly runId: RunId;

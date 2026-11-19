@@ -4,8 +4,8 @@ import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
-import * as References from "effect/References";
 import * as Ref from "effect/Ref";
+import * as References from "effect/References";
 import * as TestClock from "effect/testing/TestClock";
 
 import * as ServerConfig from "../config.ts";

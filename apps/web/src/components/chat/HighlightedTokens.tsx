@@ -1,10 +1,9 @@
-import { use, type CSSProperties } from "react";
-
 import {
   withEmbeddedScripts,
   type EmbeddedScript,
   type SyntaxToken,
 } from "@t3tools/client-runtime/work-log/embedded-scripts";
+import { use, type CSSProperties } from "react";
 
 import { resolveDiffThemeName } from "../../lib/diffRendering";
 import { getSyntaxHighlighterPromise } from "../../lib/syntaxHighlighting";

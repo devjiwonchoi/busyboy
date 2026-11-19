@@ -1,8 +1,8 @@
+import { HorizontalFloatingToolbar, RNHostView } from "@expo/ui/jetpack-compose";
+
 import { NativeHeaderToolbar } from "../../native/NativeHeaderToolbar";
 import { NativeThemeHost } from "./NativeThemeHost.android";
-import { HorizontalFloatingToolbar, RNHostView } from "@expo/ui/jetpack-compose";
 import type { ToolbarProps } from "./Toolbar.types";
-
 import { useControlTheme } from "./useControlTheme";
 
 function ToolbarRoot(props: ToolbarProps) {

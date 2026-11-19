@@ -8,10 +8,10 @@ import type {
   DevicePlatformAvailability,
   DeviceSummary,
 } from "@t3tools/contracts";
+import type { NodeRuntimeUnavailableError } from "@t3tools/shared/nodeRuntime";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
-import type { NodeRuntimeUnavailableError } from "@t3tools/shared/nodeRuntime";
 
 export class DeviceHostError extends Schema.TaggedError<DeviceHostError>()("DeviceHostError", {
   hostId: Schema.String,

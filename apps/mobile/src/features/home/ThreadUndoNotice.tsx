@@ -1,9 +1,9 @@
-import { useAndroidFloatingTabs } from "../settings/appearance/AppearancePreferencesProvider";
-import { useState } from "react";
-import { useKeyboardState } from "react-native-keyboard-controller";
-import { Platform, View } from "react-native";
 import { useGT } from "gt-react-native";
+import { useState } from "react";
+import { Platform, View } from "react-native";
+import { useKeyboardState } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+
 import { Toast } from "../../components/ui/Toast";
 import {
   useDeviceType,
@@ -13,6 +13,7 @@ import {
 } from "../../native/native-layout-metrics";
 import { workspaceSearchBottomClearance } from "../layout/workspace/workspace-tabs-state";
 import { useWorkspaceTabs } from "../layout/workspace/WorkspaceTabsContext";
+import { useAndroidFloatingTabs } from "../settings/appearance/AppearancePreferencesProvider";
 import {
   dismissThreadUndoNotice,
   readThreadUndoNotice,

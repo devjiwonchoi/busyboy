@@ -1,9 +1,11 @@
 import { useGT } from "gt-react";
-import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { ChevronDownIcon, ChevronUpIcon, XIcon } from "lucide-react";
+import { useEffect, useRef, useState, type KeyboardEvent } from "react";
+
+import { cn } from "~/lib/utils";
+
 import { Button } from "../ui/button";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "../ui/input-group";
-import { cn } from "~/lib/utils";
 import { previewBridge } from "./previewBridge";
 
 interface PreviewFindBarProps {

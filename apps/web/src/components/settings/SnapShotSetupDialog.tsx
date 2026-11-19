@@ -1,16 +1,18 @@
-import { PermissionChecklist, PermissionContinueButton } from "../permissions/PermissionChecklist";
-import { usePermissionStatus } from "../permissions/usePermissionStatus";
 import {
   isModifierPairShortcut,
   type DesktopSnapShotSetupAction,
   type DesktopSnapShotState,
 } from "@t3tools/contracts";
+import { msg, T, useGT, useMessages } from "gt-react";
 import { useState, type ReactNode } from "react";
+
 import { MacAccessibilityIcon, MacScreenRecordingIcon } from "../Icons";
-import { CaptureShortcutConfig } from "./CaptureShortcutConfig";
+import { PermissionChecklist, PermissionContinueButton } from "../permissions/PermissionChecklist";
+import { usePermissionStatus } from "../permissions/usePermissionStatus";
 import { Button } from "../ui/button";
 import { Dialog, DialogDescription } from "../ui/dialog";
 import { WizardSteps, WizardPopup, WizardHeader, WizardPanel, WizardFooter } from "../ui/wizard";
+import { CaptureShortcutConfig } from "./CaptureShortcutConfig";
 import {
   captureSetupAccessReady,
   captureSetupBackend,
@@ -20,7 +22,6 @@ import {
   captureSetupShortcutReady,
   type CaptureSetupStep,
 } from "./SnapShotSetupDialog.logic";
-import { msg, T, useGT, useMessages } from "gt-react";
 
 const SETUP_STEPS = [
   { id: "access", label: msg("Access", { $context: "setup step: capture permissions" }) },

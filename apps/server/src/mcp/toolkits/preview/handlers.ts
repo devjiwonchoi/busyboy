@@ -1,7 +1,3 @@
-import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
-import * as Record from "effect/Record";
-import * as Schema from "effect/Schema";
 import {
   PROVIDER_SEND_TURN_MAX_FILE_BYTES,
   PREVIEW_RECORDING_STOP_TIMEOUT_MS,
@@ -22,14 +18,18 @@ import {
   type PreviewAutomationStatus,
   type PreviewTabId,
 } from "@t3tools/contracts";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Record from "effect/Record";
+import * as Schema from "effect/Schema";
 
+import { resolveAttachmentRelativePath } from "../../../attachmentPaths.ts";
 import {
   parseAttachmentUuid,
   parseAttachmentFileExtension,
   PENDING_ATTACHMENT_THREAD_SEGMENT,
   toSafeThreadAttachmentSegment,
 } from "../../../attachmentStore.ts";
-import { resolveAttachmentRelativePath } from "../../../attachmentPaths.ts";
 import * as ServerConfig from "../../../config.ts";
 import * as McpInvocationContext from "../../McpInvocationContext.ts";
 import * as McpToolAccess from "../../McpToolAccess.ts";

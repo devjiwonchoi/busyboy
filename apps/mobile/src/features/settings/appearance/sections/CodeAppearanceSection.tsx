@@ -1,4 +1,5 @@
 import { useGT } from "gt-react-native";
+
 import {
   CODE_FONT_SIZE_STEP,
   MAX_CODE_FONT_SIZE,

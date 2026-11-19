@@ -2,28 +2,27 @@
 import * as NodeFSP from "node:fs/promises";
 import * as NodeZlib from "node:zlib";
 
-import react from "@vitejs/plugin-react";
-import { tanstackRouter } from "@tanstack/router-plugin/vite";
-import compression from "compression";
-import { playwright } from "vite-plus/test/browser-playwright";
-import { defineProject, type TestProjectInlineConfiguration } from "vite-plus/test/config";
-import "vite-plus/test/config";
-import { defineConfig, type Connect, type Plugin } from "vite-plus";
-import * as Hash from "effect/Hash";
-import pkg from "./package.json" with { type: "json" };
-import pdfjsPkg from "pdfjs-dist/package.json" with { type: "json" };
-
 import {
   DEV_PROXIED_ORIGIN_PRESERVING_PREFIXES,
   DEV_PROXIED_PATH_PREFIXES,
 } from "@t3tools/shared/devProxy";
+import { tanstackRouter } from "@tanstack/router-plugin/vite";
+import react from "@vitejs/plugin-react";
+import compression from "compression";
+import * as Hash from "effect/Hash";
+import "vite-plus/test/config";
+import pdfjsPkg from "pdfjs-dist/package.json" with { type: "json" };
+import { defineConfig, type Connect, type Plugin } from "vite-plus";
+import { playwright } from "vite-plus/test/browser-playwright";
+import { defineProject, type TestProjectInlineConfiguration } from "vite-plus/test/config";
 
 import { loadRepoEnv } from "../../scripts/lib/public-config";
 import { resolveTaggedSourceVersion } from "../../scripts/lib/tagged-source-version";
 import { thirdPartyLicensesPlugin } from "../../scripts/lib/third-party-licenses";
+import pkg from "./package.json" with { type: "json" };
+import { formatAppDisplayName, resolveWebAppStageLabel } from "./src/branding.logic";
 import { tailwindPlugins } from "./vite/tailwind";
 import { warmBundledDevPlugin } from "./vite/warmBundledDev";
-import { formatAppDisplayName, resolveWebAppStageLabel } from "./src/branding.logic";
 
 const repoEnv = loadRepoEnv();
 Object.assign(process.env, repoEnv);

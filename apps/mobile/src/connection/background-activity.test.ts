@@ -1,5 +1,5 @@
-import { EnvironmentId, WS_METHODS } from "@t3tools/contracts";
 import { describe, expect, it } from "@effect/vitest";
+import { EnvironmentId, WS_METHODS } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 
 import {

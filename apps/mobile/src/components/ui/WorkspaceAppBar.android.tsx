@@ -1,7 +1,7 @@
-import { useGT } from "gt-react-native";
 import { Box, Icon, IconButton, RNHostView } from "@expo/ui/jetpack-compose";
 import { size } from "@expo/ui/jetpack-compose/modifiers";
 import type { MenuAction } from "@react-native-menu/menu";
+import { useGT } from "gt-react-native";
 import {
   createContext,
   use,

@@ -1,17 +1,17 @@
+import * as NodeSqliteClient from "@t3tools/shared/nodeSqliteClient";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 import * as FileSystem from "effect/FileSystem";
+import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
 import * as SqlClient from "effect/sql/SqlClient";
 import * as SqlError from "effect/sql/SqlError";
-import * as NodeSqliteClient from "@t3tools/shared/nodeSqliteClient";
 
-import { hasPendingMigrations, runMigrations } from "./Migrations.ts";
-import { initializeV2Database } from "./initializeV2Database.ts";
 import * as ServerConfig from "../config.ts";
 import * as ServerOwnership from "../serverOwnership.ts";
+import { initializeV2Database } from "./initializeV2Database.ts";
+import { hasPendingMigrations, runMigrations } from "./Migrations.ts";
 
 const WAL_SIZE_LIMIT_BYTES = 128 * 1024 * 1024;
 

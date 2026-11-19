@@ -10,36 +10,35 @@ import * as Schema from "effect/Schema";
 
 import { applyAppearanceContrast } from "./appearanceContrast";
 import { applyAppearanceFontVariables, TYPOGRAPHY_ADVANCED_STORAGE_KEY } from "./appearanceFonts";
-import { startElectronBrowserHost } from "./browser/ElectronBrowserHost";
+import { APP_BASE_NAME, APP_DISPLAY_NAME, APP_STAGE_LABEL } from "./branding";
+import { resolveServerBackedAppDisplayName, resolveWindowTitle } from "./branding.logic";
 import { startBrowserProfileReporting } from "./browser/BrowserProfileReporter";
+import { startElectronBrowserHost } from "./browser/ElectronBrowserHost";
 import { startPreviewTitleRecording } from "./browserHistoryStore";
-import { retainThreadOverlaysForThread } from "./components/chat/threadOverlayRetention";
-import { resolveWindowTitleThreadStatus } from "./components/Sidebar.logic";
 import { startBackgroundThreadAnnouncements } from "./components/BackgroundThreadAnnouncer";
+import { registerOpenFavoriteEditorCommand } from "./components/chat/OpenInPickerShortcut";
+import { retainThreadOverlaysForThread } from "./components/chat/threadOverlayRetention";
 import { startSshPasswordPromptQueue } from "./components/desktop/SshPasswordPromptDialog";
 import { startHostFreezeToasts } from "./components/HostFreezeToastCoordinator";
 import { startKeybindingsUpdateToasts } from "./components/KeybindingsUpdateToast";
 import { startLegacyThreadMigrationToast } from "./components/LegacyThreadMigrationToast";
 import { startPermissionUpdateNotices } from "./components/PermissionUpdateNotice";
 import { startAgentOpenedPreviews } from "./components/preview/agentOpenedPreviews";
+import { startGuideRunNotifications } from "./components/pullRequest/guide/PullRequestGuideRunCoordinator";
+import { resolveWindowTitleThreadStatus } from "./components/Sidebar.logic";
 import { startMainAppLocationTracking } from "./components/sidebar/mainAppLocation";
 import { startDesktopUpdateLaunchNotice } from "./components/sidebar/updateEverythingRun";
 import { startSlowRpcRequestToasts } from "./components/SlowRpcRequestToastCoordinator";
 import { startThreadNotifications } from "./components/ThreadNotificationCoordinator";
-import { startGuideRunNotifications } from "./components/pullRequest/guide/PullRequestGuideRunCoordinator";
-import { APP_BASE_NAME, APP_DISPLAY_NAME, APP_STAGE_LABEL } from "./branding";
-import { resolveServerBackedAppDisplayName, resolveWindowTitle } from "./branding.logic";
-import { isElectron } from "./env";
 import {
   subscribeComposerDraftModelReconciliation,
   subscribeDraftThreadPromotion,
   useComposerDraftStore,
 } from "./composerDraftStore";
+import { isElectron } from "./env";
 import { startDefaultThemeAdoption } from "./hooks/useDefaultTheme";
 import { startEnvironmentThemeRepaint } from "./hooks/useEnvironmentTheme";
-import { startThemeBackground } from "./themeBackground";
 import { readLocalStorageValue, subscribeLocalStorageKey } from "./hooks/useLocalStorage";
-import { startHostEnvironmentLookup } from "./state/primaryEnvironment";
 import {
   getClientSettings,
   startModelPreferencesMigration,
@@ -47,24 +46,25 @@ import {
 } from "./hooks/useSettings";
 import { syncBrowserChromeTheme } from "./hooks/useTheme";
 import { startThreadVisitedMigration } from "./hooks/useThreadVisitedMigration";
+import { m } from "./i18n/messages";
+import { startI18n, subscribeI18n } from "./i18n/runtime";
 import { installDesktopPasteAsText } from "./lib/desktopPasteAsText";
 import {
   syncDocumentElectronPlatformClasses,
   syncDocumentWindowControlsOverlayClass,
 } from "./lib/windowControlsOverlay";
+import { startWorkspaceFocus } from "./lib/workspaceFocus";
 import { startProviderAuthDelivery } from "./providerAuthDelivery";
 import { getRouter, type AppRouter } from "./router";
 import { appAtomRegistry } from "./rpc/atomRegistry";
+import { installChatRouteCommands } from "./shortcuts/chatRouteCommands";
+import { installCommandPaletteCommands } from "./shortcuts/commandPaletteCommands";
+import { startHostEnvironmentLookup } from "./state/primaryEnvironment";
 import { environmentProjects } from "./state/projects";
 import { primaryServerConfigAtom } from "./state/server";
 import { environmentShell } from "./state/shell";
-import { installChatRouteCommands } from "./shortcuts/chatRouteCommands";
-import { startWorkspaceFocus } from "./lib/workspaceFocus";
-import { m } from "./i18n/messages";
-import { startI18n, subscribeI18n } from "./i18n/runtime";
-import { installCommandPaletteCommands } from "./shortcuts/commandPaletteCommands";
-import { registerOpenFavoriteEditorCommand } from "./components/chat/OpenInPickerShortcut";
 import { environmentThreadShells, threadEnvironment } from "./state/threads";
+import { startThemeBackground } from "./themeBackground";
 import { resolveActiveThreadRouteRef, resolveThreadRouteTarget } from "./threadRoutes";
 
 /** Writes appearance settings onto the document, touching only the groups that changed. */

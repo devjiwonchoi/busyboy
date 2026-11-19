@@ -1,4 +1,5 @@
 import { useAtomValue } from "@effect/atom-react";
+import { scopeThreadRef } from "@t3tools/client-runtime/environment";
 import {
   EMPTY_V2_ITEM_SUPPORT,
   resolveV2ItemSupport,
@@ -6,7 +7,6 @@ import {
   type V2ItemSupport,
 } from "@t3tools/client-runtime/state/item-support";
 import type { EnvironmentId, ThreadId, TurnItemId } from "@t3tools/contracts";
-import { scopeThreadRef } from "@t3tools/client-runtime/environment";
 import { Atom } from "effect/reactivity";
 
 import { environmentThreadDetails } from "./threads";

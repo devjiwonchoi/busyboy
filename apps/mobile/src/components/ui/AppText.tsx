@@ -7,9 +7,8 @@ import {
   type TextProps as RNTextProps,
 } from "react-native";
 
-import { MOBILE_TEXT_CLASSES } from "../../lib/typography";
-
 import { cn } from "../../lib/cn";
+import { MOBILE_TEXT_CLASSES } from "../../lib/typography";
 
 export type AppTextProps = RNTextProps & {
   readonly className?: string;

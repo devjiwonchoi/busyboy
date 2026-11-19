@@ -1,4 +1,3 @@
-import { vi } from "vite-plus/test";
 import { assert, it } from "@effect/vitest";
 import {
   CommandId,
@@ -7,19 +6,21 @@ import {
   ProviderInstanceId,
   ThreadId,
 } from "@t3tools/contracts";
+import type * as ProviderAdapter from "@t3tools/provider-core/server/ProviderAdapter";
 import * as Cause from "effect/Cause";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
 import * as Ref from "effect/Ref";
+import { vi } from "vite-plus/test";
+
 import * as SqlitePersistence from "../persistence/Sqlite.ts";
 import { CodexProviderCapabilitiesV2 } from "./Adapters/CodexAdapterV2.ts";
 import * as Orchestrator from "./Orchestrator.ts";
 import * as ProjectionStore from "./ProjectionStore.ts";
 import * as ProviderAdapterRegistry from "./ProviderAdapterRegistry.ts";
 import * as ProviderReplayHarness from "./testkit/ProviderReplayHarness.ts";
-import type * as ProviderAdapter from "@t3tools/provider-core/server/ProviderAdapter";
 
 const instanceId = ProviderInstanceId.make("codex");
 const modelSelection = { instanceId, model: "gpt-5.1-codex" };

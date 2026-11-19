@@ -6,25 +6,25 @@ import {
   type ProviderSendTurnInput,
   type RuntimeMode,
 } from "@t3tools/contracts";
+import * as AcpSessionRuntime from "@t3tools/provider-acp/server/AcpSessionRuntime";
 import * as HostProcess from "@t3tools/shared/HostProcess";
+import type * as EffectAcpSchema from "effect-acp/compat";
+import * as EffectAcpErrors from "effect-acp/errors";
 import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as Predicate from "effect/Predicate";
+import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
-import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
-import * as EffectAcpErrors from "effect-acp/errors";
-import type * as EffectAcpSchema from "effect-acp/compat";
 
+import packageJson from "../../../package.json" with { type: "json" };
 import {
   makeAntigravityStderrHandler,
   makeAntigravityStdoutTransform,
 } from "../antigravityAuthSupport.ts";
-import * as AcpSessionRuntime from "@t3tools/provider-acp/server/AcpSessionRuntime";
-import packageJson from "../../../package.json" with { type: "json" };
 import { normalizeAntigravitySessionUpdate } from "./AntigravityProtocol.ts";
 
 export interface AntigravityAcpRuntimeInput extends Omit<

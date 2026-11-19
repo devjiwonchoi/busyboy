@@ -1,11 +1,12 @@
-import { Button } from "../../components/ui/Button";
 import { useAudioPlayerStatus } from "expo-audio";
 import { T, useGT } from "gt-react-native";
 import { useEffect, useState } from "react";
 import { AppState, View } from "react-native";
+
 import { AppText as Text } from "../../components/ui/AppText";
-import { useFullscreenVideoOpen, useMediaAudioSessionHold } from "../../lib/videoAudioSession";
+import { Button } from "../../components/ui/Button";
 import { createAudioPlaybackSession } from "../../lib/audioSession";
+import { useFullscreenVideoOpen, useMediaAudioSessionHold } from "../../lib/videoAudioSession";
 import { usePlaybackAudioPlayer } from "../voice-input/usePlaybackAudioPlayer";
 
 function timestamp(seconds: number) {

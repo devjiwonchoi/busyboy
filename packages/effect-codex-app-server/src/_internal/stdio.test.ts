@@ -1,12 +1,12 @@
 import { assert, describe, it } from "@effect/vitest";
-import * as Effect from "effect/Effect";
 import * as Deferred from "effect/Deferred";
+import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
+import * as PlatformError from "effect/PlatformError";
+import { ChildProcessSpawner } from "effect/process";
 import * as Queue from "effect/Queue";
 import * as Stream from "effect/Stream";
 import * as TestClock from "effect/testing/TestClock";
-import * as PlatformError from "effect/PlatformError";
-import { ChildProcessSpawner } from "effect/process";
 
 import * as CodexError from "../errors.ts";
 import * as CodexProtocol from "../protocol.ts";

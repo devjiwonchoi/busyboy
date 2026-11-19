@@ -1,12 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 
 import { highlightCode } from "../../lib/highlights";
-
-import type { NativeReviewDiffRow } from "./nativeReviewDiffSurface";
-import type { NativeReviewDiffFile } from "./nativeReviewDiffTypes";
-import { highlightNativeReviewDiffVisibleRows } from "./nativeReviewDiffHighlighter";
 import { buildNativeReviewDiffData } from "../review/nativeReviewDiffAdapter";
 import { buildReviewParsedDiff } from "../review/reviewModel";
+import { highlightNativeReviewDiffVisibleRows } from "./nativeReviewDiffHighlighter";
+import type { NativeReviewDiffRow } from "./nativeReviewDiffSurface";
+import type { NativeReviewDiffFile } from "./nativeReviewDiffTypes";
 
 const tokenization = vi.hoisted(() => ({
   calls: [] as string[],

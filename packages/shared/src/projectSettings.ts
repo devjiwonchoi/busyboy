@@ -14,6 +14,7 @@ import {
   type ThreadEnvMode,
   type WorktreeCleanupRules,
 } from "@t3tools/contracts";
+
 import { readCustomModelEntries } from "./model.ts";
 import { normalizeProjectPathForComparison } from "./path.ts";
 import { fallbackTextGenerationModelSelection } from "./serverSettings.ts";

@@ -1,8 +1,8 @@
-import { SymbolView } from "./ui/AppSymbol";
 import { Image, type ImageStyle, type StyleProp } from "react-native";
 
 import { markdownFileIconSource } from "../lib/markdownFileIcons";
 import { resolveMarkdownFileIcon } from "../lib/markdownLinks";
+import { SymbolView } from "./ui/AppSymbol";
 
 export function PierreEntryIcon(props: {
   readonly path: string;

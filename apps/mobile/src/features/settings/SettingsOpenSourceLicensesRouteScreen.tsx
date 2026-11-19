@@ -1,7 +1,3 @@
-import { T, useGT, useMessages } from "gt-react-native";
-import { NativeScrollView } from "../../native/NativeScrollViewMarker";
-import { useSearchToolbarInset } from "../../components/ui/useBarInset";
-import { ScreenScrollView as ScrollView } from "../../components/ui/ScreenScrollView";
 import { LegendList } from "@legendapp/list/react-native";
 import { type StaticScreenProps, useNavigation } from "@react-navigation/native";
 import {
@@ -11,6 +7,7 @@ import {
   thirdPartyLicenseEntryKey,
   type ThirdPartyLicenseEntry,
 } from "@t3tools/shared/thirdPartyLicenses";
+import { T, useGT, useMessages } from "gt-react-native";
 import { useMemo, useState } from "react";
 import { Linking, Platform, Pressable, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -18,8 +15,10 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { SymbolView } from "../../components/ui/AppSymbol";
 import { AppText as Text } from "../../components/ui/AppText";
 import { ListRow } from "../../components/ui/ListRow";
+import { ScreenScrollView as ScrollView } from "../../components/ui/ScreenScrollView";
+import { useSearchToolbarInset } from "../../components/ui/useBarInset";
+import { NativeScrollView } from "../../native/NativeScrollViewMarker";
 import { SettingsScreen } from "./components/SettingsScreen";
-
 import { getMobileThirdPartyLicenses } from "./mobileThirdPartyLicenses";
 
 function useMobileThirdPartyLicenses() {

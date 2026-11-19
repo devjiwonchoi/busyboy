@@ -1,4 +1,5 @@
 import { ipcRenderer } from "electron";
+
 import { MAC_PERMISSION_HELPER_CHANNEL } from "./ipc/channels.ts";
 
 window.addEventListener("DOMContentLoaded", () => {

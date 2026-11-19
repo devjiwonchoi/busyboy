@@ -1,15 +1,15 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { expect, it } from "@effect/vitest";
 import * as HostProcess from "@t3tools/shared/HostProcess";
+import { Command } from "effect/cli";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as PlatformError from "effect/PlatformError";
+import { ChildProcessSpawner } from "effect/process";
 import * as Sink from "effect/Sink";
 import * as Stream from "effect/Stream";
 import * as TestConsole from "effect/testing/TestConsole";
-import { Command } from "effect/cli";
-import { ChildProcessSpawner } from "effect/process";
 
 import packageJson from "../../package.json" with { type: "json" };
 import * as PreviewBrowserHost from "../preview/PreviewBrowserHost.ts";

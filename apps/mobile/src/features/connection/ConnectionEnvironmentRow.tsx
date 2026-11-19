@@ -1,33 +1,33 @@
-import { errorDisplayMessage } from "@t3tools/client-runtime/errors";
-import { msg, T, useGT, useMessages } from "gt-react-native";
-import * as Dialog from "../../components/ui/Dialog";
-import { ConnectionTraceId } from "./ConnectionTraceId";
-import { SymbolView } from "../../components/ui/AppSymbol";
+import { useAtomValue } from "@effect/atom-react";
 import { hasSavedBearerRoute, hostFreezeNotice } from "@t3tools/client-runtime/connection";
+import { errorDisplayMessage } from "@t3tools/client-runtime/errors";
 import type { AtomCommandResult } from "@t3tools/client-runtime/state/runtime";
 import { type EnvironmentId, resolveEnvironmentMachineKind } from "@t3tools/contracts";
-import { useAtomValue } from "@effect/atom-react";
 import * as Cause from "effect/Cause";
 import { AsyncResult } from "effect/reactivity";
+import { msg, T, useGT, useMessages } from "gt-react-native";
 import { useState } from "react";
 import { Platform, Pressable, View } from "react-native";
 import Animated, { FadeIn, FadeOut, LinearTransition } from "react-native-reanimated";
-import { m as resolveMessage } from "../../i18n/messages";
 
-import { AppText as Text } from "../../components/ui/AppText";
 import { EnvironmentMachineSymbol } from "../../components/EnvironmentMachineSymbol";
+import { SymbolView } from "../../components/ui/AppSymbol";
+import { AppText as Text } from "../../components/ui/AppText";
 import { Button } from "../../components/ui/Button";
+import * as Dialog from "../../components/ui/Dialog";
 import { IconButton } from "../../components/ui/IconButton";
 import { ThemedSwitch } from "../../components/ui/ThemedSwitch";
+import { m as resolveMessage } from "../../i18n/messages";
+import type { MessageResolver } from "../../i18n/messages";
 import { cn } from "../../lib/cn";
+import { environmentPresentations } from "../../state/presentation";
 import type { ConnectedEnvironmentSummary } from "../../state/remote-runtime-types";
 import { serverEnvironment } from "../../state/server";
-import { environmentPresentations } from "../../state/presentation";
 import { ConnectionDiagnosisDetails, useConnectionDiagnosis } from "./ConnectionDiagnosisDetails";
 import { ConnectionFormField } from "./ConnectionFormField";
 import { ConnectionStatusDot } from "./ConnectionStatusDot";
+import { ConnectionTraceId } from "./ConnectionTraceId";
 import { environmentStatusText } from "./environmentStatusText";
-import type { MessageResolver } from "../../i18n/messages";
 
 function connectionStatusLabel(
   environment: ConnectedEnvironmentSummary,

@@ -11,10 +11,10 @@ import { msg, T, useGT, useMessages } from "gt-react-native";
 import { Pressable, ScrollView, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { SheetHeader } from "../../components/ui/SheetHeader";
 import { SymbolView } from "../../components/ui/AppSymbol";
 import { AppText as Text } from "../../components/ui/AppText";
 import { ScreenContent } from "../../components/ui/ScreenContent";
+import { SheetHeader } from "../../components/ui/SheetHeader";
 import { environmentThreadShells } from "../../state/threads";
 
 const KIND_LABELS = {

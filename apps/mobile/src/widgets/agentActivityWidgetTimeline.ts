@@ -2,7 +2,6 @@ import type { RelayAgentActivityAggregateState } from "@t3tools/contracts/relay"
 import { msg } from "gt-react-native";
 
 import { m, type MessageResolver } from "../i18n/messages";
-
 import type { AgentActivityProps, AgentActivityText } from "./AgentActivity";
 
 // The widget only refreshes while the app is open, so after this long it stops

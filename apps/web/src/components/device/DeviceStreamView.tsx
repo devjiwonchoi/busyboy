@@ -1,30 +1,31 @@
-import type { DevicePlatform, EnvironmentId } from "@t3tools/contracts";
 import { useAtomValue } from "@effect/atom-react";
+import { resolveDeviceShape } from "@t3tools/client-runtime/device/shape-profile";
+import type { DeviceHardwareButton, DeviceScreenSize } from "@t3tools/client-runtime/device/stream";
+import type { DevicePlatform, EnvironmentId } from "@t3tools/contracts";
 import { AsyncResult, Atom } from "effect/reactivity";
 import { T, useGT } from "gt-react";
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 
-import { cn } from "~/lib/utils";
 import { Button } from "~/components/ui/button";
+import { observeResize } from "~/lib/observeResize";
+import { cn } from "~/lib/utils";
 import { renewDeviceHubAccess, useDeviceHubAccess } from "~/state/device";
-import { resolveDeviceShape } from "@t3tools/client-runtime/device/shape-profile";
-import { deviceKeyboard, deviceModel } from "./deviceModels";
-import { fitDeviceFrame } from "./deviceFrameLayout";
-import { DeviceDuoViewport } from "./DeviceDuoViewport";
-import { DeviceDuoControls } from "./DeviceDuoControls";
+
 import { DeviceAndroidFoldControls } from "./DeviceAndroidFoldControls";
-import { DevicePhoneViewport } from "./DevicePhoneViewport";
-import { DeviceLoadingView } from "./DeviceLoadingView";
+import { DeviceDuoControls } from "./DeviceDuoControls";
+import { DeviceDuoViewport } from "./DeviceDuoViewport";
+import { fitDeviceFrame } from "./deviceFrameLayout";
 import type { DeviceAxElement } from "./deviceHubApi";
 import { androidFoldViewAtom, deviceAxElementsAtom } from "./deviceHubAtoms";
+import { DeviceLoadingView } from "./DeviceLoadingView";
+import { deviceKeyboard, deviceModel } from "./deviceModels";
+import { DevicePhoneViewport } from "./DevicePhoneViewport";
 import {
   deviceScreenKey,
   deviceStreamSessionAtom,
   type DeviceStreamSession,
   IDLE_DEVICE_STREAM_STATE,
 } from "./deviceStreamSession";
-import type { DeviceHardwareButton, DeviceScreenSize } from "@t3tools/client-runtime/device/stream";
-import { observeResize } from "~/lib/observeResize";
 
 const NO_SESSION_ATOM = Atom.make<DeviceStreamSession | null>(null).pipe(
   Atom.withLabel("device-stream:none"),

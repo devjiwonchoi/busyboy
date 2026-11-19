@@ -1,8 +1,10 @@
 // @effect-diagnostics nodeBuiltinImport:off - Lean self-invoked local IPC client; no auth/store graph.
 import * as NodeNet from "node:net";
+
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Schema from "effect/Schema";
+
 import * as Protocol from "../provider/CodexManagedTokenProtocol.ts";
 
 const decodeArguments = Schema.decodeUnknownEffect(

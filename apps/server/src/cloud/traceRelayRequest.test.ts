@@ -1,9 +1,9 @@
 import { describe, expect, it } from "@effect/vitest";
+import { RelayClientTracer } from "@t3tools/shared/relayTracing";
 import * as Effect from "effect/Effect";
+import { HttpServerRequest } from "effect/http";
 import * as Option from "effect/Option";
 import * as Tracer from "effect/Tracer";
-import { HttpServerRequest } from "effect/http";
-import { RelayClientTracer } from "@t3tools/shared/relayTracing";
 
 import {
   traceAuthenticatedRelayRequest,

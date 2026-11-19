@@ -1,9 +1,10 @@
 // @effect-diagnostics nodeBuiltinImport:off - Credential leases coordinate Node server processes.
 import * as NodePath from "node:path";
-import { lock } from "proper-lockfile";
+
 import { ProviderSetupError, type ProviderInstanceId } from "@t3tools/contracts";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
+import { lock } from "proper-lockfile";
 
 /** Keep rotating tokens and their active profile atomic across servers sharing a secret store. */
 export const withChatGptSessionLock = <A, E, R>(

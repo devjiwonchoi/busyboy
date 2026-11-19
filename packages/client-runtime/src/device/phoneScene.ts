@@ -19,8 +19,9 @@ import {
   type BufferGeometry,
   type Texture,
 } from "three";
-import type { DeviceScreenSize } from "./stream.ts";
+
 import { IOS_PHONE_SHAPE, type DeviceShapeProfile } from "./shapeProfile.ts";
+import type { DeviceScreenSize } from "./stream.ts";
 
 const SCREEN_HEIGHT = 2.2;
 

@@ -1,24 +1,25 @@
 // @effect-diagnostics nodeBuiltinImport:off
-import * as NodePath from "node:path";
-import * as NodeOS from "node:os";
-import * as NodeURL from "node:url";
+
 import * as NodeFS from "node:fs";
+import * as NodeOS from "node:os";
+import * as NodePath from "node:path";
+import * as NodeURL from "node:url";
 
 import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { it } from "@effect/vitest";
+import { ProviderInstanceId } from "@t3tools/contracts";
+import { GrokSettings } from "@t3tools/provider-grok/settings";
+import { makeGrokTextGeneration } from "@t3tools/provider-grok/testing";
+import { execScriptSource, writeFakeCli } from "@t3tools/provider-testing/fakeCli";
+import { createModelSelection } from "@t3tools/shared/model";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
-import { createModelSelection } from "@t3tools/shared/model";
 import { expect } from "vite-plus/test";
-import { ProviderInstanceId } from "@t3tools/contracts";
-import { GrokSettings } from "@t3tools/provider-grok/settings";
 
 import * as ServerConfig from "../config.ts";
 import * as TextGeneration from "./TextGeneration.ts";
-import { makeGrokTextGeneration } from "@t3tools/provider-grok/testing";
-import { execScriptSource, writeFakeCli } from "@t3tools/provider-testing/fakeCli";
 const decodeGrokSettings = Schema.decodeSync(GrokSettings);
 
 const __dirname = NodePath.dirname(NodeURL.fileURLToPath(import.meta.url));

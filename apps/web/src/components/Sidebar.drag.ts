@@ -1,5 +1,6 @@
 import { closestCenter, type CollisionDetection, type Modifier } from "@dnd-kit/core";
 import { verticalListSortingStrategy, type SortingStrategy } from "@dnd-kit/sortable";
+
 import {
   resolveSidebarDropTarget,
   sidebarListItemId,

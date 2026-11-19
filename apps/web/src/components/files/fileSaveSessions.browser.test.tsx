@@ -1,8 +1,9 @@
-import { render, fakeTimers } from "../../../test/render";
 import { type AuthSessionState, EnvironmentId } from "@t3tools/contracts";
 import { AsyncResult } from "effect/reactivity";
 import { StrictMode } from "react";
 import { describe, expect, it, vi } from "vite-plus/test";
+
+import { render, fakeTimers } from "../../../test/render";
 
 const { runAtomCommand, getUnsavedFile } = vi.hoisted(() => ({
   runAtomCommand: vi.fn(),

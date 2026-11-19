@@ -1,4 +1,3 @@
-import { deriveProviderInstanceConfigMap } from "../provider/ProviderInstanceRegistryHydration.ts";
 import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, it } from "@effect/vitest";
@@ -18,8 +17,8 @@ import {
   TerminalProviderInstanceNotFoundError,
 } from "@t3tools/contracts";
 import * as HostProcess from "@t3tools/shared/HostProcess";
+import * as PtyAdapter from "@t3tools/shared/PtyAdapter";
 import { SpawnExecutableResolution } from "@t3tools/shared/shell";
-import * as NodePtyAdapter from "./NodePtyAdapter.ts";
 import * as Clock from "effect/Clock";
 import * as Deferred from "effect/Deferred";
 import * as Duration from "effect/Duration";
@@ -30,11 +29,11 @@ import * as Fiber from "effect/Fiber";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
-import * as PlatformError from "effect/PlatformError";
 import * as Path from "effect/Path";
+import * as PlatformError from "effect/PlatformError";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
-import * as Ref from "effect/Ref";
 import * as Queue from "effect/Queue";
+import * as Ref from "effect/Ref";
 import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
@@ -42,19 +41,20 @@ import * as SynchronizedRef from "effect/SynchronizedRef";
 import * as TestClock from "effect/testing/TestClock";
 import { expect, vi } from "vite-plus/test";
 
+import packageJson from "../../package.json" with { type: "json" };
 import * as ServerConfig from "../config.ts";
+import * as GitWorkflowService from "../git/GitWorkflowService.ts";
 import * as ProjectionStore from "../orchestration-v2/ProjectionStore.ts";
 import * as ProcessRunner from "../processRunner.ts";
-import * as ServerSettings from "../serverSettings.ts";
 import * as ProjectService from "../project/ProjectService.ts";
 import * as ProjectSetupScriptRunner from "../project/ProjectSetupScriptRunner.ts";
-import * as TerminalManager from "./Manager.ts";
-import * as GitWorkflowService from "../git/GitWorkflowService.ts";
+import { deriveProviderInstanceConfigMap } from "../provider/ProviderInstanceRegistryHydration.ts";
+import * as ServerSettings from "../serverSettings.ts";
 import { makePrepareTerminalLaunch } from "../workspace/restoreMissingWorktree.ts";
 import { withWorkspaceLease } from "../workspace/workspaceLease.ts";
+import * as TerminalManager from "./Manager.ts";
+import * as NodePtyAdapter from "./NodePtyAdapter.ts";
 import { terminalOutputStream } from "./OutputProtocol.ts";
-import * as PtyAdapter from "@t3tools/shared/PtyAdapter";
-import packageJson from "../../package.json" with { type: "json" };
 
 vi.mock("effect/SynchronizedRef", async (importOriginal) => {
   const original = await importOriginal<typeof SynchronizedRef>();

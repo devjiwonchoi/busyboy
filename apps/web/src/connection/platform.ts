@@ -1,9 +1,4 @@
-import { msg } from "gt-react";
-import {
-  ClientCapabilities,
-  PlatformConnectionSource,
-  Persistence,
-} from "@t3tools/client-runtime/platform";
+import { bootstrapRemoteBearerSession } from "@t3tools/client-runtime/authorization";
 import {
   BearerConnectionCredential,
   BearerConnectionProfile,
@@ -20,8 +15,12 @@ import {
   sshTargetKey,
   Wakeups,
 } from "@t3tools/client-runtime/connection";
-import { bootstrapRemoteBearerSession } from "@t3tools/client-runtime/authorization";
 import { fetchRemoteEnvironmentDescriptor } from "@t3tools/client-runtime/environment";
+import {
+  ClientCapabilities,
+  PlatformConnectionSource,
+  Persistence,
+} from "@t3tools/client-runtime/platform";
 import { managedRelayAccountChanges, managedRelaySessionAtom } from "@t3tools/client-runtime/relay";
 import { EnvironmentRpcRequestObserver } from "@t3tools/client-runtime/rpc";
 import {
@@ -36,34 +35,35 @@ import {
 import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
+import { FetchHttpClient } from "effect/http";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Queue from "effect/Queue";
 import * as Ref from "effect/Ref";
 import * as Stream from "effect/Stream";
-import { FetchHttpClient } from "effect/http";
+import { msg } from "gt-react";
 
 import { APP_VERSION } from "../branding";
+import { clearComposerDraftsEnvironment } from "../composerDraftStore";
 import { readDesktopPrimaryBearerToken } from "../environments/primary/desktopAuth";
 import * as PrimaryEnvironmentHttpLayer from "../environments/primary/httpLayer";
 import {
   readPrimaryEnvironmentTarget,
   type PrimaryEnvironmentTarget,
 } from "../environments/primary/target";
-import { clearComposerDraftsEnvironment } from "../composerDraftStore";
 import { isHostedStaticApp } from "../hostedPairing";
-import { isLocalEnvironmentDisabled } from "../localEnvironment";
+import { m } from "../i18n/messages";
 import { randomUUID } from "../lib/utils";
+import { isLocalEnvironmentDisabled } from "../localEnvironment";
 import { appAtomRegistry } from "../rpc/atomRegistry";
 import { acknowledgeRpcRequest, trackRpcRequestSent } from "../rpc/requestLatencyState";
+import { clientPresentationMetadata } from "./clientMetadata";
 import {
   desktopLocalConnectionId,
   readDesktopSecondaryBootstrapsResult,
   type DesktopSecondaryBootstrapsRead,
 } from "./desktopLocal";
 import * as ConnectionStorage from "./storage";
-import { clientPresentationMetadata } from "./clientMetadata";
-import { m } from "../i18n/messages";
 
 let nextObservedRpcRequestId = 0;
 

@@ -1,6 +1,6 @@
 import { Editor, Extension, InputRule, type Extensions } from "@tiptap/core";
-import { closeHistory, redo, undo } from "@tiptap/pm/history";
 import { splitBlock } from "@tiptap/pm/commands";
+import { closeHistory, redo, undo } from "@tiptap/pm/history";
 import { TextSelection } from "@tiptap/pm/state";
 import StarterKit from "@tiptap/starter-kit";
 import { describe, expect, it, onTestFinished, vi } from "vite-plus/test";

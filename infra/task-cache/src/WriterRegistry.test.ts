@@ -5,14 +5,15 @@ import * as Config from "effect/Config";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
-import * as Layer from "effect/Layer";
 import * as FileSystem from "effect/FileSystem";
+import * as Layer from "effect/Layer";
 import * as PlatformError from "effect/PlatformError";
-import * as Redacted from "effect/Redacted";
 import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
-import * as WriterRegistry from "./WriterRegistry.ts";
+import * as Redacted from "effect/Redacted";
+
 import { WriterSecrets } from "./deploymentConfig.ts";
+import * as WriterRegistry from "./WriterRegistry.ts";
 
 const readKeys = Config.Redacted("DEVELOPER_KEYS").pipe(Effect.provide(WriterSecrets));
 

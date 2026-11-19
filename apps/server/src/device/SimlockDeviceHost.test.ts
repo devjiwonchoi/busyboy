@@ -1,20 +1,20 @@
-import { describe, expect, it } from "@effect/vitest";
 import * as NodeServices from "@effect/platform-node/NodeServices";
+import { describe, expect, it } from "@effect/vitest";
 import { SecretProviderId, type SimlockDeviceHostConfig } from "@t3tools/contracts";
 import * as SecretResolver from "@t3tools/secret-provider-core/server/SecretResolver";
 import * as HostProcess from "@t3tools/shared/HostProcess";
-import * as Effect from "effect/Effect";
 import * as Clock from "effect/Clock";
-import * as Fiber from "effect/Fiber";
 import * as Deferred from "effect/Deferred";
+import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import * as Fiber from "effect/Fiber";
 import * as FileSystem from "effect/FileSystem";
+import { HttpClient, HttpClientResponse } from "effect/http";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
+import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Scope from "effect/Scope";
 import * as TestClock from "effect/testing/TestClock";
-import { HttpClient, HttpClientResponse } from "effect/http";
-import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 
 import * as ServerConfig from "../config.ts";
 import * as ProcessRunner from "../processRunner.ts";

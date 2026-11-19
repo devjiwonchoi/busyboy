@@ -1,12 +1,13 @@
-import { adopt } from "alchemy/AdoptPolicy";
-import * as Alchemy from "alchemy";
 import * as Axiom from "@alchemy.run/axiom";
-import * as Layer from "effect/Layer";
-import { Observability } from "./src/observability.ts";
 import * as Cloudflare from "@alchemy.run/cloudflare";
-import * as Effect from "effect/Effect";
+import * as Alchemy from "alchemy";
+import { adopt } from "alchemy/AdoptPolicy";
 import * as Secrets from "alchemy/Secrets";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+
 import { WriterSecrets } from "./src/deploymentConfig.ts";
+import { Observability } from "./src/observability.ts";
 import * as Worker from "./src/worker.ts";
 
 export default Alchemy.Stack(

@@ -5,8 +5,8 @@ import {
 } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
-import { isFileAttachment, isImageAttachment } from "../../types";
 import type { ComposerFileAttachment, ComposerImageAttachment } from "../../composerDraftStore";
+import { isFileAttachment, isImageAttachment } from "../../types";
 import {
   attachmentsToReleaseOnUploadCapabilityLoss,
   classifyComposerAttachmentFile,

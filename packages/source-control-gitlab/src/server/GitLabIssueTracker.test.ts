@@ -1,7 +1,7 @@
 import { describe, expect, it } from "@effect/vitest";
+import * as TestSourceControlHost from "@t3tools/source-control-testing/TestSourceControlHost";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as TestSourceControlHost from "@t3tools/source-control-testing/TestSourceControlHost";
 
 import * as GitLabCli from "./GitLabCli.ts";
 import * as GitLabIssueTracker from "./GitLabIssueTracker.ts";

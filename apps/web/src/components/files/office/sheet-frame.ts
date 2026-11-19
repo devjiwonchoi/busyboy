@@ -5,6 +5,7 @@ import {
   type GridMeta,
   type WorkbookHandle,
 } from "@betteroffice/xlsx";
+
 import { attempt } from "./sheet-cells";
 import { frozenSize } from "./sheet-paint";
 import type { SheetViewport } from "./sheet-protocol";

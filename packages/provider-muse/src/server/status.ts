@@ -1,20 +1,5 @@
-import { resolveProviderProbeTimeoutMs } from "@t3tools/provider-core/server/snapshotProbe";
 import { ServerProviderModel } from "@t3tools/contracts";
-import { MuseSettings } from "../settings.ts";
-import { resolveSpawnCommand } from "@t3tools/shared/shell";
-import * as DateTime from "effect/DateTime";
-import * as Effect from "effect/Effect";
-import * as Option from "effect/Option";
-import * as Result from "effect/Result";
-import * as ChildProcess from "effect/process/ChildProcess";
-
-import { createMuseSdkHost, makeMuseEnvironment } from "./sdk.ts";
-import { parseMuseVersion } from "./maintenance.ts";
-import {
-  discoverMuseModels,
-  museModelCapabilities,
-  resolveMuseStartupTimeoutMs,
-} from "./modelCatalog.ts";
+import { resolveProviderProbeTimeoutMs } from "@t3tools/provider-core/server/snapshotProbe";
 import {
   buildServerProvider,
   COMPACT_SLASH_COMMAND,
@@ -26,6 +11,21 @@ import {
   spawnAndCollect,
   type ProviderProbeResult,
 } from "@t3tools/provider-core/server/snapshotProbe";
+import { resolveSpawnCommand } from "@t3tools/shared/shell";
+import * as DateTime from "effect/DateTime";
+import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
+import * as ChildProcess from "effect/process/ChildProcess";
+import * as Result from "effect/Result";
+
+import { MuseSettings } from "../settings.ts";
+import { parseMuseVersion } from "./maintenance.ts";
+import {
+  discoverMuseModels,
+  museModelCapabilities,
+  resolveMuseStartupTimeoutMs,
+} from "./modelCatalog.ts";
+import { createMuseSdkHost, makeMuseEnvironment } from "./sdk.ts";
 
 const MUSE_PRESENTATION = {
   displayName: "Muse Code",

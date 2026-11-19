@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from "react";
+
 import { isEditableFocused } from "./lib/editableFocus";
 
 export interface ShortcutModifierState {

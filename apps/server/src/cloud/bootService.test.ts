@@ -1,19 +1,20 @@
 // @effect-diagnostics-next-line nodeBuiltinImport:off -- Cross-process launcher contention uses real filesystem leases and IPC barriers.
 import * as NodeChildProcess from "node:child_process";
 import * as NodeSqlite from "node:sqlite";
+
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { expect, it } from "@effect/vitest";
 import * as HostProcess from "@t3tools/shared/HostProcess";
+import { CliError } from "effect/cli";
 import * as Clock from "effect/Clock";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
 import * as Fiber from "effect/Fiber";
+import * as FileSystem from "effect/FileSystem";
+import { HttpClient } from "effect/http";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
-import { CliError } from "effect/cli";
-import { HttpClient } from "effect/http";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import { vi } from "vite-plus/test";
 

@@ -1,4 +1,6 @@
-import type { ToolCallDiffTarget } from "../../diffPanelStore";
+import { type LegendListRef } from "@legendapp/list/react";
+import type { CommandOutputView } from "@t3tools/client-runtime/state/command-output";
+import type { WorkflowOpening } from "@t3tools/client-runtime/state/subagentRuntime";
 import type {
   ProviderApprovalDecision,
   ResponseContextRecord,
@@ -16,19 +18,18 @@ import {
   ThreadId,
   type TurnItemId,
 } from "@t3tools/contracts";
-import type { AsyncResult, Atom } from "effect/reactivity";
-import type { CommandOutputView } from "@t3tools/client-runtime/state/command-output";
-import type { WorkflowOpening } from "@t3tools/client-runtime/state/subagentRuntime";
-import { useEffect, useRef, createContext, type MouseEvent, type ReactNode } from "react";
-import { type LegendListRef } from "@legendapp/list/react";
-import type { CodexArtifactTemplate } from "@t3tools/shared/codexArtifactTemplates";
-import type { PendingApproval } from "../../session-logic";
-import { type ChatFileAttachment } from "../../types";
-import { type ExpandedImageItem, ExpandedImagePreview } from "./ExpandedImagePreview";
-import { type AssistantCitationTarget } from "./AssistantCitationSource";
-import { type MessagesTimelineRow, type WorkGroupScrollAnchor } from "./MessagesTimeline.logic";
 import { type TimestampFormat } from "@t3tools/contracts/settings";
+import type { CodexArtifactTemplate } from "@t3tools/shared/codexArtifactTemplates";
+import type { AsyncResult, Atom } from "effect/reactivity";
+import { useEffect, useRef, createContext, type MouseEvent, type ReactNode } from "react";
+
+import type { ToolCallDiffTarget } from "../../diffPanelStore";
+import type { PendingApproval } from "../../session-logic";
 import type { TurnItemDetailSource } from "../../state/queries";
+import { type ChatFileAttachment } from "../../types";
+import { type AssistantCitationTarget } from "./AssistantCitationSource";
+import { type ExpandedImageItem, ExpandedImagePreview } from "./ExpandedImagePreview";
+import { type MessagesTimelineRow, type WorkGroupScrollAnchor } from "./MessagesTimeline.logic";
 import { type HandoffTimelineRun } from "./V2LifecycleRow";
 
 /**

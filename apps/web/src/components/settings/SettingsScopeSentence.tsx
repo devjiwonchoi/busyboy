@@ -1,9 +1,9 @@
 import { resolveEnvironmentMachineKind } from "@t3tools/contracts";
 import { fileBasename } from "@t3tools/shared/path";
 import { useLocation } from "@tanstack/react-router";
+import { T, useGT, useMessages, Var } from "gt-react";
 import { CheckIcon, ChevronDownIcon, FolderIcon, LayersIcon } from "lucide-react";
 import { Fragment, useState, type ReactNode } from "react";
-import { T, useGT, useMessages, Var } from "gt-react";
 
 import type { SidebarProjectSnapshot } from "../../sidebarProjectGrouping";
 import { useEnvironments, type EnvironmentPresentation } from "../../state/environments";
@@ -28,7 +28,6 @@ import {
   MenuSeparator,
   MenuTrigger,
 } from "../ui/menu";
-import { useOptionalSettingsScope } from "./SettingsScopeContext";
 import { resolveSettingsScope, type SettingsScopeSearch } from "./settingsScope";
 import {
   ALL_CHECKOUTS_VALUE,
@@ -47,6 +46,7 @@ import {
   settingsScopeEnvironmentLabels,
   settingsScopeProjectMachines,
 } from "./settingsScopeAxis";
+import { useOptionalSettingsScope } from "./SettingsScopeContext";
 
 export const SETTINGS_DEVICE_ONLY_PATHS: ReadonlySet<string> = new Set([
   "/settings/general",

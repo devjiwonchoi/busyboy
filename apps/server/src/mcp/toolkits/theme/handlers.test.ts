@@ -16,8 +16,8 @@ import {
 import * as ThreadCommandExecutor from "../../../orchestration-v2/ThreadCommandExecutor.ts";
 import * as ThreadManagement from "../../../orchestration-v2/ThreadManagementService.ts";
 import * as McpInvocationContext from "../../McpInvocationContext.ts";
-import * as McpToolAccess from "../../McpToolAccess.ts";
 import { liveThreadShell } from "../../McpToolAccess.testkit.ts";
+import * as McpToolAccess from "../../McpToolAccess.ts";
 import * as ThemeHandlers from "./handlers.ts";
 import { ThemeToolkit } from "./tools.ts";
 

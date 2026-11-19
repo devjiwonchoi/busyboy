@@ -1,39 +1,39 @@
+import { StackActions, useNavigation } from "@react-navigation/native";
+import { getBrowseDirectoryPath } from "@t3tools/client-runtime/state/projects";
 import { settlePromise } from "@t3tools/client-runtime/state/runtime";
 import type { EnvironmentId, ThreadId } from "@t3tools/contracts";
-import { resolveMobileMarkdownMediaSource } from "../../lib/markdownMediaSource";
-import { getBrowseDirectoryPath } from "@t3tools/client-runtime/state/projects";
 import { maskMarkdownFrontmatter } from "@t3tools/shared/markdownFrontmatter";
 import { useGT } from "gt-react-native";
 import { useState } from "react";
-import { StackActions, useNavigation } from "@react-navigation/native";
 import { ScrollView, View } from "react-native";
-import { RefreshControl } from "../../components/ui/RefreshControl";
 
-import { tryOpenExternalUrl } from "../../lib/openExternalUrl";
-import { FONT_FAMILIES } from "../../lib/fontFamilies";
+import { AppText as Text } from "../../components/ui/AppText";
+import { FilePreviewModal, type FilePreviewSource } from "../../components/ui/FilePreviewModal";
+import { RefreshControl } from "../../components/ui/RefreshControl";
+import { VideoPreviewModal, type VideoPreviewSource } from "../../components/ui/VideoPreviewModal";
 import { resolveNativeMarkdownTypography } from "../../lib/appearancePreferences";
+import { FONT_FAMILIES } from "../../lib/fontFamilies";
+import {
+  normalizeNativeMarkdownUrl,
+  resolveMarkdownLinkPresentation,
+} from "../../lib/markdownLinks";
+import { markdownFileEmbedLabel, resolveMarkdownMediaPreview } from "../../lib/markdownMedia";
+import { resolveMobileMarkdownMediaSource } from "../../lib/markdownMediaSource";
+import { tryOpenExternalUrl } from "../../lib/openExternalUrl";
 import { useUniwindTheme } from "../../lib/useUniwindTheme";
+import {
+  SelectableMarkdownText,
+  type MarkdownImageRenderer,
+  type NativeMarkdownTextStyle,
+} from "../../native/SelectableMarkdownText";
+import { useMarkdownImageSource } from "../../native/useMarkdownImageSource";
+import { useAppearancePreferences } from "../settings/appearance/AppearancePreferencesProvider";
 import {
   ThreadMarkdownImage,
   ThreadMarkdownImageView,
   ThreadMarkdownImageUnavailable,
 } from "../threads/ThreadMarkdownImage";
 import { ThreadMarkdownVideo } from "../threads/ThreadMarkdownVideo";
-import { markdownFileEmbedLabel, resolveMarkdownMediaPreview } from "../../lib/markdownMedia";
-import {
-  normalizeNativeMarkdownUrl,
-  resolveMarkdownLinkPresentation,
-} from "../../lib/markdownLinks";
-import { AppText as Text } from "../../components/ui/AppText";
-import { VideoPreviewModal, type VideoPreviewSource } from "../../components/ui/VideoPreviewModal";
-import { FilePreviewModal, type FilePreviewSource } from "../../components/ui/FilePreviewModal";
-import { useMarkdownImageSource } from "../../native/useMarkdownImageSource";
-import { useAppearancePreferences } from "../settings/appearance/AppearancePreferencesProvider";
-import {
-  SelectableMarkdownText,
-  type MarkdownImageRenderer,
-  type NativeMarkdownTextStyle,
-} from "../../native/SelectableMarkdownText";
 import { fileRoutePathSegments, resolveWorkspaceFilePath } from "./filePath";
 
 interface MarkdownPreviewStyles {

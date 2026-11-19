@@ -11,11 +11,12 @@ import * as HostProcess from "@t3tools/shared/HostProcess";
 import { fromLenientJson } from "@t3tools/shared/schemaJson";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
-import * as Path from "effect/Path";
-import * as Option from "effect/Option";
-import * as Schema from "effect/Schema";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientResponse from "effect/http/HttpClientResponse";
+import * as Option from "effect/Option";
+import * as Path from "effect/Path";
+import * as Schema from "effect/Schema";
+
 import { resolveClaudeHomePath } from "./ClaudeHome.ts";
 
 const NATIVE_RELEASES = "https://downloads.claude.ai/claude-code-releases";

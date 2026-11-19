@@ -1,14 +1,16 @@
 import type { SDKModel } from "@cursor/sdk";
 import { describe, expect, it } from "@effect/vitest";
+import { COMPACT_SLASH_COMMAND } from "@t3tools/provider-core/server/snapshotProbe";
+import { createModelCapabilities } from "@t3tools/shared/model";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as Schema from "effect/Schema";
 import * as TestClock from "effect/testing/TestClock";
+
 import type { CursorSettings } from "../settings.ts";
 import { CursorSettings as CursorSettingsSchema } from "../settings.ts";
-import { createModelCapabilities } from "@t3tools/shared/model";
-import { COMPACT_SLASH_COMMAND } from "@t3tools/provider-core/server/snapshotProbe";
-
+import * as CursorSdkCatalog from "./CursorSdkCatalog.ts";
+import { loadCursorSdk } from "./sdk.ts";
 import {
   buildCursorCapabilitiesFromSdkModel,
   buildCursorDiscoveredModelsFromSdk,
@@ -16,8 +18,6 @@ import {
   buildInitialCursorProviderSnapshot,
   checkCursorProviderStatus,
 } from "./status.ts";
-import * as CursorSdkCatalog from "./CursorSdkCatalog.ts";
-import { loadCursorSdk } from "./sdk.ts";
 
 const { CursorSdkError } = loadCursorSdk();
 

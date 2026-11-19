@@ -1,8 +1,9 @@
 import { useGT } from "gt-react-native";
 import type { ComponentProps } from "react";
-import { FloatingActionButton } from "./ui/FloatingActionButton.android";
-import { ScrollComposeButton } from "./ScrollComposeButton.android";
+
 import type { NewThreadButton as SharedNewThreadButton } from "./NewThreadButton.shared";
+import { ScrollComposeButton } from "./ScrollComposeButton.android";
+import { FloatingActionButton } from "./ui/FloatingActionButton.android";
 
 export function NewThreadButton(props: ComponentProps<typeof SharedNewThreadButton>) {
   const gt = useGT();

@@ -11,13 +11,13 @@ import { useEffect, useState } from "react";
 
 import { useAssetUrlRefresh } from "~/assets/assetUrls";
 import { useLongLivedAssetUrl } from "~/assets/longLivedAssetUrls";
+import { observeResize } from "~/lib/observeResize";
 
 import { HtmlRenderDocument } from "../files/BrowserDocumentFrame";
 import { Button } from "../ui/button";
 import { toastManager } from "../ui/toast";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { HtmlRenderDialog } from "./HtmlRenderDialog";
-import { observeResize } from "~/lib/observeResize";
 
 const MIN_URL_LIFE_MS = 5 * 60_000;
 const MAX_MEASURED_CONTENT_HEIGHTS = 200;

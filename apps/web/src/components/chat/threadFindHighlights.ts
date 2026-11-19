@@ -1,6 +1,6 @@
+import { THREAD_FIND_BLOCK_TAGS } from "@t3tools/shared/threadFindText";
 import { findThreadSearchOccurrences } from "@t3tools/shared/threadSearch";
 import { useEffect, useEffectEvent, useRef } from "react";
-import { THREAD_FIND_BLOCK_TAGS } from "@t3tools/shared/threadFindText";
 
 import { observeResize } from "~/lib/observeResize";
 

@@ -1,3 +1,4 @@
+import { describe, expect, it } from "@effect/vitest";
 import {
   CheckpointId,
   CheckpointRef,
@@ -14,14 +15,13 @@ import {
   type OrchestrationV2ThreadProjection,
   type OrchestrationV2TurnItem,
 } from "@t3tools/contracts";
-import { describe, expect, it } from "@effect/vitest";
 import * as DateTime from "effect/DateTime";
 import * as Option from "effect/Option";
 import { AsyncResult, Atom, AtomRegistry } from "effect/reactivity";
 
-import { v2Now, v2Projection, v2ThreadId } from "./orchestrationV2TestFixtures.ts";
-import { applyOrchestrationV2ProjectionEvent } from "./orchestrationV2Projection.ts";
 import type { ThreadStructureVisibleTurnItem } from "./models.ts";
+import { applyOrchestrationV2ProjectionEvent } from "./orchestrationV2Projection.ts";
+import { v2Now, v2Projection, v2ThreadId } from "./orchestrationV2TestFixtures.ts";
 import {
   createEnvironmentThreadDetailAtoms,
   deriveWorkspaceMutationId,

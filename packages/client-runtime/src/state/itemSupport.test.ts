@@ -14,8 +14,8 @@ import {
 import * as DateTime from "effect/DateTime";
 import { describe, expect, it } from "vite-plus/test";
 
-import { v2Projection, v2ThreadId } from "./orchestrationV2TestFixtures.ts";
 import { resolveV2ItemSupport } from "./itemSupport.ts";
+import { v2Projection, v2ThreadId } from "./orchestrationV2TestFixtures.ts";
 
 const now = DateTime.makeUnsafe("2026-06-20T00:00:00.000Z");
 const runId = RunId.make("run-1");

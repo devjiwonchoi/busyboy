@@ -1,5 +1,3 @@
-import { msg } from "gt-i18n";
-import { MarkedText, translatableMessage } from "../errors/translatable.ts";
 import {
   ORCHESTRATION_PROTOCOL_VERSION,
   type EnvironmentId,
@@ -10,24 +8,26 @@ import {
 } from "@t3tools/contracts";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Ref from "effect/Ref";
-import * as Schedule from "effect/Schedule";
-import * as Schema from "effect/Schema";
-import * as Stream from "effect/Stream";
-import * as SubscriptionRef from "effect/SubscriptionRef";
-import * as HttpClient from "effect/http/HttpClient";
 import * as RpcClient from "effect/rpc/RpcClient";
 import * as RpcSerialization from "effect/rpc/RpcSerialization";
+import * as Schedule from "effect/Schedule";
+import * as Schema from "effect/Schema";
 import * as Socket from "effect/socket/Socket";
+import * as Stream from "effect/Stream";
+import * as SubscriptionRef from "effect/SubscriptionRef";
+import { msg } from "gt-i18n";
 
 import { fetchRemoteEnvironmentDescriptor } from "../environment/descriptor.ts";
+import { MarkedText, translatableMessage } from "../errors/translatable.ts";
+import * as RelayEnvironmentDiscovery from "../relay/discovery.ts";
 import { makeWsRpcProtocolClient, PING_TIMEOUT } from "../rpc/protocol.ts";
 import { isLegacyUpdateHandoffLoss, resolveServerUpdateProgressResult } from "../state/server.ts";
-import * as RelayEnvironmentDiscovery from "../relay/discovery.ts";
-import * as ConnectionResolver from "./resolver.ts";
 import * as EnvironmentRegistry from "./registry.ts";
+import * as ConnectionResolver from "./resolver.ts";
 import {
   connectionRoutes,
   hasRelayRoute,

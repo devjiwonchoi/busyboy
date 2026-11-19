@@ -1,5 +1,4 @@
 import { HStack, Image, Spacer, Text, VStack, ZStack } from "@expo/ui/swift-ui";
-import type { ComponentProps } from "react";
 import {
   accessibilityElement,
   accessibilityLabel,
@@ -19,6 +18,7 @@ import {
   type LiveActivityComponent,
   type LiveActivityLayout,
 } from "expo-widgets";
+import type { ComponentProps } from "react";
 
 type LiveActivityEnvironment = Parameters<LiveActivityComponent<AgentActivityProps>>[1];
 

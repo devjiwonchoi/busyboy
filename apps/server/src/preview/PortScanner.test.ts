@@ -1,8 +1,8 @@
 // @effect-diagnostics nodeBuiltinImport:off -- the stop test drives real server processes.
 import * as NodeChildProcess from "node:child_process";
 
-import { it as effectIt } from "@effect/vitest";
 import * as NodeServices from "@effect/platform-node/NodeServices";
+import { it as effectIt } from "@effect/vitest";
 import {
   CONFIGURED_LOCAL_SERVER_URLS_MAX_ITEMS,
   PREVIEW_URL_MAX_LENGTH,
@@ -10,17 +10,17 @@ import {
 } from "@t3tools/contracts";
 import * as ProcessGroup from "@t3tools/provider-core/server/processGroup";
 import * as HostProcess from "@t3tools/shared/HostProcess";
-import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as FileSystem from "effect/FileSystem";
+import { FetchHttpClient } from "effect/http";
 import * as Layer from "effect/Layer";
 import * as PlatformError from "effect/PlatformError";
+import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Scope from "effect/Scope";
 import * as TestClock from "effect/testing/TestClock";
 import { expect, vi } from "vite-plus/test";
-import { FetchHttpClient } from "effect/http";
 
 import * as BackgroundPolicy from "../background/BackgroundPolicy.ts";
 import * as ProcessRunner from "../processRunner.ts";

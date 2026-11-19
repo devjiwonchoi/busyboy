@@ -5,15 +5,15 @@ import {
   type OrchestrationV2ServerCommand,
 } from "@t3tools/contracts";
 import * as Deferred from "effect/Deferred";
-import * as Stream from "effect/Stream";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
+import * as Stream from "effect/Stream";
 
 import * as GitWorkflowService from "../git/GitWorkflowService.ts";
 import * as VcsStatusBroadcaster from "../vcs/VcsStatusBroadcaster.ts";
-import * as ProjectionStore from "./ProjectionStore.ts";
 import * as Orchestrator from "./Orchestrator.ts";
+import * as ProjectionStore from "./ProjectionStore.ts";
 import * as ThreadManagement from "./ThreadManagementService.ts";
 import * as WorktreeBranchSync from "./WorktreeBranchSync.ts";
 

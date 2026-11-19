@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 
 import { useStableCallback } from "~/hooks/useStableCallback";
 import { observeIntersection } from "~/lib/observeIntersection";
+
 import { DiffFileHeaderSkeleton } from "../DiffPanelShell";
 
 export function DiffFileLoadingBoundary({ load, count }: { load: () => void; count: number }) {

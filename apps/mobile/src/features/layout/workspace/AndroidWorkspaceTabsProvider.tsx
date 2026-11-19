@@ -1,9 +1,10 @@
 import type { NavigationState } from "@react-navigation/native";
 import { createContext, use, type ReactNode } from "react";
 import { Platform } from "react-native";
+
 import { androidWorkspaceSettingsOpen } from "./android-workspace-tabs";
-import { WorkspaceTabsProvider } from "./WorkspaceTabsContext";
 import { workspaceTabOf } from "./workspace-tabs-state";
+import { WorkspaceTabsProvider } from "./WorkspaceTabsContext";
 
 interface AndroidWorkspaceRoot {
   /**

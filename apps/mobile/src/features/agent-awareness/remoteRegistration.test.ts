@@ -2,23 +2,23 @@
 
 import * as NodeCrypto from "node:crypto";
 
-import { beforeEach, vi } from "vite-plus/test";
 import { describe, expect, it } from "@effect/vitest";
-import Constants from "expo-constants";
-import * as Cause from "effect/Cause";
-import * as Effect from "effect/Effect";
-import * as Deferred from "effect/Deferred";
-import * as Exit from "effect/Exit";
-import * as Fiber from "effect/Fiber";
-import * as Layer from "effect/Layer";
-import { Cookies, FetchHttpClient, HttpClientRequest, HttpClientResponse } from "effect/http";
 import { ManagedRelay } from "@t3tools/client-runtime/relay";
-
 import type { EnvironmentId, ThreadId } from "@t3tools/contracts";
 import type { RelayAgentActivityAggregateState } from "@t3tools/contracts/relay";
 import { verifyDpopProof } from "@t3tools/shared/dpop";
-import * as Dpop from "../cloud/dpop";
-import * as ManagedRelayLayer from "../cloud/managedRelayLayer";
+import * as Cause from "effect/Cause";
+import * as Deferred from "effect/Deferred";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Fiber from "effect/Fiber";
+import { Cookies, FetchHttpClient, HttpClientRequest, HttpClientResponse } from "effect/http";
+import * as Layer from "effect/Layer";
+import Constants from "expo-constants";
+import * as Notifications from "expo-notifications";
+import { Platform } from "react-native";
+import { beforeEach, vi } from "vite-plus/test";
+
 import {
   clearAgentAwarenessRegistrationRecord,
   loadAgentAwarenessRegistrationRecord,
@@ -27,6 +27,9 @@ import {
   saveAgentAwarenessRegistrationRecord,
 } from "../../persistence/imperative";
 import type { Preferences } from "../../persistence/mobile-preferences";
+import * as Dpop from "../cloud/dpop";
+import * as ManagedRelayLayer from "../cloud/managedRelayLayer";
+import { configureAndroidAgentNotifications } from "./androidNotifications";
 import { makeRelayDeviceRegistrationRequest } from "./registrationPayload";
 import {
   __resetAgentAwarenessRemoteRegistrationForTest,
@@ -41,9 +44,6 @@ import {
   updateAgentAwarenessRegistrationPreferences,
   type AgentAwarenessRegistrationError,
 } from "./remoteRegistration";
-import * as Notifications from "expo-notifications";
-import { Platform } from "react-native";
-import { configureAndroidAgentNotifications } from "./androidNotifications";
 
 vi.mock("./androidNotifications", () => ({
   supportsAndroidAgentNotifications: vi.fn(() => true),

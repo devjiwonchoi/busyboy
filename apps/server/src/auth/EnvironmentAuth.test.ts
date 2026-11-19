@@ -1,11 +1,11 @@
 import * as NodePlatformCrypto from "@effect/platform-node/NodeCrypto";
 import * as NodeServices from "@effect/platform-node/NodeServices";
+import { expect, it } from "@effect/vitest";
 import {
   authScopeResponse,
   AuthAdministrativeClientScopes,
   connectDeviceVerificationCode,
 } from "@t3tools/contracts";
-import { expect, it } from "@effect/vitest";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -13,14 +13,13 @@ import * as Redacted from "effect/Redacted";
 import * as TestClock from "effect/testing/TestClock";
 
 import * as ServerConfig from "../config.ts";
-import { makeDpopKey } from "./dpop.testkit.ts";
 import * as ServerEnvironment from "../environment/ServerEnvironment.ts";
 import * as SqlitePersistence from "../persistence/Sqlite.ts";
+import * as ManagedPolicy from "../policy/ManagedPolicy.ts";
+import { makeDpopKey } from "./dpop.testkit.ts";
 import * as EnvironmentAuth from "./EnvironmentAuth.ts";
-
 import * as ServerSecretStore from "./ServerSecretStore.ts";
 import * as SessionStore from "./SessionStore.ts";
-import * as ManagedPolicy from "../policy/ManagedPolicy.ts";
 
 const TEST_SERVER_PORT = 13_773;
 

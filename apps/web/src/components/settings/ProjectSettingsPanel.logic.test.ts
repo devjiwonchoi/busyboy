@@ -1,6 +1,6 @@
-import { describe, expect, it } from "vite-plus/test";
-import { EnvironmentId, ProjectId, SourceControlProviderKind, ThreadId } from "@t3tools/contracts";
 import { planProjectRemoval } from "@t3tools/client-runtime/state/projects";
+import { EnvironmentId, ProjectId, SourceControlProviderKind, ThreadId } from "@t3tools/contracts";
+import { describe, expect, it } from "vite-plus/test";
 
 import { buildSidebarProjectSnapshots } from "../../sidebarProjectGrouping";
 import type { Project } from "../../types";

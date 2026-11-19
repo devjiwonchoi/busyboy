@@ -1,57 +1,7 @@
-import {
-  OrchestrationV2SearchThreadError,
-  OrchestrationV2SearchThreadInput,
-  OrchestrationV2SearchThreadResult,
-  OrchestrationV2SearchThreadsInput,
-  OrchestrationV2SearchThreadsResult,
-} from "./orchestrationV2.ts";
-import { OrchestrationDispatchCommandError } from "./orchestrationDispatch.ts";
-import {
-  McpAppCallToolInput,
-  McpAppCallToolResult,
-  McpAppReadResourceInput,
-  McpAppReadResourceResult,
-  McpAppRequestError,
-  McpAppToolInfo,
-  McpAppToolInfoInput,
-  McpAppUpdateModelContextInput,
-} from "./mcpApps.ts";
-import {
-  PeerLink,
-  PeerLinkCreateInput,
-  PeerLinkError,
-  PeerLinkRemoveInput,
-  PeerLinkRemoveResult,
-  PeerLinkRequestAnswerInput,
-  PeerLinkRequestError,
-  PeerLinkSummary,
-} from "./peerLink.ts";
-import {
-  ChatGptReconnectProfileInput,
-  ChatGptReconnectProfile,
-  ChatGptImportProfileInput,
-  ChatGptHandoffInput,
-  ChatGptHandoffState,
-} from "./providerSetup.ts";
-import * as Schema from "effect/Schema";
 import * as Rpc from "effect/rpc/Rpc";
 import * as RpcGroup from "effect/rpc/RpcGroup";
 import * as RpcMiddleware from "effect/rpc/RpcMiddleware";
-import { NonNegativeInt, TrimmedNonEmptyString } from "./baseSchemas.ts";
-import { SecretSourceCheckResult } from "./settingsSecretValue.ts";
-import { SecretReference } from "./secretReference.ts";
-import {
-  ProviderAuthCancelInput,
-  ProviderAuthCompleteInput,
-  ProviderAuthState,
-  ProviderAuthStartInput,
-  ProviderAuthRemoveMethodInput,
-  ProviderAuthRespondInput,
-  ProviderInstallCancelInput,
-  ProviderInstallState,
-  ProviderSetupError,
-  ProviderSetupInput,
-} from "./providerSetup.ts";
+import * as Schema from "effect/Schema";
 
 import {
   AcpRegistryAcceptUrlAuthInput,
@@ -78,20 +28,6 @@ import {
   AcpRegistrySetProviderInput,
   AcpRegistrySetProviderResult,
 } from "./acpRegistry.ts";
-import { ExternalLauncherError, LaunchEditorInput } from "./editor.ts";
-import {
-  AuthAccessStreamError,
-  AuthAccessStreamEvent,
-  EnvironmentAuthorizationError,
-} from "./auth.ts";
-import { ClientActivityReportInput } from "./background.ts";
-import {
-  FilesystemGetMetadataInput,
-  FilesystemGetMetadataResult,
-  FilesystemBrowseInput,
-  FilesystemBrowseResult,
-  FilesystemBrowseError,
-} from "./filesystem.ts";
 import {
   AgentSessionImportInput,
   AgentSessionImportProjectChangedError,
@@ -111,6 +47,13 @@ import {
   AttachmentUploadSigningKeyError,
 } from "./assets.ts";
 import {
+  AuthAccessStreamError,
+  AuthAccessStreamEvent,
+  EnvironmentAuthorizationError,
+} from "./auth.ts";
+import { ClientActivityReportInput } from "./background.ts";
+import { NonNegativeInt, TrimmedNonEmptyString } from "./baseSchemas.ts";
+import {
   PersistChatAttachmentsError,
   PersistChatAttachmentsInput,
   PersistChatAttachmentsResult,
@@ -120,11 +63,34 @@ import {
   OrchestrationGetTurnDiffError,
 } from "./checkpointDiff.ts";
 import {
-  WorktreeSetupCancelInput,
-  WorktreeSetupCancelResult,
-  WorktreeSetupStreamEvent,
-  WorktreeSetupSubscribeInput,
-} from "./worktreeSetup.ts";
+  DeviceActionInput,
+  DeviceCloseInput,
+  DeviceConfigureInput,
+  DeviceDetail,
+  DeviceDetailInput,
+  DeviceError,
+  DeviceListInput,
+  SshDeviceHostConfig,
+  DeviceEasAccount,
+  DeviceEasAccountError,
+  DeviceEasAccountInput,
+  DeviceSimlockIdentity,
+  DeviceSimlockIdentityError,
+  DeviceSimlockIdentityInput,
+  DeviceHostSummary,
+  DeviceOpenInput,
+  DeviceServiceState,
+  DeviceSession,
+  DeviceShutdownInput,
+} from "./device.ts";
+import { ExternalLauncherError, LaunchEditorInput } from "./editor.ts";
+import {
+  FilesystemGetMetadataInput,
+  FilesystemGetMetadataResult,
+  FilesystemBrowseInput,
+  FilesystemBrowseResult,
+  FilesystemBrowseError,
+} from "./filesystem.ts";
 import {
   GitActionProgressEvent,
   VcsSwitchRefInput,
@@ -153,22 +119,10 @@ import {
   VcsStatusStreamEvent,
 } from "./git.ts";
 import {
-  ReviewBranchCommitsInput,
-  ReviewBranchCommitsResult,
-  ReviewDiffFileContentsInput,
-  ReviewDiffFileContentsResult,
-  ReviewDiffPreviewError,
-  ReviewDiffPreviewInput,
-  ReviewDiffPreviewResult,
-} from "./review.ts";
-import { KeybindingsConfigError } from "./keybindings.ts";
-import { OrchestrationSearchThreadsError } from "./threadSearch.ts";
-import {
-  ProviderUploadFeedbackError,
-  ProviderUploadFeedbackInput,
-  ProviderUploadFeedbackResult,
-} from "./provider.ts";
-import { ProviderInstanceId, ProviderInstanceMutation } from "./providerInstance.ts";
+  GuestShareCreateError,
+  GuestShareCreateInput,
+  GuestShareCreateResult,
+} from "./guestShare.ts";
 import {
   IssueCandidates,
   IssueCommentInput,
@@ -195,12 +149,130 @@ import {
   IssueUpdateInput,
   ThreadIssueKey,
 } from "./issue.ts";
+import { KeybindingsConfigError } from "./keybindings.ts";
 import {
-  GuestShareCreateError,
-  GuestShareCreateInput,
-  GuestShareCreateResult,
-} from "./guestShare.ts";
-import { PullRequestReviewGuideResult } from "./pullRequestReviewGuide.ts";
+  McpAppCallToolInput,
+  McpAppCallToolResult,
+  McpAppReadResourceInput,
+  McpAppReadResourceResult,
+  McpAppRequestError,
+  McpAppToolInfo,
+  McpAppToolInfoInput,
+  McpAppUpdateModelContextInput,
+} from "./mcpApps.ts";
+import { OrchestrationDispatchCommandError } from "./orchestrationDispatch.ts";
+import {
+  OrchestrationV2SearchThreadError,
+  OrchestrationV2SearchThreadInput,
+  OrchestrationV2SearchThreadResult,
+  OrchestrationV2SearchThreadsInput,
+  OrchestrationV2SearchThreadsResult,
+} from "./orchestrationV2.ts";
+import {
+  ORCHESTRATION_V2_WS_METHODS,
+  OrchestrationGetWorkflowScriptError,
+  OrchestrationV2GetNativeChildWorkError,
+  OrchestrationV2StopWorkflowError,
+  OrchestrationV2ForceStopThreadError,
+  OrchestrationV2DispatchCommandError,
+  OrchestrationV2GetShellSnapshotError,
+  OrchestrationV2CommandOutputError,
+  OrchestrationV2GetThreadProjectionError,
+  OrchestrationV2RpcSchemas,
+  OrchestrationV2ThreadLaunchError,
+} from "./orchestrationV2.ts";
+import {
+  PeerLink,
+  PeerLinkCreateInput,
+  PeerLinkError,
+  PeerLinkRemoveInput,
+  PeerLinkRemoveResult,
+  PeerLinkRequestAnswerInput,
+  PeerLinkRequestError,
+  PeerLinkSummary,
+} from "./peerLink.ts";
+import {
+  DiscoveredLocalServerList,
+  ConfiguredLocalServerUrls,
+  PreviewCloseInput,
+  PreviewError,
+  PreviewEvent,
+  PreviewListInput,
+  PreviewListResult,
+  PreviewClearProfileError,
+  PreviewClearProfileInput,
+  PreviewReportProfilesInput,
+  PreviewStopLocalServerError,
+  PreviewStopLocalServerInput,
+  PreviewOpenInput,
+  PreviewReportStatusInput,
+  PreviewResizeInput,
+  PreviewAdjustInput,
+  PreviewSessionSnapshot,
+} from "./preview.ts";
+import {
+  ProjectCreateNewInput,
+  ProjectCreateNewResult,
+  ProjectCreateFromThreadInput,
+  ProjectCreateFromThreadResult,
+  ProjectEnsureScratchResult,
+  ProjectListEntriesError,
+  ProjectListEntriesInput,
+  ProjectListEntriesResult,
+  ProjectListIgnoredFilesInput,
+  ProjectListIgnoredFilesResult,
+  ProjectReadFileError,
+  ProjectReadFileInput,
+  ProjectReadFileResult,
+  ProjectSearchContentsError,
+  ProjectSearchContentsInput,
+  ProjectSearchContentsResult,
+  ProjectSearchEntriesError,
+  ProjectSearchEntriesInput,
+  ProjectSearchEntriesResult,
+  ProjectWriteFileError,
+  ProjectWriteFileInput,
+  ProjectWriteFileResult,
+} from "./project.ts";
+import { Project, ProjectMutation, ProjectMutationError } from "./project.ts";
+import {
+  ProjectCloneActionInput,
+  ProjectCloneActionResult,
+  ProjectCloneListEvent,
+  ProjectCloneStartInput,
+  ProjectCloneStartResult,
+  ProjectCloneSubscribeInput,
+} from "./projectClone.ts";
+import {
+  ProviderUploadFeedbackError,
+  ProviderUploadFeedbackInput,
+  ProviderUploadFeedbackResult,
+} from "./provider.ts";
+import { ProviderInstanceId, ProviderInstanceMutation } from "./providerInstance.ts";
+import {
+  ChatGptReconnectProfileInput,
+  ChatGptReconnectProfile,
+  ChatGptImportProfileInput,
+  ChatGptHandoffInput,
+  ChatGptHandoffState,
+} from "./providerSetup.ts";
+import {
+  ProviderAuthCancelInput,
+  ProviderAuthCompleteInput,
+  ProviderAuthState,
+  ProviderAuthStartInput,
+  ProviderAuthRemoveMethodInput,
+  ProviderAuthRespondInput,
+  ProviderInstallCancelInput,
+  ProviderInstallState,
+  ProviderSetupError,
+  ProviderSetupInput,
+} from "./providerSetup.ts";
+import {
+  UsageLimitSourceError,
+  ProviderConsumeResetCreditInput,
+  ProviderConsumeResetCreditResult,
+} from "./providerUsageLimits.ts";
 import {
   PullRequestActionInput,
   PullRequestActivity,
@@ -244,101 +316,47 @@ import {
   PullRequestUnavailableError,
   PullRequestUpdateInput,
 } from "./pullRequest.ts";
+import { PullRequestReviewGuideResult } from "./pullRequestReviewGuide.ts";
 import {
   RelayClientInstallFailedError,
   RelayClientInstallProgressEventSchema,
   RelayClientStatusSchema,
 } from "./relayClient.ts";
 import {
-  ORCHESTRATION_V2_WS_METHODS,
-  OrchestrationGetWorkflowScriptError,
-  OrchestrationV2GetNativeChildWorkError,
-  OrchestrationV2StopWorkflowError,
-  OrchestrationV2ForceStopThreadError,
-  OrchestrationV2DispatchCommandError,
-  OrchestrationV2GetShellSnapshotError,
-  OrchestrationV2CommandOutputError,
-  OrchestrationV2GetThreadProjectionError,
-  OrchestrationV2RpcSchemas,
-  OrchestrationV2ThreadLaunchError,
-} from "./orchestrationV2.ts";
+  HostResourcesSnapshot,
+  ResourceTelemetryHistory,
+  ResourceTelemetryHistoryInput,
+  ResourceTelemetryRetryResult,
+  ResourceTelemetrySnapshot,
+} from "./resourceTelemetry.ts";
 import {
-  ProjectCreateNewInput,
-  ProjectCreateNewResult,
-  ProjectCreateFromThreadInput,
-  ProjectCreateFromThreadResult,
-  ProjectEnsureScratchResult,
-  ProjectListEntriesError,
-  ProjectListEntriesInput,
-  ProjectListEntriesResult,
-  ProjectListIgnoredFilesInput,
-  ProjectListIgnoredFilesResult,
-  ProjectReadFileError,
-  ProjectReadFileInput,
-  ProjectReadFileResult,
-  ProjectSearchContentsError,
-  ProjectSearchContentsInput,
-  ProjectSearchContentsResult,
-  ProjectSearchEntriesError,
-  ProjectSearchEntriesInput,
-  ProjectSearchEntriesResult,
-  ProjectWriteFileError,
-  ProjectWriteFileInput,
-  ProjectWriteFileResult,
-} from "./project.ts";
+  ReviewBranchCommitsInput,
+  ReviewBranchCommitsResult,
+  ReviewDiffFileContentsInput,
+  ReviewDiffFileContentsResult,
+  ReviewDiffPreviewError,
+  ReviewDiffPreviewInput,
+  ReviewDiffPreviewResult,
+} from "./review.ts";
 import {
-  TerminalAttachInput,
-  TerminalObserveInput,
-  TerminalAttachStreamEvent,
-  TerminalClearInput,
-  TerminalCloseInput,
-  TerminalError,
-  TerminalMetadataStreamEvent,
-  TerminalOpenInput,
-  TerminalResizeInput,
-  TerminalSessionSnapshot,
-  TerminalWriteInput,
-} from "./terminal.ts";
-import {
-  DiscoveredLocalServerList,
-  ConfiguredLocalServerUrls,
-  PreviewCloseInput,
-  PreviewError,
-  PreviewEvent,
-  PreviewListInput,
-  PreviewListResult,
-  PreviewClearProfileError,
-  PreviewClearProfileInput,
-  PreviewReportProfilesInput,
-  PreviewStopLocalServerError,
-  PreviewStopLocalServerInput,
-  PreviewOpenInput,
-  PreviewReportStatusInput,
-  PreviewResizeInput,
-  PreviewAdjustInput,
-  PreviewSessionSnapshot,
-} from "./preview.ts";
-import {
-  DeviceActionInput,
-  DeviceCloseInput,
-  DeviceConfigureInput,
-  DeviceDetail,
-  DeviceDetailInput,
-  DeviceError,
-  DeviceListInput,
-  SshDeviceHostConfig,
-  DeviceEasAccount,
-  DeviceEasAccountError,
-  DeviceEasAccountInput,
-  DeviceSimlockIdentity,
-  DeviceSimlockIdentityError,
-  DeviceSimlockIdentityInput,
-  DeviceHostSummary,
-  DeviceOpenInput,
-  DeviceServiceState,
-  DeviceSession,
-  DeviceShutdownInput,
-} from "./device.ts";
+  ScheduledTaskDeleteInput,
+  ScheduledTaskDeleteResult,
+  ScheduledTaskError,
+  ScheduledTaskListInput,
+  ScheduledTaskListResult,
+  ScheduledTaskRunNowInput,
+  ScheduledTaskRotateWebhookTokenInput,
+  ScheduledTaskListWebhookDeliveriesInput,
+  ScheduledTaskListWebhookDeliveriesResult,
+  ScheduledTaskGetWebhookDeliveryInput,
+  ScheduledTaskGetWebhookDeliveryResult,
+  ScheduledTaskRunNowResult,
+  ScheduledTaskSetEnabledInput,
+  ScheduledTaskUpsertInput,
+  ScheduledTaskMutationResult,
+} from "./scheduledTask.ts";
+import { SecretReference } from "./secretReference.ts";
+import { SecretRequestAnswerInput, SecretRequestError } from "./secretRequest.ts";
 import {
   ServerConfigStreamEvent,
   DesktopUpdateCommitInput,
@@ -371,19 +389,6 @@ import {
   ServerUpsertKeybindingResult,
 } from "./server.ts";
 import {
-  HostResourcesSnapshot,
-  ResourceTelemetryHistory,
-  ResourceTelemetryHistoryInput,
-  ResourceTelemetryRetryResult,
-  ResourceTelemetrySnapshot,
-} from "./resourceTelemetry.ts";
-import {
-  UsageLimitSourceError,
-  ProviderConsumeResetCreditInput,
-  ProviderConsumeResetCreditResult,
-} from "./providerUsageLimits.ts";
-import { UsagePricing, UsageReadError, UsageSummary, UsageSummaryInput } from "./usage.ts";
-import {
   StorageCleanupReport,
   DatabaseReclaimError,
   DatabaseStorageStatus,
@@ -394,32 +399,7 @@ import {
   ListTextGeneratorModelsResult,
   TextGeneratorError,
 } from "./settings.ts";
-import {
-  ScheduledTaskDeleteInput,
-  ScheduledTaskDeleteResult,
-  ScheduledTaskError,
-  ScheduledTaskListInput,
-  ScheduledTaskListResult,
-  ScheduledTaskRunNowInput,
-  ScheduledTaskRotateWebhookTokenInput,
-  ScheduledTaskListWebhookDeliveriesInput,
-  ScheduledTaskListWebhookDeliveriesResult,
-  ScheduledTaskGetWebhookDeliveryInput,
-  ScheduledTaskGetWebhookDeliveryResult,
-  ScheduledTaskRunNowResult,
-  ScheduledTaskSetEnabledInput,
-  ScheduledTaskUpsertInput,
-  ScheduledTaskMutationResult,
-} from "./scheduledTask.ts";
-import { SecretRequestAnswerInput, SecretRequestError } from "./secretRequest.ts";
-import {
-  ProjectCloneActionInput,
-  ProjectCloneActionResult,
-  ProjectCloneListEvent,
-  ProjectCloneStartInput,
-  ProjectCloneStartResult,
-  ProjectCloneSubscribeInput,
-} from "./projectClone.ts";
+import { SecretSourceCheckResult } from "./settingsSecretValue.ts";
 import {
   SourceControlCloneRepositoryInput,
   SourceControlCloneRepositoryResult,
@@ -437,8 +417,28 @@ import {
   SourceControlSignInPrompt,
   SourceControlSignInResult,
 } from "./sourceControl.ts";
+import {
+  TerminalAttachInput,
+  TerminalObserveInput,
+  TerminalAttachStreamEvent,
+  TerminalClearInput,
+  TerminalCloseInput,
+  TerminalError,
+  TerminalMetadataStreamEvent,
+  TerminalOpenInput,
+  TerminalResizeInput,
+  TerminalSessionSnapshot,
+  TerminalWriteInput,
+} from "./terminal.ts";
+import { OrchestrationSearchThreadsError } from "./threadSearch.ts";
+import { UsagePricing, UsageReadError, UsageSummary, UsageSummaryInput } from "./usage.ts";
 import { VcsError } from "./vcs.ts";
-import { Project, ProjectMutation, ProjectMutationError } from "./project.ts";
+import {
+  WorktreeSetupCancelInput,
+  WorktreeSetupCancelResult,
+  WorktreeSetupStreamEvent,
+  WorktreeSetupSubscribeInput,
+} from "./worktreeSetup.ts";
 
 export const WS_METHODS = {
   projectsListEntries: "projects.listEntries",

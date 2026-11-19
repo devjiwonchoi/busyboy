@@ -1,7 +1,6 @@
 import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, it } from "@effect/vitest";
-import * as HostProcess from "@t3tools/shared/HostProcess";
 import {
   OrchestratorMcpRequestSecretInput,
   ProjectId,
@@ -15,17 +14,18 @@ import {
 import { defineSecretProviderDriver } from "@t3tools/secret-provider-core/server/driver";
 import * as SecretResolver from "@t3tools/secret-provider-core/server/SecretResolver";
 import { defineSecretProvider } from "@t3tools/secret-provider-core/shared/definition";
+import * as HostProcess from "@t3tools/shared/HostProcess";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Metric from "effect/Metric";
-import * as Tracer from "effect/Tracer";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as PlatformError from "effect/PlatformError";
 import * as Schema from "effect/Schema";
 import * as TestClock from "effect/testing/TestClock";
+import * as Tracer from "effect/Tracer";
 
 import * as ServerSecretStore from "../auth/ServerSecretStore.ts";
 import * as ThreadManagementService from "../orchestration-v2/ThreadManagementService.ts";

@@ -1,4 +1,5 @@
 import { expect, it } from "vite-plus/test";
+
 import { findThreadSearchOccurrences } from "./threadSearch.ts";
 
 it("finds non-overlapping occurrences without invalidating Unicode offsets", () => {

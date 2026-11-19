@@ -1,5 +1,8 @@
 // @effect-diagnostics nodeBuiltinImport:off - Names download files on the shared disk.
 /** The manager owns the single debugger attachment; the relay shares it. */
+
+import * as NodePath from "node:path";
+
 import {
   DesktopBrowserCommand,
   DesktopBrowserEvent,
@@ -7,7 +10,6 @@ import {
   type PreviewAutomationLoadError,
 } from "@t3tools/contracts";
 import * as Context from "effect/Context";
-import * as NodePath from "node:path";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";

@@ -2,9 +2,9 @@ import type { ThreadId } from "@t3tools/contracts";
 import { boundedSnapshotProjection } from "@t3tools/shared/orchestrationV2BoundedSnapshot";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
+import { HttpClient } from "effect/http";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
-import { HttpClient } from "effect/http";
 
 import * as RemoteEnvironmentAuthorization from "../authorization/service.ts";
 import type { PreparedConnection } from "../connection/model.ts";

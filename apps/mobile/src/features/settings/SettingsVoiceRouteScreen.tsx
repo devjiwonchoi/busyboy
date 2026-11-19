@@ -1,8 +1,8 @@
-import { msg, useGT, useMessages } from "gt-react-native";
-import { ScreenScrollView as ScrollView } from "../../components/ui/ScreenScrollView";
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
+import type { EnvironmentId } from "@t3tools/contracts";
 import { AsyncResult } from "effect/reactivity";
 import { getRecordingPermissionsAsync, requestRecordingPermissionsAsync } from "expo-audio";
+import { msg, useGT, useMessages } from "gt-react-native";
 import { useState } from "react";
 import { Linking, Platform, useWindowDimensions, View } from "react-native";
 import Reanimated, { ReduceMotion, useAnimatedStyle, withTiming } from "react-native-reanimated";
@@ -10,20 +10,23 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { type AppSymbolName } from "../../components/ui/AppSymbol";
 import { AppText as Text } from "../../components/ui/AppText";
-import { cn } from "../../lib/cn";
+import * as Dialog from "../../components/ui/Dialog";
+import { ListActionRow as SettingsActionRow } from "../../components/ui/ListActionRow";
+import { ListChoiceRow } from "../../components/ui/ListChoiceRow";
+import { ListRowLayout } from "../../components/ui/ListRowLayout";
+import { ScreenScrollView as ScrollView } from "../../components/ui/ScreenScrollView";
 import { m } from "../../i18n/messages";
-import { makePermissionStatusAtom } from "../../lib/permissionStatusAtom";
+import { cn } from "../../lib/cn";
 import {
   isMicrophoneDevice,
   type MicrophoneEntry,
   type MicrophoneKind,
   microphoneEntryKey,
 } from "../../lib/microphonePriority";
-import { mobilePreferencesAtom, updateMobilePreferencesAtom } from "../../state/preferences";
-import { ListRowLayout } from "../../components/ui/ListRowLayout";
-import { ListChoiceRow } from "../../components/ui/ListChoiceRow";
-import * as Dialog from "../../components/ui/Dialog";
+import { makePermissionStatusAtom } from "../../lib/permissionStatusAtom";
 import { useEnvironments, type EnvironmentPresentation } from "../../state/environments";
+import { mobilePreferencesAtom, updateMobilePreferencesAtom } from "../../state/preferences";
+import { ThreadSwipeable } from "../home/thread-swipe-actions";
 import {
   chooseVoiceDestination,
   cloudVoiceConnectionAtom,
@@ -31,19 +34,16 @@ import {
   voiceGrantAtom,
   hasEnvironmentVoiceCapture,
 } from "../voice-input/voiceDestination";
-import { LocalModelChoice } from "./VoiceModelSection";
-import { CloudVoiceChoice } from "./CloudVoiceSection";
 import type { VoiceGrant } from "../voice-input/voiceGrantStorage";
-import type { EnvironmentId } from "@t3tools/contracts";
-import { ThreadSwipeable } from "../home/thread-swipe-actions";
-import { ListActionRow as SettingsActionRow } from "../../components/ui/ListActionRow";
-import { SettingsDragHandle } from "./components/SettingsDragHandle";
-import { SettingsScreen } from "./components/SettingsScreen";
-import { SettingsSection } from "./components/SettingsSection";
 import {
   deviceMicrophoneOrder,
   localVoiceTranscriberAtom,
 } from "../voice-input/VoiceInputProvider";
+import { CloudVoiceChoice } from "./CloudVoiceSection";
+import { SettingsDragHandle } from "./components/SettingsDragHandle";
+import { SettingsScreen } from "./components/SettingsScreen";
+import { SettingsSection } from "./components/SettingsSection";
+import { LocalModelChoice } from "./VoiceModelSection";
 
 type MicrophonePermission = "checking" | "granted" | "ask" | "denied";
 

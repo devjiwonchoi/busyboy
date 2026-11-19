@@ -1,5 +1,5 @@
-import { useGT } from "gt-react";
 import type { ScopedThreadRef } from "@t3tools/contracts";
+import { useGT } from "gt-react";
 import { X } from "lucide-react";
 
 import { isValidHistoryTimestamp, type BrowserHistoryEntry } from "~/browserHistoryStore";

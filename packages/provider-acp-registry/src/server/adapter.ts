@@ -1,8 +1,54 @@
+import { defaultInstanceIdForDriver, ProviderDriverKind } from "@t3tools/contracts";
+import * as AcpSessionRuntime from "@t3tools/provider-acp/server/AcpSessionRuntime";
+import {
+  AcpProviderCapabilitiesV2,
+  makeAcpAdapterV2,
+  type AcpAdapterV2ExtensionContext,
+  type AcpAdapterV2Flavor,
+  type AcpAdapterV2RuntimeInput,
+} from "@t3tools/provider-acp/server/adapter";
+import { makeAcpNativeLoggerFactory } from "@t3tools/provider-acp/server/nativeLogging";
+import {
+  ProviderAdapterDriverCreateError,
+  type ProviderAdapterDriver,
+  type ProviderAdapterDriverCreateInput,
+} from "@t3tools/provider-core/server/adapterDriver";
+import { makeProviderFailure } from "@t3tools/provider-core/server/failure";
+import * as IdAllocator from "@t3tools/provider-core/server/IdAllocator";
+import { mergeProviderInstanceEnvironment } from "@t3tools/provider-core/server/instanceEnvironment";
+import * as McpProviderSessions from "@t3tools/provider-core/server/McpProviderSessions";
+import * as ProviderContinuationRequests from "@t3tools/provider-core/server/ProviderContinuationRequests";
+import * as ProviderEventLoggers from "@t3tools/provider-core/server/ProviderEventLoggers";
+import * as ProviderHost from "@t3tools/provider-core/server/ProviderHost";
+import * as HostProcess from "@t3tools/shared/HostProcess";
+import { readCustomModelEntries } from "@t3tools/shared/model";
+import { resolveSelfInvocation, type SelfInvocation } from "@t3tools/shared/nodeRuntime";
+import type * as EffectAcpSchema from "effect-acp/compat";
+import * as EffectAcpErrors from "effect-acp/errors";
+import * as SecureRandom from "effect/crypto/SecureRandom";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as Path from "effect/Path";
+import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
+import * as Schema from "effect/Schema";
+import type * as Scope from "effect/Scope";
+
+import { AcpRegistrySettings } from "../settings.ts";
+import * as AcpRegistryRuntimeCoordinator from "./AcpRegistryRuntimeCoordinator.ts";
+import * as AcpRegistrySupport from "./AcpRegistrySupport.ts";
 import {
   extractClaudeSubagentUpdate,
   extractClaudeSubagentSessionEvent,
   isClaudeProvisionalSubagentTool,
 } from "./claudeAcp.ts";
+import {
+  copilotClientCapabilitiesMeta,
+  extractCopilotSubagentUpdate,
+  isCopilotLostSessionError,
+  makeCopilotSubagentRouting,
+} from "./copilotAcp.ts";
 import {
   normalizeDevinSessionUpdate,
   normalizeDevinToolCall,
@@ -11,60 +57,14 @@ import {
 } from "./devinAcp.ts";
 import { extractDroidElicitationForm } from "./droidAcp.ts";
 import { makeKimiPromptOutcomeWatch } from "./kimiAcp.ts";
+import { prefersHttpMcpTransport } from "./mcpTransport.ts";
 import { extractOmpElicitationForm } from "./ompAcp.ts";
 import { extractOpenCodeElicitationForm } from "./opencodeAcp.ts";
-import {
-  copilotClientCapabilitiesMeta,
-  extractCopilotSubagentUpdate,
-  isCopilotLostSessionError,
-  makeCopilotSubagentRouting,
-} from "./copilotAcp.ts";
-import { prefersHttpMcpTransport } from "./mcpTransport.ts";
-import { defaultInstanceIdForDriver, ProviderDriverKind } from "@t3tools/contracts";
-import { readCustomModelEntries } from "@t3tools/shared/model";
-import { AcpRegistrySettings } from "../settings.ts";
-import * as HostProcess from "@t3tools/shared/HostProcess";
-import { resolveSelfInvocation, type SelfInvocation } from "@t3tools/shared/nodeRuntime";
-import * as SecureRandom from "effect/crypto/SecureRandom";
-import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
-import * as Path from "effect/Path";
-import * as Layer from "effect/Layer";
-import * as Option from "effect/Option";
-import * as Schema from "effect/Schema";
-import type * as Scope from "effect/Scope";
-import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
-import type * as EffectAcpSchema from "effect-acp/compat";
-import * as EffectAcpErrors from "effect-acp/errors";
-
-import * as McpProviderSessions from "@t3tools/provider-core/server/McpProviderSessions";
-import * as ProviderContinuationRequests from "@t3tools/provider-core/server/ProviderContinuationRequests";
-import * as ProviderHost from "@t3tools/provider-core/server/ProviderHost";
 import {
   normalizeAcpRegistryCommands,
   normalizeAcpRegistryLiveConfiguration,
   normalizeAcpRegistryWebUrl,
 } from "./probe.ts";
-import * as AcpRegistrySupport from "./AcpRegistrySupport.ts";
-import * as AcpRegistryRuntimeCoordinator from "./AcpRegistryRuntimeCoordinator.ts";
-import * as AcpSessionRuntime from "@t3tools/provider-acp/server/AcpSessionRuntime";
-import { makeAcpNativeLoggerFactory } from "@t3tools/provider-acp/server/nativeLogging";
-import * as ProviderEventLoggers from "@t3tools/provider-core/server/ProviderEventLoggers";
-import { mergeProviderInstanceEnvironment } from "@t3tools/provider-core/server/instanceEnvironment";
-import * as IdAllocator from "@t3tools/provider-core/server/IdAllocator";
-import { makeProviderFailure } from "@t3tools/provider-core/server/failure";
-import {
-  ProviderAdapterDriverCreateError,
-  type ProviderAdapterDriver,
-  type ProviderAdapterDriverCreateInput,
-} from "@t3tools/provider-core/server/adapterDriver";
-import {
-  AcpProviderCapabilitiesV2,
-  makeAcpAdapterV2,
-  type AcpAdapterV2ExtensionContext,
-  type AcpAdapterV2Flavor,
-  type AcpAdapterV2RuntimeInput,
-} from "@t3tools/provider-acp/server/adapter";
 
 export const ACP_REGISTRY_PROVIDER = ProviderDriverKind.make("acpRegistry");
 export const ACP_REGISTRY_DEFAULT_INSTANCE_ID = defaultInstanceIdForDriver(ACP_REGISTRY_PROVIDER);

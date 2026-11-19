@@ -1,8 +1,9 @@
+import { cva, type VariantProps } from "class-variance-authority";
 import { useGT } from "gt-react";
 import { LoaderCircleIcon } from "lucide-react";
-import { cva, type VariantProps } from "class-variance-authority";
-import { observeVisibleAnimation } from "~/lib/visibleAnimation";
+
 import { cn } from "~/lib/utils";
+import { observeVisibleAnimation } from "~/lib/visibleAnimation";
 
 // No default size: inside a Button the parent's svg rule sizes the glyph.
 const spinnerVariants = cva("motion-safe:visible-animate-spin", {

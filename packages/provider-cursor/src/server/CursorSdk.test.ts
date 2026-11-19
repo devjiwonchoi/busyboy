@@ -1,6 +1,6 @@
+import type { CursorConfigureOptions } from "@cursor/sdk";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, describe, it } from "@effect/vitest";
-import type { CursorConfigureOptions } from "@cursor/sdk";
 import * as HostProcess from "@t3tools/shared/HostProcess";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";

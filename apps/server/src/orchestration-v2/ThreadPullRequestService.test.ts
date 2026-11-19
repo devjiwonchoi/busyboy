@@ -1,3 +1,4 @@
+import { describe, expect, it } from "@effect/vitest";
 import {
   ProjectId,
   ProviderInstanceId,
@@ -8,7 +9,7 @@ import {
   type OrchestrationV2ThreadShell,
   type OrchestrationV2ServerCommand,
 } from "@t3tools/contracts";
-import { describe, expect, it } from "@effect/vitest";
+import { EventId } from "@t3tools/contracts";
 import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as DateTime from "effect/DateTime";
 import * as Deferred from "effect/Deferred";
@@ -19,20 +20,19 @@ import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as PlatformError from "effect/PlatformError";
 import * as Queue from "effect/Queue";
+import * as SqlClient from "effect/sql/SqlClient";
 import * as Stream from "effect/Stream";
 import * as TestClock from "effect/testing/TestClock";
 
 import * as BackgroundPolicy from "../background/BackgroundPolicy.ts";
 import * as GitManager from "../git/GitManager.ts";
-import * as ProjectStore from "./ProjectStore.ts";
+import * as SqlitePersistence from "../persistence/Sqlite.ts";
 import * as RepositoryIdentityResolver from "../project/RepositoryIdentityResolver.ts";
 import * as PullRequestService from "../pullRequest/PullRequestService.ts";
 import * as ServerActivation from "../serverActivation.ts";
-import * as ProjectionStore from "./ProjectionStore.ts";
-import * as SqlClient from "effect/sql/SqlClient";
-import * as SqlitePersistence from "../persistence/Sqlite.ts";
-import { EventId } from "@t3tools/contracts";
 import * as Orchestrator from "./Orchestrator.ts";
+import * as ProjectionStore from "./ProjectionStore.ts";
+import * as ProjectStore from "./ProjectStore.ts";
 import * as ThreadPullRequestService from "./ThreadPullRequestService.ts";
 
 describe("ThreadPullRequestServiceV2 project guard", () => {

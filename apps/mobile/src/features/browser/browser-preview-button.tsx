@@ -1,8 +1,8 @@
 import { Plural, T, useGT, Var } from "gt-react-native";
 import { Pressable, View } from "react-native";
 
-import { AppText } from "../../components/ui/AppText";
 import { SymbolView } from "../../components/ui/AppSymbol";
+import { AppText } from "../../components/ui/AppText";
 
 export function BrowserPreviewButton(props: {
   readonly count: number;

@@ -1,3 +1,4 @@
+import { getQuestionAnswerText } from "@t3tools/client-runtime/work-log/user-input";
 import type {
   EnvironmentId,
   UserInputAttachmentAnswerPayload,
@@ -5,7 +6,7 @@ import type {
 } from "@t3tools/contracts";
 import { Image } from "expo-image";
 import { Linking, Pressable, View } from "react-native";
-import { getQuestionAnswerText } from "@t3tools/client-runtime/work-log/user-input";
+
 import { AppText as Text } from "../../components/ui/AppText";
 import { assetImageSource } from "../../lib/assetImageSource";
 import { useAssetUrl } from "../../state/assets";

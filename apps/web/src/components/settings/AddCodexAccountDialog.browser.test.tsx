@@ -6,8 +6,8 @@ import {
 } from "@t3tools/contracts";
 import { Atom } from "effect/reactivity";
 import { useState } from "react";
-import { page, userEvent } from "vite-plus/test/browser";
 import { describe, expect, it, vi } from "vite-plus/test";
+import { page, userEvent } from "vite-plus/test/browser";
 
 import { act, render } from "../../../test/render";
 import { AppAtomRegistryProvider, appAtomRegistry as registry } from "../../rpc/atomRegistry";

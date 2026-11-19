@@ -89,9 +89,9 @@ import { EMPTY_ENVIRONMENT_THREAD_STATE } from "@t3tools/client-runtime/state/th
 import { act, render as renderUi } from "../../../test/render";
 import { makeStreamingTimelineFixture, makeThreadProjectionFixture } from "../../test-fixtures";
 import { ToastProvider } from "../ui/toast";
-import { QueuedRunsControl } from "./QueuedRunsControl";
 import { ExpandedImageDialog } from "./ExpandedImageDialog";
 import type { ExpandedImagePreview } from "./ExpandedImagePreview";
+import { QueuedRunsControl } from "./QueuedRunsControl";
 
 function setup() {
   state.workflow = null;

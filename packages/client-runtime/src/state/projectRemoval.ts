@@ -1,8 +1,8 @@
 import { isListedThreadLineage } from "@t3tools/contracts";
-
-import type { EnvironmentProject, EnvironmentThreadShell } from "./models.ts";
 import { mFallback, msg } from "gt-i18n";
 import type { MFunctionType } from "gt-i18n/types";
+
+import type { EnvironmentProject, EnvironmentThreadShell } from "./models.ts";
 
 export function planProjectRemoval<
   Thread extends Pick<EnvironmentThreadShell, "environmentId" | "projectId" | "lineage">,

@@ -1,6 +1,3 @@
-import { T, useGT, useMessages } from "gt-react-native";
-import { Button } from "../../components/ui/Button";
-import * as Dialog from "../../components/ui/Dialog";
 import { useAtomValue } from "@effect/atom-react";
 import {
   type ConnectionRoute,
@@ -18,22 +15,25 @@ import {
   AUTH_SCOPE_OPTIONS,
   sessionPermissionsUnavailableMessage,
 } from "@t3tools/shared/authScopeOptions";
-import { AsyncResult } from "effect/reactivity";
 import * as Option from "effect/Option";
+import { AsyncResult } from "effect/reactivity";
+import { T, useGT, useMessages } from "gt-react-native";
 import { useState } from "react";
 import { Platform, Pressable, View } from "react-native";
 import Reanimated, { ReduceMotion, useAnimatedStyle, withTiming } from "react-native-reanimated";
 
+import { StatusPill } from "../../components/StatusPill";
 import { type AppSymbolName, SymbolView } from "../../components/ui/AppSymbol";
 import { AppText as Text } from "../../components/ui/AppText";
-import { StatusPill } from "../../components/StatusPill";
+import { Button } from "../../components/ui/Button";
+import * as Dialog from "../../components/ui/Dialog";
+import { ListActionRow as SettingsActionRow } from "../../components/ui/ListActionRow";
 import { environmentCatalog } from "../../connection/catalog";
 import { cn } from "../../lib/cn";
 import { environmentPresentations } from "../../state/presentation";
 import { environmentSession } from "../../state/session";
 import { useAtomCommand } from "../../state/use-atom-command";
 import { connectionTone } from "../connection/connectionTone";
-import { ListActionRow as SettingsActionRow } from "../../components/ui/ListActionRow";
 import { SettingsDragHandle } from "./components/SettingsDragHandle";
 import { SettingsSection } from "./components/SettingsSection";
 

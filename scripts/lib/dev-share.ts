@@ -11,8 +11,8 @@ import {
   type TailscaleStderrDiagnostic,
 } from "@t3tools/tailscale";
 import * as Effect from "effect/Effect";
-import * as Schema from "effect/Schema";
 import type { ChildProcessSpawner } from "effect/process";
+import * as Schema from "effect/Schema";
 
 /** Log fixed diagnostics; tailscale stderr can contain auth keys and node names. */
 const DIAGNOSTIC_EXPLANATIONS: Record<TailscaleStderrDiagnostic, string | undefined> = {

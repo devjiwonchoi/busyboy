@@ -1,13 +1,14 @@
+import * as NodeModule from "node:module";
+
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as PlatformError from "effect/PlatformError";
+import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
-import { ChildProcess, ChildProcessSpawner } from "effect/process";
-import * as NodeModule from "node:module";
 
 // oxlint is only a transitive dependency (via vite-plus), so its bin placement
 // varies by package manager: pnpm hoists it into the virtual store, while

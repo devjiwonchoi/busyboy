@@ -1,6 +1,7 @@
 import { EnvironmentId } from "@t3tools/contracts";
 import type { RelayClientEnvironmentRecord } from "@t3tools/contracts/relay";
 import { describe, expect, it } from "vite-plus/test";
+
 import type { ConnectedEnvironmentSummary } from "../../state/remote-runtime-types";
 import { splitEnvironmentSections } from "./environmentSections";
 

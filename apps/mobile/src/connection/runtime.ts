@@ -1,6 +1,6 @@
 import { Connection } from "@t3tools/client-runtime/connection";
-import { ShellSnapshotLoader } from "@t3tools/client-runtime/state/shell";
 import { PullRequestDiffLoader } from "@t3tools/client-runtime/state/pull-requests";
+import { ShellSnapshotLoader } from "@t3tools/client-runtime/state/shell";
 import {
   BoundedThreadSnapshotLoader,
   ThreadHistoryController,

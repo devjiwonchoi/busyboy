@@ -1,4 +1,3 @@
-import { createMemoryHistory } from "@tanstack/react-router";
 import {
   ProviderDriverKind,
   ProviderInstanceId,
@@ -6,6 +5,7 @@ import {
   type OrchestrationV2ProviderThread,
 } from "@t3tools/contracts";
 import { DEFAULT_CLIENT_SETTINGS } from "@t3tools/contracts/settings";
+import { createMemoryHistory } from "@tanstack/react-router";
 import type * as Context from "effect/Context";
 import * as DateTime from "effect/DateTime";
 import { expect, it, vi } from "vite-plus/test";
@@ -17,6 +17,7 @@ import { AppRoot } from "~/AppRoot";
 import "~/components/ChatView";
 import { __setClientSettingsForTests } from "~/hooks/useSettings";
 import { getRouter } from "~/router";
+
 import {
   CLAUDE_PROVIDER,
   CODEX_PROVIDER,

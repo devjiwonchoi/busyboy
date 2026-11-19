@@ -1,30 +1,30 @@
 import {
-  createAdvertisedEndpoint,
-  type CreateAdvertisedEndpointInput,
-} from "@t3tools/shared/advertisedEndpoint";
-import {
   DesktopServerExposureModeSchema,
   type AdvertisedEndpoint,
   type AdvertisedEndpointProvider,
   type DesktopServerExposureMode,
   type DesktopServerExposureState,
 } from "@t3tools/contracts";
+import {
+  createAdvertisedEndpoint,
+  type CreateAdvertisedEndpointInput,
+} from "@t3tools/shared/advertisedEndpoint";
 import { isTailscaleIpv4Address, readTailscaleStatus } from "@t3tools/tailscale";
 import * as Cache from "effect/Cache";
 import * as Context from "effect/Context";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Ref from "effect/Ref";
 import * as Schema from "effect/Schema";
 import * as Semaphore from "effect/Semaphore";
-import * as HttpClient from "effect/http/HttpClient";
-import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 
+import * as DesktopConfig from "../app/DesktopConfig.ts";
 import * as DesktopManagedPolicy from "../app/DesktopManagedPolicy.ts";
 import * as DesktopAppSettings from "../settings/DesktopAppSettings.ts";
-import * as DesktopConfig from "../app/DesktopConfig.ts";
 import * as DesktopNetworkInterfaces from "./DesktopNetworkInterfaces.ts";
 import { resolveTailscaleAdvertisedEndpoints } from "./tailscaleEndpointProvider.ts";
 

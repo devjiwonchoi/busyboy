@@ -1,10 +1,10 @@
-import { msg } from "gt-react-native";
-
-import { m } from "../../i18n/messages";
 import {
   throwIfVoiceTranscriptionAborted,
   type VoiceRecorder,
 } from "@t3tools/client-runtime/voice-input";
+import { msg } from "gt-react-native";
+
+import { m } from "../../i18n/messages";
 
 type Subscription = { remove(): void };
 type RecordingDestination = "local" | "environment";

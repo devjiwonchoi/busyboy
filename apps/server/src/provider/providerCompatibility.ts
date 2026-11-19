@@ -7,6 +7,7 @@ import {
 } from "@t3tools/contracts";
 import { satisfiesSemverRange } from "@t3tools/shared/semver";
 import * as Schema from "effect/Schema";
+
 import packageJson from "../../package.json" with { type: "json" };
 
 const StableVersion = TrimmedNonEmptyString.pipe(

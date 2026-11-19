@@ -1,12 +1,12 @@
+import { RegistryContext, useAtomSet } from "@effect/atom-react";
 import { describe, expect, it } from "@effect/vitest";
+import { ProviderInstanceId } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { AsyncResult, Atom, AtomRegistry } from "effect/reactivity";
-import { vi } from "vite-plus/test";
-import { ProviderInstanceId } from "@t3tools/contracts";
-import { RegistryContext, useAtomSet } from "@effect/atom-react";
 import { createElement } from "react";
 import { renderToString } from "react-dom/server";
+import { vi } from "vite-plus/test";
 
 vi.mock("expo-secure-store", () => ({
   getItemAsync: vi.fn(),
@@ -25,8 +25,8 @@ vi.mock("../lib/runtime", async () => {
   };
 });
 
-import { createMobilePreferencesState } from "./preferences";
 import * as MobilePreferences from "../persistence/mobile-preferences";
+import { createMobilePreferencesState } from "./preferences";
 
 function deferred<A>() {
   let resolve!: (value: A) => void;

@@ -1,9 +1,9 @@
-import type { SelectableMarkdownModel } from "./SelectableMarkdownText.types";
 import type { OrchestrationMessageContext, ServerProviderSkill } from "@t3tools/contracts";
 import type { Ref } from "react";
 import type { StyleProp, TextStyle, ViewStyle } from "react-native";
 
 import type { ComposerEnterBehavior } from "../lib/composerEnterBehavior";
+import type { SelectableMarkdownModel } from "./SelectableMarkdownText.types";
 
 export type { ComposerEnterBehavior };
 

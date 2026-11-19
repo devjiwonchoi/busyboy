@@ -1,3 +1,4 @@
+import { describe, expect, it } from "@effect/vitest";
 import {
   EnvironmentId,
   ORCHESTRATION_V2_WS_METHODS,
@@ -9,7 +10,6 @@ import {
   type OrchestrationV2ShellSnapshot,
   type OrchestrationV2ThreadShell,
 } from "@t3tools/contracts";
-import { describe, expect, it } from "@effect/vitest";
 import * as Clock from "effect/Clock";
 import * as DateTime from "effect/DateTime";
 import * as Deferred from "effect/Deferred";
@@ -17,9 +17,9 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Queue from "effect/Queue";
+import { AsyncResult, Atom, AtomRegistry } from "effect/reactivity";
 import * as Stream from "effect/Stream";
 import * as SubscriptionRef from "effect/SubscriptionRef";
-import { AsyncResult, Atom, AtomRegistry } from "effect/reactivity";
 import * as TestClock from "effect/testing/TestClock";
 
 import {
@@ -32,7 +32,6 @@ import * as EnvironmentRegistry from "../connection/registry.ts";
 import * as EnvironmentSupervisor from "../connection/supervisor.ts";
 import type { WsRpcProtocolClient } from "../rpc/protocol.ts";
 import type * as RpcSession from "../rpc/session.ts";
-import { EMPTY_SHELL_STATE, type EnvironmentShellState } from "./shell.ts";
 import {
   createOlderSettledThreadAtoms,
   isListedSettledThread,
@@ -43,6 +42,7 @@ import {
   type OlderSettled,
   type OlderSettledPages,
 } from "./olderSettledThreads.ts";
+import { EMPTY_SHELL_STATE, type EnvironmentShellState } from "./shell.ts";
 
 const DAY = 24 * 60 * 60 * 1000;
 const environmentId = EnvironmentId.make("env-a");

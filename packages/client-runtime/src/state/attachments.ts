@@ -7,9 +7,9 @@ import {
   type EnvironmentId,
 } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
+import type { AsyncResult, Atom, AtomRegistry } from "effect/reactivity";
 import { mFallback, msg } from "gt-i18n";
 import type { MFunctionType } from "gt-i18n/types";
-import type { AsyncResult, Atom, AtomRegistry } from "effect/reactivity";
 
 import type { EnvironmentRegistry } from "../connection/registry.ts";
 import {

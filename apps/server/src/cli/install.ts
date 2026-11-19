@@ -1,15 +1,15 @@
 import * as HostProcess from "@t3tools/shared/HostProcess";
 import { pathSetupCommand, resolveCommandPath } from "@t3tools/shared/shell";
+import { Command, Prompt } from "effect/cli";
 import * as Console from "effect/Console";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
-import * as Schema from "effect/Schema";
-import { Command, Prompt } from "effect/cli";
 import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
+import * as Schema from "effect/Schema";
 
 import packageJson from "../../package.json" with { type: "json" };
 import {

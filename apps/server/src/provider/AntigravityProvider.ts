@@ -1,4 +1,3 @@
-import { resolveProviderProbeTimeoutMs } from "@t3tools/provider-core/server/snapshotProbe";
 import {
   ANTIGRAVITY_DEFAULT_MODEL,
   ProviderDriverKind,
@@ -9,7 +8,23 @@ import {
   type ServerProviderSlashCommand,
   type ServerProviderUsageLimits,
 } from "@t3tools/contracts";
+import type * as AcpSessionRuntime from "@t3tools/provider-acp/server/AcpSessionRuntime";
+import { acpProviderOptionDescriptors } from "@t3tools/provider-acp/server/sessionConfig";
+import {
+  makeManualOnlyProviderMaintenanceCapabilities,
+  type ProviderMaintenanceCapabilities,
+} from "@t3tools/provider-core/server/maintenanceResolver";
+import { makeManagedServerProvider } from "@t3tools/provider-core/server/managedProvider";
+import { resolveProviderProbeTimeoutMs } from "@t3tools/provider-core/server/snapshotProbe";
+import {
+  buildServerProvider,
+  isCommandMissingCause,
+  type ServerProviderDraft,
+} from "@t3tools/provider-core/server/snapshotProbe";
+import { resolveUsageLimitsAfterProbe } from "@t3tools/provider-core/server/usageLimits";
 import { createModelCapabilities } from "@t3tools/shared/model";
+import type * as EffectAcpSchema from "effect-acp/compat";
+import type * as EffectAcpErrors from "effect-acp/errors";
 import * as Context from "effect/Context";
 import * as DateTime from "effect/DateTime";
 import * as Deferred from "effect/Deferred";
@@ -20,22 +35,6 @@ import * as Predicate from "effect/Predicate";
 import * as Result from "effect/Result";
 import * as Stream from "effect/Stream";
 import * as SubscriptionRef from "effect/SubscriptionRef";
-import type * as EffectAcpErrors from "effect-acp/errors";
-import type * as EffectAcpSchema from "effect-acp/compat";
-
-import type * as AcpSessionRuntime from "@t3tools/provider-acp/server/AcpSessionRuntime";
-import { acpProviderOptionDescriptors } from "@t3tools/provider-acp/server/sessionConfig";
-import { makeManagedServerProvider } from "@t3tools/provider-core/server/managedProvider";
-import {
-  makeManualOnlyProviderMaintenanceCapabilities,
-  type ProviderMaintenanceCapabilities,
-} from "@t3tools/provider-core/server/maintenanceResolver";
-import {
-  buildServerProvider,
-  isCommandMissingCause,
-  type ServerProviderDraft,
-} from "@t3tools/provider-core/server/snapshotProbe";
-import { resolveUsageLimitsAfterProbe } from "@t3tools/provider-core/server/usageLimits";
 
 import { antigravityThinkingConfig } from "./acp/AntigravityAcpSupport.ts";
 

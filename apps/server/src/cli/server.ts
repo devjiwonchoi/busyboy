@@ -1,10 +1,10 @@
 import * as HostProcess from "@t3tools/shared/HostProcess";
+import { Command, GlobalFlag } from "effect/cli";
+import * as CliError from "effect/cli/CliError";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
-import { Command, GlobalFlag } from "effect/cli";
-import * as CliError from "effect/cli/CliError";
 
 import { awaitServiceLauncherStop } from "../cloud/serviceLauncherClient.ts";
 import * as ServerConfig from "../config.ts";

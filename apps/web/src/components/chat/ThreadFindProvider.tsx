@@ -1,7 +1,8 @@
 import { createContext, use, type ReactNode, type ComponentProps } from "react";
-import { useThreadFind } from "./useThreadFind";
-import { ThreadFindBar } from "./ThreadFindBar";
+
 import { ChatCanvas } from "./ChatCanvas";
+import { ThreadFindBar } from "./ThreadFindBar";
+import { useThreadFind } from "./useThreadFind";
 
 type Find = ReturnType<typeof useThreadFind>;
 export const ThreadFindTimelineContext = createContext<Find["timelineProps"] | null>(null);

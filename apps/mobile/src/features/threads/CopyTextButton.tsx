@@ -1,9 +1,9 @@
-import * as Dialog from "../../components/ui/Dialog";
-import { SymbolView } from "../../components/ui/AppSymbol";
 import { useGT } from "gt-react-native";
 import { memo, useState } from "react";
 import { Pressable, type ColorValue } from "react-native";
 
+import { SymbolView } from "../../components/ui/AppSymbol";
+import * as Dialog from "../../components/ui/Dialog";
 import { useDeadlinePassed } from "../../lib/clock";
 import { tryCopyTextWithHaptic } from "../../lib/copyTextWithHaptic";
 

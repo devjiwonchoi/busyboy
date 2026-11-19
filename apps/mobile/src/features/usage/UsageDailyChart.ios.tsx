@@ -1,6 +1,5 @@
 import { Chart, Host, type ChartDataPoint } from "@expo/ui/swift-ui";
 import { frame } from "@expo/ui/swift-ui/modifiers";
-
 import type { DailyTotals } from "@t3tools/shared/usageMerge";
 
 import { buildChartDays, type UsageChartMetric } from "./usageChartData";

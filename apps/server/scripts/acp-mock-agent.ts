@@ -2,17 +2,15 @@
 // @effect-diagnostics nodeBuiltinImport:off
 import * as NodeFS from "node:fs";
 
-import * as Effect from "effect/Effect";
-import * as Schema from "effect/Schema";
-import * as Deferred from "effect/Deferred";
-
-import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
-
+import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as EffectAcpAgent from "effect-acp/agent";
+import type * as AcpCompat from "effect-acp/compat";
 import * as AcpError from "effect-acp/errors";
 import * as AcpSchema from "effect-acp/schema";
-import type * as AcpCompat from "effect-acp/compat";
+import * as Deferred from "effect/Deferred";
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
 
 import { beginAcpMockPrompt } from "./acpMockCancellationState.ts";
 

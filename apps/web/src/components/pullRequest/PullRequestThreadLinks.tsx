@@ -1,20 +1,20 @@
-import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
-import { Tooltip, TooltipTrigger, TooltipPopup } from "../ui/tooltip";
 import { useAtomValue } from "@effect/atom-react";
 import { scopeThreadRef } from "@t3tools/client-runtime/environment";
-import { visibleLinkedThreads } from "@t3tools/client-runtime/state/threads";
+import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
+import { sourceControlClients } from "@t3tools/client-runtime/source-control-clients";
 import { settlePromise, squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
+import { visibleLinkedThreads } from "@t3tools/client-runtime/state/threads";
+import { threadPullRequestLinkMode } from "@t3tools/client-runtime/thread-pull-request-compatibility";
+import { normalizeThreadPullRequestKey } from "@t3tools/client-runtime/thread-pull-requests";
 import type { EnvironmentId, PullRequestRef, ScopedThreadRef, ThreadId } from "@t3tools/contracts";
-import { MessageSquareIcon } from "lucide-react";
 import { Branch, msg, T, useGT } from "gt-react";
+import { MessageSquareIcon } from "lucide-react";
 import { useState } from "react";
 
-import { m } from "~/i18n/messages";
-import { threadPullRequestLinkMode } from "@t3tools/client-runtime/thread-pull-request-compatibility";
+import { openCommandPalette } from "~/commandPaletteBus";
 import { usePullRequestLinking } from "~/hooks/usePullRequestLinking";
-
-import { sourceControlClients } from "@t3tools/client-runtime/source-control-clients";
-import { normalizeThreadPullRequestKey } from "@t3tools/client-runtime/thread-pull-requests";
+import { m } from "~/i18n/messages";
+import { appAtomRegistry } from "~/rpc/atomRegistry";
 import {
   useAnyEnvironmentHiding,
   useEnvironmentThreadRefs,
@@ -22,18 +22,17 @@ import {
   useThreadShell,
 } from "~/state/entities";
 import { pullRequestEnvironment } from "~/state/pullRequests";
-import { environmentThreadShells } from "~/state/threads";
 import { useEnvironmentQuery } from "~/state/query";
-import { appAtomRegistry } from "~/rpc/atomRegistry";
-import { openCommandPalette } from "~/commandPaletteBus";
-import { Button } from "../ui/button";
+import { environmentThreadShells } from "~/state/threads";
+
 import { ThreadLinkPicker } from "../ThreadLinkPicker";
+import { Button } from "../ui/button";
 import { Dialog, DialogPopup, DialogTitle } from "../ui/dialog";
 import { MenuItem } from "../ui/menu";
 import { toastManager } from "../ui/toast";
-import { PullRequestGlyph } from "./pullRequestIcons";
-
+import { Tooltip, TooltipTrigger, TooltipPopup } from "../ui/tooltip";
 import { changeRequestTermKind } from "./changeRequestTerm";
+import { PullRequestGlyph } from "./pullRequestIcons";
 
 interface PullRequestThreadLinksProps {
   environmentId: EnvironmentId;

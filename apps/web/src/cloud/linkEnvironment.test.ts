@@ -1,18 +1,4 @@
-import {
-  type DesktopBridge,
-  EnvironmentId,
-  type RelayClientInstallProgressEvent,
-  WS_METHODS,
-} from "@t3tools/contracts";
-import { RelayWebClientId } from "@t3tools/contracts/relay";
 import { describe, expect, it } from "@effect/vitest";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import * as Option from "effect/Option";
-import * as Stream from "effect/Stream";
-import * as SubscriptionRef from "effect/SubscriptionRef";
-import { HttpClient } from "effect/http";
-import { afterEach, beforeEach, vi } from "vite-plus/test";
 import {
   AVAILABLE_CONNECTION_STATE,
   type PreparedConnection,
@@ -20,12 +6,26 @@ import {
   PrimaryConnectionTarget,
   EnvironmentSupervisor,
 } from "@t3tools/client-runtime/connection";
-import { type RpcSession } from "@t3tools/client-runtime/rpc";
 import { EnvironmentRegistry } from "@t3tools/client-runtime/connection";
 import { ManagedRelay } from "@t3tools/client-runtime/relay";
+import { type RpcSession } from "@t3tools/client-runtime/rpc";
 import { layerRemoteHttpClient } from "@t3tools/client-runtime/rpc";
-import { __resetDesktopPrimaryAuthForTests } from "../environments/primary/desktopAuth";
+import {
+  type DesktopBridge,
+  EnvironmentId,
+  type RelayClientInstallProgressEvent,
+  WS_METHODS,
+} from "@t3tools/contracts";
+import { RelayWebClientId } from "@t3tools/contracts/relay";
+import * as Effect from "effect/Effect";
+import { HttpClient } from "effect/http";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as Stream from "effect/Stream";
+import * as SubscriptionRef from "effect/SubscriptionRef";
+import { afterEach, beforeEach, vi } from "vite-plus/test";
 
+import { __resetDesktopPrimaryAuthForTests } from "../environments/primary/desktopAuth";
 import { readCloudLinkState, unlinkEnvironmentFromCloud } from "./linkEnvironment";
 
 const TARGET = {

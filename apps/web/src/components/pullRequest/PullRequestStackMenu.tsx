@@ -1,20 +1,20 @@
-import { Tooltip, TooltipTrigger, TooltipPopup } from "../ui/tooltip";
+import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
 import type {
   EnvironmentId,
   PullRequestRef,
   PullRequestStack,
   PullRequestMergeMethod,
 } from "@t3tools/contracts";
-import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
-import { RefreshCwIcon, TriangleAlertIcon } from "lucide-react";
 import { msg, T, useGT, Var } from "gt-react";
+import { RefreshCwIcon, TriangleAlertIcon } from "lucide-react";
 import { useState } from "react";
 
 import { m } from "~/i18n/messages";
-import { useAtomCommand } from "~/state/use-atom-command";
+import type { ChangeRequestTerminology } from "~/sourceControlPresentation";
 import { pullRequestEnvironment } from "~/state/pullRequests";
+import { useAtomCommand } from "~/state/use-atom-command";
+
 import { Button } from "../ui/button";
-import { Menu, MenuPopup, MenuTrigger, MenuItem, MenuGroup, MenuSeparator } from "../ui/menu";
 import {
   Dialog,
   DialogPopup,
@@ -24,15 +24,15 @@ import {
   DialogPanel,
   DialogFooter,
 } from "../ui/dialog";
+import { Menu, MenuPopup, MenuTrigger, MenuItem, MenuGroup, MenuSeparator } from "../ui/menu";
 import { toastManager } from "../ui/toast";
-import type { ChangeRequestTerminology } from "~/sourceControlPresentation";
-import { PullRequestStackLayers } from "./PullRequestStackLayers";
+import { Tooltip, TooltipTrigger, TooltipPopup } from "../ui/tooltip";
+import { changeRequestTermKind } from "./changeRequestTerm";
+import { readableFailure } from "./pullRequestDetail.logic";
+import { PullRequestGlyph } from "./pullRequestIcons";
 import { PullRequestStackHeader } from "./PullRequestStackHeader";
 import { PullRequestStackLayerContent } from "./PullRequestStackLayerContent";
-import { PullRequestGlyph } from "./pullRequestIcons";
-import { readableFailure } from "./pullRequestDetail.logic";
-
-import { changeRequestTermKind } from "./changeRequestTerm";
+import { PullRequestStackLayers } from "./PullRequestStackLayers";
 
 export function PullRequestStackMenu({
   hostLabel,

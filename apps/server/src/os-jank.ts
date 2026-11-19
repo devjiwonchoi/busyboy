@@ -16,9 +16,9 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
-import * as Stream from "effect/Stream";
 import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
+import * as Stream from "effect/Stream";
 // @effect-diagnostics-next-line nodeBuiltinImport:off -- the shared login shell probe runs synchronously through execFileSync.
 import * as NodeChildProcess from "node:child_process";
 import * as NodeOS from "node:os";

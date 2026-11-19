@@ -1,5 +1,5 @@
-import type { OpencodeClient } from "@opencode-ai/sdk/v2";
 import { it as effectIt } from "@effect/vitest";
+import type { OpencodeClient } from "@opencode-ai/sdk/v2";
 import * as Effect from "effect/Effect";
 import { describe, expect, it } from "vite-plus/test";
 

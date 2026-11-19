@@ -1,25 +1,25 @@
+import { useAtomValue } from "@effect/atom-react";
 import {
   EDITORS,
   type ContextMenuItem,
   type EditorId,
   type EnvironmentId,
 } from "@t3tools/contracts";
+import { resolvePathLinkTarget } from "@t3tools/shared/fileLinks";
+import { msg, useMessages } from "gt-react";
 
-import { resolveDiffPathForWorkspace } from "./diffFileActions";
 import {
   revealInFileExplorerLabelForKind,
   revealInFileExplorerLabelForOs,
 } from "~/components/preview/fileExplorerLabel";
+
+import { toastManager } from "./components/ui/toast";
+import { resolveDiffPathForWorkspace } from "./diffFileActions";
+import type { MessageResolver } from "./i18n/messages";
 import { readLocalApi } from "./localApi";
 import { serverEnvironment } from "./state/server";
 import { shellEnvironment } from "./state/shell";
 import { useAtomCommand } from "./state/use-atom-command";
-import { resolvePathLinkTarget } from "@t3tools/shared/fileLinks";
-import { toastManager } from "./components/ui/toast";
-import { useAtomValue } from "@effect/atom-react";
-import { msg, useMessages } from "gt-react";
-
-import type { MessageResolver } from "./i18n/messages";
 
 export type FileContextMenuAction =
   | "reveal-in-folder"

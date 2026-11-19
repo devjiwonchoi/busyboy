@@ -1,31 +1,31 @@
+import { errorDisplayMessage } from "@t3tools/client-runtime/errors";
 import {
   pullRequestLinkProject,
   resolveLinkPullRequestInput,
 } from "@t3tools/client-runtime/pull-request-link-input";
-import { errorDisplayMessage } from "@t3tools/client-runtime/errors";
-import type {
-  EnvironmentProject,
-  EnvironmentThreadShell,
-} from "@t3tools/client-runtime/state/shell";
+import { sourceControlClients } from "@t3tools/client-runtime/source-control-clients";
 import {
   isAtomCommandInterrupted,
   squashAtomCommandFailure,
   type AtomCommandResult,
 } from "@t3tools/client-runtime/state/runtime";
+import type {
+  EnvironmentProject,
+  EnvironmentThreadShell,
+} from "@t3tools/client-runtime/state/shell";
 import {
   canStartThreadPullRequestWatch,
   planThreadPullRequestMutation,
 } from "@t3tools/client-runtime/thread-pull-request-compatibility";
-import { sourceControlClients } from "@t3tools/client-runtime/source-control-clients";
-import { changeRequestTermKind } from "../../lib/changeRequestTerm";
 import { AuthOrchestrationOperateScope, type ThreadPullRequestLink } from "@t3tools/contracts";
 import * as Clipboard from "expo-clipboard";
 import { useGT } from "gt-react-native";
 
 import * as Dialog from "../../components/ui/Dialog";
-import { m } from "../../i18n/messages";
-import { tryOpenExternalUrl } from "../../lib/openExternalUrl";
 import type { MenuProps } from "../../components/ui/Menu.types";
+import { m } from "../../i18n/messages";
+import { changeRequestTermKind } from "../../lib/changeRequestTerm";
+import { tryOpenExternalUrl } from "../../lib/openExternalUrl";
 import type { EnvironmentRuntimeState } from "../../state/remote-runtime-types";
 import { useEnvironmentScope } from "../../state/session";
 import { threadEnvironment } from "../../state/threads";

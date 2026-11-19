@@ -2,6 +2,7 @@ import { VoiceTranscriptionDestination } from "@t3tools/contracts";
 import * as Schema from "effect/Schema";
 import { File, Paths } from "expo-file-system";
 import * as SecureStore from "expo-secure-store";
+
 import { whenProtectedDataAvailable } from "../../lib/protectedData";
 
 const key = "t3code.voice.audio-grant.v1";

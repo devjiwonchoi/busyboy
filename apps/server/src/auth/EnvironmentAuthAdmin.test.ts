@@ -1,18 +1,18 @@
-import { AuthStandardClientScopes, type ManagedPolicyDocument } from "@t3tools/contracts";
 import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, expect, it } from "@effect/vitest";
+import { AuthStandardClientScopes, type ManagedPolicyDocument } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 
 import * as ServerConfig from "../config.ts";
 import * as ServerEnvironment from "../environment/ServerEnvironment.ts";
 import * as SqlitePersistence from "../persistence/Sqlite.ts";
+import * as ManagedPolicy from "../policy/ManagedPolicy.ts";
 import * as EnvironmentAuth from "./EnvironmentAuth.ts";
+import * as PairingGrantStore from "./PairingGrantStore.ts";
 import * as ServerSecretStore from "./ServerSecretStore.ts";
 import * as SessionStore from "./SessionStore.ts";
-import * as PairingGrantStore from "./PairingGrantStore.ts";
-import * as ManagedPolicy from "../policy/ManagedPolicy.ts";
 
 const layerServerConfig = (
   overrides?: Partial<Pick<ServerConfig.ServerConfig["Service"], "desktopBootstrapToken">>,

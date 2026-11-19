@@ -1,8 +1,9 @@
-import { LegendList, type LegendListRef } from "@legendapp/list/react-native";
-import { T, useGT } from "gt-react-native";
-import { settlePromise } from "@t3tools/client-runtime/state/runtime";
 import { useAtomValue } from "@effect/atom-react";
+import { LegendList, type LegendListRef } from "@legendapp/list/react-native";
+import { settlePromise } from "@t3tools/client-runtime/state/runtime";
+import { SourceText } from "@t3tools/mobile-source-text";
 import { AsyncResult } from "effect/reactivity";
+import { T, useGT } from "gt-react-native";
 import type { ComponentType } from "react";
 import { useLayoutEffect, useRef, useState } from "react";
 import {
@@ -13,32 +14,31 @@ import {
   useWindowDimensions,
   View,
 } from "react-native";
-import { NativeScrollView } from "../../native/NativeScrollViewMarker";
-import { RefreshControl } from "../../components/ui/RefreshControl";
-import { WebView } from "react-native-webview";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { WebView } from "react-native-webview";
+
 import { AppText as Text } from "../../components/ui/AppText";
 import { LoadingStrip } from "../../components/ui/LoadingStrip";
+import { RefreshControl } from "../../components/ui/RefreshControl";
+import type { ResolvedMobileCodeSurface } from "../../lib/appearancePreferences";
+import { cn } from "../../lib/cn";
+import type { HighlightedToken } from "../../lib/highlights";
+import { useUniwindTheme } from "../../lib/useUniwindTheme";
 import { useNativeColumnLayoutMetrics } from "../../native/native-layout-metrics";
+import { NativeScrollView } from "../../native/NativeScrollViewMarker";
 import {
   type NativeReviewDiffViewProps,
   resolveNativeReviewDiffView,
 } from "../diffs/nativeReviewDiffSurface";
 import { createNativeReviewDiffTheme } from "../review/nativeReviewDiffAdapter";
 import { REVIEW_MONO_FONT_FAMILY, renderVisibleWhitespace } from "../review/reviewDiffRendering";
-import type { HighlightedToken } from "../../lib/highlights";
-import { cn } from "../../lib/cn";
-import type { ResolvedMobileCodeSurface } from "../../lib/appearancePreferences";
-import { useAppearanceCodeSurface } from "../settings/appearance/useAppearanceCodeSurface";
 import { useAppearancePreferences } from "../settings/appearance/AppearancePreferencesProvider";
-import { useUniwindTheme } from "../../lib/useUniwindTheme";
+import { useAppearanceCodeSurface } from "../settings/appearance/useAppearanceCodeSurface";
 import {
   buildNativeSourceTokens,
   NATIVE_SOURCE_CONTENT_WIDTH,
   nativeSourceRowId,
 } from "./nativeSourceFileAdapter";
-import { SourceText } from "@t3tools/mobile-source-text";
-
 import {
   boundedSelectableSourceTokens,
   prepareSourceFileDocument,

@@ -1,11 +1,13 @@
+import type { DesktopSshEnvironmentTarget } from "@t3tools/contracts";
 import {
   isLocalLoopbackHost,
   isPrivateNetworkHost,
   isSharedAddressSpaceHost,
   isTailnetHost,
 } from "@t3tools/shared/hostClassification";
-import type { DesktopSshEnvironmentTarget } from "@t3tools/contracts";
 import * as Option from "effect/Option";
+import { mFallback, msg } from "gt-i18n";
+import type { MFunctionType } from "gt-i18n/types";
 
 import {
   BearerConnectionProfile,
@@ -13,8 +15,6 @@ import {
   type ConnectionRoute,
 } from "./catalog.ts";
 import { BearerConnectionTarget, type ConnectionTarget } from "./model.ts";
-import { mFallback, msg } from "gt-i18n";
-import type { MFunctionType } from "gt-i18n/types";
 
 export type ConnectionRouteKind =
   | "relay"

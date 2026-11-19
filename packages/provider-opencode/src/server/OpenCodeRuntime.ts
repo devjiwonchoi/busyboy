@@ -1,7 +1,5 @@
-import { resolveProviderProbeTimeoutMs } from "@t3tools/provider-core/server/snapshotProbe";
 import * as NodeURL from "node:url";
 
-import type { ChatAttachment, ProviderApprovalDecision } from "@t3tools/contracts";
 import {
   createOpencodeClient,
   type Agent,
@@ -12,6 +10,16 @@ import {
   type QuestionAnswer,
   type QuestionRequest,
 } from "@opencode-ai/sdk/v2";
+import type { ChatAttachment, ProviderApprovalDecision } from "@t3tools/contracts";
+import { signalProcessGroup } from "@t3tools/provider-core/server/processGroup";
+import { resolveProviderProbeTimeoutMs } from "@t3tools/provider-core/server/snapshotProbe";
+import { isWindowsCommandNotFound } from "@t3tools/provider-core/server/snapshotProbe";
+import { collectStreamAsString } from "@t3tools/provider-core/server/snapshotProbe";
+import { AgentScope } from "@t3tools/shared/AgentScope";
+import * as HostProcess from "@t3tools/shared/HostProcess";
+import * as NetService from "@t3tools/shared/Net";
+import { compareSemverVersions, parseSemver } from "@t3tools/shared/semver";
+import { resolveSpawnCommand } from "@t3tools/shared/shell";
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
 import * as Deferred from "effect/Deferred";
@@ -21,24 +29,16 @@ import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as P from "effect/Predicate";
-import * as Ref from "effect/Ref";
-import * as Result from "effect/Result";
-import * as Scope from "effect/Scope";
-import * as Schema from "effect/Schema";
-import * as Schedule from "effect/Schedule";
-import * as Stream from "effect/Stream";
 import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
+import * as Ref from "effect/Ref";
+import * as Result from "effect/Result";
+import * as Schedule from "effect/Schedule";
+import * as Schema from "effect/Schema";
+import * as Scope from "effect/Scope";
+import * as Stream from "effect/Stream";
 
-import { signalProcessGroup } from "@t3tools/provider-core/server/processGroup";
-import { isWindowsCommandNotFound } from "@t3tools/provider-core/server/snapshotProbe";
 import * as OpenCodeServerLedger from "./OpenCodeServerLedger.ts";
-import { collectStreamAsString } from "@t3tools/provider-core/server/snapshotProbe";
-import * as NetService from "@t3tools/shared/Net";
-import { AgentScope } from "@t3tools/shared/AgentScope";
-import * as HostProcess from "@t3tools/shared/HostProcess";
-import { compareSemverVersions, parseSemver } from "@t3tools/shared/semver";
-import { resolveSpawnCommand } from "@t3tools/shared/shell";
 const encodeUnknownJsonStringExit = Schema.encodeUnknownExit(Schema.fromJsonString(Schema.Unknown));
 const OPENCODE_EMPTY_CONFIG_CONTENT = "{}";
 

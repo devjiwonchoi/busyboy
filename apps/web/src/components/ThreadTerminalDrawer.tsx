@@ -1,8 +1,5 @@
-import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
-import { workspaceAreaProps } from "../lib/workspaceFocus";
 import { useAtomMount, useAtomValue } from "@effect/atom-react";
-import { msg, T, useGT, useMessages } from "gt-react";
-import { m } from "../i18n/messages";
+import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
 import {
   isAtomCommandInterrupted,
   executeAtomQuery,
@@ -16,14 +13,6 @@ import {
   type TerminalSessionState,
 } from "@t3tools/client-runtime/state/terminal";
 import {
-  Plus,
-  Square,
-  SquareSplitHorizontal,
-  SquareSplitVertical,
-  TerminalSquare,
-  Trash2,
-} from "lucide-react";
-import {
   AuthPreviewOperateScope,
   AuthFilesystemReadScope,
   AuthOrchestrationOperateScope,
@@ -35,8 +24,17 @@ import {
   type ThreadId,
 } from "@t3tools/contracts";
 import { getTerminalLabel } from "@t3tools/shared/terminalLabelsCopy";
-import * as Schema from "effect/Schema";
 import { AsyncResult } from "effect/reactivity";
+import * as Schema from "effect/Schema";
+import { msg, T, useGT, useMessages } from "gt-react";
+import {
+  Plus,
+  Square,
+  SquareSplitHorizontal,
+  SquareSplitVertical,
+  TerminalSquare,
+  Trash2,
+} from "lucide-react";
 import {
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
@@ -47,20 +45,33 @@ import {
   useRef,
   useState,
 } from "react";
-import { Popover, PopoverPopup, PopoverTrigger } from "~/components/ui/popover";
+
 import { Button } from "~/components/ui/button";
 import { PanelTabCloseButton } from "~/components/ui/panel-tab-close-button";
+import { Popover, PopoverPopup, PopoverTrigger } from "~/components/ui/popover";
 import { stackedThreadToast, toastManager } from "~/components/ui/toast";
 import { readTextFromClipboard, writeTextToClipboard } from "~/hooks/useCopyToClipboard";
-import { cn } from "~/lib/utils";
+import { confirmTerminalClose } from "~/lib/terminalCloseConfirm";
 import { type TerminalContextSelection } from "~/lib/terminalContext";
+import { cn } from "~/lib/utils";
+import { readLocalApi } from "~/localApi";
+import { type GhosttyColor, type GhosttyTheme } from "~/terminal/ghostty/core";
 import {
   GhosttyTerminalSurface,
   type GhosttyTerminalSurfaceOptions,
 } from "~/terminal/ghostty/surface";
-import { type GhosttyColor, type GhosttyTheme } from "~/terminal/ghostty/core";
+
+import {
+  resolveTerminalFontPreference,
+  resolveTerminalFontSizePreference,
+  TYPOGRAPHY_ADVANCED_STORAGE_KEY,
+} from "../appearanceFonts";
 import { useOpenInPreferredEditor } from "../editorPreferences";
-import { isTerminalUrl, resolveTerminalLinkTarget } from "../terminal-links";
+import { FileMetadataThreadContext } from "../hooks/FileMetadataThreadProvider";
+import { getFileMetadataQueryAtom } from "../hooks/useFileMetadata";
+import { useLocalStorage } from "../hooks/useLocalStorage";
+import { useClientSettings } from "../hooks/useSettings";
+import { m } from "../i18n/messages";
 import {
   isDiffToggleShortcut,
   isTerminalClearShortcut,
@@ -72,41 +83,32 @@ import {
   terminalDeleteShortcutData,
   terminalNavigationShortcutData,
 } from "../keybindings";
-import {
-  DEFAULT_THREAD_TERMINAL_HEIGHT,
-  MAX_TERMINALS_PER_GROUP,
-  type ThreadTerminalGroup,
-} from "../types";
-import { readLocalApi } from "~/localApi";
-import { confirmTerminalClose } from "~/lib/terminalCloseConfirm";
-import { useClientSettings } from "../hooks/useSettings";
-import { getFileMetadataQueryAtom } from "../hooks/useFileMetadata";
-import { FileMetadataThreadContext } from "../hooks/FileMetadataThreadProvider";
-import { useLocalStorage } from "../hooks/useLocalStorage";
-import { attachedTerminalSessionAtom } from "../state/terminalSessions";
-import { appAtomRegistry } from "../rpc/atomRegistry";
-import { serverEnvironment } from "../state/server";
-import { previewEnvironment } from "../state/preview";
-import { readEnvironmentScope } from "../state/session";
-import { terminalEnvironment } from "../state/terminal";
-import { useEnvironmentScope } from "../state/session";
-import { openTerminalLinkInPreview } from "./preview/openTerminalLinkInPreview";
-import { terminalInputWriter } from "./terminal/terminalInputWriter";
-import { useAtomCommand } from "../state/use-atom-command";
-import { preventTerminalCloseShortcut } from "../lib/terminalCloseShortcut";
 import { observeResize } from "../lib/observeResize";
-import { threadShortcutContext } from "./Sidebar.logic";
+import { preventTerminalCloseShortcut } from "../lib/terminalCloseShortcut";
 import {
   consumePendingTerminalFocus,
   focusTerminal,
   focusTerminalViewport,
   registerTerminalFocusTarget,
 } from "../lib/terminalFocus";
+import { workspaceAreaProps } from "../lib/workspaceFocus";
+import { appAtomRegistry } from "../rpc/atomRegistry";
+import { previewEnvironment } from "../state/preview";
+import { serverEnvironment } from "../state/server";
+import { readEnvironmentScope } from "../state/session";
+import { useEnvironmentScope } from "../state/session";
+import { terminalEnvironment } from "../state/terminal";
+import { attachedTerminalSessionAtom } from "../state/terminalSessions";
+import { useAtomCommand } from "../state/use-atom-command";
+import { isTerminalUrl, resolveTerminalLinkTarget } from "../terminal-links";
 import {
-  resolveTerminalFontPreference,
-  resolveTerminalFontSizePreference,
-  TYPOGRAPHY_ADVANCED_STORAGE_KEY,
-} from "../appearanceFonts";
+  DEFAULT_THREAD_TERMINAL_HEIGHT,
+  MAX_TERMINALS_PER_GROUP,
+  type ThreadTerminalGroup,
+} from "../types";
+import { openTerminalLinkInPreview } from "./preview/openTerminalLinkInPreview";
+import { threadShortcutContext } from "./Sidebar.logic";
+import { terminalInputWriter } from "./terminal/terminalInputWriter";
 
 const MIN_DRAWER_HEIGHT = 180;
 const MAX_DRAWER_HEIGHT_RATIO = 0.75;

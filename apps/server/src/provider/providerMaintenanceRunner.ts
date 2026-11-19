@@ -1,3 +1,5 @@
+import * as NodeUtil from "node:util";
+
 import {
   defaultInstanceIdForDriver,
   ProviderDriverKind,
@@ -7,27 +9,7 @@ import {
   type ServerProviderUpdatedPayload,
   type ServerProviderUpdateState,
 } from "@t3tools/contracts";
-import { resolveSpawnCommand } from "@t3tools/shared/shell";
-import * as Cause from "effect/Cause";
-import * as Context from "effect/Context";
-import * as DateTime from "effect/DateTime";
-import * as Duration from "effect/Duration";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import * as Option from "effect/Option";
-import * as Ref from "effect/Ref";
-import * as Schedule from "effect/Schedule";
-import * as Schema from "effect/Schema";
-import * as Stream from "effect/Stream";
-import { HttpClient } from "effect/http";
-import { ChildProcess, ChildProcessSpawner } from "effect/process";
-import * as NodeUtil from "node:util";
-
-import * as ModelManifest from "./ModelManifest.ts";
-import { resolveProviderCompatibility } from "./providerCompatibility.ts";
-import * as ProviderInstallationGate from "./ProviderInstallationGate.ts";
-import * as ProviderRegistry from "./ProviderRegistry.ts";
-import { makeProviderMaintenanceCommandCoordinator } from "./providerMaintenanceCommandCoordinator.ts";
+import { collectUint8StreamText } from "@t3tools/provider-core/server/collectStreamText";
 import {
   enrichProviderSnapshotWithVersionAdvisory,
   invalidateLatestProviderVersion,
@@ -36,9 +18,28 @@ import {
   resolveLatestProviderVersion,
   type ProviderMaintenanceCommandAction,
 } from "@t3tools/provider-core/server/maintenanceResolver";
-import * as ProviderLatestVersions from "@t3tools/provider-core/server/ProviderLatestVersions";
 import type { ProviderMaintenanceCapabilities } from "@t3tools/provider-core/server/maintenanceResolver";
-import { collectUint8StreamText } from "@t3tools/provider-core/server/collectStreamText";
+import * as ProviderLatestVersions from "@t3tools/provider-core/server/ProviderLatestVersions";
+import { resolveSpawnCommand } from "@t3tools/shared/shell";
+import * as Cause from "effect/Cause";
+import * as Context from "effect/Context";
+import * as DateTime from "effect/DateTime";
+import * as Duration from "effect/Duration";
+import * as Effect from "effect/Effect";
+import { HttpClient } from "effect/http";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import { ChildProcess, ChildProcessSpawner } from "effect/process";
+import * as Ref from "effect/Ref";
+import * as Schedule from "effect/Schedule";
+import * as Schema from "effect/Schema";
+import * as Stream from "effect/Stream";
+
+import * as ModelManifest from "./ModelManifest.ts";
+import { resolveProviderCompatibility } from "./providerCompatibility.ts";
+import * as ProviderInstallationGate from "./ProviderInstallationGate.ts";
+import { makeProviderMaintenanceCommandCoordinator } from "./providerMaintenanceCommandCoordinator.ts";
+import * as ProviderRegistry from "./ProviderRegistry.ts";
 const isServerProviderUpdateError = Schema.is(ServerProviderUpdateError);
 
 // Native updaters (`claude update`) download a ~300 MB binary without printing

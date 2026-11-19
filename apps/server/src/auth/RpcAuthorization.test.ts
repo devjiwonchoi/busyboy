@@ -1,3 +1,4 @@
+import { describe, expect, it } from "@effect/vitest";
 import {
   AuthEnvironmentMaintainScope,
   AuthDiagnosticsReadScope,
@@ -20,11 +21,10 @@ import {
   WS_METHODS,
   WsRpcGroup,
 } from "@t3tools/contracts";
-import { describe, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as Stream from "effect/Stream";
 import * as RpcTest from "effect/rpc/RpcTest";
+import * as Stream from "effect/Stream";
 
 import {
   RPC_REQUIRED_SCOPES,

@@ -1,16 +1,16 @@
 import { useAtomValue } from "@effect/atom-react";
 import { AuthSettingsWriteScope, type EnvironmentId, sessionGrantsScope } from "@t3tools/contracts";
-import { ChevronDownIcon, PlusIcon, RotateCcwIcon, XIcon } from "lucide-react";
 import { AsyncResult, Atom } from "effect/reactivity";
 import { msg, T, useGT, useMessages, Var } from "gt-react";
+import { ChevronDownIcon, PlusIcon, RotateCcwIcon, XIcon } from "lucide-react";
 import { useRef, useState } from "react";
 
 import { cn } from "../../lib/utils";
 import { environmentPresentations } from "../../state/presentation";
 import { serverEnvironment } from "../../state/server";
 import { environmentSession, readEnvironmentScope } from "../../state/session";
-import { useAtomCommand } from "../../state/use-atom-command";
 import type { EnvironmentUsageStatus } from "../../state/usage";
+import { useAtomCommand } from "../../state/use-atom-command";
 import { Button } from "../ui/button";
 import {
   Dialog,

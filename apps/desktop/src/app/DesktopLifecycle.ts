@@ -1,3 +1,4 @@
+import * as HostProcess from "@t3tools/shared/HostProcess";
 import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
 import * as Duration from "effect/Duration";
@@ -7,21 +8,18 @@ import * as Option from "effect/Option";
 import * as Ref from "effect/Ref";
 import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
-
 import type * as Electron from "electron";
 
-import * as HostProcess from "@t3tools/shared/HostProcess";
-
-import * as DesktopEnvironment from "./DesktopEnvironment.ts";
-import { stopChildProcessesBeforeExit, stopZygotesBeforeExit } from "./DesktopExitChildren.ts";
-import { makeComponentLogger } from "./DesktopObservability.ts";
-import * as DesktopShutdown from "./DesktopShutdown.ts";
 import * as ElectronApp from "../electron/ElectronApp.ts";
 import * as ElectronProtocol from "../electron/ElectronProtocol.ts";
 import * as ElectronTheme from "../electron/ElectronTheme.ts";
 import * as ElectronWindow from "../electron/ElectronWindow.ts";
-import * as DesktopState from "./DesktopState.ts";
 import * as DesktopWindow from "../window/DesktopWindow.ts";
+import * as DesktopEnvironment from "./DesktopEnvironment.ts";
+import { stopChildProcessesBeforeExit, stopZygotesBeforeExit } from "./DesktopExitChildren.ts";
+import { makeComponentLogger } from "./DesktopObservability.ts";
+import * as DesktopShutdown from "./DesktopShutdown.ts";
+import * as DesktopState from "./DesktopState.ts";
 
 export class DesktopLifecycleRelaunchError extends Schema.TaggedError<DesktopLifecycleRelaunchError>()(
   "DesktopLifecycleRelaunchError",

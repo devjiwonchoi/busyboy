@@ -7,6 +7,7 @@ import {
 import { expect, it, vi } from "vite-plus/test";
 
 import { render } from "../../../test/render";
+
 import "../../index.css";
 import { PullRequestTimelineTab } from "./PullRequestTimelineTab";
 

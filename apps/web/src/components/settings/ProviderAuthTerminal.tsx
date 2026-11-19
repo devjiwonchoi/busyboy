@@ -1,9 +1,10 @@
 import type { ProviderAuthResponse } from "@t3tools/contracts";
 import { useGT } from "gt-react";
 import { useEffect, useRef, useState } from "react";
-import { GhosttyTerminalSurface } from "../../terminal/ghostty/surface";
-import { ensureLocalApi } from "../../localApi";
+
 import { useStableCallback } from "../../hooks/useStableCallback";
+import { ensureLocalApi } from "../../localApi";
+import { GhosttyTerminalSurface } from "../../terminal/ghostty/surface";
 import { terminalThemeFromApp } from "../ThreadTerminalDrawer";
 
 export default function ProviderAuthTerminal({

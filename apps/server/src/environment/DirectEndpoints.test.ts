@@ -1,24 +1,25 @@
-import * as NodeServices from "@effect/platform-node/NodeServices";
-import { EnvironmentId } from "@t3tools/contracts";
-import { it as effectIt } from "@effect/vitest";
 import type * as NodeOS from "node:os";
-import * as Effect from "effect/Effect";
+
+import * as NodeServices from "@effect/platform-node/NodeServices";
+import { it as effectIt } from "@effect/vitest";
+import { EnvironmentId } from "@t3tools/contracts";
 import * as Deferred from "effect/Deferred";
+import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
-import * as Ref from "effect/Ref";
-import * as Layer from "effect/Layer";
-import * as Sink from "effect/Sink";
-import * as Stream from "effect/Stream";
 import * as HttpClient from "effect/http/HttpClient";
 import type * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as HttpClientResponse from "effect/http/HttpClientResponse";
+import * as Layer from "effect/Layer";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
+import * as Ref from "effect/Ref";
+import * as Sink from "effect/Sink";
+import * as Stream from "effect/Stream";
 import { describe, expect, it } from "vite-plus/test";
 
 import * as ServerConfig from "../config.ts";
 import * as DirectEndpoints from "./DirectEndpoints.ts";
-import * as ServerEnvironment from "./ServerEnvironment.ts";
 import { resolveBoundEndpoints } from "./DirectEndpoints.ts";
+import * as ServerEnvironment from "./ServerEnvironment.ts";
 
 const INTERFACES: ReturnType<typeof NodeOS.networkInterfaces> = {
   lo0: [

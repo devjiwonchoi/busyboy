@@ -1,20 +1,21 @@
 // @effect-diagnostics nodeBuiltinImport:off - node:path.win32 stands in for a Windows host in one test.
+
+import * as NodePath from "node:path";
+
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, it } from "@effect/vitest";
+import * as HostProcess from "@t3tools/shared/HostProcess";
 import * as Deferred from "effect/Deferred";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
 import * as Fiber from "effect/Fiber";
-import * as Path from "effect/Path";
-import * as Stream from "effect/Stream";
-import * as NodePath from "node:path";
-import * as TestClock from "effect/testing/TestClock";
+import * as FileSystem from "effect/FileSystem";
 import { HttpClient, HttpClientError, HttpClientResponse } from "effect/http";
+import * as Path from "effect/Path";
 import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
-
-import * as HostProcess from "@t3tools/shared/HostProcess";
+import * as Stream from "effect/Stream";
+import * as TestClock from "effect/testing/TestClock";
 
 import * as ProcessRunner from "../processRunner.ts";
 import {

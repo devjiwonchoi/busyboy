@@ -1,29 +1,7 @@
-import * as CodexErrors from "effect-codex-app-server/errors";
-import { vi } from "vite-plus/test";
-import * as ServerSecretStore from "../auth/ServerSecretStore.ts";
-import * as CodexInstallation from "./CodexInstallation.ts";
-import * as CodexManagedTokenBroker from "./CodexManagedTokenBroker.ts";
-import * as ServerEnvironment from "../environment/ServerEnvironment.ts";
+import type { ModelInfo } from "@anthropic-ai/claude-agent-sdk";
 import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import type { ModelInfo } from "@anthropic-ai/claude-agent-sdk";
 import { describe, it, assert, expect } from "@effect/vitest";
-import * as DateTime from "effect/DateTime";
-import * as Deferred from "effect/Deferred";
-import * as Effect from "effect/Effect";
-import * as Exit from "effect/Exit";
-import * as Fiber from "effect/Fiber";
-import * as FileSystem from "effect/FileSystem";
-import * as Layer from "effect/Layer";
-import * as Path from "effect/Path";
-import * as PubSub from "effect/PubSub";
-import * as Queue from "effect/Queue";
-import * as Ref from "effect/Ref";
-import * as Schema from "effect/Schema";
-import * as Scope from "effect/Scope";
-import * as Sink from "effect/Sink";
-import * as Stream from "effect/Stream";
-import * as TestClock from "effect/testing/TestClock";
 import {
   EnvironmentId,
   ClaudeSettings,
@@ -40,53 +18,75 @@ import {
   type ServerProviderVersionAdvisoryStatus,
   type ServerSettings as ContractServerSettings,
 } from "@t3tools/contracts";
-import { HttpClient, HttpClientResponse } from "effect/http";
-import { ChildProcessSpawner } from "effect/process";
+import type {
+  ProviderInstance,
+  ProviderWorkspaceSnapshot,
+} from "@t3tools/provider-core/server/driver";
+import { ProviderDriverError } from "@t3tools/provider-core/server/errors";
+import { mergeProviderInstanceEnvironment } from "@t3tools/provider-core/server/instanceEnvironment";
+import { makeManualOnlyProviderMaintenanceCapabilities } from "@t3tools/provider-core/server/maintenanceResolver";
+import * as McpProviderSessions from "@t3tools/provider-core/server/McpProviderSessions";
+import * as ProviderEventLoggers from "@t3tools/provider-core/server/ProviderEventLoggers";
+import * as ProviderLatestVersions from "@t3tools/provider-core/server/ProviderLatestVersions";
+import { COMPACT_SLASH_COMMAND } from "@t3tools/provider-core/server/snapshotProbe";
+import * as OpenCodeRuntime from "@t3tools/provider-opencode/server/OpenCodeRuntime";
+import * as OpenCodeServerLedger from "@t3tools/provider-opencode/server/OpenCodeServerLedger";
 import * as HostProcess from "@t3tools/shared/HostProcess";
-import { WindowsShellEnvironment } from "@t3tools/shared/shell";
-import { deepMerge } from "@t3tools/shared/Struct";
 import { createModelCapabilities } from "@t3tools/shared/model";
 import { applyServerSettingsPatch } from "@t3tools/shared/serverSettings";
+import { WindowsShellEnvironment } from "@t3tools/shared/shell";
+import { deepMerge } from "@t3tools/shared/Struct";
+import * as CodexErrors from "effect-codex-app-server/errors";
+import * as DateTime from "effect/DateTime";
+import * as Deferred from "effect/Deferred";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Fiber from "effect/Fiber";
+import * as FileSystem from "effect/FileSystem";
+import { HttpClient, HttpClientResponse } from "effect/http";
+import * as Layer from "effect/Layer";
+import * as Path from "effect/Path";
+import { ChildProcessSpawner } from "effect/process";
+import * as PubSub from "effect/PubSub";
+import * as Queue from "effect/Queue";
+import * as Ref from "effect/Ref";
+import * as Schema from "effect/Schema";
+import * as Scope from "effect/Scope";
+import * as Sink from "effect/Sink";
+import * as Stream from "effect/Stream";
+import * as TestClock from "effect/testing/TestClock";
+import { vi } from "vite-plus/test";
 
+import * as ServerSecretStore from "../auth/ServerSecretStore.ts";
+import * as BackgroundPolicy from "../background/BackgroundPolicy.ts";
+import * as ServerConfig from "../config.ts";
+import * as ServerEnvironment from "../environment/ServerEnvironment.ts";
+import * as SqlitePersistence from "../persistence/Sqlite.ts";
+import * as PortScanner from "../preview/PortScanner.ts";
+import * as ServerSettingsModule from "../serverSettings.ts";
+import * as AntigravityInstallation from "./AntigravityInstallation.ts";
+import { BUNDLED_CLAUDE_MODEL_CATALOG } from "./ClaudeModelCatalog.ts";
+import { checkClaudeProviderStatus } from "./ClaudeProvider.ts";
+import * as CodexInstallation from "./CodexInstallation.ts";
+import * as CodexManagedTokenBroker from "./CodexManagedTokenBroker.ts";
 import {
   checkCodexProviderStatus,
   mapCodexModelCapabilities,
   type CodexAppServerProviderSnapshot,
 } from "./CodexProvider.ts";
-import { BUNDLED_CLAUDE_MODEL_CATALOG } from "./ClaudeModelCatalog.ts";
-import { checkClaudeProviderStatus } from "./ClaudeProvider.ts";
-import * as BackgroundPolicy from "../background/BackgroundPolicy.ts";
-import * as AntigravityInstallation from "./AntigravityInstallation.ts";
 import * as ModelManifest from "./ModelManifest.ts";
 import { applyProviderCompatibility } from "./providerCompatibility.ts";
-import * as ResetCreditCoordinator from "./resetCreditCoordinator.ts";
-import * as ProviderLatestVersions from "@t3tools/provider-core/server/ProviderLatestVersions";
-import * as McpProviderSessions from "@t3tools/provider-core/server/McpProviderSessions";
-import * as OpenCodeRuntime from "@t3tools/provider-opencode/server/OpenCodeRuntime";
-import * as OpenCodeServerLedger from "@t3tools/provider-opencode/server/OpenCodeServerLedger";
-import * as ProviderEventLoggers from "@t3tools/provider-core/server/ProviderEventLoggers";
 import * as ProviderInstallationGate from "./ProviderInstallationGate.ts";
+import * as ProviderInstanceRegistry from "./ProviderInstanceRegistry.ts";
 import * as ProviderInstanceRegistryHydration from "./ProviderInstanceRegistryHydration.ts";
-import * as PortScanner from "../preview/PortScanner.ts";
-import * as ServerConfig from "../config.ts";
-import * as ServerSettingsModule from "../serverSettings.ts";
-import * as SqlitePersistence from "../persistence/Sqlite.ts";
+import * as ProviderInstanceRegistryMutator from "./ProviderInstanceRegistryMutator.ts";
+import * as ProviderRegistry from "./ProviderRegistry.ts";
 import {
   readProviderStatusCache,
   resolveProviderStatusCachePath,
   writeProviderStatusCache,
 } from "./providerStatusCache.ts";
-import { COMPACT_SLASH_COMMAND } from "@t3tools/provider-core/server/snapshotProbe";
-import type {
-  ProviderInstance,
-  ProviderWorkspaceSnapshot,
-} from "@t3tools/provider-core/server/driver";
-import * as ProviderInstanceRegistry from "./ProviderInstanceRegistry.ts";
-import * as ProviderInstanceRegistryMutator from "./ProviderInstanceRegistryMutator.ts";
-import * as ProviderRegistry from "./ProviderRegistry.ts";
-import { ProviderDriverError } from "@t3tools/provider-core/server/errors";
-import { mergeProviderInstanceEnvironment } from "@t3tools/provider-core/server/instanceEnvironment";
-import { makeManualOnlyProviderMaintenanceCapabilities } from "@t3tools/provider-core/server/maintenanceResolver";
+import * as ResetCreditCoordinator from "./resetCreditCoordinator.ts";
 vi.mock("@anthropic-ai/claude-agent-sdk", { spy: true });
 
 const decodeServerProvider = Schema.decodeSync(ServerProvider);

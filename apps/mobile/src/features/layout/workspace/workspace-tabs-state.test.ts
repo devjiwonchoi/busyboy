@@ -1,7 +1,7 @@
-import { describe, expect, it, vi } from "vite-plus/test";
 import { act, createElement, createContext, useState, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
-import { WorkspaceRootScreen } from "./WorkspaceRootScreen.android";
+import { describe, expect, it, vi } from "vite-plus/test";
+
 import {
   initialWorkspaceTabsState,
   workspaceTabsReducer,
@@ -14,6 +14,7 @@ import {
   type WorkspaceTab,
   type WorkspaceTabsState,
 } from "./workspace-tabs-state";
+import { WorkspaceRootScreen } from "./WorkspaceRootScreen.android";
 
 describe("compact list clearance", () => {
   it.each([

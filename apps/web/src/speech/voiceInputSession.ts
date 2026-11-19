@@ -1,3 +1,4 @@
+import type { PreparedConnection } from "@t3tools/client-runtime/connection";
 import {
   postProcessEnvironmentTranscript,
   VoiceInputController,
@@ -6,7 +7,6 @@ import {
   type VoiceInputControllerDependencies,
   type VoiceInputState,
 } from "@t3tools/client-runtime/voice-input";
-import type { PreparedConnection } from "@t3tools/client-runtime/connection";
 import type {
   CloudSpeechModelId,
   CloudSpeechProvider,
@@ -19,15 +19,15 @@ import type {
 } from "@t3tools/contracts";
 import { DEFAULT_CLIENT_SETTINGS } from "@t3tools/contracts";
 import { resolveSpeechVocabulary } from "@t3tools/shared/speech";
+import { msg } from "gt-react";
 import { useEffect, useSyncExternalStore } from "react";
 
 import { toastManager } from "../components/ui/toast";
+import { m } from "../i18n/messages";
 import { chooseRecordingMicrophone } from "./browserMicrophones";
 import { createBrowserVoiceInputPlatform } from "./browserVoiceInput";
 import { runEnvironmentSpeech } from "./runEnvironmentSpeech";
 import { bindAudioGrant, readCleanupGrant } from "./voiceConsent";
-import { msg } from "gt-react";
-import { m } from "../i18n/messages";
 
 export const IDLE_VOICE_STATE: VoiceInputState = { phase: "idle", error: null, errorAction: null };
 

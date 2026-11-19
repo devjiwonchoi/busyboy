@@ -1,12 +1,13 @@
+import JSZip from "jszip";
 import { createElement } from "react";
 import { expect, it, vi } from "vite-plus/test";
-import JSZip from "jszip";
+
 import "~/index.css";
 import { act, render } from "../../../../test/render";
-import Spreadsheet from "./Spreadsheet";
-import { createWorkerClient } from "./worker-rpc";
 import type { SheetMethods } from "./sheet-protocol";
 import { maximumTrackSize } from "./sheet-sizing";
+import Spreadsheet from "./Spreadsheet";
+import { createWorkerClient } from "./worker-rpc";
 
 it.each([false, true])(
   "reflows preview tracks through sheet switches, frozen and hidden tracks: %s",

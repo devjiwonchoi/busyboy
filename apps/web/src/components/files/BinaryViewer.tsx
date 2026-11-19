@@ -1,14 +1,14 @@
 /* oxlint-disable react/no-array-index-key -- Read-only cells retain their database row and column positions. */
+
+import { formatAttachmentSize } from "@t3tools/client-runtime/state/attachments";
 import {
   decodeFilePreviewText,
   filePreviewKind,
   hostPreviewMimeTypeFromExtension,
 } from "@t3tools/shared/filePreview";
-import { formatAttachmentSize } from "@t3tools/client-runtime/state/attachments";
-import { ChevronLeftIcon, ChevronRightIcon, FileIcon, FolderIcon } from "lucide-react";
 import { msg, T, useGT, useMessages } from "gt-react";
+import { ChevronLeftIcon, ChevronRightIcon, FileIcon, FolderIcon } from "lucide-react";
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
-import { m } from "~/i18n/messages";
 
 import {
   Select,
@@ -17,21 +17,22 @@ import {
   SelectPopup,
   SelectItem,
 } from "~/components/ui/select";
+import { m } from "~/i18n/messages";
 
+import {
+  SQLITE_PAGE_SIZE,
+  type BinaryWorkerRequest,
+  type BinaryWorkerResult,
+} from "./binaryPreviewProtocol";
 import {
   FileSurfaceAction,
   FileSurfaceFailure,
   FileSurfaceLoading,
   FileSurfaceNotice,
 } from "./fileSurfaceChrome";
-import {
-  SQLITE_PAGE_SIZE,
-  type BinaryWorkerRequest,
-  type BinaryWorkerResult,
-} from "./binaryPreviewProtocol";
+import { previewErrorText, previewFailureText } from "./previewFailureMessages";
 import { PreviewImage } from "./PreviewImage";
 import { readBinaryPreview } from "./readBinaryPreview";
-import { previewErrorText, previewFailureText } from "./previewFailureMessages";
 
 const SourcePreview = lazy(() => import("./ReadOnlySourcePreview"));
 type Archive = Extract<BinaryWorkerResult, { type: "archive" }>;

@@ -1,8 +1,8 @@
 import { EnvironmentId, ThreadId } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
-import { resolveMarkdownMediaPreview } from "./markdownMedia";
 import { resolveMarkdownLinkPresentation } from "./markdownLinks";
+import { resolveMarkdownMediaPreview } from "./markdownMedia";
 
 const input = {
   environmentId: EnvironmentId.make("environment-1"),

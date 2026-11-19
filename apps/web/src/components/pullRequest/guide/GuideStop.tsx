@@ -1,8 +1,10 @@
 import type { FileDiffContentsLoader, FileDiffMetadata } from "@pierre/diffs";
+import { letterStopNotes } from "@t3tools/client-runtime/review-guide-tour";
 import type {
   PullRequestReviewGuideAttention,
   PullRequestReviewGuideStop,
 } from "@t3tools/contracts";
+import { msg, T, useGT, useMessages, Var } from "gt-react";
 import {
   ArrowRightIcon,
   ChevronDownIcon,
@@ -13,7 +15,6 @@ import {
   MessageCircleQuestionIcon,
   MessageSquareIcon,
 } from "lucide-react";
-import { msg, T, useGT, useMessages, Var } from "gt-react";
 import type { ReactNode } from "react";
 
 import { getDiffLineStat } from "~/lib/diffRendering";
@@ -22,14 +23,13 @@ import { cn } from "~/lib/utils";
 import { DiffWorkerPoolProvider } from "../../DiffWorkerPoolProvider";
 import { Alert, AlertDescription, AlertTitle } from "../../ui/alert";
 import { Button } from "../../ui/button";
+import { Collapsible, CollapsiblePanel, CollapsibleTrigger } from "../../ui/collapsible";
 import { Kbd } from "../../ui/kbd";
 import { PullRequestDiffStat } from "../pullRequestPresentation";
-import { Collapsible, CollapsiblePanel, CollapsibleTrigger } from "../../ui/collapsible";
 import { GuideExcerpt, type ExcerptCommenting } from "./GuideExcerpt";
 import { GuideFileDiff } from "./GuideFileDiff";
 import { GuideNotes } from "./GuideNotes";
 import { GuideProse } from "./GuideProse";
-import { letterStopNotes } from "@t3tools/client-runtime/review-guide-tour";
 
 const ATTENTION_LABELS = {
   tradeoff: msg("A tradeoff to weigh"),

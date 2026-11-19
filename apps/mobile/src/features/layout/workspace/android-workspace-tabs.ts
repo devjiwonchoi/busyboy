@@ -1,12 +1,13 @@
 import type { NavigationState } from "@react-navigation/native";
+
 import { androidWorkspaceNavigationState } from "../../../lib/android-workspace-navigation";
 import {
   isSettingsRoute,
   settingsNavigationState,
   settingsOpenIn,
 } from "../../settings/settings-navigation";
-import type { WorkspaceTab } from "./workspace-tabs-state";
 import { rememberedSettingsPage, workspaceSelectionsIn } from "./workspace-tab-navigation";
+import type { WorkspaceTab } from "./workspace-tabs-state";
 
 /** Settings joins the two list tabs as a top-level Android destination. */
 export type AndroidWorkspaceNavigationTab = WorkspaceTab | "settings";

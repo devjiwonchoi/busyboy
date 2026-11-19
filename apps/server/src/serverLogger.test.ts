@@ -1,23 +1,22 @@
-import * as NodePath from "@effect/platform-node/NodePath";
-import { assert, describe, it } from "@effect/vitest";
 import * as NodeOS from "node:os";
 import * as NodeUtil from "node:util";
 
+import * as NodePath from "@effect/platform-node/NodePath";
+import { assert, describe, it } from "@effect/vitest";
 import { ExternalLauncherBrowserSpawnError } from "@t3tools/contracts";
+import { DEFAULT_SIGNAL_EXPORT } from "@t3tools/shared/observability";
+import * as OtelEnvironment from "@t3tools/shared/otelEnvironment";
 import * as Cause from "effect/Cause";
 import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
-import * as Layer from "effect/Layer";
-import * as Redactable from "effect/Redactable";
-import * as Path from "effect/Path";
-import * as Tracer from "effect/Tracer";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientResponse from "effect/http/HttpClientResponse";
+import * as Layer from "effect/Layer";
+import * as Path from "effect/Path";
+import * as Redactable from "effect/Redactable";
 import * as TestConsole from "effect/testing/TestConsole";
-
-import { DEFAULT_SIGNAL_EXPORT } from "@t3tools/shared/observability";
-import * as OtelEnvironment from "@t3tools/shared/otelEnvironment";
+import * as Tracer from "effect/Tracer";
 
 import * as ServerConfig from "./config.ts";
 import * as ExternalLauncher from "./process/externalLauncher.ts";

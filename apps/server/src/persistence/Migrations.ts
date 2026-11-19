@@ -1,12 +1,11 @@
-import * as Migrator from "effect/sql/Migrator";
-import * as Effect from "effect/Effect";
-import * as SqlClient from "effect/sql/SqlClient";
 import {
   DATABASE_MIGRATION_PROGRESS_MESSAGE,
   DATABASE_MIGRATIONS_FINISHED_MESSAGE,
   DATABASE_MIGRATIONS_STARTED_MESSAGE,
 } from "@t3tools/shared/databaseMigrationLog";
-import { reconcileV2PreviewMigration } from "./reconcileV2PreviewMigration.ts";
+import * as Effect from "effect/Effect";
+import * as Migrator from "effect/sql/Migrator";
+import * as SqlClient from "effect/sql/SqlClient";
 
 import Migration0001 from "./Migrations/001_OrchestrationEvents.ts";
 import Migration0002 from "./Migrations/002_OrchestrationCommandReceipts.ts";
@@ -107,6 +106,7 @@ import Migration0096 from "./Migrations/096_RepairStaleTitleRegeneration.ts";
 import Migration0097 from "./Migrations/097_IssueTrackerBindings.ts";
 import Migration0098 from "./Migrations/098_ActiveShellIndexIndexes.ts";
 import Migration0099 from "./Migrations/099_BackgroundRecoveryIndexes.ts";
+import { reconcileV2PreviewMigration } from "./reconcileV2PreviewMigration.ts";
 
 const migrationEntries = [
   [1, "OrchestrationEvents", Migration0001],

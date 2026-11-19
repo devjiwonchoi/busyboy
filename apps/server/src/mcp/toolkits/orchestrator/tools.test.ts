@@ -1,7 +1,7 @@
 import { expect, it } from "@effect/vitest";
+import { Tool } from "effect/ai";
 import * as Exit from "effect/Exit";
 import * as Schema from "effect/Schema";
-import { Tool } from "effect/ai";
 
 import { OrchestratorToolkit } from "./tools.ts";
 

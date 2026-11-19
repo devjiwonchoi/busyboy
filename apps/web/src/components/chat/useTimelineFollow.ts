@@ -1,4 +1,7 @@
-import { useStableCallback } from "../../hooks/useStableCallback";
+import { type LegendListRef } from "@legendapp/list/react";
+import type { ThreadStructure } from "@t3tools/client-runtime/state/shell";
+import type { deriveThreadActivityRun } from "@t3tools/client-runtime/state/thread-execution";
+import type { EnvironmentThreadStatus } from "@t3tools/client-runtime/state/threads";
 import { type MessageId, type RunId } from "@t3tools/contracts";
 import { CHAT_LIST_ANCHOR_OFFSET } from "@t3tools/shared/chatList";
 import { Debouncer } from "@tanstack/react-pacer";
@@ -9,7 +12,16 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
-import { type LegendListRef } from "@legendapp/list/react";
+import type { Dispatch, RefObject } from "react";
+
+import { useStableCallback } from "../../hooks/useStableCallback";
+import type { TimelineEntry } from "../../session-logic";
+import {
+  releaseChatTimelineAnchor,
+  shouldReleaseTimelineAnchorForToolActivity,
+} from "../ChatView.logic";
+import { resolveTimelineIsAtEnd, type MessagesTimelineRow } from "./MessagesTimeline.logic";
+import { createPageScrollController, type PageScrollKey } from "./pageScrollController";
 import {
   CHAT_TIMELINE_ANCHOR_OFFSET,
   timelineContentOverflowsViewport,
@@ -17,7 +29,6 @@ import {
   observeTimelineRun,
   type TimelineRunObservation,
 } from "./timelineScrollAnchoring";
-import { createPageScrollController, type PageScrollKey } from "./pageScrollController";
 import {
   FOLLOWING,
   initialTimelineFollow,
@@ -28,17 +39,7 @@ import {
   type TimelineNavigation,
   type TimelineViewport,
 } from "./timelineViewport";
-import { resolveTimelineIsAtEnd, type MessagesTimelineRow } from "./MessagesTimeline.logic";
 import { measuredEndOffset, settleListScroll } from "./useTimelinePositionRestore";
-import {
-  releaseChatTimelineAnchor,
-  shouldReleaseTimelineAnchorForToolActivity,
-} from "../ChatView.logic";
-import type { Dispatch, RefObject } from "react";
-import type { ThreadStructure } from "@t3tools/client-runtime/state/shell";
-import type { deriveThreadActivityRun } from "@t3tools/client-runtime/state/thread-execution";
-import type { EnvironmentThreadStatus } from "@t3tools/client-runtime/state/threads";
-import type { TimelineEntry } from "../../session-logic";
 
 interface TimelineAnchor {
   readonly threadKey: string | null;

@@ -1,10 +1,6 @@
-import { msg, T, useGT, useMessages, Var } from "gt-react-native";
 import { useNavigation } from "@react-navigation/native";
-import { SettingsRow } from "./components/SettingsRow";
+import { supportsSharedSettingsSync } from "@t3tools/client-runtime/state/shared-settings";
 import { AuthSettingsWriteScope } from "@t3tools/contracts";
-import { readEnvironmentScope, useEnvironmentsWithScope } from "../../state/session";
-import { ScreenScrollView as ScrollView } from "../../components/ui/ScreenScrollView";
-import { AppText as Text } from "../../components/ui/AppText";
 import {
   type ResponseStreamingMode,
   type ServerSettings,
@@ -14,26 +10,31 @@ import {
   PROJECT_SCOPED_SERVER_SETTING_KEYS,
   type ProjectScopedServerSettingKey,
 } from "@t3tools/contracts";
+import { msg, T, useGT, useMessages, Var } from "gt-react-native";
 import { useRef, useState } from "react";
 import { View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { AppText as Text } from "../../components/ui/AppText";
+import { ListChoiceRow as SettingsChoiceRow } from "../../components/ui/ListChoiceRow";
+import { ScreenScrollView as ScrollView } from "../../components/ui/ScreenScrollView";
+import { readEnvironmentScope, useEnvironmentsWithScope } from "../../state/session";
+import { PullRequestGlyph } from "../pull-requests/pullRequestGlyphs";
 import {
   RUNTIME_MODE_CHOICES,
   withManagedRuntimeModeLimits,
 } from "../threads/thread-settings-options";
-import { SettingsScreen } from "./components/SettingsScreen";
-import { useSettingsEnvironmentMenu } from "./components/SettingsEnvironmentFilterHeader";
 import { BranchNamingSettings } from "./components/BranchNamingSettings";
 import { DatabaseStorageNotice } from "./components/DatabaseStorageNotice";
-import { ListChoiceRow as SettingsChoiceRow } from "../../components/ui/ListChoiceRow";
+import { IssueTrackerSection } from "./components/IssueTrackerSection";
+import { useSettingsEnvironmentMenu } from "./components/SettingsEnvironmentFilterHeader";
+import { SettingsProjectOverridesSection } from "./components/SettingsProjectOverridesSection";
+import { SettingsRow } from "./components/SettingsRow";
+import { SettingsScreen } from "./components/SettingsScreen";
 import { SettingsSection } from "./components/SettingsSection";
 import { SettingsSwitchRow } from "./components/SettingsSwitchRow";
-import { IssueTrackerSection } from "./components/IssueTrackerSection";
 import { SourceControlProvidersSection } from "./components/SourceControlProvidersSection";
-import { SettingsProjectOverridesSection } from "./components/SettingsProjectOverridesSection";
 import { useSettingsEnvironmentFilter } from "./settings-environment-filter";
-import { useSettingsWriter } from "./useSettingsWriter";
 import {
   managedSettingReason,
   planMobileScopedSettingsClear,
@@ -42,9 +43,8 @@ import {
   uniformMobileSetting,
   type ScopedMobileSettingsTarget,
 } from "./settings-scoped-server";
-import { PullRequestGlyph } from "../pull-requests/pullRequestGlyphs";
 import { AutoSettleSettingsRows } from "./ThreadSettingsSections";
-import { supportsSharedSettingsSync } from "@t3tools/client-runtime/state/shared-settings";
+import { useSettingsWriter } from "./useSettingsWriter";
 
 type SettingsPage = "threads" | "source-control" | "worktrees" | "maintenance";
 

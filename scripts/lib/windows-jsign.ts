@@ -7,10 +7,10 @@ import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
+import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
-import { ChildProcess, ChildProcessSpawner } from "effect/process";
 
 // Upstream failures worth another attempt: Azure's `InternalError` (seen in
 // release runs on both the certificate chain and the sign call), HTTP 429/5xx,

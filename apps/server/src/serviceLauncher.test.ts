@@ -21,6 +21,17 @@ import {
   renderBootServiceUnit,
 } from "./cloud/bootService.ts";
 import {
+  compareExactServiceVersions,
+  decodeServiceState,
+  isExactServiceVersion,
+  decodeServiceUnit,
+  disabledServiceTask,
+  SERVICE_ENV_FILE,
+  SERVICE_LAUNCHER_PROTOCOL,
+  SERVICE_RESTART_PENDING_FILE,
+  SERVICE_STOP_MARKER_FILE,
+} from "./cloud/serviceProtocol.ts";
+import {
   databaseBackupBlocker,
   Launcher,
   main,
@@ -34,17 +45,6 @@ import {
   stateDirOwned,
   writeServiceState,
 } from "./serviceLauncher.ts";
-import {
-  compareExactServiceVersions,
-  decodeServiceState,
-  isExactServiceVersion,
-  decodeServiceUnit,
-  disabledServiceTask,
-  SERVICE_ENV_FILE,
-  SERVICE_LAUNCHER_PROTOCOL,
-  SERVICE_RESTART_PENDING_FILE,
-  SERVICE_STOP_MARKER_FILE,
-} from "./cloud/serviceProtocol.ts";
 
 const spawnedChildren = vi.hoisted((): Array<NodeChildProcess.ChildProcess> => []);
 const spawnHook = vi.hoisted(() => ({

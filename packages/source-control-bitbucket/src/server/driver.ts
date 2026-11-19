@@ -6,7 +6,6 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 
 import { definition } from "../shared/definition.ts";
-
 import * as BitbucketApi from "./BitbucketApi.ts";
 import * as BitbucketPullRequestApi from "./BitbucketPullRequestApi.ts";
 import * as BitbucketPullRequestProvider from "./BitbucketPullRequestProvider.ts";

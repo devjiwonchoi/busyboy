@@ -1,8 +1,7 @@
 import { useAtomMount } from "@effect/atom-react";
 import { errorDisplayMessage } from "@t3tools/client-runtime/errors";
-
-import { EnvironmentProject, EnvironmentThreadShell } from "@t3tools/client-runtime/state/shell";
 import type { AtomCommandResult } from "@t3tools/client-runtime/state/runtime";
+import { EnvironmentProject, EnvironmentThreadShell } from "@t3tools/client-runtime/state/shell";
 import {
   createVcsStatusRevalidationAtomFamily,
   type GitActionRequestInput,
@@ -20,24 +19,24 @@ import {
   sanitizeFeatureBranchName,
 } from "@t3tools/shared/git";
 import * as Cause from "effect/Cause";
-import { msg } from "gt-react-native";
-import { m } from "../i18n/messages";
 import { AsyncResult } from "effect/reactivity";
+import { msg } from "gt-react-native";
 
-import { useBranches } from "./queries";
-import { threadEnvironment } from "./threads";
-import { vcsActionManager, vcsEnvironment } from "./vcs";
+import { m } from "../i18n/messages";
 import { uuidv4 } from "../lib/uuid";
 import { appAtomRegistry } from "./atom-registry";
+import { useBranches } from "./queries";
 import { readEnvironmentScope, useEnvironmentScope } from "./session";
+import { threadEnvironment } from "./threads";
+import { useAtomCommand } from "./use-atom-command";
 import {
   environmentConnectedAtom,
   setPendingConnectionError,
 } from "./use-remote-environment-registry";
-import { useAtomCommand } from "./use-atom-command";
-import { showGitActionResult } from "./use-vcs-action-state";
-import { useThreadSelection } from "./use-thread-selection";
 import { useSelectedThreadWorktree } from "./use-selected-thread-worktree";
+import { useThreadSelection } from "./use-thread-selection";
+import { showGitActionResult } from "./use-vcs-action-state";
+import { vcsActionManager, vcsEnvironment } from "./vcs";
 
 function refreshFailureMessage(cause: Cause.Cause<unknown>): string {
   const error = Cause.squash(cause);

@@ -1,11 +1,11 @@
 import type { EnvironmentId } from "@t3tools/contracts";
 import { msg } from "gt-react";
 
+import { m, type MessageResolver } from "../../i18n/messages";
 import type {
   SidebarProjectGroupMember,
   SidebarProjectSnapshot,
 } from "../../sidebarProjectGrouping";
-import { m, type MessageResolver } from "../../i18n/messages";
 import type { EnvironmentPresentation } from "../../state/environments";
 
 export interface SettingsScopeSearch {

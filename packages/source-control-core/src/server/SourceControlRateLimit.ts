@@ -1,3 +1,7 @@
+import {
+  SourceControlProviderKind as SourceControlProviderKindSchema,
+  type SourceControlProviderKind,
+} from "@t3tools/contracts";
 import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
 import * as Duration from "effect/Duration";
@@ -5,10 +9,6 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Ref from "effect/Ref";
 import * as Schema from "effect/Schema";
-import {
-  SourceControlProviderKind as SourceControlProviderKindSchema,
-  type SourceControlProviderKind,
-} from "@t3tools/contracts";
 
 const FALLBACK_COOLDOWN = Duration.seconds(30);
 const MAX_FALLBACK_COOLDOWN = Duration.minutes(15);

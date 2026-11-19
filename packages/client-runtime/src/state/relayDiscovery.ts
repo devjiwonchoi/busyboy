@@ -1,7 +1,7 @@
 import * as Effect from "effect/Effect";
+import { AsyncResult, Atom } from "effect/reactivity";
 import * as Stream from "effect/Stream";
 import * as SubscriptionRef from "effect/SubscriptionRef";
-import { AsyncResult, Atom } from "effect/reactivity";
 
 import * as RelayEnvironmentDiscovery from "../relay/discovery.ts";
 import { createRuntimeCommand } from "./runtime.ts";

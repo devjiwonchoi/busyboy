@@ -6,6 +6,7 @@ import type {
 
 import type { PullRequestTabStatusSeed } from "~/components/RightPanelTabs";
 import { pullRequestSurfaceId } from "~/rightPanelStore";
+
 import {
   comparePullRequestsByRecency,
   filterPullRequestsByInvolvement,

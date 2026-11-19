@@ -16,13 +16,13 @@ import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
+import type { HttpClient } from "effect/http";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Queue from "effect/Queue";
+import { AsyncResult } from "effect/reactivity";
 import * as Schema from "effect/Schema";
 import * as TestClock from "effect/testing/TestClock";
-import type { HttpClient } from "effect/http";
-import { AsyncResult } from "effect/reactivity";
 
 import * as RemoteEnvironmentAuthorization from "../authorization/service.ts";
 import {
@@ -34,15 +34,15 @@ import {
 import * as ManagedRelay from "../relay/managedRelay.ts";
 import { type RemoteEnvironmentRequestError } from "../rpc/http.ts";
 import * as RpcHttp from "../rpc/http.ts";
+import { fetchEnvironmentBoundedThreadSnapshot } from "./boundedThreadSnapshotHttp.ts";
+import * as BoundedThreadSnapshotHttp from "./boundedThreadSnapshotHttp.ts";
+import { v2Projection } from "./orchestrationV2TestFixtures.ts";
 import * as PullRequestDiffLoader from "./pullRequestDiffHttp.ts";
 import { fetchEnvironmentSessionState, sessionDeniesScope } from "./session.ts";
 import { fetchEnvironmentShellSnapshot } from "./shellSnapshotHttp.ts";
+import { fetchEnvironmentThreadHistoryPage } from "./threadHistoryHttp.ts";
 import * as ThreadSnapshotLoader from "./threadSnapshotHttp.ts";
 import { fetchEnvironmentThreadTranscript } from "./threadTranscriptHttp.ts";
-import { fetchEnvironmentBoundedThreadSnapshot } from "./boundedThreadSnapshotHttp.ts";
-import * as BoundedThreadSnapshotHttp from "./boundedThreadSnapshotHttp.ts";
-import { fetchEnvironmentThreadHistoryPage } from "./threadHistoryHttp.ts";
-import { v2Projection } from "./orchestrationV2TestFixtures.ts";
 
 const encodeBoundedSnapshot = Schema.encodeSync(OrchestrationV2ThreadBoundedSnapshot);
 const encodeThreadTranscript = Schema.encodeSync(OrchestrationV2ThreadTranscript);

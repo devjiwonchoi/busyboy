@@ -1,4 +1,3 @@
-import { SheetHeader } from "../../components/ui/SheetHeader";
 import {
   DatePicker,
   Host,
@@ -30,9 +29,10 @@ import {
 } from "@t3tools/client-runtime/state/thread-settled";
 import { msg, useGT, useMessages } from "gt-react-native";
 import { useState, type ReactNode } from "react";
-import { StandaloneStack } from "../layout/nested-stacks";
 import { ScrollView, useWindowDimensions, View } from "react-native";
 
+import { SheetHeader } from "../../components/ui/SheetHeader";
+import { StandaloneStack } from "../layout/nested-stacks";
 import { useAppearancePreferences } from "../settings/appearance/AppearancePreferencesProvider";
 
 const durationAmounts = Array.from({ length: 99 }, (_, index) => index + 1);

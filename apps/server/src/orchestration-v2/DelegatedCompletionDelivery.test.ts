@@ -1,8 +1,3 @@
-import * as Exit from "effect/Exit";
-import * as EffectOutbox from "./EffectOutbox.ts";
-import * as EffectWorker from "./EffectWorker.ts";
-import * as SourceControlProviderRegistry from "../sourceControl/SourceControlProviderRegistry.ts";
-import * as McpProviderSessions from "@t3tools/provider-core/server/McpProviderSessions";
 import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, it, vi } from "@effect/vitest";
@@ -24,14 +19,21 @@ import {
   ThreadId,
   TurnItemId,
 } from "@t3tools/contracts";
+import type { ProviderInstance } from "@t3tools/provider-core/server/driver";
+import * as IdAllocator from "@t3tools/provider-core/server/IdAllocator";
+import * as McpProviderSessions from "@t3tools/provider-core/server/McpProviderSessions";
+import type * as ProviderAdapter from "@t3tools/provider-core/server/ProviderAdapter";
+import * as ProviderContinuationRequests from "@t3tools/provider-core/server/ProviderContinuationRequests";
+import { PROVIDER_STOP_REASON_SIGNAL } from "@t3tools/provider-core/server/subagentProjection";
 import * as DateTime from "effect/DateTime";
-import * as Effect from "effect/Effect";
 import * as Deferred from "effect/Deferred";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
-import * as Tracer from "effect/Tracer";
 import * as TestClock from "effect/testing/TestClock";
+import * as Tracer from "effect/Tracer";
 
 import * as CheckpointStore from "../checkpointing/CheckpointStore.ts";
 import * as ServerConfig from "../config.ts";
@@ -39,26 +41,24 @@ import * as McpSessionRegistryTestkit from "../mcp/McpSessionRegistry.testkit.ts
 import * as SqlitePersistence from "../persistence/Sqlite.ts";
 import * as ProjectEnrichmentService from "../project/ProjectEnrichmentService.ts";
 import * as ProjectService from "../project/ProjectService.ts";
-import type { ProviderInstance } from "@t3tools/provider-core/server/driver";
 import * as ProviderInstanceRegistry from "../provider/ProviderInstanceRegistry.ts";
 import * as ServerSettings from "../serverSettings.ts";
+import * as SourceControlProviderRegistry from "../sourceControl/SourceControlProviderRegistry.ts";
 import * as VcsDriverRegistry from "../vcs/VcsDriverRegistry.ts";
 import * as VcsProcess from "../vcs/VcsProcess.ts";
 import * as WorkspacePaths from "../workspace/WorkspacePaths.ts";
 import { CodexProviderCapabilitiesV2 } from "./Adapters/CodexAdapterV2.ts";
+import * as EffectOutbox from "./EffectOutbox.ts";
+import * as EffectWorker from "./EffectWorker.ts";
 import * as EventSink from "./EventSink.ts";
 import * as Orchestrator from "./Orchestrator.ts";
+import * as ProviderContinuationService from "./ProviderContinuationService.ts";
 import * as ProviderRuntimeRecovery from "./ProviderRuntimeRecoveryService.ts";
+import * as ProviderTurnStartServiceTestkit from "./ProviderTurnStartService.testkit.ts";
 import { continueRestartedRun } from "./RestartContinuation.ts";
 import * as RuntimeLayer from "./runtimeLayer.ts";
 import * as ThreadCommandExecutor from "./ThreadCommandExecutor.ts";
 import { limitRecoveryCommand } from "./UsageLimitRecoveryWorker.ts";
-import * as ProviderTurnStartServiceTestkit from "./ProviderTurnStartService.testkit.ts";
-import type * as ProviderAdapter from "@t3tools/provider-core/server/ProviderAdapter";
-import * as ProviderContinuationRequests from "@t3tools/provider-core/server/ProviderContinuationRequests";
-import * as IdAllocator from "@t3tools/provider-core/server/IdAllocator";
-import { PROVIDER_STOP_REASON_SIGNAL } from "@t3tools/provider-core/server/subagentProjection";
-import * as ProviderContinuationService from "./ProviderContinuationService.ts";
 
 const layerPlatformTest = Layer.merge(
   Layer.mergeAll(NodeServices.layer, NodeCrypto.layer),

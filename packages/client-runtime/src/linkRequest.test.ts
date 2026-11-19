@@ -6,7 +6,6 @@ import { describe, expect, it } from "vite-plus/test";
 import { BearerConnectionProfile } from "./connection/catalog.ts";
 import { BearerConnectionTarget, RelayConnectionTarget } from "./connection/model.ts";
 import type { EnvironmentPresentation } from "./connection/presentation.ts";
-import type { RelayDiscoveredEnvironment } from "./relay/discovery.ts";
 import {
   ANOTHER_ADDRESS,
   linkableMachines,
@@ -19,6 +18,7 @@ import {
   linkRequestTargetName,
   rankMachinesByHint,
 } from "./linkRequest.ts";
+import type { RelayDiscoveredEnvironment } from "./relay/discovery.ts";
 
 const item = {
   id: TurnItemId.make("turn-item:link-request:1"),

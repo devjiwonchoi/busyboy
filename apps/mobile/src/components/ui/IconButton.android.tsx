@@ -1,5 +1,3 @@
-import type { IconButtonProps } from "./IconButton.types";
-import { NativeThemeHost } from "./NativeThemeHost.android";
 import {
   FilledIconButton,
   FilledTonalIconButton,
@@ -8,9 +6,11 @@ import {
 import { size } from "@expo/ui/jetpack-compose/modifiers";
 import { View } from "react-native";
 
-import { useControlTheme } from "./useControlTheme";
-import { useAndroidControlSizing } from "./useAndroidControlSizing";
 import { SymbolView } from "./AppSymbol";
+import type { IconButtonProps } from "./IconButton.types";
+import { NativeThemeHost } from "./NativeThemeHost.android";
+import { useAndroidControlSizing } from "./useAndroidControlSizing";
+import { useControlTheme } from "./useControlTheme";
 
 export function IconButton(props: IconButtonProps) {
   const { colors } = useControlTheme();

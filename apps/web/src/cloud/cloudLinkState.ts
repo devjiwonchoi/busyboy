@@ -1,17 +1,17 @@
 import { useAtomValue } from "@effect/atom-react";
+import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
 import {
   AuthRelayReadScope,
   type EnvironmentCloudLinkStateResult,
   type EnvironmentId,
 } from "@t3tools/contracts";
-import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
 import * as Cause from "effect/Cause";
-import { useGT, useMessages } from "gt-react";
 import { AsyncResult, Atom } from "effect/reactivity";
+import { useGT, useMessages } from "gt-react";
 
 import { connectionAtomRuntime } from "../connection/runtime";
-import { usePrimaryEnvironmentId } from "../state/environments";
 import { appAtomRegistry } from "../rpc/atomRegistry";
+import { usePrimaryEnvironmentId } from "../state/environments";
 import { readEnvironmentScope, useEnvironmentScope } from "../state/session";
 import { readCloudLinkState, type CloudLinkTarget } from "./linkEnvironment";
 import { hasCloudPublicConfig } from "./publicConfig";

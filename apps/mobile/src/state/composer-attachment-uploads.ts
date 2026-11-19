@@ -1,36 +1,36 @@
 import { useAtomValue } from "@effect/atom-react";
-import { AuthOrchestrationOperateScope, type EnvironmentId } from "@t3tools/contracts";
-import * as Effect from "effect/Effect";
-import * as Schema from "effect/Schema";
 import {
   attachmentUploadError,
   createAttachmentUploadRegistry,
 } from "@t3tools/client-runtime/state/attachment-uploads";
 import { verifyPersistedAttachmentUpload } from "@t3tools/client-runtime/state/attachments";
+import { AuthOrchestrationOperateScope, type EnvironmentId } from "@t3tools/contracts";
+import * as Effect from "effect/Effect";
 import { Atom } from "effect/reactivity";
+import * as Schema from "effect/Schema";
 
 import { uploadComposerAttachment } from "../lib/attachmentUpload";
 import { retainComposerAttachmentFileForPreview } from "../lib/composerAttachmentPreviewRetention";
-import {
-  isFileBackedComposerAttachment,
-  type DraftComposerAttachment,
-} from "../lib/composerImages";
 import {
   composerAttachmentUploadKey,
   composerDraftEnvironmentId,
   canUploadComposerAttachment,
   type ComposerAttachmentUploadState,
 } from "../lib/composerAttachmentUploadQueue";
-import { appAtomRegistry } from "./atom-registry";
+import {
+  isFileBackedComposerAttachment,
+  type DraftComposerAttachment,
+} from "../lib/composerImages";
 import { assetEnvironment } from "./assets";
+import { appAtomRegistry } from "./atom-registry";
 import { environmentServerConfigsAtom } from "./server";
+import { environmentSession, readEnvironmentScope, sessionHasScope } from "./session";
 import {
   flattenQueuedThreadMessages,
   threadOutboxManager,
   modifyThreadOutboxMessage,
   type QueuedThreadMessage,
 } from "./thread-outbox";
-import { editingQueuedMessageIdsAtom } from "./use-thread-outbox";
 import {
   ComposerDraftPersistenceError,
   type ComposerDraft,
@@ -40,7 +40,7 @@ import {
   flushComposerDrafts,
   setComposerDraftAttachmentUpload,
 } from "./use-composer-drafts";
-import { environmentSession, readEnvironmentScope, sessionHasScope } from "./session";
+import { editingQueuedMessageIdsAtom } from "./use-thread-outbox";
 import { workspaceConnections } from "./workspace";
 
 const isComposerDraftPersistenceError = Schema.is(ComposerDraftPersistenceError);

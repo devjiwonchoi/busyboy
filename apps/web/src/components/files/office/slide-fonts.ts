@@ -1,11 +1,12 @@
 // Adapted from opencode (MIT). Copyright (c) 2025 opencode. See LICENSE.opencode.
+import { resolveScriptFallbackFace } from "@betteroffice/fonts";
 import type {
   PositionedTextRun,
   PresentationHandle,
   SlideDisplayList,
   SlidePrimitive,
 } from "@betteroffice/pptx";
-import { resolveScriptFallbackFace } from "@betteroffice/fonts";
+
 import { loadFace, presentationFace } from "./fonts";
 import type { DeckText, FallbackScript, FontStyle } from "./slide-text";
 

@@ -14,14 +14,9 @@ import {
 } from "@t3tools/contracts";
 import { commandIndicatesFailure } from "@t3tools/shared/toolOutput";
 import {
-  changeRequestsClosedBy,
-  isChangeRequestCloseCommand,
-} from "../sourceControl/sourceControlDefinitions.ts";
-import {
-  normalizeThreadPullRequestKey,
-  threadPullRequestKeyOf,
-  visibleThreadPullRequests,
-} from "../sourceControl/threadPullRequests.ts";
+  type ProviderChangeRequestWatchFingerprint,
+  PullRequestProviderError,
+} from "@t3tools/source-control-core/server/PullRequestProvider";
 import * as Cause from "effect/Cause";
 import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
@@ -33,19 +28,23 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
-import * as Semaphore from "effect/Semaphore";
 import type * as Scope from "effect/Scope";
+import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
 
-import {
-  type ProviderChangeRequestWatchFingerprint,
-  PullRequestProviderError,
-} from "@t3tools/source-control-core/server/PullRequestProvider";
 import * as PullRequestService from "../pullRequest/PullRequestService.ts";
 import { forkParked } from "../serverActivation.ts";
+import {
+  changeRequestsClosedBy,
+  isChangeRequestCloseCommand,
+} from "../sourceControl/sourceControlDefinitions.ts";
+import {
+  normalizeThreadPullRequestKey,
+  threadPullRequestKeyOf,
+  visibleThreadPullRequests,
+} from "../sourceControl/threadPullRequests.ts";
 import * as Orchestrator from "./Orchestrator.ts";
 import * as ProjectionStore from "./ProjectionStore.ts";
-import { isTerminalRunStatus } from "./ThreadManagementService.ts";
 import {
   combinePullRequestWatchWakes,
   evaluatePullRequestWatch,
@@ -53,6 +52,7 @@ import {
   pullRequestWatchEndMessage,
   pullRequestWatchMessage,
 } from "./pullRequestWatch.ts";
+import { isTerminalRunStatus } from "./ThreadManagementService.ts";
 
 /** Checks take minutes; faster sweeps waste the account's shared host quota. */
 const SWEEP_MINUTES = 2;

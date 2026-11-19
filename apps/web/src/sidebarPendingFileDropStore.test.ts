@@ -1,7 +1,6 @@
-import { beforeEach, describe, expect, it } from "vite-plus/test";
-
 import { scopeThreadRef } from "@t3tools/client-runtime/environment";
 import { type EnvironmentId, ThreadId } from "@t3tools/contracts";
+import { beforeEach, describe, expect, it } from "vite-plus/test";
 
 import {
   useSidebarPendingFileDropStore,

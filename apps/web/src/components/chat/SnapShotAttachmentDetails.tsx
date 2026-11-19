@@ -6,13 +6,13 @@ import { Suspense, useRef, useState } from "react";
 import { useRenderedAppearance } from "../../hooks/useTheme";
 import { cn } from "../../lib/utils";
 import { RenderErrorBoundary } from "../RenderErrorBoundary";
-import { Button } from "../ui/button";
-import { Popover, PopoverPopup, PopoverTitle, PopoverTrigger } from "../ui/popover";
-import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import {
   ANCHORED_COPY_TOAST_TIMEOUT_MS,
   showAnchoredCopyErrorToast,
 } from "../ui/anchoredCopyToast";
+import { Button } from "../ui/button";
+import { Popover, PopoverPopup, PopoverTitle, PopoverTrigger } from "../ui/popover";
+import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { HighlightedTokens } from "./HighlightedTokens";
 
 export const SNAP_SHOT_ATTACHMENT_FRAME_CLASS =

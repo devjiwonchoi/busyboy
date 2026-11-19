@@ -1,3 +1,4 @@
+import { parseMarkdown } from "react-native-enriched-markdown/src/web/parseMarkdown";
 import { describe, expect, it } from "vite-plus/test";
 
 import { splitMarkdownDetails } from "./markdownDetails";
@@ -6,7 +7,6 @@ import {
   markdownReferenceDefinitions,
   withReferenceDefinitions,
 } from "./markdownDocument";
-import { parseMarkdown } from "react-native-enriched-markdown/src/web/parseMarkdown";
 
 type NativeNode = Awaited<ReturnType<typeof parseMarkdown>>;
 

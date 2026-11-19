@@ -1,5 +1,6 @@
 import { requireOptionalNativeModule } from "expo";
 import { Platform } from "react-native";
+
 import { useDeadlinePassed } from "../lib/clock";
 import type { NativeLayoutMetrics } from "../lib/reserved-regions";
 import { useNativeLayoutMetrics, useNativeLayoutMetricsDeadline } from "./native-layout-metrics";

@@ -8,11 +8,21 @@ import {
   type ServerProvider,
   type ServerProviderUpdateState,
 } from "@t3tools/contracts";
+import type {
+  ProviderInstance,
+  ProviderWorkspaceSnapshot,
+} from "@t3tools/provider-core/server/driver";
+import {
+  makeManualOnlyProviderMaintenanceCapabilities,
+  type ProviderMaintenanceCapabilities,
+  latestProviderVersionCacheKeys,
+} from "@t3tools/provider-core/server/maintenanceResolver";
+import * as ProviderLatestVersions from "@t3tools/provider-core/server/ProviderLatestVersions";
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
 import * as DateTime from "effect/DateTime";
-import * as Duration from "effect/Duration";
 import * as Deferred from "effect/Deferred";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Equal from "effect/Equal";
 import * as Fiber from "effect/Fiber";
@@ -24,14 +34,14 @@ import * as PubSub from "effect/PubSub";
 import * as Queue from "effect/Queue";
 import * as Ref from "effect/Ref";
 import * as Scope from "effect/Scope";
-import * as Stream from "effect/Stream";
 import * as Semaphore from "effect/Semaphore";
+import * as Stream from "effect/Stream";
 
-import * as ProviderLatestVersions from "@t3tools/provider-core/server/ProviderLatestVersions";
-import * as ModelManifest from "./ModelManifest.ts";
-import { applyProviderCompatibility } from "./providerCompatibility.ts";
 import * as ServerConfig from "../config.ts";
 import { refreshWindowsPath } from "../os-jank.ts";
+import type { ProviderSnapshotSource } from "./builtInProviderCatalog.ts";
+import * as ModelManifest from "./ModelManifest.ts";
+import { applyProviderCompatibility } from "./providerCompatibility.ts";
 import * as ProviderInstanceRegistry from "./ProviderInstanceRegistry.ts";
 import * as ProviderInstanceRegistryMutator from "./ProviderInstanceRegistryMutator.ts";
 import {
@@ -42,16 +52,6 @@ import {
   resolveProviderStatusCachePath,
   writeProviderStatusCache,
 } from "./providerStatusCache.ts";
-import type {
-  ProviderInstance,
-  ProviderWorkspaceSnapshot,
-} from "@t3tools/provider-core/server/driver";
-import {
-  makeManualOnlyProviderMaintenanceCapabilities,
-  type ProviderMaintenanceCapabilities,
-  latestProviderVersionCacheKeys,
-} from "@t3tools/provider-core/server/maintenanceResolver";
-import type { ProviderSnapshotSource } from "./builtInProviderCatalog.ts";
 
 export type ProviderMaintenanceActionKind = "update";
 

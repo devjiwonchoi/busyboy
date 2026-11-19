@@ -4,12 +4,12 @@ vi.mock("react-native", () => ({ View: () => null }));
 vi.mock("expo", () => ({ requireNativeView: vi.fn() }));
 vi.mock("../../components/ui/EmptyState", () => ({ EmptyState: () => null }));
 
+import type { NativeReviewDiffViewProps } from "../diffs/nativeReviewDiffSurface";
+import { createReviewDiffHighlightScheduler } from "../review/reviewDiffHighlightScheduler";
 import {
   handlePullRequestDiffDebugEvent,
   pullRequestDiffInitialPosition,
 } from "./pullRequestDiffDebug";
-import { createReviewDiffHighlightScheduler } from "../review/reviewDiffHighlightScheduler";
-import type { NativeReviewDiffViewProps } from "../diffs/nativeReviewDiffSurface";
 
 it("enters at a file header without changing guide focus positioning", () => {
   expect(pullRequestDiffInitialPosition("last-file", -1)).toEqual({

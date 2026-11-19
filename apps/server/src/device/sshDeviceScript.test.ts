@@ -1,12 +1,15 @@
 // @effect-diagnostics nodeBuiltinImport:off globalFetchInEffect:off - verifies generated remote scripts using real shell and Node processes.
-import * as Effect from "effect/Effect";
-import * as HostProcess from "@t3tools/shared/HostProcess";
-import { expect, it } from "@effect/vitest";
+
 import * as NodeChildProcess from "node:child_process";
 import * as NodeFSP from "node:fs/promises";
 import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
 import * as NodeUtil from "node:util";
+
+import { expect, it } from "@effect/vitest";
+import * as HostProcess from "@t3tools/shared/HostProcess";
+import * as Effect from "effect/Effect";
+
 import { quoteRemoteArg, remoteDeviceEnvironment, remoteDeviceScript } from "./sshDeviceScript.ts";
 
 const exec = NodeUtil.promisify(NodeChildProcess.execFile);

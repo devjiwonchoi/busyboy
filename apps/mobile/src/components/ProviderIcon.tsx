@@ -1,17 +1,18 @@
-import { Image } from "expo-image";
-import { Defs, LinearGradient, Path, Stop, Svg } from "react-native-svg";
-import { View } from "react-native";
+import { getProviderClient, openRouterIcon } from "@t3tools/client-runtime/provider-clients";
 import {
   normalizeProviderAccentColor,
   providerAccentForegroundColor,
   providerInstanceInitials,
 } from "@t3tools/client-runtime/state/provider-instance-display";
-import { useId, useState } from "react";
 import { resolveOfficialAcpRegistryIconUrl } from "@t3tools/contracts";
+import { Image } from "expo-image";
+import { useId, useState } from "react";
+import { View } from "react-native";
+import { Defs, LinearGradient, Path, Stop, Svg } from "react-native-svg";
+
 import { useAppearancePreferences } from "../features/settings/appearance/AppearancePreferencesProvider";
-import { AppText as Text } from "./ui/AppText";
 import { cn } from "../lib/cn";
-import { getProviderClient, openRouterIcon } from "@t3tools/client-runtime/provider-clients";
+import { AppText as Text } from "./ui/AppText";
 
 type ProviderIconProps = {
   readonly provider: string | null | undefined;

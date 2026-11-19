@@ -1,5 +1,6 @@
-import * as NodePath from "node:path";
 import * as NodeModule from "node:module";
+import * as NodePath from "node:path";
+
 import * as React from "react";
 import { act, useLayoutEffect } from "react";
 import { createRoot } from "react-dom/client";

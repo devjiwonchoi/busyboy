@@ -1,7 +1,7 @@
 import * as Layer from "effect/Layer";
 
-import * as PullRequestCacheStore from "../connection/pull-request-cache-store";
 import * as EnvironmentCacheStore from "../connection/environment-cache-store";
+import * as PullRequestCacheStore from "../connection/pull-request-cache-store";
 import * as MobileDatabase from "./mobile-database";
 import * as MobilePreferences from "./mobile-preferences";
 import * as MobileSecureStorage from "./mobile-secure-storage";

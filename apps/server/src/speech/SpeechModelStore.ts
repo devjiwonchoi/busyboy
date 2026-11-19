@@ -1,5 +1,7 @@
 // @effect-diagnostics nodeBuiltinImport:off - Effect has no incremental digest.
 import * as NodeCrypto from "node:crypto";
+
+import * as HostProcess from "@t3tools/shared/HostProcess";
 import * as Context from "effect/Context";
 import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
@@ -13,8 +15,6 @@ import * as Path from "effect/Path";
 import type { PlatformError } from "effect/PlatformError";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
-
-import * as HostProcess from "@t3tools/shared/HostProcess";
 
 import * as ServerConfig from "../config.ts";
 import { expandHomePath } from "../os-jank.ts";

@@ -1,7 +1,8 @@
 import type { ProviderUserInputAnswers, UserInputAttachments } from "@t3tools/contracts";
-import * as Schema from "effect/Schema";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import * as Schema from "effect/Schema";
+
 import { resolveAttachmentPath } from "../attachmentStore.ts";
 import * as DocumentText from "./DocumentText.ts";
 class UserInputAttachmentError extends Schema.TaggedError<UserInputAttachmentError>()(

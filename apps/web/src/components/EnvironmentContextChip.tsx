@@ -1,8 +1,8 @@
 import { type EnvironmentContextRecord, resolveEnvironmentMachineKind } from "@t3tools/contracts";
-
 import { useGT } from "gt-react";
 
 import { useEnvironment } from "~/state/environments";
+
 import { ContextChip, ContextChipLabel } from "./ContextChip";
 import { EnvironmentMachineIcon } from "./EnvironmentMachineIcon";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "./ui/tooltip";

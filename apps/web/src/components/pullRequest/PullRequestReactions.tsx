@@ -1,4 +1,12 @@
-import { useAtomCommand } from "~/state/use-atom-command";
+import {
+  applyPendingPullRequestReactions,
+  type PendingPullRequestReaction,
+  PULL_REQUEST_REACTION_ORDER,
+  pullRequestReactionEmoji,
+  pullRequestReactionName,
+  pullRequestReactionTooltip,
+  pullRequestReactionsSignature,
+} from "@t3tools/client-runtime/pull-request-reactions";
 import type {
   EnvironmentId,
   PullRequestReaction,
@@ -12,19 +20,11 @@ import { useState } from "react";
 import { m } from "~/i18n/messages";
 import { cn } from "~/lib/utils";
 import { pullRequestEnvironment } from "~/state/pullRequests";
+import { useAtomCommand } from "~/state/use-atom-command";
 
 import { Popover, PopoverPopup, PopoverTrigger } from "../ui/popover";
 import { toastManager } from "../ui/toast";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
-import {
-  applyPendingPullRequestReactions,
-  type PendingPullRequestReaction,
-  PULL_REQUEST_REACTION_ORDER,
-  pullRequestReactionEmoji,
-  pullRequestReactionName,
-  pullRequestReactionTooltip,
-  pullRequestReactionsSignature,
-} from "@t3tools/client-runtime/pull-request-reactions";
 
 const PILL_CLASS =
   "inline-flex h-6 shrink-0 items-center gap-1 rounded-full border px-2 text-xs outline-none transition-colors focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring";

@@ -1,7 +1,3 @@
-import {
-  makeAggregateState,
-  TERMINAL_AGENT_ACTIVITY_DISPLAY_TTL_MS,
-} from "./agentActivityAggregate.ts";
 import type {
   RelayAgentActivityState,
   RelayDeliveryResult,
@@ -13,14 +9,18 @@ import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 
+import {
+  makeAggregateState,
+  TERMINAL_AGENT_ACTIVITY_DISPLAY_TTL_MS,
+} from "./agentActivityAggregate.ts";
 import { isTerminalPhase } from "./agentActivityPayloads.ts";
 
 export { isExpiredAgentActivityState } from "./agentActivityPayloads.ts";
-import * as AgentActivityRows from "./AgentActivityRows.ts";
 import * as EnvironmentLinks from "../environments/EnvironmentLinks.ts";
-import * as LiveActivities from "./LiveActivities.ts";
+import * as AgentActivityRows from "./AgentActivityRows.ts";
 import * as ApnsDeliveries from "./ApnsDeliveries.ts";
 import * as FcmDeliveries from "./FcmDeliveries.ts";
+import * as LiveActivities from "./LiveActivities.ts";
 
 export type AgentActivityPublishError =
   | FcmDeliveries.FcmDeliveryError

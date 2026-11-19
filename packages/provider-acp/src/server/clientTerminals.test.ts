@@ -1,14 +1,14 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { describe, expect, it } from "@effect/vitest";
+import * as HostProcess from "@t3tools/shared/HostProcess";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
-import * as Sink from "effect/Sink";
-import * as TestClock from "effect/testing/TestClock";
-import * as Result from "effect/Result";
-import * as Stream from "effect/Stream";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
-import * as HostProcess from "@t3tools/shared/HostProcess";
+import * as Result from "effect/Result";
+import * as Sink from "effect/Sink";
+import * as Stream from "effect/Stream";
+import * as TestClock from "effect/testing/TestClock";
 
 import {
   makeAcpClientTerminals,

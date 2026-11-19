@@ -10,6 +10,7 @@ import {
 } from "@t3tools/client-runtime/issue-list";
 import { issueTrackerDetailText } from "@t3tools/client-runtime/state/issue-trackers";
 import { issueEntryKey } from "@t3tools/client-runtime/state/issues";
+import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
 import type {
   EnvironmentId,
   IssueInvolvement,
@@ -21,6 +22,7 @@ import type {
   ProjectId,
 } from "@t3tools/contracts";
 import { useNavigate, useSearch } from "@tanstack/react-router";
+import { msg, T, useGT, useMessages, Var } from "gt-react";
 import {
   ArrowDownUpIcon,
   AtSignIcon,
@@ -33,18 +35,18 @@ import {
   UserCheckIcon,
   UsersIcon,
 } from "lucide-react";
-import { msg, T, useGT, useMessages, Var } from "gt-react";
 import { Fragment, useEffect, useEffectEvent, useState, type ReactNode } from "react";
 
-import { RefreshIcon } from "~/components/ui/refresh-icon";
+import { isCommandPaletteOpen } from "~/commandPaletteBus";
+import { PanelLayoutControls } from "~/components/chat/PanelLayoutControls";
 import { IssueDetailPanel } from "~/components/issue/IssueDetailPanel";
-import { IssueRow, type IssueRowTarget } from "~/components/issue/IssueRow";
 import {
   issueListPreferences,
   writeIssueListPreferences,
   type IssueListPreferences,
 } from "~/components/issue/issueListPreferences";
 import { IssueGlyph, issueTrackerPresentation } from "~/components/issue/issuePresentation";
+import { IssueRow, type IssueRowTarget } from "~/components/issue/IssueRow";
 import { PullRequestDetailPanel } from "~/components/pullRequest/PullRequestDetailPanel";
 import { PullRequestListGhost } from "~/components/pullRequest/PullRequestGhosts";
 import {
@@ -52,19 +54,9 @@ import {
   PullRequestSearchInput,
   type PullRequestFilterOption,
 } from "~/components/pullRequest/PullRequestListFilters";
-import { m, type MessageResolver } from "~/i18n/messages";
-import { resolveFilterOptions } from "../pullRequest/pullRequestListOptions";
-import { IssueFiltersMenu } from "./IssueListFilterPickers";
-import { issueFilterProjects } from "./issuesSearch.logic";
-import { ISSUE_SAVED_VIEWS } from "./issueSavedViews";
-import { SavedViewsMenu } from "~/components/SavedViewsMenu";
-import { PullRequestCompactFilterMenu } from "../pullRequest/PullRequestCompactFilterMenu";
 import { PullRequestsUnavailableState } from "~/components/pullRequest/PullRequestsUnavailableState";
 import { RightPanelTabs } from "~/components/RightPanelTabs";
-import { WorkspaceBreadcrumb, WorkspaceBreadcrumbItem } from "~/components/WorkspaceBreadcrumb";
-import { WorkspacePageContainer } from "~/components/WorkspacePageContainer";
-import { WorkspacePageHeader } from "~/components/WorkspacePageHeader";
-import { PanelLayoutControls } from "~/components/chat/PanelLayoutControls";
+import { SavedViewsMenu } from "~/components/SavedViewsMenu";
 import { Button } from "~/components/ui/button";
 import {
   Empty,
@@ -74,10 +66,14 @@ import {
   EmptyTitle,
 } from "~/components/ui/empty";
 import { Menu, MenuPopup, MenuRadioGroup, MenuRadioItem, MenuTrigger } from "~/components/ui/menu";
+import { RefreshIcon } from "~/components/ui/refresh-icon";
 import { SidebarInset } from "~/components/ui/sidebar";
-import { isCommandPaletteOpen } from "~/commandPaletteBus";
+import { WorkspaceBreadcrumb, WorkspaceBreadcrumbItem } from "~/components/WorkspaceBreadcrumb";
+import { WorkspacePageContainer } from "~/components/WorkspacePageContainer";
+import { WorkspacePageHeader } from "~/components/WorkspacePageHeader";
 import { isElectron } from "~/env";
 import { useLiveRefresh } from "~/hooks/useLiveRefresh";
+import { m, type MessageResolver } from "~/i18n/messages";
 import { resolveShortcutCommand, shortcutLabelForCommand } from "~/keybindings";
 import { isTerminalFocused } from "~/lib/terminalFocus";
 import { usePanelAnimationSettings, usePanelPresence } from "~/panelAnimations";
@@ -90,13 +86,18 @@ import {
   type PullRequestSurface,
   type RightPanelSurface,
 } from "~/rightPanelStore";
-import { useAtomCommand } from "~/state/use-atom-command";
-import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
 import { useProjects } from "~/state/entities";
 import { useEnvironments, useIssuesSupported } from "~/state/environments";
 import { issueEnvironment, useIssueList, type IssueListTarget } from "~/state/issues";
 import { useDebouncedValue } from "~/state/queries";
 import { primaryServerKeybindingsAtom } from "~/state/server";
+import { useAtomCommand } from "~/state/use-atom-command";
+
+import { PullRequestCompactFilterMenu } from "../pullRequest/PullRequestCompactFilterMenu";
+import { resolveFilterOptions } from "../pullRequest/pullRequestListOptions";
+import { IssueFiltersMenu } from "./IssueListFilterPickers";
+import { ISSUE_SAVED_VIEWS } from "./issueSavedViews";
+import { issueFilterProjects } from "./issuesSearch.logic";
 
 export interface IssuesSearch extends IssueListPreferences {
   readonly selectedEnvironmentId?: EnvironmentId | undefined;

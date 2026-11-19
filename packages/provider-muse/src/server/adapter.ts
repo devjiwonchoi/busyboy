@@ -24,7 +24,33 @@ import {
   type ServerProviderModel,
   type ThreadId,
 } from "@t3tools/contracts";
-import type { MuseSettings } from "../settings.ts";
+import {
+  providerMessageTextWithAttachmentPaths,
+  isProviderNativeImageAttachment,
+} from "@t3tools/provider-core/server/attachmentPrompt";
+import {
+  makeProviderFailure,
+  makeProviderRetryTurnItem,
+} from "@t3tools/provider-core/server/failure";
+import * as IdAllocator from "@t3tools/provider-core/server/IdAllocator";
+import * as McpProviderSessions from "@t3tools/provider-core/server/McpProviderSessions";
+import * as McpProviderSession from "@t3tools/provider-core/server/mcpSession";
+import {
+  backgroundWorkNotification,
+  type BackgroundWorkReport,
+} from "@t3tools/provider-core/server/notification";
+import * as ProviderAdapter from "@t3tools/provider-core/server/ProviderAdapter";
+import type * as ProviderContinuationRequests from "@t3tools/provider-core/server/ProviderContinuationRequests";
+import type * as ProviderEventLoggers from "@t3tools/provider-core/server/ProviderEventLoggers";
+import * as ProviderHost from "@t3tools/provider-core/server/ProviderHost";
+import { buildRuntimeInstructions } from "@t3tools/provider-core/server/runtimeInstructions";
+import { turnScopedSelectionTransition } from "@t3tools/provider-core/server/selectionTransition";
+import type { ManagedServerProvider } from "@t3tools/provider-core/server/snapshot";
+import {
+  makeSubagentChildThread,
+  makeSubagentConversationArtifacts,
+  subagentThreadTitle,
+} from "@t3tools/provider-core/server/subagentProjection";
 import { AgentScope } from "@t3tools/shared/AgentScope";
 import { getModelSelectionStringOptionValue } from "@t3tools/shared/model";
 import { formatDuration } from "@t3tools/shared/orchestrationTiming";
@@ -35,14 +61,12 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Queue from "effect/Queue";
 import * as Schema from "effect/Schema";
-import * as Semaphore from "effect/Semaphore";
 import * as Scope from "effect/Scope";
+import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
 
-import * as ProviderHost from "@t3tools/provider-core/server/ProviderHost";
-import * as McpProviderSession from "@t3tools/provider-core/server/mcpSession";
-import * as McpProviderSessions from "@t3tools/provider-core/server/McpProviderSessions";
-import { buildRuntimeInstructions } from "@t3tools/provider-core/server/runtimeInstructions";
+import type { MuseSettings } from "../settings.ts";
+import { museItemStatus, museToolPresentation } from "./itemPresentation.ts";
 import { museModelCapabilities, resolveMuseReasoningEffort } from "./modelCatalog.ts";
 import {
   MuseApproval,
@@ -64,11 +88,6 @@ import {
   type MuseItem,
 } from "./protocol.ts";
 import {
-  isMuseUsageLimitFailure,
-  museUsageLimitResetAt,
-  museUsageToLimits,
-} from "./usageLimits.ts";
-import {
   createMuseSdkHostEffect,
   MuseSdkError,
   museApprovalMode,
@@ -78,30 +97,11 @@ import {
   type createMuseSdkHost,
   type MuseSdkHost,
 } from "./sdk.ts";
-import type * as ProviderEventLoggers from "@t3tools/provider-core/server/ProviderEventLoggers";
-import type { ManagedServerProvider } from "@t3tools/provider-core/server/snapshot";
 import {
-  providerMessageTextWithAttachmentPaths,
-  isProviderNativeImageAttachment,
-} from "@t3tools/provider-core/server/attachmentPrompt";
-import * as IdAllocator from "@t3tools/provider-core/server/IdAllocator";
-import * as ProviderAdapter from "@t3tools/provider-core/server/ProviderAdapter";
-import {
-  backgroundWorkNotification,
-  type BackgroundWorkReport,
-} from "@t3tools/provider-core/server/notification";
-import type * as ProviderContinuationRequests from "@t3tools/provider-core/server/ProviderContinuationRequests";
-import {
-  makeProviderFailure,
-  makeProviderRetryTurnItem,
-} from "@t3tools/provider-core/server/failure";
-import {
-  makeSubagentChildThread,
-  makeSubagentConversationArtifacts,
-  subagentThreadTitle,
-} from "@t3tools/provider-core/server/subagentProjection";
-import { turnScopedSelectionTransition } from "@t3tools/provider-core/server/selectionTransition";
-import { museItemStatus, museToolPresentation } from "./itemPresentation.ts";
+  isMuseUsageLimitFailure,
+  museUsageLimitResetAt,
+  museUsageToLimits,
+} from "./usageLimits.ts";
 
 const MUSE_PROVIDER = ProviderDriverKind.make("muse");
 const isOpenSessionError = Schema.is(ProviderAdapter.ProviderAdapterOpenSessionError);

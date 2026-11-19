@@ -1,6 +1,3 @@
-import * as Effect from "effect/Effect";
-import * as Schema from "effect/Schema";
-import type * as Stream from "effect/Stream";
 import type {
   PullRequestStackMembership,
   PullRequestAction,
@@ -43,6 +40,9 @@ import type {
   SourceControlProviderKind,
 } from "@t3tools/contracts";
 import { SourceControlProviderKind as SourceControlProviderKindSchema } from "@t3tools/contracts";
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
+import type * as Stream from "effect/Stream";
 
 export class PullRequestProviderError extends Schema.TaggedError<PullRequestProviderError>()(
   "PullRequestProviderError",

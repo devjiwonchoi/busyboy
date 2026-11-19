@@ -1,4 +1,5 @@
 import { PRIMARY_LOCAL_ENVIRONMENT_ID } from "@t3tools/contracts";
+import * as HostProcess from "@t3tools/shared/HostProcess";
 import {
   makeLocalFileTracer,
   makeTraceSink,
@@ -6,7 +7,6 @@ import {
   processServiceInstanceId,
   type SignalExport,
 } from "@t3tools/shared/observability";
-import * as HostProcess from "@t3tools/shared/HostProcess";
 import * as SharedObservability from "@t3tools/shared/observability";
 import * as OtelEnvironment from "@t3tools/shared/otelEnvironment";
 import { releaseChannelOf, releaseResourceAttributes } from "@t3tools/shared/releaseResource";
@@ -20,20 +20,19 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
+import { OtlpExporter, OtlpLogger, OtlpTracer } from "effect/observability";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as PlatformError from "effect/PlatformError";
-import * as References from "effect/References";
 import * as Ref from "effect/Ref";
+import * as References from "effect/References";
 import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
 import * as Semaphore from "effect/Semaphore";
 import * as SynchronizedRef from "effect/SynchronizedRef";
 import * as Tracer from "effect/Tracer";
-import { OtlpExporter, OtlpLogger, OtlpTracer } from "effect/observability";
 
 import desktopPackageJson from "../../package.json" with { type: "json" };
-
 import * as DesktopEnvironment from "./DesktopEnvironment.ts";
 
 const DESKTOP_LOG_FILE_MAX_BYTES = 10 * 1024 * 1024;

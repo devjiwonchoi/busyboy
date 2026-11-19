@@ -1,11 +1,11 @@
 import { threadPullRequestKeyOf } from "@t3tools/client-runtime/thread-pull-requests";
-import { filterComposerPullRequestMatches } from "@t3tools/shared/composerPullRequestMatches";
 import { EnvironmentId, MessageId, ThreadId, type AssistantCitation } from "@t3tools/contracts";
 import {
   collectAssistantCitations,
   expandAssistantCitationsForProvider,
   serializeAssistantCitation,
 } from "@t3tools/shared/assistantCitations";
+import { filterComposerPullRequestMatches } from "@t3tools/shared/composerPullRequestMatches";
 import {
   DEFAULT_RESOLVED_KEYBINDINGS,
   compileResolvedKeybindingsConfig,
@@ -13,6 +13,7 @@ import {
 } from "@t3tools/shared/keybindings";
 import { describe, expect, it } from "vite-plus/test";
 
+import { slashCommandItemsForPromptPosition } from "./components/chat/composerSlashCommandSearch";
 import {
   clampCollapsedComposerCursor,
   collapseExpandedComposerCursor,
@@ -25,9 +26,8 @@ import {
   isPathSuggestionCurrent,
   replaceTextRange,
 } from "./composer-logic";
-import { slashCommandItemsForPromptPosition } from "./components/chat/composerSlashCommandSearch";
-import { carryDisplacedCustomAnswerIntoPrompt } from "./pendingUserInput";
 import { formatTerminalContextReference } from "./lib/terminalContext";
+import { carryDisplacedCustomAnswerIntoPrompt } from "./pendingUserInput";
 
 const terminalReference = formatTerminalContextReference({
   id: "ctx-1",

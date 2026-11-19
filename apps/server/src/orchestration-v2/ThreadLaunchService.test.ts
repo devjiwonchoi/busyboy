@@ -1,16 +1,6 @@
-import * as DocumentText from "../provider/DocumentText.ts";
-import * as Scheduler from "../scheduling/Scheduler.ts";
-import * as WorktreeSetupTracker from "../project/WorktreeSetupTracker.ts";
-import * as ProjectCloneTracker from "../project/ProjectCloneTracker.ts";
-import * as TerminalManager from "../terminal/Manager.ts";
-import * as CheckpointStore from "../checkpointing/CheckpointStore.ts";
-import * as NodeServices from "@effect/platform-node/NodeServices";
-import * as FileSystem from "effect/FileSystem";
-import * as ServerConfig from "../config.ts";
-import { createPendingAttachmentId, resolveAttachmentPath } from "../attachmentStore.ts";
-import * as ThreadMessageIntake from "./ThreadMessageIntake.ts";
-import { assert, it, vi } from "@effect/vitest";
 import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
+import * as NodeServices from "@effect/platform-node/NodeServices";
+import { assert, it, vi } from "@effect/vitest";
 import {
   ChatAttachmentId,
   ComposerContextId,
@@ -32,47 +22,57 @@ import {
   ServerSettingsError,
   VcsProcessExitError,
 } from "@t3tools/contracts";
+import * as IdAllocator from "@t3tools/provider-core/server/IdAllocator";
+import type * as ProviderAdapter from "@t3tools/provider-core/server/ProviderAdapter";
 import * as Cause from "effect/Cause";
-import * as Deferred from "effect/Deferred";
 import * as DateTime from "effect/DateTime";
+import * as Deferred from "effect/Deferred";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Ref from "effect/Ref";
 import * as Result from "effect/Result";
-import * as Stream from "effect/Stream";
 import * as Schema from "effect/Schema";
 import * as SqlClient from "effect/sql/SqlClient";
+import * as Stream from "effect/Stream";
 import * as TestClock from "effect/testing/TestClock";
 
+import { createPendingAttachmentId, resolveAttachmentPath } from "../attachmentStore.ts";
+import * as CheckpointStore from "../checkpointing/CheckpointStore.ts";
+import * as ServerConfig from "../config.ts";
 import * as GitWorkflow from "../git/GitWorkflowService.ts";
+import * as RemoteDelegation from "../peer/RemoteDelegation.ts";
 import * as SqlitePersistence from "../persistence/Sqlite.ts";
-import * as ProjectStore from "./ProjectStore.ts";
+import * as ManagedPolicy from "../policy/ManagedPolicy.ts";
+import * as ManagedProjectFolders from "../project/ManagedProjectFolders.ts";
+import * as ProjectCloneTracker from "../project/ProjectCloneTracker.ts";
 import * as ProjectService from "../project/ProjectService.ts";
 import * as ProjectSetupScriptRunner from "../project/ProjectSetupScriptRunner.ts";
-import * as ManagedProjectFolders from "../project/ManagedProjectFolders.ts";
+import * as WorktreeSetupTracker from "../project/WorktreeSetupTracker.ts";
+import * as DocumentText from "../provider/DocumentText.ts";
 import * as ProviderRegistryMock from "../provider/testUtils/providerRegistryMock.ts";
-import * as ServerSettings from "../serverSettings.ts";
 import * as ScheduledTasks from "../scheduledTasks/ScheduledTaskService.ts";
-import * as ManagedPolicy from "../policy/ManagedPolicy.ts";
+import * as Scheduler from "../scheduling/Scheduler.ts";
 import * as SecretRequests from "../secrets/SecretRequests.ts";
+import * as ServerSettings from "../serverSettings.ts";
+import * as TerminalManager from "../terminal/Manager.ts";
 import * as TextGeneration from "../textGeneration/TextGeneration.ts";
+import * as GitVcsDriver from "../vcs/GitVcsDriver.ts";
 import { ClaudeProviderCapabilitiesV2 } from "./Adapters/ClaudeAdapterV2.ts";
 import { CodexProviderCapabilitiesV2 } from "./Adapters/CodexAdapterV2.ts";
 import * as CommandReceiptStore from "./CommandReceiptStore.ts";
-import * as Orchestrator from "./Orchestrator.ts";
 import * as EffectOutbox from "./EffectOutbox.ts";
-import * as IdAllocator from "@t3tools/provider-core/server/IdAllocator";
+import * as Orchestrator from "./Orchestrator.ts";
+import * as ProjectStore from "./ProjectStore.ts";
 import * as ProviderAdapterRegistry from "./ProviderAdapterRegistry.ts";
-import * as ThreadLaunch from "./ThreadLaunchService.ts";
-import * as GitVcsDriver from "../vcs/GitVcsDriver.ts";
-import * as ThreadManagement from "./ThreadManagementService.ts";
-import * as ThreadTitleRegeneration from "./ThreadTitleRegenerationService.ts";
 import * as ProviderReplayHarness from "./testkit/ProviderReplayHarness.ts";
-import * as RemoteDelegation from "../peer/RemoteDelegation.ts";
-import type * as ProviderAdapter from "@t3tools/provider-core/server/ProviderAdapter";
+import * as ThreadLaunch from "./ThreadLaunchService.ts";
+import * as ThreadManagement from "./ThreadManagementService.ts";
+import * as ThreadMessageIntake from "./ThreadMessageIntake.ts";
+import * as ThreadTitleRegeneration from "./ThreadTitleRegenerationService.ts";
 
 const projectId = ProjectId.make("project:launch-test");
 const otherProjectId = ProjectId.make("project:launch-other");

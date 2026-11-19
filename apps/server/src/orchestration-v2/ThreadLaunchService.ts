@@ -1,7 +1,3 @@
-import * as WorktreeSetupTracker from "../project/WorktreeSetupTracker.ts";
-import * as ProjectCloneTracker from "../project/ProjectCloneTracker.ts";
-import * as TerminalManager from "../terminal/Manager.ts";
-import { resolveProjectSettings } from "@t3tools/shared/projectSettings";
 import {
   CommandId,
   type ChatAttachment,
@@ -22,6 +18,16 @@ import {
   TextGenerationError,
   ThreadId,
 } from "@t3tools/contracts";
+import { makeProviderFailure } from "@t3tools/provider-core/server/failure";
+import * as IdAllocator from "@t3tools/provider-core/server/IdAllocator";
+import { randomUuidV4 } from "@t3tools/provider-core/server/randomUuid";
+import {
+  buildTemporaryWorktreeBranchName,
+  flattenTemporaryWorktreeBranchName,
+  formatGeneratedBranchName,
+  isTemporaryWorktreeBranch,
+} from "@t3tools/shared/git";
+import { resolveProjectSettings } from "@t3tools/shared/projectSettings";
 import * as Cause from "effect/Cause";
 import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
@@ -37,29 +43,23 @@ import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
-import {
-  buildTemporaryWorktreeBranchName,
-  flattenTemporaryWorktreeBranchName,
-  formatGeneratedBranchName,
-  isTemporaryWorktreeBranch,
-} from "@t3tools/shared/git";
 
 import * as CheckpointStore from "../checkpointing/CheckpointStore.ts";
 import * as GitWorkflow from "../git/GitWorkflowService.ts";
 import { parseGitCloneProgressLine } from "../project/gitCloneProgress.ts";
+import * as ManagedProjectFolders from "../project/ManagedProjectFolders.ts";
+import * as ProjectCloneTracker from "../project/ProjectCloneTracker.ts";
 import * as ProjectService from "../project/ProjectService.ts";
 import * as ProjectSetupScriptRunner from "../project/ProjectSetupScriptRunner.ts";
-import * as ManagedProjectFolders from "../project/ManagedProjectFolders.ts";
+import * as WorktreeSetupTracker from "../project/WorktreeSetupTracker.ts";
 import * as ProviderRegistry from "../provider/ProviderRegistry.ts";
 import * as ServerSettings from "../serverSettings.ts";
+import * as TerminalManager from "../terminal/Manager.ts";
 import * as TextGeneration from "../textGeneration/TextGeneration.ts";
 import * as CommandReceiptStore from "./CommandReceiptStore.ts";
-import * as EventSink from "./EventSink.ts";
-import * as IdAllocator from "@t3tools/provider-core/server/IdAllocator";
-import type * as Orchestrator from "./Orchestrator.ts";
-import { makeProviderFailure } from "@t3tools/provider-core/server/failure";
-import { randomUuidV4 } from "@t3tools/provider-core/server/randomUuid";
 import { DispatchModeLimit } from "./DispatchModeLimit.ts";
+import * as EventSink from "./EventSink.ts";
+import type * as Orchestrator from "./Orchestrator.ts";
 import * as ThreadManagement from "./ThreadManagementService.ts";
 
 // The agent waits for its branch name; a rate-limited provider would hold it for minutes.

@@ -1,5 +1,4 @@
-import * as Dialog from "../../components/ui/Dialog";
-import { errorDisplayMessage } from "@t3tools/client-runtime/errors";
+import { useAtomValue } from "@effect/atom-react";
 import {
   CommonActions,
   useRoute,
@@ -7,39 +6,39 @@ import {
   usePreventRemoveContext,
   type StaticScreenProps,
 } from "@react-navigation/native";
-import { msg, T, useGT } from "gt-react-native";
-import { useEffect, useState } from "react";
-import { View } from "react-native";
-import { useAtomValue } from "@effect/atom-react";
+import { errorDisplayMessage } from "@t3tools/client-runtime/errors";
 import {
   isAtomCommandInterrupted,
   runAtomCommand,
   squashAtomCommandFailure,
 } from "@t3tools/client-runtime/state/runtime";
 import { AsyncResult, Atom } from "effect/reactivity";
+import { msg, T, useGT } from "gt-react-native";
+import { useEffect, useState } from "react";
+import { View } from "react-native";
+
+import { AppBar } from "../../components/ui/AppBar";
 import { AppText as Text } from "../../components/ui/AppText";
+import * as Dialog from "../../components/ui/Dialog";
 import { m } from "../../i18n/messages";
-import { useProjects } from "../../state/entities";
-import { appAtomRegistry } from "../../state/atom-registry";
 import { rootNavigationRef } from "../../lib/rootNavigation";
-import { threadSelectionDeferral } from "../layout/deferred-navigation";
-import { useWorkspaceState } from "../../state/workspace";
+import { appAtomRegistry } from "../../state/atom-registry";
+import { useProjects } from "../../state/entities";
 import { vcsEnvironment } from "../../state/vcs";
+import { useWorkspaceState } from "../../state/workspace";
+import { threadSelectionDeferral } from "../layout/deferred-navigation";
+import { useWorkspaceBackNavigation } from "../layout/workspace/useAndroidWorkspaceNavigation";
 import { checkoutNewTaskBranch } from "./checkout-new-task-branch";
-import { resolveNewTaskBranchWorktreePath } from "./new-task-context-presentation";
 import {
   type BranchCheckoutResult,
   branchCheckoutRequestKey,
   makeNewTaskBranchCheckouts,
 } from "./new-task-branch-checkout";
+import { resolveNewTaskBranchWorktreePath } from "./new-task-context-presentation";
 import { liveNewTaskFlowKeys, newTaskFlowKey } from "./new-task-flow-state";
-import { AppBar } from "../../components/ui/AppBar";
-import { useWorkspaceBackNavigation } from "../layout/workspace/useAndroidWorkspaceNavigation";
-
-import { ThreadScreenFallback } from "./ThreadScreenHost";
 import { NewTaskDraftScreen } from "./NewTaskDraftScreen";
-
 import type { NewTaskDraftRouteParams } from "./thread-route-state";
+import { ThreadScreenFallback } from "./ThreadScreenHost";
 export type { NewTaskDraftRouteParams } from "./thread-route-state";
 
 const branchCheckouts = makeNewTaskBranchCheckouts({

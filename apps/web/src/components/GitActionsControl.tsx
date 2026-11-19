@@ -1,20 +1,24 @@
-import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
-import { sourceControlInstallHintText } from "@t3tools/client-runtime/contract-labels";
-import { msg, T, useGT, useMessages, Var } from "gt-react";
-import { m, type MessageResolver } from "../i18n/messages";
-import { changeRequestTermKind } from "./pullRequest/changeRequestTerm";
-import { ThreadDetailsControl } from "./chat/ThreadDetailsControl";
+import { Radio as RadioPrimitive } from "@base-ui/react/radio";
 import { useAtomMount, useAtomValue } from "@effect/atom-react";
+import { sourceControlInstallHintText } from "@t3tools/client-runtime/contract-labels";
+import { formatDiffCount } from "@t3tools/client-runtime/diff-count";
+import { scopeProjectRef } from "@t3tools/client-runtime/environment";
+import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
+import {
+  isSourceControlProviderOffered,
+  type OfferedSourceControlProviders,
+} from "@t3tools/client-runtime/operations/projects";
+import { sourceControlClients } from "@t3tools/client-runtime/source-control-clients";
+import {
+  isAtomCommandInterrupted,
+  squashAtomCommandFailure,
+} from "@t3tools/client-runtime/state/runtime";
 import {
   AuthOrchestrationOperateScope,
   AuthSourceControlWriteScope,
   SourceControlProviderKind,
   type ScopedThreadRef,
 } from "@t3tools/contracts";
-import {
-  isAtomCommandInterrupted,
-  squashAtomCommandFailure,
-} from "@t3tools/client-runtime/state/runtime";
 import type {
   GitRunStackedActionResult,
   GitStackedAction,
@@ -24,12 +28,10 @@ import type {
   SourceControlRepositoryVisibility,
   VcsStatusResult,
 } from "@t3tools/contracts";
+import { resolvePathLinkTarget } from "@t3tools/shared/fileLinks";
 import { useNavigate } from "@tanstack/react-router";
 import * as Option from "effect/Option";
-import { useEffect, useEffectEvent, useId, useRef, useState } from "react";
-import { useDeadlinePassed } from "../hooks/useDeadline";
-import { useNowSecond } from "../hooks/useNowSecond";
-import { flushSync } from "react-dom";
+import { msg, T, useGT, useMessages, Var } from "gt-react";
 import {
   CheckIcon,
   ChevronDownIcon,
@@ -42,11 +44,73 @@ import {
   LockIcon,
   GlobeIcon,
 } from "lucide-react";
-import { Radio as RadioPrimitive } from "@base-ui/react/radio";
+import { useEffect, useEffectEvent, useId, useRef, useState } from "react";
+import { flushSync } from "react-dom";
+
+import { useOpenLink } from "~/browser/useOpenLink";
+import { Button } from "~/components/ui/button";
+import { Checkbox } from "~/components/ui/checkbox";
+import {
+  Dialog,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogPanel,
+  DialogPopup,
+  DialogTitle,
+} from "~/components/ui/dialog";
+import { Input } from "~/components/ui/input";
+import { Menu, MenuItem, MenuItemLabel, MenuPopup, MenuTrigger } from "~/components/ui/menu";
+import { Popover, PopoverPopup, PopoverTrigger } from "~/components/ui/popover";
 import { RadioGroup } from "~/components/ui/radio-group";
+import { ScrollArea } from "~/components/ui/scroll-area";
 import { Spinner } from "~/components/ui/spinner";
+import { Textarea } from "~/components/ui/textarea";
+import { stackedThreadToast, toastManager } from "~/components/ui/toast";
 import { Toggle, ToggleGroup } from "~/components/ui/toggle-group";
+import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
+import { type DraftId, useComposerDraftStore } from "~/composerDraftStore";
+import {
+  selectThreadBranchBaseRef,
+  useDiffPanelSessionStore,
+  useDiffPanelStore,
+} from "~/diffPanelStore";
+import { useOpenInPreferredEditor } from "~/editorPreferences";
+import { useClientSettings } from "~/hooks/useSettings";
 import { cn } from "~/lib/utils";
+import { randomUUID } from "~/lib/utils";
+import { getSourceControlPresentation, sourceControlIcon } from "~/sourceControlPresentation";
+import { useQuietThreadProjection, useQuietThreadShell } from "~/state/entities";
+import { useFilesystemReadAccess } from "~/state/filesystem";
+import { useProjectClone } from "~/state/projectClones";
+import { useEnvironmentQuery } from "~/state/query";
+import { reviewEnvironment } from "~/state/review";
+import { revisionedQuery } from "~/state/revisionedQuery";
+import { serverEnvironment } from "~/state/server";
+import { readEnvironmentScope, useEnvironmentScope } from "~/state/session";
+import { sourceControlEnvironment } from "~/state/sourceControl";
+import { threadEnvironment } from "~/state/threads";
+import { useAtomCommand } from "~/state/use-atom-command";
+import { vcsActionManager, vcsEnvironment, vcsStatusRevalidation } from "~/state/vcs";
+
+import { useDeadlinePassed } from "../hooks/useDeadline";
+import { useNowSecond } from "../hooks/useNowSecond";
+import { m, type MessageResolver } from "../i18n/messages";
+import {
+  useGitStackedAction,
+  useSourceControlActionRunning,
+  useSourceControlPublishRepositoryAction,
+  useVcsInitAction,
+  useVcsPullAction,
+} from "../state/sourceControlActions";
+import { ThreadDetailsControl } from "./chat/ThreadDetailsControl";
+import {
+  THREAD_DETAILS_PANEL_CHEVRON_CLASS,
+  THREAD_DETAILS_PANEL_ICON_CLASS,
+  THREAD_DETAILS_PANEL_LABEL_CLASS,
+  THREAD_DETAILS_PANEL_SPLIT_GROUP_CLASS,
+  THREAD_DETAILS_PANEL_SPLIT_SEPARATOR_CLASS,
+} from "./chat/threadDetailsPanelStyles";
 import {
   buildMenuItems,
   formatGitActionElapsed,
@@ -69,72 +133,10 @@ import {
   resolveQuickAction,
   resolveThreadBranchUpdate,
 } from "./GitActionsControl.logic";
-import { WizardPopup, WizardHeader, WizardSteps, WizardPanel, WizardFooter } from "./ui/wizard";
-import { StartTruncatedPath } from "./StartTruncatedPath";
-import { Button } from "~/components/ui/button";
-import { Checkbox } from "~/components/ui/checkbox";
-import {
-  Dialog,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogPanel,
-  DialogPopup,
-  DialogTitle,
-} from "~/components/ui/dialog";
-import { Input } from "~/components/ui/input";
-import { Menu, MenuItem, MenuItemLabel, MenuPopup, MenuTrigger } from "~/components/ui/menu";
-import { Popover, PopoverPopup, PopoverTrigger } from "~/components/ui/popover";
-import { ScrollArea } from "~/components/ui/scroll-area";
-import { Textarea } from "~/components/ui/textarea";
-import { stackedThreadToast, toastManager } from "~/components/ui/toast";
-import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
-import { useOpenInPreferredEditor } from "~/editorPreferences";
-import {
-  useGitStackedAction,
-  useSourceControlActionRunning,
-  useSourceControlPublishRepositoryAction,
-  useVcsInitAction,
-  useVcsPullAction,
-} from "../state/sourceControlActions";
-import { useQuietThreadProjection, useQuietThreadShell } from "~/state/entities";
-import { useProjectClone } from "~/state/projectClones";
-import { readEnvironmentScope, useEnvironmentScope } from "~/state/session";
-import { useEnvironmentQuery } from "~/state/query";
-import { useFilesystemReadAccess } from "~/state/filesystem";
-import { reviewEnvironment } from "~/state/review";
-import { revisionedQuery } from "~/state/revisionedQuery";
-import {
-  selectThreadBranchBaseRef,
-  useDiffPanelSessionStore,
-  useDiffPanelStore,
-} from "~/diffPanelStore";
-import { useClientSettings } from "~/hooks/useSettings";
-import { serverEnvironment } from "~/state/server";
-import { sourceControlEnvironment } from "~/state/sourceControl";
-import { threadEnvironment } from "~/state/threads";
-import { useAtomCommand } from "~/state/use-atom-command";
-import { vcsActionManager, vcsEnvironment, vcsStatusRevalidation } from "~/state/vcs";
-import { randomUUID } from "~/lib/utils";
-import { resolvePathLinkTarget } from "@t3tools/shared/fileLinks";
-import { type DraftId, useComposerDraftStore } from "~/composerDraftStore";
-import {
-  THREAD_DETAILS_PANEL_CHEVRON_CLASS,
-  THREAD_DETAILS_PANEL_ICON_CLASS,
-  THREAD_DETAILS_PANEL_LABEL_CLASS,
-  THREAD_DETAILS_PANEL_SPLIT_GROUP_CLASS,
-  THREAD_DETAILS_PANEL_SPLIT_SEPARATOR_CLASS,
-} from "./chat/threadDetailsPanelStyles";
-import { getSourceControlPresentation, sourceControlIcon } from "~/sourceControlPresentation";
-import {
-  isSourceControlProviderOffered,
-  type OfferedSourceControlProviders,
-} from "@t3tools/client-runtime/operations/projects";
-import { sourceControlClients } from "@t3tools/client-runtime/source-control-clients";
-import { scopeProjectRef } from "@t3tools/client-runtime/environment";
-import { formatDiffCount } from "@t3tools/client-runtime/diff-count";
 import { ChangeBreakdownGrid } from "./pullRequest/ChangeBreakdownGrid";
-import { useOpenLink } from "~/browser/useOpenLink";
+import { changeRequestTermKind } from "./pullRequest/changeRequestTerm";
+import { StartTruncatedPath } from "./StartTruncatedPath";
+import { WizardPopup, WizardHeader, WizardSteps, WizardPanel, WizardFooter } from "./ui/wizard";
 
 interface GitActionsControlProps {
   gitCwd: string | null;

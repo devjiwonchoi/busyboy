@@ -11,9 +11,9 @@ import {
   deriveMenuVerticalPlacement,
 } from "../../lib/menu-placement";
 import { WindowHingeContext } from "../../native/window-hinge-context";
+import { MenuPopup } from "./MenuPopup";
 import { OverlayPortal } from "./OverlayPortal";
 import { useAndroidControlSizing } from "./useAndroidControlSizing";
-import { MenuPopup } from "./MenuPopup";
 
 const SCREEN_MARGIN = 12;
 const ANCHOR_GAP = 6;

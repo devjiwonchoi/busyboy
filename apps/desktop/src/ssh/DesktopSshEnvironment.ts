@@ -23,16 +23,15 @@ import type * as Digest from "effect/crypto/Digest";
 import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
-import * as Layer from "effect/Layer";
-import * as Path from "effect/Path";
-import * as Schema from "effect/Schema";
 import * as HttpClient from "effect/http/HttpClient";
-import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
+import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as Path from "effect/Path";
+import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
+import * as Schema from "effect/Schema";
+
 import serverPackageJson from "../../../server/package.json" with { type: "json" };
-
 import type * as DesktopEnvironment from "../app/DesktopEnvironment.ts";
-
 import * as DesktopSshPasswordPrompts from "./DesktopSshPasswordPrompts.ts";
 
 export type DesktopSshEnvironmentRuntimeServices =

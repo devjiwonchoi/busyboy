@@ -1,7 +1,7 @@
-import { MOBILE_SHAPE } from "../../lib/designTokens";
 import type { ReactNode } from "react";
 import { Platform, View } from "react-native";
 
+import { MOBILE_SHAPE } from "../../lib/designTokens";
 import { AppText as Text } from "./AppText";
 
 export function ListSection(props: {

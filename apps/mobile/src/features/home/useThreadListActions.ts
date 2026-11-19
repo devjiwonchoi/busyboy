@@ -1,47 +1,47 @@
 import { errorDisplayMessage } from "@t3tools/client-runtime/errors";
-import type { ThreadMoveDestination } from "../threads/threadOrder";
 import type { EnvironmentThreadShell } from "@t3tools/client-runtime/state/shell";
-import * as ThreadUndo from "@t3tools/client-runtime/state/thread-undo";
-import { showThreadUndoNotice } from "./thread-undo-notice";
 import { canSnooze } from "@t3tools/client-runtime/state/thread-settled";
+import { pinOrderKeyBetween } from "@t3tools/client-runtime/state/thread-sort";
+import * as ThreadUndo from "@t3tools/client-runtime/state/thread-undo";
 import { AuthOrchestrationOperateScope } from "@t3tools/contracts";
 import * as Cause from "effect/Cause";
 import * as Haptics from "expo-haptics";
 import { msg } from "gt-react-native";
 import { useRef } from "react";
 
-import { withThreadDismissal } from "./thread-dismissal";
 import * as Dialog from "../../components/ui/Dialog";
 import { m } from "../../i18n/messages";
 import { scopedThreadKey } from "../../lib/scopedEntities";
-import { refreshArchivedThreadsForEnvironment } from "../archive/useArchivedThreadSnapshots";
-import { pinOrderKeyBetween } from "@t3tools/client-runtime/state/thread-sort";
 import { appAtomRegistry } from "../../state/atom-registry";
-import { environmentServerConfigsAtom } from "../../state/server";
 import { connectedEnvironmentIdsAtom } from "../../state/presentation";
+import { environmentServerConfigsAtom } from "../../state/server";
 import { readEnvironmentScope } from "../../state/session";
-import { clearComposerDraft } from "../../state/use-composer-drafts";
-import {
-  environmentThreadShells,
-  steadyNavigationThreadShellsAtom,
-  steadyShellsHoldingAtom,
-  threadEnvironment,
-} from "../../state/threads";
-import { queuedThreadKeysAtom } from "../../state/use-thread-outbox";
-import { useAtomCommand } from "../../state/use-atom-command";
 import {
   beginPendingThreadOrder,
   getPendingThreadOrder,
   threadDropBusyAtom,
 } from "../../state/thread-order";
 import {
+  environmentThreadShells,
+  steadyNavigationThreadShellsAtom,
+  steadyShellsHoldingAtom,
+  threadEnvironment,
+} from "../../state/threads";
+import { useAtomCommand } from "../../state/use-atom-command";
+import { clearComposerDraft } from "../../state/use-composer-drafts";
+import { queuedThreadKeysAtom } from "../../state/use-thread-outbox";
+import { refreshArchivedThreadsForEnvironment } from "../archive/useArchivedThreadSnapshots";
+import { resolveThreadTitleRename } from "../threads/thread-title-rename";
+import { getThreadListV2OrderedSection } from "../threads/threadListV2";
+import type { ThreadMoveDestination } from "../threads/threadOrder";
+import {
   createPendingThreadOrder,
   createThreadMovePlanner,
   threadDropLifecycle,
 } from "../threads/threadOrder";
-import { getThreadListV2OrderedSection } from "../threads/threadListV2";
+import { withThreadDismissal } from "./thread-dismissal";
+import { showThreadUndoNotice } from "./thread-undo-notice";
 import { threadCanArchive } from "./threadArchive";
-import { resolveThreadTitleRename } from "../threads/thread-title-rename";
 
 function environmentConfigLoaded(environmentId: EnvironmentThreadShell["environmentId"]) {
   return appAtomRegistry.get(environmentServerConfigsAtom).has(environmentId);

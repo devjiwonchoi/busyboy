@@ -1,10 +1,10 @@
 import { Pressable, View } from "react-native";
 
 import type { useMediaActions } from "../state/mediaActions";
-import { SymbolView } from "./ui/AppSymbol";
-import { AppText } from "./ui/AppText";
 import { MediaActionsMenu } from "./MediaActionsMenu";
 import { MediaSourceCaption } from "./MediaSourceCaption";
+import { SymbolView } from "./ui/AppSymbol";
+import { AppText } from "./ui/AppText";
 
 /** The bar over a full-screen image or video: always dark, whatever the app theme. */
 export function MediaPreviewHeader(props: {

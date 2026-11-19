@@ -5,23 +5,23 @@ import * as HostProcess from "@t3tools/shared/HostProcess";
 import * as Deferred from "effect/Deferred";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
 import * as Fiber from "effect/Fiber";
+import * as FileSystem from "effect/FileSystem";
+import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
+import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Stream from "effect/Stream";
 import * as TestClock from "effect/testing/TestClock";
-import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http";
-import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 
 import packageJson from "../../package.json" with { type: "json" };
 import * as ServerConfig from "../config.ts";
 import * as DesktopAppUpdate from "../desktopUpdate/DesktopAppUpdate.ts";
 import * as ManagedPolicy from "../policy/ManagedPolicy.ts";
 import * as ProcessRunner from "../processRunner.ts";
+import * as ServerSelfUpdate from "./selfUpdate.ts";
 import * as ServiceLauncherClient from "./serviceLauncherClient.ts";
 import { SERVICE_LAUNCHER_PROTOCOL } from "./serviceProtocol.ts";
-import * as ServerSelfUpdate from "./selfUpdate.ts";
 
 interface HarnessOptions {
   readonly mode?: "web" | "desktop";

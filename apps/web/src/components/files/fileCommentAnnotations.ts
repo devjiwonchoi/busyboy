@@ -1,5 +1,6 @@
 import type { LineAnnotation, SelectedLineRange } from "@pierre/diffs";
 import { msg } from "gt-react";
+
 import { m, type MessageResolver } from "~/i18n/messages";
 
 export interface FileCommentAnnotationEntry {

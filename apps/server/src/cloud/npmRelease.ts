@@ -9,11 +9,11 @@ import * as Cache from "effect/Cache";
 import * as Context from "effect/Context";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import { FetchHttpClient, HttpClient } from "effect/http";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as Semaphore from "effect/Semaphore";
-import { FetchHttpClient, HttpClient } from "effect/http";
 
 import * as ProcessRunner from "../processRunner.ts";
 

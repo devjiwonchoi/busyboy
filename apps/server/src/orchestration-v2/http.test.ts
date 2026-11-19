@@ -1,3 +1,5 @@
+import * as NodeServices from "@effect/platform-node/NodeServices";
+import { expect, it } from "@effect/vitest";
 import {
   AuthSessionId,
   type AuthEnvironmentScope,
@@ -15,34 +17,32 @@ import {
   PROVIDER_SEND_TURN_MAX_FILE_BYTES,
   ThreadId,
 } from "@t3tools/contracts";
-import { expect, it } from "@effect/vitest";
 import { threadTranscriptHeader } from "@t3tools/shared/threadTranscript";
-import * as Effect from "effect/Effect";
 import * as Context from "effect/Context";
 import * as DateTime from "effect/DateTime";
+import * as Effect from "effect/Effect";
+import * as HttpApi from "effect/http-api/HttpApi";
+import * as HttpApiBuilder from "effect/http-api/HttpApiBuilder";
+import * as Etag from "effect/http/Etag";
+import * as HttpPlatform from "effect/http/HttpPlatform";
+import * as HttpRouter from "effect/http/HttpRouter";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
 import * as SqlClient from "effect/sql/SqlClient";
 import * as Statement from "effect/sql/Statement";
-import * as HttpRouter from "effect/http/HttpRouter";
-import * as HttpPlatform from "effect/http/HttpPlatform";
-import * as Etag from "effect/http/Etag";
-import * as NodeServices from "@effect/platform-node/NodeServices";
-import * as HttpApi from "effect/http-api/HttpApi";
-import * as HttpApiBuilder from "effect/http-api/HttpApiBuilder";
-import * as ServerEnvironment from "../environment/ServerEnvironment.ts";
-import * as SqlitePersistence from "../persistence/Sqlite.ts";
-import * as ServerSettings from "../serverSettings.ts";
 
+import * as ServerEnvironment from "../environment/ServerEnvironment.ts";
 import * as OrchestrationEventStore from "../persistence/OrchestrationEventStore.ts";
+import * as SqlitePersistence from "../persistence/Sqlite.ts";
 import { ProjectEnrichmentService } from "../project/ProjectEnrichmentService.ts";
-import * as OrchestrationHttp from "./http.ts";
-import { EventSinkV2 } from "./EventSink.ts";
-import * as ProjectStore from "./ProjectStore.ts";
+import * as ServerSettings from "../serverSettings.ts";
 import * as CommandReceiptStore from "./CommandReceiptStore.ts";
-import * as ThreadManagementService from "./ThreadManagementService.ts";
+import { EventSinkV2 } from "./EventSink.ts";
+import * as OrchestrationHttp from "./http.ts";
+import * as ProjectStore from "./ProjectStore.ts";
 import * as ProviderAdapterRegistry from "./ProviderAdapterRegistry.ts";
 import * as ProviderReplayHarness from "./testkit/ProviderReplayHarness.ts";
+import * as ThreadManagementService from "./ThreadManagementService.ts";
 
 class TranscriptTestApi extends HttpApi.make("environment").add(
   EnvironmentHttpApi.groups.orchestration,

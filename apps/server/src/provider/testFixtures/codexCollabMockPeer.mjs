@@ -1,6 +1,6 @@
 import * as NodeFS from "node:fs";
-import * as NodeReadline from "node:readline";
 import * as NodePath from "node:path";
+import * as NodeReadline from "node:readline";
 import * as NodeURL from "node:url";
 
 const here = NodePath.dirname(NodeURL.fileURLToPath(import.meta.url));

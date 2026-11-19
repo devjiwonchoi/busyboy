@@ -7,6 +7,7 @@ import {
   respondToConfirmDialog,
   subscribeConfirmDialogHost,
 } from "../confirmDialog";
+import type { MessageResolver } from "../i18n/messages";
 import {
   AlertDialog,
   AlertDialogClose,
@@ -18,7 +19,6 @@ import {
   AlertDialogTitle,
 } from "./ui/alert-dialog";
 import { Button } from "./ui/button";
-import type { MessageResolver } from "../i18n/messages";
 
 type ConfirmationCopy = {
   readonly title: string;

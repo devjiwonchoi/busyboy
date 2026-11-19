@@ -1,14 +1,15 @@
 import * as NodeHttpServer from "@effect/platform-node/NodeHttpServer";
 import { it } from "@effect/vitest";
-import { expect } from "vite-plus/test";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import * as Schema from "effect/Schema";
-import { HttpRouter, HttpServer, HttpServerRequest, HttpServerResponse } from "effect/http";
 import { SpeechStreamEvent, DEFAULT_SPEECH_TRANSCRIPTION_OPTIONS } from "@t3tools/contracts";
+import * as Effect from "effect/Effect";
+import { HttpRouter, HttpServer, HttpServerRequest, HttpServerResponse } from "effect/http";
+import * as Layer from "effect/Layer";
+import type * as NetAddress from "effect/net/NetAddress";
+import * as Schema from "effect/Schema";
+import { expect } from "vite-plus/test";
+
 import type { SpeechService, SpeechStream } from "./SpeechService.ts";
 import { runSpeechSocket } from "./stream.ts";
-import type * as NetAddress from "effect/net/NetAddress";
 
 const decodeEvent = Schema.decodeUnknownSync(Schema.fromJsonString(SpeechStreamEvent));
 

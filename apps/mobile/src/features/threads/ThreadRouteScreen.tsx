@@ -1,29 +1,22 @@
-import * as Dialog from "../../components/ui/Dialog";
-import { errorDisplayMessage } from "@t3tools/client-runtime/errors";
-import { useRememberThreadProject } from "./useRememberThreadProject";
-import { useOpenPullRequest } from "../../native/useOpenPullRequest";
-import { makeTurnCommandMetadata } from "../../lib/commandMetadata";
-import { buildProjectThreadStartTurnInput } from "../../lib/projectThreadStartTurn";
-import { useWorktreeSetup } from "./use-worktree-setup";
-import { worktreeSetupAgentStarted } from "@t3tools/client-runtime/worktree-setup";
-import { AppBar } from "../../components/ui/AppBar";
 import {
   StackActions,
   useNavigation,
   useRoute,
   type StaticScreenProps,
 } from "@react-navigation/native";
+import { scopeThreadRef } from "@t3tools/client-runtime/environment";
+import { errorDisplayMessage } from "@t3tools/client-runtime/errors";
 import {
-  createContext,
-  use,
-  useEffect,
-  useEffectEvent,
-  useRef,
-  useState,
-  type ReactNode,
-} from "react";
-import { useGT, useMessages } from "gt-react-native";
-import * as Option from "effect/Option";
+  isAtomCommandInterrupted,
+  squashAtomCommandFailure,
+} from "@t3tools/client-runtime/state/runtime";
+import { resolveMergeBackTargetThreadId } from "@t3tools/client-runtime/state/thread-relationships";
+import { resolveLatestMergeBackRun } from "@t3tools/client-runtime/state/thread-workflows";
+import {
+  EMPTY_ENVIRONMENT_THREAD_STATE,
+  threadErrorText,
+} from "@t3tools/client-runtime/state/threads";
+import { worktreeSetupAgentStarted } from "@t3tools/client-runtime/worktree-setup";
 import {
   AuthOrchestrationOperateScope,
   AuthTerminalOperateScope,
@@ -41,102 +34,110 @@ import {
   projectScriptTerminalInput,
   resolveProjectScripts,
 } from "@t3tools/shared/projectScripts";
-import { ScreenScrollView as ScrollView } from "../../components/ui/ScreenScrollView";
-import { useConnectionsReady } from "../../state/workspace";
-import { useEnvironmentShellReadiness } from "../../state/shell";
-import { restoredNewTaskDraftKey } from "../../state/new-task-draft-key";
-import { clearPendingThreadCreationOutcome } from "../../state/pending-thread-creation";
-import { recoverFailedThreadDraft } from "../../state/recover-failed-thread-draft";
-import { useEnvironmentQuery } from "../../state/query";
-import { dismissGitActionResult, useGitActionProgress } from "../../state/use-vcs-action-state";
-import { vcsEnvironment } from "../../state/vcs";
-import { EmptyState } from "../../components/ui/EmptyState";
+import * as Option from "effect/Option";
+import { useGT, useMessages } from "gt-react-native";
+import {
+  createContext,
+  use,
+  useEffect,
+  useEffectEvent,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
+
 import { LoadingScreen } from "../../components/LoadingScreen";
+import { AppBar } from "../../components/ui/AppBar";
+import * as Dialog from "../../components/ui/Dialog";
+import { EmptyState } from "../../components/ui/EmptyState";
+import { ScreenScrollView as ScrollView } from "../../components/ui/ScreenScrollView";
+import { makeTurnCommandMetadata } from "../../lib/commandMetadata";
+import { buildProjectThreadStartTurnInput } from "../../lib/projectThreadStartTurn";
 import { scopedThreadKey } from "../../lib/scopedEntities";
 import { useDelayedStatus } from "../../lib/useDelayedStatus";
-import { connectionRetryLabel } from "./floating-working-status";
-import { scopeThreadRef } from "@t3tools/client-runtime/environment";
-import { useThreadShell } from "../../state/entities";
+import { uuidv4 } from "../../lib/uuid";
 import { NATIVE_LIQUID_GLASS_SUPPORTED } from "../../native/native-glass";
-import { connectionTone } from "../connection/connectionTone";
-import { runtimeConnectionErrorText } from "../connection/environmentStatusText";
+import { useOpenPullRequest } from "../../native/useOpenPullRequest";
+import { useThreadShell } from "../../state/entities";
+import { useProjects } from "../../state/entities";
+import { restoredNewTaskDraftKey } from "../../state/new-task-draft-key";
+import { clearPendingThreadCreationOutcome } from "../../state/pending-thread-creation";
+import { useEnvironmentQuery } from "../../state/query";
+import { recoverFailedThreadDraft } from "../../state/recover-failed-thread-draft";
+import { readEnvironmentScope, useEnvironmentScope } from "../../state/session";
+import { useEnvironmentShellReadiness } from "../../state/shell";
+import { threadEnvironment } from "../../state/threads";
+import { useAtomCommand } from "../../state/use-atom-command";
 import {
   useRemoteConnections,
   useRemoteConnectionStatus,
   useRemoteEnvironmentRuntime,
 } from "../../state/use-remote-environment-registry";
-import { useKnownTerminalSessions } from "../../state/use-terminal-session";
-import { uuidv4 } from "../../lib/uuid";
-import {
-  isAtomCommandInterrupted,
-  squashAtomCommandFailure,
-} from "@t3tools/client-runtime/state/runtime";
-import { readEnvironmentScope, useEnvironmentScope } from "../../state/session";
-import { useSelectedThreadDetailState } from "../../state/use-thread-detail";
-import { useThreadSelection } from "../../state/use-thread-selection";
-import { GitActionProgressOverlay } from "./GitActionProgressOverlay";
-import {
-  buildTerminalMenuSessions,
-  nextOpenTerminalId,
-  resolveProjectScriptTerminalId,
-} from "../terminal/terminalMenu";
-import {
-  resolvePreferredThreadWorktreePath,
-  stagePendingTerminalLaunch,
-} from "../terminal/terminalLaunchContext";
-import type { ThreadDetailScreenProps } from "./ThreadDetailScreen";
-import { ThreadScreenBinding, ThreadScreenFallback, ThreadScreenHost } from "./ThreadScreenHost";
-import { draftRouteIdentity } from "./thread-route-state";
-import { NewTaskDraftRouteScreen, type NewTaskDraftRouteParams } from "./NewTaskDraftRouteScreen";
-import { GitOverviewSheet } from "./git/GitOverviewSheet";
-import { useAtomCommand } from "../../state/use-atom-command";
 import { useSelectedThreadGitActions } from "../../state/use-selected-thread-git-actions";
 import { useSelectedThreadGitState } from "../../state/use-selected-thread-git-state";
 import { useSelectedThreadRequests } from "../../state/use-selected-thread-requests";
 import { useSelectedThreadWorktree } from "../../state/use-selected-thread-worktree";
+import { useKnownTerminalSessions } from "../../state/use-terminal-session";
 import { useThreadComposerState } from "../../state/use-thread-composer-state";
-import { resolveMergeBackTargetThreadId } from "@t3tools/client-runtime/state/thread-relationships";
-import { resolveLatestMergeBackRun } from "@t3tools/client-runtime/state/thread-workflows";
-import { threadEnvironment } from "../../state/threads";
-import {
-  EMPTY_ENVIRONMENT_THREAD_STATE,
-  threadErrorText,
-} from "@t3tools/client-runtime/state/threads";
-import { useProjects } from "../../state/entities";
-import {
-  projectThreadContentPresentation,
-  threadSyncStatusLabel,
-} from "./threadContentPresentation";
+import { useSelectedThreadDetailState } from "../../state/use-thread-detail";
+import { useThreadSelection } from "../../state/use-thread-selection";
+import { dismissGitActionResult, useGitActionProgress } from "../../state/use-vcs-action-state";
+import { vcsEnvironment } from "../../state/vcs";
+import { useConnectionsReady } from "../../state/workspace";
+import { connectionTone } from "../connection/connectionTone";
+import { runtimeConnectionErrorText } from "../connection/environmentStatusText";
+import { ThreadFileNavigatorPane } from "../files/thread-file-navigator-pane";
 import {
   Inspector,
   useAdaptiveWorkspaceLayout,
   useWorkspacePaneState,
 } from "../layout/AdaptiveWorkspaceLayout";
-import { ThreadFileNavigatorPane } from "../files/thread-file-navigator-pane";
-import { InspectorSheetContext } from "../layout/workspace-inspector-sheet";
 import type { InspectorContent } from "../layout/inspector-panes";
-import {
-  threadDetailErrorIsCurrent,
-  threadRouteIsHydrating,
-  threadRouteOpensDraft,
-} from "./thread-route-hydration";
-import { ThreadHeader } from "./ThreadHeader";
-import { resumeThread } from "./resume-thread";
+import { InspectorSheetContext } from "../layout/workspace-inspector-sheet";
 import {
   useAndroidWorkspaceBack,
   useWorkspaceBackNavigation,
 } from "../layout/workspace/useAndroidWorkspaceNavigation";
+import { useSelectWorkspaceDetail } from "../layout/workspace/useSelectWorkspaceDetail";
 import { openSettings } from "../settings/settings-navigation";
+import {
+  resolvePreferredThreadWorktreePath,
+  stagePendingTerminalLaunch,
+} from "../terminal/terminalLaunchContext";
+import {
+  buildTerminalMenuSessions,
+  nextOpenTerminalId,
+  resolveProjectScriptTerminalId,
+} from "../terminal/terminalMenu";
+import { connectionRetryLabel } from "./floating-working-status";
+import { GitOverviewSheet } from "./git/GitOverviewSheet";
+import { GitActionProgressOverlay } from "./GitActionProgressOverlay";
+import { NewTaskDraftRouteScreen, type NewTaskDraftRouteParams } from "./NewTaskDraftRouteScreen";
+import { resumeThread } from "./resume-thread";
+import type { ThreadInspectorMode, ThreadInspectorTarget } from "./thread-inspector-navigation";
 import {
   InspectorContentScope,
   ThreadInspectorHeader,
   ThreadInspectorPreview,
   type ThreadInspectorPresentation,
 } from "./thread-inspector-preview";
+import {
+  threadDetailErrorIsCurrent,
+  threadRouteIsHydrating,
+  threadRouteOpensDraft,
+} from "./thread-route-hydration";
+import { draftRouteIdentity } from "./thread-route-state";
+import {
+  projectThreadContentPresentation,
+  threadSyncStatusLabel,
+} from "./threadContentPresentation";
+import type { ThreadDetailScreenProps } from "./ThreadDetailScreen";
+import { ThreadHeader } from "./ThreadHeader";
+import { ThreadScreenBinding, ThreadScreenFallback, ThreadScreenHost } from "./ThreadScreenHost";
+import { useWorktreeSetup } from "./use-worktree-setup";
+import { useRememberThreadProject } from "./useRememberThreadProject";
 import { useStartSideChat } from "./useStartSideChat";
 import { useThreadStatusAnnouncements } from "./useThreadStatusAnnouncements";
-import type { ThreadInspectorMode, ThreadInspectorTarget } from "./thread-inspector-navigation";
-import { useSelectWorkspaceDetail } from "../layout/workspace/useSelectWorkspaceDetail";
 
 function firstRouteParam(value: string | string[] | undefined): string | null {
   const first = Array.isArray(value) ? value[0] : value;

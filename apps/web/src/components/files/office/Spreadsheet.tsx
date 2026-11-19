@@ -1,8 +1,3 @@
-import * as Schema from "effect/Schema";
-import { observeResize } from "~/lib/observeResize";
-import { msg, useGT } from "gt-react";
-import { useEffect, useRef, useState } from "react";
-import { m } from "~/i18n/messages";
 import {
   cellAtPoint,
   normalizeRange,
@@ -15,10 +10,16 @@ import {
   type Selection,
   type CellAddr,
 } from "@betteroffice/xlsx/headless";
+import * as Schema from "effect/Schema";
+import { msg, useGT } from "gt-react";
+import { useEffect, useRef, useState } from "react";
+
+import { m } from "~/i18n/messages";
+import { observeResize } from "~/lib/observeResize";
+
 import { FileSurfaceLoading, FileSurfaceNotice } from "../fileSurfaceChrome";
 import type { WorkbookView } from "../officePreviewProtocol";
-import { createWorkerClient, SupersededError } from "./worker-rpc";
-import type { SheetLayout, SheetMethods, SheetFrameRequest, SheetTab } from "./sheet-protocol";
+import { externalUrl } from "./links";
 import {
   coverMerges,
   contains,
@@ -35,8 +36,9 @@ import {
   headerHeight,
   type Painted,
 } from "./sheet-paint";
-import { externalUrl } from "./links";
+import type { SheetLayout, SheetMethods, SheetFrameRequest, SheetTab } from "./sheet-protocol";
 import { bufferedViewport, cachedViewport, retainCachedViewport } from "./sheet-viewport";
+import { createWorkerClient, SupersededError } from "./worker-rpc";
 
 const isSupersededError = Schema.is(SupersededError);
 

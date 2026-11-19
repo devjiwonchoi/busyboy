@@ -1,8 +1,8 @@
-import type { QueuedThreadMessage } from "./thread-outbox-model";
 import type { DraftComposerAttachment } from "../lib/composerImages";
 import { scopedThreadKey } from "../lib/scopedEntities";
 import { abortComposerDraftOperations } from "./composerDraftOperations";
 import { restoredNewTaskDraftKey } from "./new-task-draft-key";
+import type { QueuedThreadMessage } from "./thread-outbox-model";
 import {
   appendComposerDraftAttachments,
   clearComposerDraftContent,

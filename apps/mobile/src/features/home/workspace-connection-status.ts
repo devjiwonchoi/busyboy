@@ -1,8 +1,8 @@
 import { msg } from "gt-react-native";
 
 import { m, type MessageResolver } from "../../i18n/messages";
-import { runtimeConnectionErrorText } from "../connection/environmentStatusText";
 import type { WorkspaceState } from "../../state/workspaceModel";
+import { runtimeConnectionErrorText } from "../connection/environmentStatusText";
 
 export interface WorkspaceConnectionStatusPresentation {
   readonly label: string;

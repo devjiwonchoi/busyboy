@@ -1,3 +1,6 @@
+import * as HostProcess from "@t3tools/shared/HostProcess";
+import { satisfiesSemverRange } from "@t3tools/shared/semver";
+import { buildRemoteNodeEnvScript } from "@t3tools/ssh/tunnel";
 import * as Context from "effect/Context";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -6,14 +9,10 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import type * as PlatformError from "effect/PlatformError";
+import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import * as Ref from "effect/Ref";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
-import { ChildProcess, ChildProcessSpawner } from "effect/process";
-
-import * as HostProcess from "@t3tools/shared/HostProcess";
-import { buildRemoteNodeEnvScript } from "@t3tools/ssh/tunnel";
-import { satisfiesSemverRange } from "@t3tools/shared/semver";
 
 import * as DesktopEnvironment from "../app/DesktopEnvironment.ts";
 import * as DesktopManagedPolicy from "../app/DesktopManagedPolicy.ts";

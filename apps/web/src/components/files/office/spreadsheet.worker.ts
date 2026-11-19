@@ -9,13 +9,14 @@ import {
   type XlsxRangeTarget,
 } from "@betteroffice/xlsx";
 import type { CellRange } from "@betteroffice/xlsx/headless";
-import { anchorRange, attempt, lastCell, parseRange, parseSpans } from "./sheet-cells";
+
 import type { WorkbookView } from "../officePreviewProtocol";
-import { chartFonts, drawFrame, paintFrame, withoutGridlines } from "./sheet-frame";
-import { maximumTrackSize, minimumTrackSize } from "./sheet-sizing";
+import { anchorRange, attempt, lastCell, parseRange, parseSpans } from "./sheet-cells";
 import { sheetFonts } from "./sheet-fonts";
+import { chartFonts, drawFrame, paintFrame, withoutGridlines } from "./sheet-frame";
 import { frozenSize } from "./sheet-paint";
 import type { SheetLayout, SheetMethods, SheetTab } from "./sheet-protocol";
+import { maximumTrackSize, minimumTrackSize } from "./sheet-sizing";
 import { serveWorker, Transfer } from "./worker-rpc";
 
 // One worker holds one open workbook: its engine, recalculation, display lists and the painting of its cells. The

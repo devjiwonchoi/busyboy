@@ -1,4 +1,4 @@
-import { cloudSpeechLanguages, effectiveSpeechLanguage } from "@t3tools/shared/speech";
+import type { PreparedConnection } from "@t3tools/client-runtime/connection";
 import {
   requireCloudSpeechKey,
   transcribeCloudPcm,
@@ -11,15 +11,15 @@ import {
   VoiceTranscriptionError,
   type VoiceTranscriptionOptions,
 } from "@t3tools/client-runtime/voice-input";
-import type { PreparedConnection } from "@t3tools/client-runtime/connection";
 import type { SpeechTranscriptionOptions, SpeechStreamText } from "@t3tools/contracts";
 import type { CloudSpeechModelId, CloudSpeechProvider } from "@t3tools/contracts";
+import { cloudSpeechLanguages, effectiveSpeechLanguage } from "@t3tools/shared/speech";
 import * as Schema from "effect/Schema";
+import { msg } from "gt-react";
 
+import { m } from "../i18n/messages";
 import { createBrowserPcmCapture } from "./browserPcmCapture";
 import { runEnvironmentSpeech } from "./runEnvironmentSpeech";
-import { msg } from "gt-react";
-import { m } from "../i18n/messages";
 
 const isVoiceTranscriptionError = Schema.is(VoiceTranscriptionError);
 

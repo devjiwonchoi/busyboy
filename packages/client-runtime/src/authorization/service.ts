@@ -1,5 +1,3 @@
-import { msg } from "gt-i18n";
-import { translatableDetail } from "../errors/translatable.ts";
 import {
   AuthAccessTokenType,
   connectDeviceVerificationCode,
@@ -10,12 +8,20 @@ import {
 import { RelayEnvironmentConnectScope } from "@t3tools/contracts/relay";
 import * as KeyedLock from "@t3tools/shared/KeyedLock";
 import { withRelayClientTracing } from "@t3tools/shared/relayTracing";
-import {
-  exchangeRemoteDpopAccessToken,
-  type RemoteEnvironmentAuthError,
-  resolveRemoteDpopWebSocketConnectionUrl,
-  resolveRemoteWebSocketConnectionUrl,
-} from "./remote.ts";
+import * as Clock from "effect/Clock";
+import * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
+import * as HttpClient from "effect/http/HttpClient";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as Result from "effect/Result";
+import * as Scope from "effect/Scope";
+import * as Semaphore from "effect/Semaphore";
+import { msg } from "gt-i18n";
+
+import { DpopConnectionCredential } from "../connection/catalog.ts";
+import * as ConnectionCredentialStore from "../connection/credentialStore.ts";
 import {
   credentialMissingError,
   environmentMismatchError,
@@ -23,35 +29,29 @@ import {
   mapRemoteDpopEnvironmentError,
   mapRemoteEnvironmentError,
 } from "../connection/errors.ts";
-import { DpopConnectionCredential } from "../connection/catalog.ts";
-import * as ConnectionCredentialStore from "../connection/credentialStore.ts";
 import {
   ConnectionBlockedError,
   ConnectionTransientError,
   type ConnectionAttemptError,
   type DirectDpopConnection,
 } from "../connection/model.ts";
-import { isNearbyAddress } from "../connection/routes.ts";
-import { fetchRemoteEnvironmentDescriptor } from "../environment/descriptor.ts";
-import { environmentEndpointUrl } from "../environment/endpoint.ts";
-import * as ClientCapabilities from "../platform/capabilities.ts";
-import * as ManagedRelay from "../relay/managedRelay.ts";
-import * as TokenStore from "./tokenStore.ts";
-import * as Clock from "effect/Clock";
-import * as Context from "effect/Context";
-import * as Effect from "effect/Effect";
-import * as Fiber from "effect/Fiber";
-import * as Layer from "effect/Layer";
-import * as Option from "effect/Option";
-import * as Result from "effect/Result";
-import * as Scope from "effect/Scope";
-import * as Semaphore from "effect/Semaphore";
-import * as HttpClient from "effect/http/HttpClient";
-
 import {
   DPOP_ACCESS_TOKEN_REFRESH_SKEW_MS,
   type PreparedHttpAuthorization,
 } from "../connection/model.ts";
+import { isNearbyAddress } from "../connection/routes.ts";
+import { fetchRemoteEnvironmentDescriptor } from "../environment/descriptor.ts";
+import { environmentEndpointUrl } from "../environment/endpoint.ts";
+import { translatableDetail } from "../errors/translatable.ts";
+import * as ClientCapabilities from "../platform/capabilities.ts";
+import * as ManagedRelay from "../relay/managedRelay.ts";
+import {
+  exchangeRemoteDpopAccessToken,
+  type RemoteEnvironmentAuthError,
+  resolveRemoteDpopWebSocketConnectionUrl,
+  resolveRemoteWebSocketConnectionUrl,
+} from "./remote.ts";
+import * as TokenStore from "./tokenStore.ts";
 
 export interface AuthorizedRemoteEnvironment {
   readonly environmentId: EnvironmentId;

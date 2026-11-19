@@ -1,16 +1,16 @@
 import {
-  isNetworkPath,
-  isWindowsAbsolutePath,
-  stripSlashPrefixedWindowsDrive,
-  workspaceRelativeFilePath,
-} from "./path.ts";
-import {
   type FilePathPosition,
   formatFilePathPosition,
   parseFileUrlHref,
   resolvePathLinkTarget,
   splitFilePathPosition,
 } from "./fileLinks.ts";
+import {
+  isNetworkPath,
+  isWindowsAbsolutePath,
+  stripSlashPrefixedWindowsDrive,
+  workspaceRelativeFilePath,
+} from "./path.ts";
 
 const RELATIVE_PATH_PREFIX_PATTERN = /^(~\/|\.{1,2}\/)/;
 

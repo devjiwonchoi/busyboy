@@ -1,6 +1,11 @@
-import { msg } from "gt-react";
 import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
-import { m } from "~/i18n/messages";
+import {
+  isAtomCommandInterrupted,
+  mapAtomCommandResult,
+  squashAtomCommandFailure,
+  type AtomCommandResult,
+} from "@t3tools/client-runtime/state/runtime";
+import type { EnvironmentProject } from "@t3tools/client-runtime/state/shell";
 import type {
   KeybindingCommand,
   ProjectId,
@@ -9,16 +14,13 @@ import type {
 } from "@t3tools/contracts";
 import { AuthSettingsWriteScope, EnvironmentAuthorizationError } from "@t3tools/contracts";
 import type { UnifiedSettings } from "@t3tools/contracts/settings";
-import {
-  isAtomCommandInterrupted,
-  mapAtomCommandResult,
-  squashAtomCommandFailure,
-  type AtomCommandResult,
-} from "@t3tools/client-runtime/state/runtime";
-import type { EnvironmentProject } from "@t3tools/client-runtime/state/shell";
 import { resolveProjectScripts } from "@t3tools/shared/projectScripts";
 import * as Cause from "effect/Cause";
 import { AsyncResult } from "effect/reactivity";
+import { msg } from "gt-react";
+
+import { m } from "~/i18n/messages";
+
 import { useStableCallback } from "../../hooks/useStableCallback";
 import {
   decodeProjectScriptKeybindingRule,
@@ -32,10 +34,10 @@ import {
   releaseClaimedRoles,
 } from "../../projectScripts";
 import { appAtomRegistry } from "../../rpc/atomRegistry";
+import { useProjects } from "../../state/entities";
 import { serverEnvironment } from "../../state/server";
 import { readEnvironmentScope } from "../../state/session";
 import { useAtomCommand } from "../../state/use-atom-command";
-import { useProjects } from "../../state/entities";
 import { type NewProjectScriptInput } from "../ProjectScriptsControl";
 import { stackedThreadToast, toastManager } from "../ui/toast";
 

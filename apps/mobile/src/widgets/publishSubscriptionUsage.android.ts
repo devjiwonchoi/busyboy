@@ -1,5 +1,6 @@
 import { requireOptionalNativeModule } from "expo";
 import * as Linking from "expo-linking";
+
 import type { SubscriptionUsageSnapshot } from "./subscriptionUsageSnapshot";
 
 let tapUrl: string | undefined;

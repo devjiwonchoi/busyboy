@@ -1,23 +1,26 @@
-import { msg } from "gt-i18n";
-import { translatableDetail } from "../errors/translatable.ts";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
-import * as Option from "effect/Option";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
-import * as Layer from "effect/Layer";
-import * as Scope from "effect/Scope";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as HttpClient from "effect/http/HttpClient";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as Scope from "effect/Scope";
+import { msg } from "gt-i18n";
 
+import * as RemoteEnvironmentAuthorization from "../authorization/service.ts";
+import { fetchRemoteEnvironmentDescriptor } from "../environment/descriptor.ts";
+import { translatableDetail } from "../errors/translatable.ts";
+import * as RpcSession from "../rpc/session.ts";
 import type { ConnectionCatalogEntry, ConnectionRoute } from "./catalog.ts";
+import { isHostCredentialRefusal } from "./errors.ts";
 import type {
   ConnectionAttemptError,
   ConnectionAttemptStage,
   PreparedConnection,
 } from "./model.ts";
 import { ConnectionTransientError } from "./model.ts";
-import { isHostCredentialRefusal } from "./errors.ts";
 import * as ConnectionResolver from "./resolver.ts";
 import {
   connectionRouteId,
@@ -28,9 +31,6 @@ import {
   sendsTokenInClear,
   usableRoutes,
 } from "./routes.ts";
-import * as RemoteEnvironmentAuthorization from "../authorization/service.ts";
-import * as RpcSession from "../rpc/session.ts";
-import { fetchRemoteEnvironmentDescriptor } from "../environment/descriptor.ts";
 
 export type ConnectionDriverProgress =
   | {

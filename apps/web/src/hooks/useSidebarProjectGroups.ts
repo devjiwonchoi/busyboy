@@ -1,13 +1,13 @@
-import { useMessages } from "gt-react";
-
-import { orderItemsByPreferredIds, sortSidebarV2ProjectGroups } from "../components/Sidebar.logic";
 import {
   getProjectOrderKey,
   selectProjectGroupingSettings,
 } from "@t3tools/client-runtime/state/project-grouping";
+import { useMessages } from "gt-react";
+
+import { orderItemsByPreferredIds, sortSidebarV2ProjectGroups } from "../components/Sidebar.logic";
 import { buildSidebarProjectSnapshots } from "../sidebarProjectGrouping";
-import { useEnvironmentIdentities, usePrimaryEnvironmentId } from "../state/environments";
 import { useDelegatedUnderParent, useProjects, useQuietThreadShells } from "../state/entities";
+import { useEnvironmentIdentities, usePrimaryEnvironmentId } from "../state/environments";
 import { legacyProjectCwdPreferenceKey, useUiStateStore } from "../uiStateStore";
 import { useClientSettings } from "./useSettings";
 

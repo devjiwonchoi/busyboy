@@ -6,22 +6,23 @@ import {
   type NativeSyntheticEvent,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+
 import { ScrollComposeButton } from "../../components/ScrollComposeButton.android";
-import {
-  androidHomeFabPosition,
-  type AndroidHomeFabLayout as SharedAndroidHomeFabLayout,
-} from "./AndroidHomeFab.shared";
-import { useWorkspaceState } from "../../state/workspace";
-import { FabScrollContext } from "./FabScrollContext";
-import { updateFabScroll } from "./fab-scroll";
 import { useAndroidControlSizing } from "../../components/ui/useAndroidControlSizing";
-import { WorkspaceTabsContext, useWorkspaceTabs } from "../layout/workspace/WorkspaceTabsContext";
+import { useWorkspaceState } from "../../state/workspace";
 import { FLOATING_TABS, floatingTabsMetrics } from "../layout/workspace/floating-workspace-tabs";
 import { useEnabledNavigationTabs } from "../layout/workspace/navigation-tabs";
+import { WorkspaceTabsContext, useWorkspaceTabs } from "../layout/workspace/WorkspaceTabsContext";
 import {
   useAppearancePreferences,
   useAndroidFloatingTabs,
 } from "../settings/appearance/AppearancePreferencesProvider";
+import {
+  androidHomeFabPosition,
+  type AndroidHomeFabLayout as SharedAndroidHomeFabLayout,
+} from "./AndroidHomeFab.shared";
+import { updateFabScroll } from "./fab-scroll";
+import { FabScrollContext } from "./FabScrollContext";
 
 export function AndroidHomeFabLayout(props: ComponentProps<typeof SharedAndroidHomeFabLayout>) {
   const floatingTabsEnabled = useAndroidFloatingTabs();

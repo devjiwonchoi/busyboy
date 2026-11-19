@@ -1,15 +1,15 @@
 import { settlePromise } from "@t3tools/client-runtime/state/runtime";
 import { AsyncResult } from "effect/reactivity";
-import { PlayIcon, RotateCwIcon, TriangleAlertIcon } from "lucide-react";
 import { useGT } from "gt-react";
+import { PlayIcon, RotateCwIcon, TriangleAlertIcon } from "lucide-react";
 import { useState, type CSSProperties } from "react";
 
 import { observeIntersection } from "../../lib/observeIntersection";
 import { cn } from "../../lib/utils";
 import { prepareVideoFirstFrame } from "../../lib/videoFirstFrame";
 import { Button } from "../ui/button";
-import { OpenMediaLink } from "./OpenMediaLink";
 import { MediaActions, type MediaActionSource } from "./MediaActions";
+import { OpenMediaLink } from "./OpenMediaLink";
 
 interface MediaVideoPlayerProps {
   readonly src: string | null;

@@ -14,9 +14,9 @@ import {
   DialogTitle,
 } from "../ui/dialog";
 import { Input } from "../ui/input";
+import { Label } from "../ui/label";
 import { sourceIdFromUrl } from "./AddUsageLimitSourceDialog.logic";
 import { SecretSourceInput, useSecretSources } from "./SecretSourceInput";
-import { Label } from "../ui/label";
 
 /** Send the management key once to server secret storage; settings retain only a redaction marker. */
 export function AddUsageLimitSourceDialog({

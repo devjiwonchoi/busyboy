@@ -6,10 +6,10 @@ import {
 } from "@t3tools/contracts";
 import * as Cause from "effect/Cause";
 import * as DateTime from "effect/DateTime";
-import * as Schema from "effect/Schema";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import { AsyncResult, Atom, AtomRegistry } from "effect/reactivity";
+import * as Schema from "effect/Schema";
 import type { ReactNode } from "react";
 import { describe, expect, it, vi } from "vite-plus/test";
 

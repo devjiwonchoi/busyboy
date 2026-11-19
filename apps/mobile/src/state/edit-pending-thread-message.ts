@@ -1,5 +1,6 @@
 import { PROVIDER_SEND_TURN_MAX_ATTACHMENTS } from "@t3tools/contracts";
 import { msg } from "gt-react-native";
+
 import { m } from "../i18n/messages";
 import { scopedThreadKey } from "../lib/scopedEntities";
 import { appAtomRegistry } from "./atom-registry";

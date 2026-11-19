@@ -1,4 +1,5 @@
 import type { EnvironmentSpeechModel } from "@t3tools/contracts";
+
 import catalog from "./catalog.json" with { type: "json" };
 
 export type SpeechModel = {

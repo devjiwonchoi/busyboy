@@ -11,6 +11,7 @@ import {
   PeerLinkError,
   type PeerLinkSummary,
 } from "@t3tools/contracts";
+import { isLocalLoopbackHost, isTailnetHost } from "@t3tools/shared/hostClassification";
 import * as NodeSqliteClient from "@t3tools/shared/nodeSqliteClient";
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
@@ -21,6 +22,11 @@ import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Base64Url from "effect/encoding/Base64Url";
 import * as Hex from "effect/encoding/Hex";
+import * as HttpApi from "effect/http-api/HttpApi";
+import * as HttpApiClient from "effect/http-api/HttpApiClient";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientError from "effect/http/HttpClientError";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
@@ -29,12 +35,6 @@ import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
 import * as SqlClient from "effect/sql/SqlClient";
-import * as FetchHttpClient from "effect/http/FetchHttpClient";
-import * as HttpClient from "effect/http/HttpClient";
-import * as HttpClientError from "effect/http/HttpClientError";
-import * as HttpApi from "effect/http-api/HttpApi";
-import * as HttpApiClient from "effect/http-api/HttpApiClient";
-import { isLocalLoopbackHost, isTailnetHost } from "@t3tools/shared/hostClassification";
 
 import * as ServerSecretStore from "../auth/ServerSecretStore.ts";
 import * as ServerEnvironment from "../environment/ServerEnvironment.ts";

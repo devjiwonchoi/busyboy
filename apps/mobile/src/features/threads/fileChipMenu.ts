@@ -1,13 +1,12 @@
 import { formatFilePathForClipboard } from "@t3tools/client-runtime/media-actions";
-import { fileBasename } from "@t3tools/shared/path";
 import type { ThreadId } from "@t3tools/contracts";
-import { resolveMarkdownLinkPresentation } from "../../lib/markdownLinks";
-import type { MarkdownFileContextMenu } from "../../native/SelectableMarkdownText.types";
 import { hostPreviewMimeTypeFromExtension } from "@t3tools/shared/filePreview";
+import { fileBasename } from "@t3tools/shared/path";
 import { msg } from "gt-react-native";
 
 import { m, type MessageResolver } from "../../i18n/messages";
-
+import { resolveMarkdownLinkPresentation } from "../../lib/markdownLinks";
+import type { MarkdownFileContextMenu } from "../../native/SelectableMarkdownText.types";
 import {
   isAbsolutePath,
   resolveFileLinkPath,

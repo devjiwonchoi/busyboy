@@ -1,5 +1,5 @@
-import { resolveLocaleSelection } from "@t3tools/client-runtime/locales";
 import { useAtomValue } from "@effect/atom-react";
+import { resolveLocaleSelection } from "@t3tools/client-runtime/locales";
 import { AsyncResult } from "effect/reactivity";
 import { GTProvider, initializeGT, useLocale } from "gt-react-native";
 import { createContext, use, useDeferredValue, useEffect, useMemo, type ReactNode } from "react";

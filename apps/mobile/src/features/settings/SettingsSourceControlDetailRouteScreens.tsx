@@ -1,7 +1,7 @@
 import { useAtomValue } from "@effect/atom-react";
 import type { StaticScreenProps } from "@react-navigation/native";
-import { issueTrackerSummary } from "@t3tools/client-runtime/state/issue-trackers";
 import { sourceControlClients } from "@t3tools/client-runtime/source-control-clients";
+import { issueTrackerSummary } from "@t3tools/client-runtime/state/issue-trackers";
 import {
   AuthSettingsWriteScope,
   type EnvironmentId,

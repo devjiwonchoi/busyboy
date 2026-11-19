@@ -1,4 +1,5 @@
 import type { DeviceHostSummary, DevicePlatform } from "@t3tools/contracts";
+import { T, useGT, useMessages, msg } from "gt-react";
 import {
   Camera,
   ChevronLeft,
@@ -18,8 +19,8 @@ import {
   MoonIcon,
   SunIcon,
 } from "lucide-react";
-import { T, useGT, useMessages, msg } from "gt-react";
 import type { ReactNode } from "react";
+
 import { Button } from "~/components/ui/button";
 import {
   Menu,
@@ -32,6 +33,7 @@ import {
   MenuRadioItemIndicator,
 } from "~/components/ui/menu";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
+
 import type { DeviceStreamHandle, DeviceViewControls } from "./DeviceStreamView";
 import type { DeviceControls } from "./useDeviceControls";
 

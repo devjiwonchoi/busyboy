@@ -1,7 +1,8 @@
 import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
-import { m } from "~/i18n/messages";
 import { T, useGT } from "gt-react";
 import { useState } from "react";
+
+import { m } from "~/i18n/messages";
 
 import { isLocalEnvironmentDisabled } from "../../localEnvironment";
 import {

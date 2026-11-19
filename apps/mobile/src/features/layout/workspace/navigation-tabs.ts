@@ -1,7 +1,11 @@
 import { useAtomValue } from "@effect/atom-react";
-import { msg } from "gt-react-native";
 import { AsyncResult } from "effect/reactivity";
+import { msg } from "gt-react-native";
 import { Platform } from "react-native";
+
+import type { AppSymbolName } from "../../../components/ui/AppSymbol";
+import { mobilePreferencesAtom } from "../../../state/preferences";
+import { PullRequestGlyph } from "../../pull-requests/pullRequestGlyphs";
 import {
   NAVIGATION_TAB_LABELS,
   navigationCustomizationAvailable,
@@ -10,11 +14,8 @@ import {
   sharedSlotAbsentee,
   type NavigationTab,
 } from "./navigation-tab-order";
-import type { AppSymbolName } from "../../../components/ui/AppSymbol";
-import { mobilePreferencesAtom } from "../../../state/preferences";
-import { PullRequestGlyph } from "../../pull-requests/pullRequestGlyphs";
-import { useWorkspaceTabs } from "./WorkspaceTabsContext";
 import { resolveWorkspaceTabOrder } from "./workspace-tabs-state";
+import { useWorkspaceTabs } from "./WorkspaceTabsContext";
 
 export const WORKSPACE_TAB_LABELS = {
   ...NAVIGATION_TAB_LABELS,

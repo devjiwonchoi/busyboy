@@ -1,12 +1,14 @@
-import { Tooltip, TooltipTrigger, TooltipPopup } from "../ui/tooltip";
 import type { EnvironmentId, PullRequestRef, PullRequestStackMembership } from "@t3tools/contracts";
 import { T, useGT, Var } from "gt-react";
 import { useState } from "react";
+
 import { usePullRequestStack } from "~/state/usePullRequestStack";
+
 import { Menu, MenuTrigger, MenuPopup, MenuGroup, MenuGroupLabel, MenuItem } from "../ui/menu";
-import { PullRequestStackLayers } from "./PullRequestStackLayers";
-import { PullRequestStackHeader } from "./PullRequestStackHeader";
+import { Tooltip, TooltipTrigger, TooltipPopup } from "../ui/tooltip";
 import { PullRequestGlyph } from "./pullRequestIcons";
+import { PullRequestStackHeader } from "./PullRequestStackHeader";
+import { PullRequestStackLayers } from "./PullRequestStackLayers";
 
 // Mount only on open to avoid per-row stack fetches.
 function StackBody({

@@ -1,11 +1,13 @@
-import type { ElementType } from "react";
-import type { SourceControlProviderInfo } from "@t3tools/contracts";
 import { sourceControlClients } from "@t3tools/client-runtime/source-control-clients";
 import type {
   ChangeRequestTerminology,
   SourceControlDefinition,
 } from "@t3tools/client-runtime/source-control-clients";
+import type { SourceControlProviderInfo } from "@t3tools/contracts";
+import type { ElementType } from "react";
+
 import { PullRequestGlyph } from "~/components/pullRequest/pullRequestIcons";
+
 import { SourceControlIconArtwork } from "./components/SourceControlIconArtwork";
 
 export type { ChangeRequestTerminology } from "@t3tools/client-runtime/source-control-clients";

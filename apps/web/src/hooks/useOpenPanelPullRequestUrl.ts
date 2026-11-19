@@ -1,3 +1,4 @@
+import { projectChangeRequestUrl } from "@t3tools/client-runtime/change-request-links";
 import { scopeProjectRef } from "@t3tools/client-runtime/environment";
 import { EnvironmentId, ProjectId, type ScopedThreadRef } from "@t3tools/contracts";
 
@@ -5,7 +6,6 @@ import {
   readPullRequestDetailSnapshot,
   resolvePullRequestReferenceHost,
 } from "../components/pullRequest/pullRequestDetail.logic";
-import { projectChangeRequestUrl } from "@t3tools/client-runtime/change-request-links";
 import { selectActiveRightPanelSurface, useRightPanelStore } from "../rightPanelStore";
 import { useProject } from "../state/entities";
 import { pullRequestEnvironment } from "../state/pullRequests";

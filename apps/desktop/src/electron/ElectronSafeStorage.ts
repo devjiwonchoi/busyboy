@@ -1,11 +1,10 @@
+import * as HostProcess from "@t3tools/shared/HostProcess";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
-
 import * as Electron from "electron";
-import * as HostProcess from "@t3tools/shared/HostProcess";
 
 const electronSafeStorageErrorFields = {
   cause: Schema.Defect(),

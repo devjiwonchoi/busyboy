@@ -1,7 +1,8 @@
+import type { ScopedThreadRef } from "@t3tools/contracts";
 import { createContext, useContext } from "react";
+
 import type { resolveChatCanvasLayout } from "./chatCanvasLayout";
 import type { resolveThreadDetailsCardLayout } from "./threadDetailsCardLayout";
-import type { ScopedThreadRef } from "@t3tools/contracts";
 
 /** The inline details card's measured full-density height at a card width. */
 export interface DetailsCardMeasurement {

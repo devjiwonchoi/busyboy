@@ -1,32 +1,18 @@
+import { defaultAnimateLayoutChanges, type AnimateLayoutChanges } from "@dnd-kit/sortable";
+import { deadlineAfter, deadlineStore, type ClockStore } from "@t3tools/client-runtime/clock";
 import type { EnvironmentServerConfig } from "@t3tools/client-runtime/connection";
 import { scopeThreadRef, scopedThreadKey } from "@t3tools/client-runtime/environment";
 import { resolveThreadWorkingStartedAt } from "@t3tools/client-runtime/state/models";
-import { isShownUnderParent } from "@t3tools/client-runtime/state/threads";
-import { backgroundWorkHoldsCompletion } from "@t3tools/shared/orchestrationV2PendingBackgroundWork";
-import { threadPullRequestSearchTerms } from "@t3tools/shared/threadPullRequests";
-import * as React from "react";
-import { msg } from "gt-react";
-import { m, type MessageResolver } from "../i18n/messages";
 import {
   isAtomCommandInterrupted,
   type AtomCommandResult,
 } from "@t3tools/client-runtime/state/runtime";
-import { defaultAnimateLayoutChanges, type AnimateLayoutChanges } from "@dnd-kit/sortable";
+import { THREAD_STATUS_TEXT } from "@t3tools/client-runtime/state/thread-activity-announcement";
 import {
   threadSearchMatchKey,
   threadSearchSubject,
   type ThreadSearchShell,
 } from "@t3tools/client-runtime/state/thread-search";
-import { foldSearchQuery, rankSearchItems, scoreThreadSearch } from "@t3tools/shared/paletteSearch";
-import {
-  type ContextMenuItem,
-  type EnvironmentId,
-  type ResolvedKeybindingsConfig,
-  type ScopedThreadRef,
-  type ThreadId,
-} from "@t3tools/contracts";
-import type { SidebarProjectSortOrder, SidebarThreadSortOrder } from "@t3tools/contracts/settings";
-import type { AsyncResult } from "effect/reactivity";
 import {
   effectiveSnoozed,
   hasUnseenRunFailure,
@@ -39,22 +25,37 @@ import {
   toSortableTimestamp,
   type ThreadSortInput,
 } from "@t3tools/client-runtime/state/thread-sort";
-import type { SidebarThreadSummary, Thread } from "../types";
-import { normalizeSearchText } from "../lib/utils";
-import { isLatestRunSettled } from "../session-logic";
-import { THREAD_STATUS_TEXT } from "@t3tools/client-runtime/state/thread-activity-announcement";
-import { observeIntersection } from "../lib/observeIntersection";
-import { deadlineAfter, deadlineStore, type ClockStore } from "@t3tools/client-runtime/clock";
-import { useDeadlinePassed } from "../hooks/useDeadline";
-import { legacyProjectCwdPreferenceKey } from "../uiStateStore";
+import { isShownUnderParent } from "@t3tools/client-runtime/state/threads";
+import {
+  type ContextMenuItem,
+  type EnvironmentId,
+  type ResolvedKeybindingsConfig,
+  type ScopedThreadRef,
+  type ThreadId,
+} from "@t3tools/contracts";
+import type { SidebarProjectSortOrder, SidebarThreadSortOrder } from "@t3tools/contracts/settings";
+import { backgroundWorkHoldsCompletion } from "@t3tools/shared/orchestrationV2PendingBackgroundWork";
+import { foldSearchQuery, rankSearchItems, scoreThreadSearch } from "@t3tools/shared/paletteSearch";
+import { threadPullRequestSearchTerms } from "@t3tools/shared/threadPullRequests";
+import type { AsyncResult } from "effect/reactivity";
+import { msg } from "gt-react";
+import * as React from "react";
+
 import { isElectron } from "../env";
+import { useDeadlinePassed } from "../hooks/useDeadline";
+import { m, type MessageResolver } from "../i18n/messages";
 import { shouldShowThreadJumpHintsForModifiers } from "../keybindings";
-import { isTerminalFocused, subscribeToTerminalFocusChanges } from "../lib/terminalFocus";
+import { observeIntersection } from "../lib/observeIntersection";
 import { isPreviewFocused } from "../lib/previewFocus";
+import { isTerminalFocused, subscribeToTerminalFocusChanges } from "../lib/terminalFocus";
+import { normalizeSearchText } from "../lib/utils";
 import { isModelPickerOpen, subscribeToModelPickerVisibility } from "../modelPickerVisibility";
+import { selectActiveRightPanel, useRightPanelStore } from "../rightPanelStore";
+import { isLatestRunSettled } from "../session-logic";
 import { shortcutModifierStore } from "../shortcutModifierState";
 import { selectThreadTerminalUiState, useTerminalUiStateStore } from "../terminalUiStateStore";
-import { selectActiveRightPanel, useRightPanelStore } from "../rightPanelStore";
+import type { SidebarThreadSummary, Thread } from "../types";
+import { legacyProjectCwdPreferenceKey } from "../uiStateStore";
 
 export function shouldNavigateAfterThreadPark(input: {
   readonly threadKey: string;

@@ -1,51 +1,51 @@
-import { SheetCloseButton } from "../../components/ui/SheetHeader";
-import { Button } from "../../components/ui/Button";
-import * as Dialog from "../../components/ui/Dialog";
+import { useIsFocused, useNavigation, type StaticScreenProps } from "@react-navigation/native";
 import {
   deviceToolVersionLabels,
   deviceToolUpdateOwnership,
   deviceToolUpdatePolicy,
 } from "@t3tools/client-runtime/state/device";
-import { useIsFocused, useNavigation, type StaticScreenProps } from "@react-navigation/native";
 import { EnvironmentId, ThreadId } from "@t3tools/contracts";
 import * as Cause from "effect/Cause";
-import { msg, T, useGT } from "gt-react-native";
-import { useEffect, useRef, useState, type RefObject } from "react";
 import * as Haptics from "expo-haptics";
 import { Accelerometer } from "expo-sensors";
+import { msg, T, useGT } from "gt-react-native";
+import { useEffect, useRef, useState, type RefObject } from "react";
 import { Pressable, View } from "react-native";
 import Animated, { FadeIn, FadeOut, ReduceMotion } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AppActivityIndicator } from "../../components/ui/AppActivityIndicator";
+import { AppBar } from "../../components/ui/AppBar";
+import type { AppBarMenuItem } from "../../components/ui/AppBar.types";
 import { AppText } from "../../components/ui/AppText";
+import { Button } from "../../components/ui/Button";
 import { ControlPill } from "../../components/ui/ControlPill";
-import { Menu } from "../../components/ui/Menu";
+import * as Dialog from "../../components/ui/Dialog";
 import { GlassSurface } from "../../components/ui/GlassSurface";
+import { Menu } from "../../components/ui/Menu";
 import {
   findAppBarMenuItem,
   menuActionsFromAppBarItems,
 } from "../../components/ui/menuActionItems";
-import { AppBar } from "../../components/ui/AppBar";
-import { m } from "../../i18n/messages";
+import { SheetCloseButton } from "../../components/ui/SheetHeader";
 import { useBarOverlap } from "../../components/ui/useBarInset";
-import type { AppBarMenuItem } from "../../components/ui/AppBar.types";
+import { m } from "../../i18n/messages";
 import { useAppForeground } from "../../lib/appState";
 import { useHardwareBack } from "../../lib/backHandler";
 import { deriveBottomControlInsets } from "../../lib/reserved-regions";
-import { useNativeColumnLayoutMetrics } from "../../native/native-layout-metrics";
 import { uuidv4 } from "../../lib/uuid";
+import { useNativeColumnLayoutMetrics } from "../../native/native-layout-metrics";
 import { deviceEnvironment, useDeviceHubAccess } from "../../state/device";
 import { useEnvironmentQuery } from "../../state/query";
 import { useAtomCommand } from "../../state/use-atom-command";
 import { useAppearancePreferences } from "../settings/appearance/AppearancePreferencesProvider";
 import { DeviceStreamWebView, type DeviceStreamRef } from "./DeviceStreamWebView";
+import { createShakeDetector } from "./shakeDetector";
 import {
   selectedThreadDevicePreview,
   threadDevicePreviews,
   type ThreadDevicePreview,
 } from "./threadDevicePreviews";
-import { createShakeDetector } from "./shakeDetector";
 
 const OVERLAY_ENTERING = FadeIn.duration(160).reduceMotion(ReduceMotion.System);
 const OVERLAY_EXITING = FadeOut.duration(120).reduceMotion(ReduceMotion.System);

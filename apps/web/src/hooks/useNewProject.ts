@@ -16,8 +16,9 @@ import { waitForProject } from "~/state/entities";
 import { projectEnvironment } from "~/state/projects";
 import { sourceControlEnvironment } from "~/state/sourceControl";
 import { useAtomCommand } from "~/state/use-atom-command";
-import { useNewThreadHandler } from "./useHandleNewThread";
+
 import { suggestAppAccessForRemote } from "../components/sourceControlAppAccessToast";
+import { useNewThreadHandler } from "./useHandleNewThread";
 
 function errorMessage(error: unknown): string {
   return error instanceof Error && error.message.trim().length > 0

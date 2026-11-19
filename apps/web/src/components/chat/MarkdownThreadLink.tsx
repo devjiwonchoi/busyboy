@@ -1,5 +1,4 @@
 import type { EnvironmentId } from "@t3tools/contracts";
-import { useGT, useMessages } from "gt-react";
 import {
   formatHostedThreadLink,
   guessThreadLinkRef,
@@ -7,6 +6,7 @@ import {
   type ThreadLink,
 } from "@t3tools/shared/threadLinks";
 import { unknownThreadLinkLabel } from "@t3tools/shared/threadLinksCopy";
+import { useGT, useMessages } from "gt-react";
 
 import { configuredHostedAppUrl } from "../../hostedPairing";
 import { useThreadRefs, useThreadShell } from "../../state/entities";

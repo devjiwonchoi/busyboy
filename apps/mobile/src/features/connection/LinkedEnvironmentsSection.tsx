@@ -1,10 +1,10 @@
-import { useGT } from "gt-react-native";
 import { RegistryContext } from "@effect/atom-react";
+import { useFocusEffect } from "@react-navigation/native";
 import { offersLinkedEnvironments } from "@t3tools/client-runtime/link-request";
 import { peerLinkHealth } from "@t3tools/client-runtime/state/peerLinks";
-import { useFocusEffect } from "@react-navigation/native";
 import { AuthAccessReadScope, type EnvironmentId } from "@t3tools/contracts";
 import * as DateTime from "effect/DateTime";
+import { useGT } from "gt-react-native";
 import { useCallback, useContext, useState } from "react";
 import { AppState, View } from "react-native";
 

@@ -5,8 +5,8 @@ import {
 } from "@t3tools/client-runtime/state/runtime";
 import type { EnvironmentId } from "@t3tools/contracts";
 import type { RelayClientEnvironmentRecord } from "@t3tools/contracts/relay";
-import { ServerIcon } from "lucide-react";
 import { msg, T, useGT, useMessages, Var } from "gt-react";
+import { ServerIcon } from "lucide-react";
 import { useRef, useState } from "react";
 
 import {
@@ -15,6 +15,7 @@ import {
   useManagedTunnelUsage,
 } from "../../cloud/managedRelayState";
 import { relayFailureReason } from "../../cloud/relayFailureReason";
+import { m, type MessageResolver } from "../../i18n/messages";
 import { relayEnvironmentDiscovery } from "../../state/relay";
 import { useAtomCommand } from "../../state/use-atom-command";
 import { T3CHAT_SUBSCRIPTION_URL, TunnelUsageMeter, tunnelUpgradeCopy } from "../cloud/TunnelUsage";
@@ -28,7 +29,6 @@ import {
   ClerkUserProfileRefreshButton,
   ClerkUserProfileRow,
 } from "./ClerkUserProfilePage";
-import { m, type MessageResolver } from "../../i18n/messages";
 import { useT3ChatLink } from "./useT3ChatLink";
 
 const linkedAtFormatter = new Intl.DateTimeFormat(undefined, { dateStyle: "medium" });

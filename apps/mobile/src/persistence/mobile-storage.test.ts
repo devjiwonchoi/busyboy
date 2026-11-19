@@ -22,7 +22,6 @@ vi.mock("expo-secure-store", () => ({ getItemAsync, setItemAsync }));
 vi.mock("expo-crypto", () => ({ randomUUID: uuidv4 }));
 
 import "../lib/uuid";
-
 import * as MobileSecureStorage from "./mobile-secure-storage";
 import * as MobileStorage from "./mobile-storage";
 

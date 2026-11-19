@@ -1,3 +1,14 @@
+import { TokenStore } from "@t3tools/client-runtime/authorization";
+import {
+  ConnectionTransientError,
+  ConnectionBlockedError,
+  CredentialStore,
+  ProfileStore,
+  PullRequestRoutingPermissions,
+  StoredPullRequestRoutingPermission,
+  pullRequestRoutingConnectionKey,
+  pullRequestRoutingPermissionFor,
+} from "@t3tools/client-runtime/connection";
 import {
   ConnectionCatalogDocument,
   type ConnectionCatalogDocument as ConnectionCatalogDocumentType,
@@ -18,18 +29,6 @@ import {
   makeStoredThreadSnapshotEncoder,
   makeThreadCacheWriteOrder,
 } from "@t3tools/client-runtime/platform";
-import { TokenStore } from "@t3tools/client-runtime/authorization";
-import { msg } from "gt-react";
-import {
-  ConnectionTransientError,
-  ConnectionBlockedError,
-  CredentialStore,
-  ProfileStore,
-  PullRequestRoutingPermissions,
-  StoredPullRequestRoutingPermission,
-  pullRequestRoutingConnectionKey,
-  pullRequestRoutingPermissionFor,
-} from "@t3tools/client-runtime/connection";
 import { EnvironmentQueryStore } from "@t3tools/client-runtime/state/query-persistence";
 import { EnvironmentId, ServerConfig, ThreadId, VcsListRefsResult } from "@t3tools/contracts";
 import * as Clock from "effect/Clock";
@@ -37,13 +36,15 @@ import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
-import * as Ref from "effect/Ref";
 import * as Queue from "effect/Queue";
+import * as Ref from "effect/Ref";
 import * as Schema from "effect/Schema";
 import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
-import { m } from "../i18n/messages";
+import { msg } from "gt-react";
+
 import { projectFaviconCache } from "../assets/projectFaviconCache";
+import { m } from "../i18n/messages";
 
 const DATABASE_NAME = "t3code:connection-runtime";
 const DATABASE_VERSION = 5;

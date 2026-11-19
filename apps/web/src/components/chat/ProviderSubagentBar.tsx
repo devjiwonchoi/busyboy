@@ -8,6 +8,7 @@ import { ArrowUpLeftIcon } from "lucide-react";
 import type { ReactNode } from "react";
 
 import { tickTextContent } from "~/lib/tickTextContent";
+
 import type { ProviderInstanceEntry } from "../../providerInstances";
 import { Button } from "../ui/button";
 import { ProviderInstanceIcon } from "./ProviderInstanceIcon";

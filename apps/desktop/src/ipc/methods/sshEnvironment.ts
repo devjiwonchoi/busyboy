@@ -29,10 +29,10 @@ import { resolveLoopbackSshHttpBaseUrl } from "@t3tools/ssh/tunnel";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 
-import * as IpcChannels from "../channels.ts";
-import * as DesktopIpc from "../DesktopIpc.ts";
 import * as DesktopSshEnvironment from "../../ssh/DesktopSshEnvironment.ts";
 import * as DesktopSshPasswordPrompts from "../../ssh/DesktopSshPasswordPrompts.ts";
+import * as IpcChannels from "../channels.ts";
+import * as DesktopIpc from "../DesktopIpc.ts";
 
 const DesktopSshEnvironmentRequestOperation = Schema.Literals([
   "fetch-environment-descriptor",

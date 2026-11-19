@@ -1,3 +1,5 @@
+import { useAtomValue } from "@effect/atom-react";
+import { invalidSecretReferenceText } from "@t3tools/client-runtime/secret-request";
 import {
   SecretReference,
   type EnvironmentId,
@@ -6,8 +8,6 @@ import {
   type SecretProviderKind,
 } from "@t3tools/contracts";
 import { builtInSecretProviderDefinitions } from "@t3tools/secret-provider-definitions/registry";
-import { invalidSecretReferenceText } from "@t3tools/client-runtime/secret-request";
-import { useAtomValue } from "@effect/atom-react";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import { useGT, useMessages } from "gt-react";
@@ -16,9 +16,9 @@ import { useState, type ComponentProps, type ComponentType, type ReactNode } fro
 
 import { isSecretsFeatureEnabled } from "../../env";
 import { useEnvironmentSettings } from "../../hooks/useSettings";
-import { OnePasswordIcon } from "../Icons";
 import { serverEnvironment } from "../../state/server";
 import { useAtomCommand } from "../../state/use-atom-command";
+import { OnePasswordIcon } from "../Icons";
 import { Button } from "../ui/button";
 import { DraftInput } from "../ui/draft-input";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";

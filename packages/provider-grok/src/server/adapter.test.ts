@@ -14,6 +14,11 @@ import {
   RunId,
   ThreadId,
 } from "@t3tools/contracts";
+import * as AcpSessionRuntime from "@t3tools/provider-acp/server/AcpSessionRuntime";
+import * as IdAllocator from "@t3tools/provider-core/server/IdAllocator";
+import * as McpProviderSessions from "@t3tools/provider-core/server/McpProviderSessions";
+import * as ProviderAdapter from "@t3tools/provider-core/server/ProviderAdapter";
+import * as TestProviderHost from "@t3tools/provider-testing/TestProviderHost";
 import * as HostProcess from "@t3tools/shared/HostProcess";
 import { resolveSelfInvocation } from "@t3tools/shared/nodeRuntime";
 import * as SecureRandom from "effect/crypto/SecureRandom";
@@ -25,11 +30,6 @@ import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 
-import * as AcpSessionRuntime from "@t3tools/provider-acp/server/AcpSessionRuntime";
-import * as IdAllocator from "@t3tools/provider-core/server/IdAllocator";
-import * as McpProviderSessions from "@t3tools/provider-core/server/McpProviderSessions";
-import * as ProviderAdapter from "@t3tools/provider-core/server/ProviderAdapter";
-import * as TestProviderHost from "@t3tools/provider-testing/TestProviderHost";
 import { GrokSettings } from "../settings.ts";
 import { makeGrokAcpAdapterFlavor, makeGrokAdapterV2 } from "./adapter.ts";
 

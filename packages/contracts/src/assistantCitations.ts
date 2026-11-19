@@ -1,4 +1,5 @@
 import * as Schema from "effect/Schema";
+
 import { EnvironmentId, MessageId, NonNegativeInt, ThreadId } from "./baseSchemas.ts";
 
 export const ASSISTANT_CITATION_MAX_TEXT_LENGTH = 8_000;

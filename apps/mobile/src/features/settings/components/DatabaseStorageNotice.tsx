@@ -1,12 +1,12 @@
-import { useGT } from "gt-react-native";
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
 import { AsyncResult } from "effect/reactivity";
+import { useGT } from "gt-react-native";
 
+import { ListActionRow as SettingsActionRow } from "../../../components/ui/ListActionRow";
 import { copyTextWithHaptic } from "../../../lib/copyTextWithHaptic";
 import { mobilePreferencesAtom, updateMobilePreferencesAtom } from "../../../state/preferences";
 import { serverEnvironment } from "../../../state/server";
 import type { SettingsTarget } from "../settings-environment-filter";
-import { ListActionRow as SettingsActionRow } from "../../../components/ui/ListActionRow";
 import { SettingsSection } from "./SettingsSection";
 
 /** Suggests `t3 doctor` on every machine whose database still holds at least 1 GiB of freed pages. */

@@ -1,4 +1,3 @@
-import { describe, expect, it } from "vite-plus/test";
 import {
   ASSISTANT_CITATION_CONTEXT_LENGTH,
   ASSISTANT_CITATION_MAX_COMMENT_LENGTH,
@@ -9,6 +8,8 @@ import {
   ThreadId,
   type AssistantCitation,
 } from "@t3tools/contracts";
+import { describe, expect, it } from "vite-plus/test";
+
 import {
   assistantCitationLabel,
   assistantCitationsToPlainText,

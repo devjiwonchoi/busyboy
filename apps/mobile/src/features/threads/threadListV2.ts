@@ -1,4 +1,16 @@
-import { msg } from "gt-react-native";
+import type { MenuAction } from "@react-native-menu/menu";
+import { resolveThreadProviderStack } from "@t3tools/client-runtime/state/models";
+import type { EnvironmentThreadShell } from "@t3tools/client-runtime/state/shell";
+import {
+  createInboxReturnTracker,
+  isThreadWorking,
+  sortInboxThreadsByReturn,
+  sortWorkingThreadsBySend,
+} from "@t3tools/client-runtime/state/thread-inbox";
+import {
+  threadSearchMatchKey,
+  threadSearchSubject,
+} from "@t3tools/client-runtime/state/thread-search";
 import {
   canSnooze,
   effectiveSnoozed,
@@ -13,19 +25,6 @@ import {
   hasUnseenRunFailure,
   type SnoozePreset,
 } from "@t3tools/client-runtime/state/thread-settled";
-import type { EnvironmentThreadShell } from "@t3tools/client-runtime/state/shell";
-import { resolveThreadProviderStack } from "@t3tools/client-runtime/state/models";
-import {
-  threadSearchMatchKey,
-  threadSearchSubject,
-} from "@t3tools/client-runtime/state/thread-search";
-import { foldSearchQuery, rankSearchItems, scoreThreadSearch } from "@t3tools/shared/paletteSearch";
-import {
-  createInboxReturnTracker,
-  isThreadWorking,
-  sortInboxThreadsByReturn,
-  sortWorkingThreadsBySend,
-} from "@t3tools/client-runtime/state/thread-inbox";
 import {
   sortActiveThreadsByOrderKey,
   resolveSettledThreadTimestamp,
@@ -35,15 +34,14 @@ import {
 } from "@t3tools/client-runtime/state/thread-sort";
 import { isListedThreadLineage, type EnvironmentId, type ProjectId } from "@t3tools/contracts";
 import type { SnoozePresetSetting } from "@t3tools/contracts/settings";
-import type { MenuAction } from "@react-native-menu/menu";
+import { foldSearchQuery, rankSearchItems, scoreThreadSearch } from "@t3tools/shared/paletteSearch";
+import { msg } from "gt-react-native";
 
-import type { ThreadListProvider } from "../../state/thread-list-environments";
-import type { ThreadMoveAvailability } from "./threadOrder";
-
-import { relativeTime } from "../../lib/time";
-import type { PendingNewTask } from "../../state/use-pending-new-tasks";
 import { m, type MessageResolver } from "../../i18n/messages";
-
+import { relativeTime } from "../../lib/time";
+import type { ThreadListProvider } from "../../state/thread-list-environments";
+import type { PendingNewTask } from "../../state/use-pending-new-tasks";
+import type { ThreadMoveAvailability } from "./threadOrder";
 import {
   applyPendingThreadOrder,
   reconcilePendingThreadOrder,

@@ -1,4 +1,5 @@
 import { expect, it } from "vite-plus/test";
+
 import type { PullRequestSavedView } from "../../persistence/mobile-preferences";
 import { pullRequestSavedViewPreferences, pullRequestViewMatches } from "./pullRequestSavedViews";
 

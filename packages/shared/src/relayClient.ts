@@ -1,11 +1,12 @@
 // @effect-diagnostics-next-line nodeBuiltinImport:off -- FileSystem.remove cannot remove an empty directory nonrecursively.
 import * as NodeFSP from "node:fs/promises";
-import * as Cache from "effect/Cache";
-import * as Clock from "effect/Clock";
+
 import type {
   RelayClientInstallProgressEvent,
   RelayClientInstallProgressStage,
 } from "@t3tools/contracts";
+import * as Cache from "effect/Cache";
+import * as Clock from "effect/Clock";
 import * as Config from "effect/Config";
 import * as Context from "effect/Context";
 import * as Digest from "effect/crypto/Digest";
@@ -13,18 +14,19 @@ import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
-import * as Exit from "effect/Exit";
 import * as Hex from "effect/encoding/Hex";
+import * as Exit from "effect/Exit";
 import * as FileSystem from "effect/FileSystem";
+import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import type * as PlatformError from "effect/PlatformError";
+import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
 import * as Semaphore from "effect/Semaphore";
-import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http";
-import { ChildProcess, ChildProcessSpawner } from "effect/process";
+
 import { isWindowsRenameLock } from "./atomicWrite.ts";
 import * as HostProcess from "./HostProcess.ts";
 

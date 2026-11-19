@@ -16,25 +16,6 @@ import {
   type RuntimeRequestId,
   ThreadId,
 } from "@t3tools/contracts";
-import { resolveSelfInvocation } from "@t3tools/shared/nodeRuntime";
-import { htmlRenderFromToolItem } from "@t3tools/shared/toolOutput";
-import * as Cause from "effect/Cause";
-import * as DateTime from "effect/DateTime";
-import * as Deferred from "effect/Deferred";
-import * as Effect from "effect/Effect";
-import * as Exit from "effect/Exit";
-import * as Fiber from "effect/Fiber";
-import * as FileSystem from "effect/FileSystem";
-import * as Layer from "effect/Layer";
-import * as Option from "effect/Option";
-import * as Path from "effect/Path";
-import * as Schema from "effect/Schema";
-import * as Stream from "effect/Stream";
-import * as TestClock from "effect/testing/TestClock";
-import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
-import type * as EffectAcpSchema from "effect-acp/compat";
-
-import * as TestProviderHost from "@t3tools/provider-testing/TestProviderHost";
 import type * as AcpSessionRuntime from "@t3tools/provider-acp/server/AcpSessionRuntime";
 import * as IdAllocator from "@t3tools/provider-core/server/IdAllocator";
 import * as McpProviderSessions from "@t3tools/provider-core/server/McpProviderSessions";
@@ -46,16 +27,6 @@ import {
   ProviderCompactionUnsupportedError,
   ProviderAdapterV2RuntimePolicy,
 } from "@t3tools/provider-core/server/ProviderAdapter";
-import {
-  decodeAcpReplayTranscript,
-  makeAcpReplayCompletenessAssertion,
-  makeAcpReplayRuntime,
-} from "./AcpAdapterV2.testkit.ts";
-import {
-  makeProviderReplayGate,
-  type ProviderReplayGate,
-} from "@t3tools/provider-testing/replayGate";
-import { readProviderReplayTranscript } from "@t3tools/provider-testing/replayTranscript";
 import { KiroSettings } from "@t3tools/provider-kiro/settings";
 import {
   KIRO_PROVIDER,
@@ -64,6 +35,35 @@ import {
   kiroPermissionDisposition,
   makeKiroAdapterV2,
 } from "@t3tools/provider-kiro/testing";
+import {
+  makeProviderReplayGate,
+  type ProviderReplayGate,
+} from "@t3tools/provider-testing/replayGate";
+import { readProviderReplayTranscript } from "@t3tools/provider-testing/replayTranscript";
+import * as TestProviderHost from "@t3tools/provider-testing/TestProviderHost";
+import { resolveSelfInvocation } from "@t3tools/shared/nodeRuntime";
+import { htmlRenderFromToolItem } from "@t3tools/shared/toolOutput";
+import type * as EffectAcpSchema from "effect-acp/compat";
+import * as Cause from "effect/Cause";
+import * as DateTime from "effect/DateTime";
+import * as Deferred from "effect/Deferred";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Fiber from "effect/Fiber";
+import * as FileSystem from "effect/FileSystem";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as Path from "effect/Path";
+import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
+import * as Schema from "effect/Schema";
+import * as Stream from "effect/Stream";
+import * as TestClock from "effect/testing/TestClock";
+
+import {
+  decodeAcpReplayTranscript,
+  makeAcpReplayCompletenessAssertion,
+  makeAcpReplayRuntime,
+} from "./AcpAdapterV2.testkit.ts";
 
 const testLayer = Layer.mergeAll(
   NodeServices.layer,

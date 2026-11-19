@@ -1,3 +1,9 @@
+import { useAtomValue } from "@effect/atom-react";
+import {
+  makeQueuedRunEditStore,
+  resolveQueuedEditExit,
+  type QueuedRunsAtom,
+} from "@t3tools/client-runtime/queued-run-edit";
 import type {
   ChatAttachment,
   MessageId,
@@ -5,14 +11,8 @@ import type {
   RunId,
   UploadChatAttachment,
 } from "@t3tools/contracts";
-import { useAtomValue } from "@effect/atom-react";
-import { msg } from "gt-react-native";
 import { stripAttachmentOnlyBootstrapPrompt } from "@t3tools/shared/composerContextReferences";
-import {
-  makeQueuedRunEditStore,
-  resolveQueuedEditExit,
-  type QueuedRunsAtom,
-} from "@t3tools/client-runtime/queued-run-edit";
+import { msg } from "gt-react-native";
 
 import { m } from "../i18n/messages";
 import { uploadedComposerContext } from "../lib/composerContext";

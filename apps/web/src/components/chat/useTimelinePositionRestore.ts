@@ -1,4 +1,5 @@
 import type { LegendListRef } from "@legendapp/list/react";
+
 import type { MessagesTimelineRow } from "./MessagesTimeline.logic";
 import type { RememberedTimelinePosition } from "./timelineScrollAnchoring";
 import type { TimelineViewport } from "./timelineViewport";

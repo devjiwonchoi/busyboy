@@ -7,9 +7,9 @@ import type {
 import { msg } from "gt-react";
 
 import { isWebUrl } from "./browser/webUrl";
+import { readBrowserClientSettings, writeBrowserClientSettings } from "./clientPersistenceStorage";
 import { requestConfirmDialog } from "./confirmDialog";
 import { dismissContextMenu, showContextMenuFallback } from "./contextMenuFallback";
-import { readBrowserClientSettings, writeBrowserClientSettings } from "./clientPersistenceStorage";
 import { m } from "./i18n/messages";
 
 let cachedApi: LocalApi | undefined;

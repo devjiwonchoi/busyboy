@@ -1,4 +1,5 @@
 import * as NodeUtil from "node:util";
+
 import {
   VcsProcessExitError,
   VcsProcessSpawnError,
@@ -17,8 +18,8 @@ import * as PlatformError from "effect/PlatformError";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 
-import type * as SourceControlProvider from "./SourceControlProvider.ts";
 import type * as SourceControlHost from "./SourceControlHost.ts";
+import type * as SourceControlProvider from "./SourceControlProvider.ts";
 
 export interface SourceControlAuthProbeInput {
   readonly stdout: string;

@@ -1,4 +1,9 @@
 import {
+  readHostCredentialSettings,
+  type SourceControlDefinition,
+  type SourceControlHostCredentials,
+} from "@t3tools/client-runtime/source-control-clients";
+import {
   isSecretReference,
   type EnvironmentId,
   type SecretReference,
@@ -9,11 +14,6 @@ import { ExternalLinkIcon } from "lucide-react";
 import { useState } from "react";
 
 import { useEnvironmentSettings } from "../../hooks/useSettings";
-import {
-  readHostCredentialSettings,
-  type SourceControlDefinition,
-  type SourceControlHostCredentials,
-} from "@t3tools/client-runtime/source-control-clients";
 import { serverEnvironment } from "../../state/server";
 import { useAtomCommand } from "../../state/use-atom-command";
 import { Button, InlineButton } from "../ui/button";

@@ -1,9 +1,10 @@
+import * as NodeURL from "node:url";
+
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Alchemy from "alchemy";
 import { adopt } from "alchemy/AdoptPolicy";
-import * as Cloudflare from "@alchemy.run/cloudflare";
 import { retain } from "alchemy/RemovalPolicy";
 import * as Effect from "effect/Effect";
-import * as NodeURL from "node:url";
 
 const protocol = new URL("../vendor/vite-plus-remote-cache-cloudflare/", import.meta.url);
 

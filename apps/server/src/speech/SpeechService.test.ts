@@ -1,23 +1,24 @@
-import { beforeEach, expect, vi } from "vite-plus/test";
-import { it } from "@effect/vitest";
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import * as Effect from "effect/Effect";
+import { it } from "@effect/vitest";
+import { DEFAULT_SPEECH_TRANSCRIPTION_OPTIONS } from "@t3tools/contracts";
+import * as HostProcess from "@t3tools/shared/HostProcess";
 import * as Deferred from "effect/Deferred";
-import * as TestClock from "effect/testing/TestClock";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
+import * as PlatformError from "effect/PlatformError";
 import * as Result from "effect/Result";
 import * as Scheduler from "effect/Scheduler";
 import * as Scope from "effect/Scope";
-import * as Exit from "effect/Exit";
-import * as PlatformError from "effect/PlatformError";
-import * as HostProcess from "@t3tools/shared/HostProcess";
-import { DEFAULT_SPEECH_TRANSCRIPTION_OPTIONS } from "@t3tools/contracts";
+import * as TestClock from "effect/testing/TestClock";
+import { beforeEach, expect, vi } from "vite-plus/test";
+
 import * as ServerSettings from "../serverSettings.ts";
 import { listNativeSpeechGpuDevices } from "./native.ts";
+import { SILERO_VAD } from "./silero.ts";
 import * as SpeechModelStore from "./SpeechModelStore.ts";
 import * as SpeechService from "./SpeechService.ts";
-import { SILERO_VAD } from "./silero.ts";
 
 const native = vi.hoisted(() => ({
   backend: "Vulkan0",

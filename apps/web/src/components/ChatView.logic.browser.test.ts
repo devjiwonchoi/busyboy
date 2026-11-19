@@ -1,5 +1,6 @@
 import { expect, it } from "vite-plus/test";
 import { userEvent } from "vite-plus/test/browser";
+
 import { createWorkspaceFocusController } from "../lib/workspaceFocus";
 import { shouldRefocusComposerOnWindowFocus } from "./ChatView.logic";
 

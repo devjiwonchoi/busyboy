@@ -1,5 +1,3 @@
-import { msg } from "gt-i18n";
-import { translatableDetail } from "../errors/translatable.ts";
 import {
   CLIENT_CAPABILITIES_QUERY_PARAM,
   ORCHESTRATION_PROTOCOL_QUERY_PARAM,
@@ -7,7 +5,9 @@ import {
   SETTINGS_SECRET_REFERENCES_CAPABILITY,
   type ExecutionEnvironmentDescriptor,
 } from "@t3tools/contracts";
+import { msg } from "gt-i18n";
 
+import { translatableDetail } from "../errors/translatable.ts";
 import { ConnectionBlockedError } from "./model.ts";
 
 export function orchestrationProtocolCompatibilityError(

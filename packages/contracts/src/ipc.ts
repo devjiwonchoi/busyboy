@@ -1,25 +1,24 @@
 import * as Schema from "effect/Schema";
-import type { PreviewCaptureFailureEncoded } from "./previewCapture.ts";
 
-import { SnapShotSource } from "./chatAttachment.ts";
+import { AuthAccessTokenResult, AuthSessionState } from "./auth.ts";
 import { EnvironmentId, TrimmedNonEmptyString } from "./baseSchemas.ts";
-import { BrowserProfileId } from "./browserProfile.ts";
 import type {
   BrowserImportResult,
   BrowserImportSource,
   BrowserImportSourceId,
 } from "./browserImport.ts";
-import { AuthAccessTokenResult, AuthSessionState } from "./auth.ts";
-import { AdvertisedEndpoint } from "./remoteAccess.ts";
-import { ExecutionEnvironmentDescriptor } from "./environment.ts";
-import { type ClientSettings, type QuitConfirmationMode, SnapShotShortcut } from "./settings.ts";
-import type { EditorId } from "./editor.ts";
-import { KeybindingShortcut, type PreviewForwardedShortcut } from "./keybindings.ts";
-
+import { BrowserProfileId } from "./browserProfile.ts";
+import { SnapShotSource } from "./chatAttachment.ts";
 import type {
   DesktopAppActivationRequest,
   DesktopAppActivationResponse,
 } from "./desktopAppActivation.ts";
+import type { EditorId } from "./editor.ts";
+import { ExecutionEnvironmentDescriptor } from "./environment.ts";
+import { KeybindingShortcut, type PreviewForwardedShortcut } from "./keybindings.ts";
+import type { PreviewCaptureFailureEncoded } from "./previewCapture.ts";
+import { AdvertisedEndpoint } from "./remoteAccess.ts";
+import { type ClientSettings, type QuitConfirmationMode, SnapShotShortcut } from "./settings.ts";
 
 export interface ContextMenuItem<T extends string = string> {
   id: T;

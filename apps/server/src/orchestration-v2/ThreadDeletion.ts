@@ -3,11 +3,11 @@ import type {
   OrchestrationV2DomainEvent,
   OrchestrationV2ThreadProjection,
 } from "@t3tools/contracts";
+import type * as IdAllocator from "@t3tools/provider-core/server/IdAllocator";
 import type * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 
 import type { PendingOrchestrationEffectV2 } from "./EffectOutbox.ts";
-import type * as IdAllocator from "@t3tools/provider-core/server/IdAllocator";
 
 export interface ThreadDeletionPlan {
   readonly events: ReadonlyArray<OrchestrationV2DomainEvent>;

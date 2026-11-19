@@ -2,15 +2,13 @@ import * as Context from "effect/Context";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
 import * as Stdio from "effect/Stdio";
-import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 
 import * as CodexRpc from "./_generated/meta.gen.ts";
 import * as CodexSchema from "./_generated/schema.gen.ts";
-import * as CodexError from "./errors.ts";
-import * as CodexProtocol from "./protocol.ts";
 import {
   decodeNotificationPayload,
   decodeOptionalPayload,
@@ -18,6 +16,8 @@ import {
   runHandler,
 } from "./_internal/shared.ts";
 import { makeChildStdio, makeStderrTail, makeTerminationError } from "./_internal/stdio.ts";
+import * as CodexError from "./errors.ts";
+import * as CodexProtocol from "./protocol.ts";
 
 export interface CodexAppServerClientOptions {
   readonly logIncoming?: boolean;

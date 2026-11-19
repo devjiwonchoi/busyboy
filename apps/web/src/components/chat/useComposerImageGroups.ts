@@ -1,11 +1,12 @@
-import { type ComposerImageAttachment, type DraftId } from "../../composerDraftStore";
 import { type ScopedThreadRef } from "@t3tools/contracts";
+import { useSyncExternalStore } from "react";
+
+import { type ComposerImageAttachment, type DraftId } from "../../composerDraftStore";
 import {
   getPendingSnapShotAnimations,
   pendingSnapShotAnimationIdsForTarget,
   subscribeToPendingSnapShotAnimations,
 } from "../../lib/snapShotAnimation";
-import { useSyncExternalStore } from "react";
 
 /**
  * Follows the SnapShots still animating into this draft and splits the draft's images into

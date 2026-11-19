@@ -42,8 +42,8 @@ vi.mock("expo-file-system", () => ({
 import type { EnvironmentId } from "@t3tools/contracts";
 import { AsyncResult, AtomRegistry } from "effect/reactivity";
 
-import type { DraftComposerImageAttachment } from "./composerImages";
 import { MaterializedPreviewKey, materializedPreviewAtom } from "./composerImagePreview";
+import type { DraftComposerImageAttachment } from "./composerImages";
 
 describe("materializedPreviewAtom", () => {
   it("keeps the materialized preview when the upload reference lands", async () => {

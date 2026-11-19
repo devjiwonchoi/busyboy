@@ -3,8 +3,8 @@ import {
   type DesktopCaptureConfigPreview,
   type DesktopSnapShotState,
 } from "@t3tools/contracts";
-import { userEvent } from "vite-plus/test/browser";
 import { expect, it, vi } from "vite-plus/test";
+import { userEvent } from "vite-plus/test/browser";
 
 import { act, render } from "../../../test/render";
 

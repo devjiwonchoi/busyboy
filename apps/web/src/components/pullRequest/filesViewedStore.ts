@@ -8,7 +8,6 @@ import type {
   PullRequestFilesViewedResult,
   PullRequestRef,
 } from "@t3tools/contracts";
-
 import { msg } from "gt-react";
 
 import { m } from "~/i18n/messages";

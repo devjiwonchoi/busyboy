@@ -1,6 +1,5 @@
-import { selectedNavigationTab, visibleNavigationTabs } from "./navigation-tab-order";
-import { requireNativeView } from "expo";
 import { CommonActions, useNavigation } from "@react-navigation/native";
+import { requireNativeView } from "expo";
 import {
   Keyboard,
   processColor,
@@ -15,18 +14,19 @@ import { useAndroidControlSizing } from "../../../components/ui/useAndroidContro
 import { useToolbarLayout } from "../../../components/ui/useToolbarLayout";
 import { rootNavigationRef } from "../../../lib/rootNavigation";
 import { useWorkspaceConnectionState } from "../../../state/workspace";
+import { useSoftKeyboardShowing } from "../../keyboard/useSoftKeyboardShowing";
+import { useAppearancePreferences } from "../../settings/appearance/AppearancePreferencesProvider";
+import { useAdaptiveWorkspaceLayout } from "../adaptive-workspace-context";
 import { androidWorkspaceNavigationColors } from "./android-workspace-navigation-colors";
 import {
   androidWorkspaceTabNavigationState,
   type AndroidWorkspaceNavigationTab,
 } from "./android-workspace-tabs";
-import { useAppearancePreferences } from "../../settings/appearance/AppearancePreferencesProvider";
-import { useSoftKeyboardShowing } from "../../keyboard/useSoftKeyboardShowing";
-import { useAdaptiveWorkspaceLayout } from "../adaptive-workspace-context";
 import { useAndroidWorkspaceRoot } from "./AndroidWorkspaceTabsProvider";
+import { FLOATING_TABS, floatingTabsMetrics } from "./floating-workspace-tabs";
+import { selectedNavigationTab, visibleNavigationTabs } from "./navigation-tab-order";
 import { useNavigationTabOrder, useHiddenNavigationTabs } from "./navigation-tabs";
 import { useWorkspaceTabs } from "./WorkspaceTabsContext";
-import { FLOATING_TABS, floatingTabsMetrics } from "./floating-workspace-tabs";
 
 // Matches RAIL_WIDTH in the native rail.
 export const ANDROID_WORKSPACE_RAIL_WIDTH = 72;

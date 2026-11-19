@@ -1,11 +1,12 @@
-import { selectedNavigationTab, visibleNavigationTabs } from "./navigation-tab-order";
 import { requireNativeView } from "expo";
 import type { NativeSyntheticEvent, ViewProps } from "react-native";
+
 import { useControlTheme } from "../../../components/ui/useControlTheme";
-import { useNavigationTabOrder, useHiddenNavigationTabs } from "./navigation-tabs";
-import { useWorkspaceTabs } from "./WorkspaceTabsContext";
-import { useSelectWorkspaceTab } from "./useSelectWorkspaceTab";
 import { useAdaptiveWorkspaceLayout } from "../adaptive-workspace-context";
+import { selectedNavigationTab, visibleNavigationTabs } from "./navigation-tab-order";
+import { useNavigationTabOrder, useHiddenNavigationTabs } from "./navigation-tabs";
+import { useSelectWorkspaceTab } from "./useSelectWorkspaceTab";
+import { useWorkspaceTabs } from "./WorkspaceTabsContext";
 
 const NativeSidebarTabBar = requireNativeView<
   ViewProps & {

@@ -1,17 +1,20 @@
-import { msg, T, useGT, useMessages } from "gt-react";
-import { m, type MessageResolver } from "../i18n/messages";
-import { sourceControlClients } from "@t3tools/client-runtime/source-control-clients";
+import {
+  closestCenter,
+  DndContext,
+  type DragEndEvent,
+  PointerSensor,
+  useSensor,
+  useSensors,
+} from "@dnd-kit/core";
+import { restrictToFirstScrollableAncestor, restrictToHorizontalAxis } from "@dnd-kit/modifiers";
+import { horizontalListSortingStrategy, SortableContext, useSortable } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { scopeThreadRef } from "@t3tools/client-runtime/environment";
+import { sourceControlClients } from "@t3tools/client-runtime/source-control-clients";
 import {
   threadRuntimeIsActive,
   type EnvironmentThreadShell,
 } from "@t3tools/client-runtime/state/shell";
-import {
-  useProjects,
-  useQuietThreadShell,
-  useServerConfigs,
-  useThreadShells,
-} from "~/state/entities";
 import {
   threadPullRequestKeysEqual,
   visibleThreadPullRequests,
@@ -26,18 +29,9 @@ import type {
   ResolvedKeybindingsConfig,
   ThreadId,
 } from "@t3tools/contracts";
+import { faviconUrlForOrigin } from "@t3tools/shared/favicon";
 import { getTerminalLabel } from "@t3tools/shared/terminalLabelsCopy";
-import {
-  closestCenter,
-  DndContext,
-  type DragEndEvent,
-  PointerSensor,
-  useSensor,
-  useSensors,
-} from "@dnd-kit/core";
-import { restrictToFirstScrollableAncestor, restrictToHorizontalAxis } from "@dnd-kit/modifiers";
-import { horizontalListSortingStrategy, SortableContext, useSortable } from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
+import { msg, T, useGT, useMessages } from "gt-react";
 import {
   CircleDotIcon,
   Smartphone,
@@ -64,18 +58,11 @@ import {
   useState,
 } from "react";
 
-import { isElectron } from "~/env";
-import type { DesktopPreviewOverlay } from "~/previewStateStore";
-import type { RightPanelSurface } from "~/rightPanelStore";
-import { cn } from "~/lib/utils";
-import { issueStatePresentation } from "~/components/issue/issuePresentation";
-import { issueEnvironment } from "~/state/issues";
-import { resolveShortcutCommand, type ShortcutMatchContext } from "~/keybindings";
-import { readLocalApi } from "~/localApi";
-import { useStableCallback } from "~/hooks/useStableCallback";
-import { Button } from "~/components/ui/button";
+import { useBrowserDefaults } from "~/browser/browserDefaults";
 import { AndroidIcon, AppleIcon } from "~/components/Icons";
-import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
+import { issueStatePresentation } from "~/components/issue/issuePresentation";
+import { PullRequestGlyph } from "~/components/pullRequest/pullRequestIcons";
+import { Button } from "~/components/ui/button";
 import { Kbd } from "~/components/ui/kbd";
 import {
   Menu,
@@ -87,13 +74,28 @@ import {
   MenuSubTrigger,
   MenuTrigger,
 } from "~/components/ui/menu";
-import { useBrowserDefaults } from "~/browser/browserDefaults";
-import { ScrollArea } from "~/components/ui/scroll-area";
 import { PanelTabCloseButton } from "~/components/ui/panel-tab-close-button";
-import { faviconUrlForOrigin } from "@t3tools/shared/favicon";
-import { useTheme } from "~/hooks/useTheme";
-import { useDeviceState } from "~/state/device";
+import { ScrollArea } from "~/components/ui/scroll-area";
+import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
+import { isElectron } from "~/env";
 import type { PreviewPanelInlineSize } from "~/hooks/usePreviewPanelInlineSize";
+import { useStableCallback } from "~/hooks/useStableCallback";
+import { useTheme } from "~/hooks/useTheme";
+import { resolveShortcutCommand, type ShortcutMatchContext } from "~/keybindings";
+import { observeResize } from "~/lib/observeResize";
+import { surfaceShortcutKey } from "~/lib/surfaceShortcutKey";
+import { cn } from "~/lib/utils";
+import { readLocalApi } from "~/localApi";
+import type { DesktopPreviewOverlay } from "~/previewStateStore";
+import type { RightPanelSurface } from "~/rightPanelStore";
+import { useDeviceState } from "~/state/device";
+import {
+  useProjects,
+  useQuietThreadShell,
+  useServerConfigs,
+  useThreadShells,
+} from "~/state/entities";
+import { issueEnvironment } from "~/state/issues";
 import {
   newestPullRequestSummary,
   pullRequestEnvironment,
@@ -102,16 +104,14 @@ import {
 import { useEnvironmentQuery } from "~/state/query";
 import { COLLAPSED_SIDEBAR_TITLEBAR_INSET_CLASS } from "~/workspaceTitlebar";
 
-import { PreviewPanelShell, type PreviewPanelMode } from "./preview/PreviewPanelShell";
-import { FaviconImage } from "./preview/PreviewFaviconIcon";
-import { previewBridge } from "./preview/previewBridge";
-import { dispatchPreviewAction } from "./preview/previewActionBus";
-import { preventThumbButtonFocus, takeThumbButtonNavigation } from "./preview/thumbButtons";
+import { m, type MessageResolver } from "../i18n/messages";
 import { PierreEntryIcon } from "./chat/PierreEntryIcon";
+import { dispatchPreviewAction } from "./preview/previewActionBus";
+import { previewBridge } from "./preview/previewBridge";
+import { FaviconImage } from "./preview/PreviewFaviconIcon";
+import { PreviewPanelShell, type PreviewPanelMode } from "./preview/PreviewPanelShell";
+import { preventThumbButtonFocus, takeThumbButtonNavigation } from "./preview/thumbButtons";
 import { resolvePullRequestState } from "./pullRequest/pullRequestPresentation";
-import { PullRequestGlyph } from "~/components/pullRequest/pullRequestIcons";
-import { observeResize } from "~/lib/observeResize";
-import { surfaceShortcutKey } from "~/lib/surfaceShortcutKey";
 
 export interface RightPanelTabsProps {
   mode: PreviewPanelMode;

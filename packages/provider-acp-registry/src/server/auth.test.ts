@@ -1,22 +1,22 @@
 import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import * as Layer from "effect/Layer";
 import { assert, it } from "@effect/vitest";
 import { ProviderInstanceId, type ProviderAuthState } from "@t3tools/contracts";
-import { AcpRegistrySettings } from "../settings.ts";
-import * as Deferred from "effect/Deferred";
+import type * as AcpSessionRuntime from "@t3tools/provider-acp/server/AcpSessionRuntime";
+import * as PtyAdapter from "@t3tools/shared/PtyAdapter";
+import type * as AcpSchema from "effect-acp/compat";
+import { AcpRequestError } from "effect-acp/errors";
 import * as Cause from "effect/Cause";
+import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
-import type * as AcpSchema from "effect-acp/compat";
-import { AcpRequestError } from "effect-acp/errors";
 
-import * as PtyAdapter from "@t3tools/shared/PtyAdapter";
-import { formatFailureDetail, makeAcpRegistryAuth } from "./auth.ts";
+import { AcpRegistrySettings } from "../settings.ts";
 import * as AcpRegistrySupport from "./AcpRegistrySupport.ts";
-import type * as AcpSessionRuntime from "@t3tools/provider-acp/server/AcpSessionRuntime";
+import { formatFailureDetail, makeAcpRegistryAuth } from "./auth.ts";
 
 const decodeSettings = Schema.decodeSync(AcpRegistrySettings);
 const instanceId = ProviderInstanceId.make("acp-auth-test");

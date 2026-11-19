@@ -1,13 +1,14 @@
 import * as NodeOS from "node:os";
+
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import { describe, expect, it } from "vite-plus/test";
+import { symlinksSupported } from "@t3tools/shared/testing/symlinks";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as PlatformError from "effect/PlatformError";
 import type * as Scope from "effect/Scope";
-import { symlinksSupported } from "@t3tools/shared/testing/symlinks";
+import { describe, expect, it } from "vite-plus/test";
 
 import {
   discoverCursorSkills,

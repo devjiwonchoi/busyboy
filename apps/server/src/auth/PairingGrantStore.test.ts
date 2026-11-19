@@ -1,18 +1,18 @@
-import { AuthStandardClientScopes } from "@t3tools/contracts";
 import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { expect, it } from "@effect/vitest";
-import * as SecureRandom from "effect/crypto/SecureRandom";
-import * as Duration from "effect/Duration";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import * as Stream from "effect/Stream";
-import * as Queue from "effect/Queue";
-import * as TestClock from "effect/testing/TestClock";
+import { AuthStandardClientScopes } from "@t3tools/contracts";
 import {
   DESKTOP_BOOTSTRAP_TOKEN_WINDOW_MS,
   currentDesktopBootstrapToken,
 } from "@t3tools/shared/desktopBootstrapToken";
+import * as SecureRandom from "effect/crypto/SecureRandom";
+import * as Duration from "effect/Duration";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Queue from "effect/Queue";
+import * as Stream from "effect/Stream";
+import * as TestClock from "effect/testing/TestClock";
 
 import * as ServerConfig from "../config.ts";
 import { MCP_APPROVAL_SUBJECT_PREFIX } from "../persistence/AuthPairingLinks.ts";

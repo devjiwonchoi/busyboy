@@ -1,5 +1,3 @@
-import { msg } from "gt-i18n";
-import { translatableMessage } from "../errors/translatable.ts";
 import {
   ORCHESTRATION_V2_WS_METHODS,
   type EnvironmentId,
@@ -9,18 +7,24 @@ import {
   type OrchestrationV2GetTurnItemInput,
 } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
+import type { HttpClient } from "effect/http";
 import * as Option from "effect/Option";
+import { Atom } from "effect/reactivity";
 import * as Stream from "effect/Stream";
 import * as SubscriptionRef from "effect/SubscriptionRef";
-import type { HttpClient } from "effect/http";
-import { Atom } from "effect/reactivity";
+import { msg } from "gt-i18n";
 
+import * as RemoteEnvironmentAuthorization from "../authorization/service.ts";
+import type { EnvironmentRegistry } from "../connection/registry.ts";
+import * as EnvironmentSupervisor from "../connection/supervisor.ts";
+import { translatableMessage } from "../errors/translatable.ts";
+import * as ManagedRelayDpopSigner from "../relay/managedRelay.ts";
+import { EnvironmentRpcUnavailableError, request } from "../rpc/client.ts";
 import {
   applyCommandOutputFrame,
   EMPTY_COMMAND_OUTPUT,
   type CommandOutputView,
 } from "./commandOutput.ts";
-
 import {
   createEnvironmentQueryAtomFamily,
   createEnvironmentRpcCommand,
@@ -29,11 +33,6 @@ import {
   createEnvironmentCommand,
   type QueryAnswerHandler,
 } from "./runtime.ts";
-import type { EnvironmentRegistry } from "../connection/registry.ts";
-import * as EnvironmentSupervisor from "../connection/supervisor.ts";
-import * as RemoteEnvironmentAuthorization from "../authorization/service.ts";
-import * as ManagedRelayDpopSigner from "../relay/managedRelay.ts";
-import { EnvironmentRpcUnavailableError, request } from "../rpc/client.ts";
 import type { EnvironmentShellState } from "./shell.ts";
 import { fetchEnvironmentThreadTranscript } from "./threadTranscriptHttp.ts";
 

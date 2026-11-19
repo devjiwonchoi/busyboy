@@ -1,3 +1,4 @@
+import type { EnvironmentConnectionPhase } from "@t3tools/client-runtime/connection";
 import { errorDisplayMessage } from "@t3tools/client-runtime/errors";
 import {
   ClientSettingsSchema,
@@ -15,7 +16,6 @@ import {
   type T3ProjectFile,
   type ServerSettingsPatch,
 } from "@t3tools/contracts";
-import type { EnvironmentConnectionPhase } from "@t3tools/client-runtime/connection";
 import {
   clearProjectSettingsOverrides,
   resolveProjectSettings,
@@ -23,13 +23,12 @@ import {
   type ProjectSettingSource,
 } from "@t3tools/shared/projectSettings";
 import { applyServerSettingsPatch } from "@t3tools/shared/serverSettings";
-import * as Equal from "effect/Equal";
 import * as Cause from "effect/Cause";
+import * as Equal from "effect/Equal";
 import { Atom } from "effect/reactivity";
 import { msg } from "gt-react";
 
 import { m } from "../../i18n/messages";
-
 import type { ResolvedSettingsScope } from "./settingsScope";
 
 export type ScopedSettingsPatch = ServerSettingsPatch & ClientSettingsPatch;

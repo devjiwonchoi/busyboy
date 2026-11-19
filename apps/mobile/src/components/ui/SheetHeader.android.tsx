@@ -1,8 +1,8 @@
 import { useGT } from "gt-react-native";
 import { View } from "react-native";
 
-import { AppBar } from "./AppBar";
 import { NativeStackScreenOptions } from "../../native/StackHeader";
+import { AppBar } from "./AppBar";
 import { Button } from "./Button";
 import { IconButton } from "./IconButton";
 import type { SheetCloseButtonProps, SheetHeaderProps } from "./SheetHeader.types";

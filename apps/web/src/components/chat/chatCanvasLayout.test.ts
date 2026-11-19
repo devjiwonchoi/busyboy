@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vite-plus/test";
-import { resolveChatCanvasLayout, type ChatCanvasPreview } from "./chatCanvasLayout";
+
 import { resizePreviewMiniPlayer } from "../preview/previewMiniPlayerLayout";
+import { resolveChatCanvasLayout, type ChatCanvasPreview } from "./chatCanvasLayout";
 import {
   resolveThreadDetailsCardDensity,
   resolveThreadDetailsCardLayout,

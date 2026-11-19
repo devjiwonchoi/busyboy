@@ -1,9 +1,5 @@
 import { managedCapabilityDenial } from "@t3tools/client-runtime/contract-labels";
-import { DeviceHostUpdates } from "../device/DeviceHostUpdates";
-import { DeviceToolVersions } from "../device/DeviceToolVersions";
-import { useScopedSettings, useUpdateScopedSettings } from "./useScopedSettings";
-import { ScopedSwitch } from "./ScopedSwitch";
-import { DeviceSourcesSettings } from "./DeviceSourcesSettings";
+import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
 import {
   AuthSettingsWriteScope,
   BrowserImportFailureReason,
@@ -36,47 +32,43 @@ import {
   type PreviewAppearancePreference,
   type PreviewViewportSetting,
 } from "@t3tools/contracts";
-import { usePrimaryManagedPolicy } from "~/state/managedPolicy";
 import { isValidSearchUrlTemplate } from "@t3tools/shared/preview";
 import { PREVIEW_VIEWPORT_PRESETS } from "@t3tools/shared/previewViewport";
-import { MoreVertical, Plus as PlusIcon } from "lucide-react";
 import * as Schema from "effect/Schema";
-import { useRef, useState } from "react";
 import { msg, T, useGT, useMessages, Var } from "gt-react";
-import { m as resolveNow, type MessageResolver } from "../../i18n/messages";
+import { MoreVertical, Plus as PlusIcon } from "lucide-react";
+import { useRef, useState } from "react";
 
 import { ScreenRotationIcon } from "~/browser/ScreenRotationIcon";
 import { resolveEnvironmentOptionLabel } from "~/components/BranchToolbar.logic";
-import { previewBridge } from "~/components/preview/previewBridge";
-import { cn, randomUUID } from "~/lib/utils";
-import { useEnvironments, usePrimaryEnvironment } from "~/state/environments";
-import { deviceEnvironment, useDeviceState } from "~/state/device";
-import { readEnvironmentScope, useEnvironmentScope } from "~/state/session";
-import { useAtomCommand } from "~/state/use-atom-command";
-import { formatEnvironmentQueryError } from "~/state/query";
-import { previewEnvironment } from "~/state/preview";
-import { useServerConfigs } from "~/state/entities";
-import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
 import {
   AgentDeviceSetupStatus,
   DeviceHubSetupStatus,
   deviceHubReadiness,
 } from "~/components/device/DeviceSetup";
-import { isElectron } from "../../env";
-
-import { Badge } from "../ui/badge";
+import { previewBridge } from "~/components/preview/previewBridge";
 import {
-  Menu,
-  MenuGroup,
-  MenuGroupLabel,
-  MenuItem,
-  MenuPopup,
-  MenuSeparator,
-  MenuTrigger,
-} from "../ui/menu";
+  getClientSettings,
+  persistClientSettingsUpdate,
+  useClientSettings,
+  useClientSettingsHydrated,
+  useUpdatePrimarySettings,
+} from "~/hooks/useSettings";
+import { cn, randomUUID } from "~/lib/utils";
 import { readLocalApi } from "~/localApi";
+import { deviceEnvironment, useDeviceState } from "~/state/device";
+import { useServerConfigs } from "~/state/entities";
+import { useEnvironments, usePrimaryEnvironment } from "~/state/environments";
+import { usePrimaryManagedPolicy } from "~/state/managedPolicy";
+import { previewEnvironment } from "~/state/preview";
+import { formatEnvironmentQueryError } from "~/state/query";
+import { readEnvironmentScope, useEnvironmentScope } from "~/state/session";
+import { useAtomCommand } from "~/state/use-atom-command";
 
-import { toastManager } from "../ui/toast";
+import { isElectron } from "../../env";
+import { m as resolveNow, type MessageResolver } from "../../i18n/messages";
+import { DeviceHostUpdates } from "../device/DeviceHostUpdates";
+import { DeviceToolVersions } from "../device/DeviceToolVersions";
 import {
   AlertDialog,
   AlertDialogClose,
@@ -86,8 +78,18 @@ import {
   AlertDialogPopup,
   AlertDialogTitle,
 } from "../ui/alert-dialog";
+import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { DraftInput } from "../ui/draft-input";
+import {
+  Menu,
+  MenuGroup,
+  MenuGroupLabel,
+  MenuItem,
+  MenuPopup,
+  MenuSeparator,
+  MenuTrigger,
+} from "../ui/menu";
 import { NumberField, NumberFieldGroup, NumberFieldInput } from "../ui/number-field";
 import {
   Select,
@@ -99,15 +101,13 @@ import {
   SelectValue,
 } from "../ui/select";
 import { Switch } from "../ui/switch";
+import { toastManager } from "../ui/toast";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
-import {
-  getClientSettings,
-  persistClientSettingsUpdate,
-  useClientSettings,
-  useClientSettingsHydrated,
-  useUpdatePrimarySettings,
-} from "~/hooks/useSettings";
-
+import { AdvancedSettings } from "./AdvancedSettings";
+import { BrowserImportWizard, type WizardTarget } from "./BrowserImportWizard";
+import type { ImportOutcome } from "./browserImportWizard.logic";
+import { DeviceSourcesSettings } from "./DeviceSourcesSettings";
+import { ScopedSwitch } from "./ScopedSwitch";
 import {
   SettingsUnavailableGroup,
   SettingResetButton,
@@ -115,11 +115,9 @@ import {
   SettingsRow,
   SettingsSection,
 } from "./settingsLayout";
-import { useSearchableSetting } from "./settingsSearch";
-import { AdvancedSettings } from "./AdvancedSettings";
 import { useSettingsScope } from "./SettingsScopeContext";
-import { BrowserImportWizard, type WizardTarget } from "./BrowserImportWizard";
-import type { ImportOutcome } from "./browserImportWizard.logic";
+import { useSearchableSetting } from "./settingsSearch";
+import { useScopedSettings, useUpdateScopedSettings } from "./useScopedSettings";
 
 const FILL_VALUE = "fill";
 const RESPONSIVE_VALUE = "responsive";

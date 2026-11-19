@@ -17,31 +17,30 @@ import {
   ThreadId,
   TurnItemId,
 } from "@t3tools/contracts";
+import type * as ProviderAdapter from "@t3tools/provider-core/server/ProviderAdapter";
 import * as Context from "effect/Context";
 import * as DateTime from "effect/DateTime";
 import * as Deferred from "effect/Deferred";
-import type * as ProviderAdapter from "@t3tools/provider-core/server/ProviderAdapter";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
-import * as FileSystem from "effect/FileSystem";
 import * as Fiber from "effect/Fiber";
+import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Queue from "effect/Queue";
 import * as Ref from "effect/Ref";
 import * as Stream from "effect/Stream";
 import * as TestClock from "effect/testing/TestClock";
 
+import { resolveAttachmentRelativePath } from "../attachmentPaths.ts";
 import {
   createAttachmentId,
   resolveAttachmentPath,
   resolveAttachmentPathById,
   sweepStalePendingAttachments,
 } from "../attachmentStore.ts";
-import { resolveAttachmentRelativePath } from "../attachmentPaths.ts";
 import * as ServerSecretStore from "../auth/ServerSecretStore.ts";
 import { CloudManagedEndpointRuntime } from "../cloud/ManagedEndpointRuntime.ts";
 import * as ServerConfig from "../config.ts";
-import * as SqlitePersistence from "../persistence/Sqlite.ts";
 import { CodexProviderCapabilitiesV2 } from "../orchestration-v2/Adapters/CodexAdapterV2.ts";
 import * as CommandOutputHub from "../orchestration-v2/CommandOutputHub.ts";
 import * as EffectOutbox from "../orchestration-v2/EffectOutbox.ts";
@@ -52,6 +51,7 @@ import * as ProjectionStore from "../orchestration-v2/ProjectionStore.ts";
 import * as ProviderAdapterRegistry from "../orchestration-v2/ProviderAdapterRegistry.ts";
 import * as ResourceCleanupService from "../orchestration-v2/ResourceCleanupService.ts";
 import * as ProviderReplayHarness from "../orchestration-v2/testkit/ProviderReplayHarness.ts";
+import * as SqlitePersistence from "../persistence/Sqlite.ts";
 import * as DocumentText from "../provider/DocumentText.ts";
 import * as ProviderRegistry from "../provider/ProviderRegistry.ts";
 import * as ServerSettings from "../serverSettings.ts";

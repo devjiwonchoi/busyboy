@@ -19,6 +19,7 @@ import {
   resolveVersionMismatch,
   supportsDesktopAppUpdate,
 } from "~/versionSkew";
+
 import type { ServerUpdateOutcome, ServerUpdateTarget } from "../ServerUpdateAction";
 
 export interface UpdateEverythingMachine {

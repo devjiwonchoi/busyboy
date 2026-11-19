@@ -1,11 +1,12 @@
-import { useGT } from "gt-react";
-import { useEffect, useRef } from "react";
+import { createDuoPinch } from "@t3tools/client-runtime/device/duo-control";
 import type { DuoViewer } from "@t3tools/client-runtime/device/duo-viewer";
+import { createCanvasFrameSink } from "@t3tools/client-runtime/device/frame";
 import type { DeviceModelSource } from "@t3tools/client-runtime/device/model";
 import type { createPhoneInteraction } from "@t3tools/client-runtime/device/phone-interaction";
-import { createCanvasFrameSink } from "@t3tools/client-runtime/device/frame";
 import type { DeviceScreenSize, DeviceStreamClient } from "@t3tools/client-runtime/device/stream";
-import { createDuoPinch } from "@t3tools/client-runtime/device/duo-control";
+import { useGT } from "gt-react";
+import { useEffect, useRef } from "react";
+
 import { mountDeviceViewer } from "./mountDeviceViewer";
 
 const loadDuoViewer = () => import("@t3tools/client-runtime/device/duo-viewer");

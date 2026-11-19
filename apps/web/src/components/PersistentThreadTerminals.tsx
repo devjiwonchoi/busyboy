@@ -1,3 +1,4 @@
+import { scopeProjectRef } from "@t3tools/client-runtime/environment";
 import {
   AuthTerminalOperateScope,
   type EnvironmentId,
@@ -5,16 +6,17 @@ import {
   type ScopedThreadRef,
   type ThreadId,
 } from "@t3tools/contracts";
-import { scopeProjectRef } from "@t3tools/client-runtime/environment";
 import { projectScriptCwd, projectScriptRuntimeEnv } from "@t3tools/shared/projectScripts";
 import { resolveTerminalSessionLabel } from "@t3tools/shared/terminalLabelsCopy";
 import { useMessages } from "gt-react";
 import { memo, useEffect } from "react";
+
+import { cn } from "~/lib/utils";
+
 import { useComposerDraftStore } from "../composerDraftStore";
 import { useStableCallback } from "../hooks/useStableCallback";
 import type { TerminalContextSelection } from "../lib/terminalContext";
 import { focusActiveDrawerTerminal, focusTerminal } from "../lib/terminalFocus";
-import { cn } from "~/lib/utils";
 import {
   selectThreadRightPanelState,
   useRightPanelStore,
@@ -24,9 +26,9 @@ import { useProject, useQuietThreadShell } from "../state/entities";
 import { useEnvironmentScope } from "../state/session";
 import { useKnownTerminalSessions, useTerminalDrawerSessions } from "../state/terminalSessions";
 import { selectThreadTerminalUiState, useTerminalUiStateStore } from "../terminalUiStateStore";
+import { resolveTerminalWorktreePath } from "./ChatView.logic";
 import { useThreadTerminalActions } from "./terminal/useThreadTerminalActions";
 import ThreadTerminalDrawer from "./ThreadTerminalDrawer";
-import { resolveTerminalWorktreePath } from "./ChatView.logic";
 
 /** Where a drawer or panel opens new terminals when a script run overrides the thread's own. */
 export type PersistentTerminalLaunchContext = {

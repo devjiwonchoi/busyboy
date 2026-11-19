@@ -1,5 +1,6 @@
 // @effect-diagnostics nodeBuiltinImport:off -- Effect's Node FileSystem is async, and pre-ready startup must not yield before the Clerk bridge registers its privileged scheme.
 import * as NodeFS from "node:fs";
+
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";

@@ -4,12 +4,12 @@ import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
-import * as Path from "effect/Path";
 import * as Option from "effect/Option";
-import * as Stream from "effect/Stream";
-import * as Tracer from "effect/Tracer";
-import * as TestClock from "effect/testing/TestClock";
+import * as Path from "effect/Path";
 import * as SqlClient from "effect/sql/SqlClient";
+import * as Stream from "effect/Stream";
+import * as TestClock from "effect/testing/TestClock";
+import * as Tracer from "effect/Tracer";
 
 import * as ServerConfig from "../config.ts";
 import * as ProjectionMaintenance from "../orchestration-v2/ProjectionMaintenance.ts";

@@ -13,56 +13,56 @@ import {
   ProviderSessionId,
   ThreadId,
 } from "@t3tools/contracts";
-import { pendingBackgroundTurnItems } from "@t3tools/shared/orchestrationV2PendingBackgroundWork";
-import { resolveSelfInvocation, selfInvocationArgs } from "@t3tools/shared/nodeRuntime";
-import * as Exit from "effect/Exit";
-import * as Fiber from "effect/Fiber";
-import * as DateTime from "effect/DateTime";
-import * as Queue from "effect/Queue";
-import * as Stream from "effect/Stream";
-import * as TestClock from "effect/testing/TestClock";
-import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
-import * as Layer from "effect/Layer";
-import * as Option from "effect/Option";
-import * as Path from "effect/Path";
-import * as Schema from "effect/Schema";
-import * as HttpClient from "effect/http/HttpClient";
-import * as HttpClientResponse from "effect/http/HttpClientResponse";
-import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
-import * as EffectAcpErrors from "effect-acp/errors";
-
-import { makeProviderFailure } from "@t3tools/provider-core/server/failure";
-import * as McpProviderSessions from "@t3tools/provider-core/server/McpProviderSessions";
-import * as TestProviderHost from "@t3tools/provider-testing/TestProviderHost";
-import {
-  makeProviderReplayGate,
-  type ProviderReplayGate,
-} from "@t3tools/provider-testing/replayGate";
-import type { ProviderContinuationRequest } from "@t3tools/provider-core/server/ProviderContinuationRequests";
-import * as ServerSettings from "../../serverSettings.ts";
-import type { AcpRegistryLiveConfiguration } from "@t3tools/provider-acp-registry/testing";
-import * as AcpRegistrySupport from "@t3tools/provider-acp-registry/server/AcpRegistrySupport";
-import * as AcpRegistryRuntimeCoordinator from "@t3tools/provider-acp-registry/server/AcpRegistryRuntimeCoordinator";
-import { ACP_SESSION_MODE_OPTION_ID } from "@t3tools/provider-acp/server/sessionConfig";
-import * as AcpSessionRuntime from "@t3tools/provider-acp/server/AcpSessionRuntime";
-import { t3AcpPromptWithInstructions } from "@t3tools/provider-core/server/orchestrationInstructions";
-import { buildRuntimeInstructions } from "@t3tools/provider-core/server/runtimeInstructions";
-import * as IdAllocator from "@t3tools/provider-core/server/IdAllocator";
-import {
-  decodeAcpReplayTranscript,
-  makeAcpReplayCompletenessAssertion,
-  makeAcpReplayRuntime,
-  makeTurnInput,
-} from "./AcpAdapterV2.testkit.ts";
-import * as ProviderAdapter from "@t3tools/provider-core/server/ProviderAdapter";
 import { AcpRegistryAdapterV2Driver } from "@t3tools/provider-acp-registry/server";
+import * as AcpRegistryRuntimeCoordinator from "@t3tools/provider-acp-registry/server/AcpRegistryRuntimeCoordinator";
+import * as AcpRegistrySupport from "@t3tools/provider-acp-registry/server/AcpRegistrySupport";
+import type { AcpRegistryLiveConfiguration } from "@t3tools/provider-acp-registry/testing";
 import {
   ACP_REGISTRY_PROVIDER,
   makeAcpRegistryAdapterV2,
   acpRegistryPromptFailure,
   acpRegistryProbeResult,
 } from "@t3tools/provider-acp-registry/testing";
+import * as AcpSessionRuntime from "@t3tools/provider-acp/server/AcpSessionRuntime";
+import { ACP_SESSION_MODE_OPTION_ID } from "@t3tools/provider-acp/server/sessionConfig";
+import { makeProviderFailure } from "@t3tools/provider-core/server/failure";
+import * as IdAllocator from "@t3tools/provider-core/server/IdAllocator";
+import * as McpProviderSessions from "@t3tools/provider-core/server/McpProviderSessions";
+import { t3AcpPromptWithInstructions } from "@t3tools/provider-core/server/orchestrationInstructions";
+import * as ProviderAdapter from "@t3tools/provider-core/server/ProviderAdapter";
+import type { ProviderContinuationRequest } from "@t3tools/provider-core/server/ProviderContinuationRequests";
+import { buildRuntimeInstructions } from "@t3tools/provider-core/server/runtimeInstructions";
+import {
+  makeProviderReplayGate,
+  type ProviderReplayGate,
+} from "@t3tools/provider-testing/replayGate";
+import * as TestProviderHost from "@t3tools/provider-testing/TestProviderHost";
+import { resolveSelfInvocation, selfInvocationArgs } from "@t3tools/shared/nodeRuntime";
+import { pendingBackgroundTurnItems } from "@t3tools/shared/orchestrationV2PendingBackgroundWork";
+import * as EffectAcpErrors from "effect-acp/errors";
+import * as DateTime from "effect/DateTime";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Fiber from "effect/Fiber";
+import * as FileSystem from "effect/FileSystem";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientResponse from "effect/http/HttpClientResponse";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as Path from "effect/Path";
+import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
+import * as Queue from "effect/Queue";
+import * as Schema from "effect/Schema";
+import * as Stream from "effect/Stream";
+import * as TestClock from "effect/testing/TestClock";
+
+import * as ServerSettings from "../../serverSettings.ts";
+import {
+  decodeAcpReplayTranscript,
+  makeAcpReplayCompletenessAssertion,
+  makeAcpReplayRuntime,
+  makeTurnInput,
+} from "./AcpAdapterV2.testkit.ts";
 
 const decodeAcpRegistryAdapterSettings = Schema.decodeUnknownEffect(
   AcpRegistryAdapterV2Driver.configSchema,

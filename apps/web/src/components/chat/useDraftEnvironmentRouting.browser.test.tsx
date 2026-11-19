@@ -1,29 +1,29 @@
 import { useAtomValue } from "@effect/atom-react";
-import type { EnvironmentProject } from "@t3tools/client-runtime/state/shell";
 import { PrimaryConnectionTarget } from "@t3tools/client-runtime/connection";
-import * as Option from "effect/Option";
-import type { EnvironmentPresentation } from "../../state/environments";
-import type { ServerProvider } from "@t3tools/contracts";
 import {
   scopedThreadKey,
   scopeProjectRef,
   scopeThreadRef,
 } from "@t3tools/client-runtime/environment";
-import { createModelSelection } from "@t3tools/shared/model";
-import { DEFAULT_UNIFIED_SETTINGS } from "@t3tools/contracts/settings";
+import type { EnvironmentProject } from "@t3tools/client-runtime/state/shell";
+import type { ServerProvider } from "@t3tools/contracts";
 import {
   EnvironmentId,
   ProjectId,
   ProviderDriverKind,
   ProviderInstanceId,
 } from "@t3tools/contracts";
+import { DEFAULT_UNIFIED_SETTINGS } from "@t3tools/contracts/settings";
+import { createModelSelection } from "@t3tools/shared/model";
+import * as Option from "effect/Option";
 import { expect, it, vi } from "vite-plus/test";
 
 import { act, render } from "../../../test/render";
 import { DraftId, useComposerDraftStore } from "../../composerDraftStore";
-import { useDraftEnvironmentRouting } from "./useDraftEnvironmentRouting";
 import { appAtomRegistry, AppAtomRegistryProvider } from "../../rpc/atomRegistry";
+import type { EnvironmentPresentation } from "../../state/environments";
 import { draftFanoutSelectionsAtom } from "./chatViewSend";
+import { useDraftEnvironmentRouting } from "./useDraftEnvironmentRouting";
 
 const resources = vi.hoisted(() => ({
   projects: [] as EnvironmentProject[],

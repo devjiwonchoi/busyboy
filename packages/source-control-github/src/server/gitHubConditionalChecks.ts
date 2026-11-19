@@ -1,17 +1,17 @@
-import * as Clock from "effect/Clock";
+import { PositiveInt, type PullRequestChecks } from "@t3tools/contracts";
+import type { ProviderRepositoryRef } from "@t3tools/source-control-core/server/PullRequestProvider";
 import * as Cache from "effect/Cache";
+import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as Semaphore from "effect/Semaphore";
-import { PositiveInt, type PullRequestChecks } from "@t3tools/contracts";
 
-import * as GitHubRest from "./GitHubRest.ts";
-import * as GitHubRequestPolicy from "./GitHubRequestPolicy.ts";
-import type { GitHubPullRequestDetail } from "./gitHubPullRequestJson.ts";
 import type { GitHubPullRequestApiError } from "./GitHubPullRequestApi.ts";
-import type { ProviderRepositoryRef } from "@t3tools/source-control-core/server/PullRequestProvider";
+import type { GitHubPullRequestDetail } from "./gitHubPullRequestJson.ts";
+import * as GitHubRequestPolicy from "./GitHubRequestPolicy.ts";
+import * as GitHubRest from "./GitHubRest.ts";
 
 const HeadSchema = Schema.Struct({
   head: Schema.Struct({

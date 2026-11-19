@@ -1,5 +1,5 @@
-import { expect, it, vi } from "vite-plus/test";
 import type { NavigationContainerRef } from "@react-navigation/native";
+import { expect, it, vi } from "vite-plus/test";
 
 vi.mock("@react-navigation/native", () => ({
   createNavigationContainerRef: () => ({

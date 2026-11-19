@@ -1,29 +1,32 @@
 // @effect-diagnostics nodeBuiltinImport:off globalFetchInEffect:off - Local mock OAuth server validates the browser callback boundary.
-import * as NodeNet from "node:net";
-import * as Context from "effect/Context";
-import * as Scope from "effect/Scope";
-import * as ServerConfig from "../config.ts";
-import * as CodexManagedTokenBroker from "./CodexManagedTokenBroker.ts";
-import * as NodeHttp from "node:http";
+
 import * as NodeCrypto from "node:crypto";
+import * as NodeHttp from "node:http";
+import * as NodeNet from "node:net";
+
 import * as NodePlatformCrypto from "@effect/platform-node/NodeCrypto";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, it } from "@effect/vitest";
 import { EnvironmentId, ProviderInstanceId } from "@t3tools/contracts";
+import * as Context from "effect/Context";
+import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
+import { FetchHttpClient, HttpClient, HttpClientResponse } from "effect/http";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 import * as TestClock from "effect/testing/TestClock";
-import * as Fiber from "effect/Fiber";
-import * as Deferred from "effect/Deferred";
-import { subscribeChatGptHandoff } from "./CodexChatGptHandoff.ts";
-import { FetchHttpClient, HttpClient, HttpClientResponse } from "effect/http";
+
 import * as ServerSecretStore from "../auth/ServerSecretStore.ts";
+import * as ServerConfig from "../config.ts";
 import * as ServerEnvironment from "../environment/ServerEnvironment.ts";
-import * as ProviderCredentialStore from "./ProviderCredentialStore.ts";
 import * as AnalyticsService from "../telemetry/AnalyticsService.ts";
 import { makeCodexChatGptAuth } from "./CodexChatGptAuth.ts";
+import { subscribeChatGptHandoff } from "./CodexChatGptHandoff.ts";
+import * as CodexManagedTokenBroker from "./CodexManagedTokenBroker.ts";
+import * as ProviderCredentialStore from "./ProviderCredentialStore.ts";
 
 const assertSameCallback = (actual: string | null, expected: string | null) => {
   const left = new URL(actual!);

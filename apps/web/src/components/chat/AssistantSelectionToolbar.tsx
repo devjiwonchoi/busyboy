@@ -8,6 +8,7 @@ import { useGT } from "gt-react";
 import { QuoteIcon } from "lucide-react";
 import { use, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+
 import {
   captureAssistantTextSelection,
   type AssistantCitationSourceAnchor,
@@ -18,6 +19,7 @@ import {
   resolveSelectionActionPosition,
   type SelectionActionPoint,
 } from "~/lib/selectionActions";
+
 import { Button } from "../ui/button";
 import { BackgroundThreadContext } from "./backgroundThread";
 

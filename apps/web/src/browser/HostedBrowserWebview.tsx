@@ -3,8 +3,8 @@ import type {
   PreviewViewportSetting,
   ScopedThreadRef,
 } from "@t3tools/contracts";
-import { useShallow } from "zustand/react/shallow";
 import { useEffect, useEffectEvent, useRef, useState } from "react";
+import { useShallow } from "zustand/react/shallow";
 
 import { previewBridge } from "~/components/preview/previewBridge";
 import {
@@ -15,15 +15,15 @@ import { usePreviewBridge } from "~/components/preview/usePreviewBridge";
 import { useClientSettingsHydrated } from "~/hooks/useSettings";
 import { cn, isMacPlatform } from "~/lib/utils";
 
-import { resolveBrowserSurfacePanelRect, useBrowserSurfaceStore } from "./browserSurfaceStore";
+import { BrowserDeviceToolbar } from "./BrowserDeviceToolbar";
 import { useActiveBrowserRecordingTabIds } from "./browserRecording";
+import { resolveBrowserSurfacePanelRect, useBrowserSurfaceStore } from "./browserSurfaceStore";
 import {
   browserViewportSettingKey,
   resolveBrowserViewportLayout,
   resolveBrowserViewportTransform,
   resolveFittedBrowserViewport,
 } from "./browserViewportLayout";
-import { BrowserDeviceToolbar } from "./BrowserDeviceToolbar";
 import { BrowserViewportResizeHandles } from "./BrowserViewportResizeHandles";
 import { acquireDesktopTab, type AcquiredDesktopTab, withDesktopTab } from "./desktopTabLifetime";
 import { resolveHostedBrowserWebviewWrapperStyle } from "./hostedBrowserWebviewStyle";

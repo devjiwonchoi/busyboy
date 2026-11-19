@@ -1,7 +1,7 @@
 import { useCallback, useMemo } from "react";
 
-import { updateReviewExpandedFileIds, updateReviewViewedFileIds } from "./reviewState";
 import type { ReviewRenderableFile } from "./reviewModel";
+import { updateReviewExpandedFileIds, updateReviewViewedFileIds } from "./reviewState";
 
 // File ids are scoped to one diff text, so a refresh renames every file. Expansion is
 // stored by path, which survives a refresh; the occurrence index keeps apart entries

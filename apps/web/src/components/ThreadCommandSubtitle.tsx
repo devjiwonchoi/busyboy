@@ -1,10 +1,11 @@
 import type { ProviderDriverKind } from "@t3tools/contracts";
 import { T } from "gt-react";
 import { FolderGit2Icon, FolderIcon, GitBranchIcon } from "lucide-react";
-import { ProjectFavicon, type ProjectFaviconProject } from "./ProjectFavicon";
-import { ProviderInstanceIcon } from "./chat/ProviderInstanceIcon";
+
 import { cn } from "~/lib/utils";
 
+import { ProviderInstanceIcon } from "./chat/ProviderInstanceIcon";
+import { ProjectFavicon, type ProjectFaviconProject } from "./ProjectFavicon";
 import { MiddleTruncate } from "./ui/middle-truncate";
 
 export type ThreadCommandSubtitleVariant =

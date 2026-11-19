@@ -1,4 +1,3 @@
-import { describe, expect, it } from "vite-plus/test";
 import {
   ProviderDriverKind,
   ProviderInstanceId,
@@ -7,7 +6,9 @@ import {
   type OrchestrationV2SubagentWorkflow,
 } from "@t3tools/contracts";
 import * as DateTime from "effect/DateTime";
+import { describe, expect, it } from "vite-plus/test";
 
+import { resolveSubagentMetadata } from "./subagentDisplay.ts";
 import {
   deriveWorkflowGroups,
   isWorkflowScriptMessage,
@@ -15,7 +16,6 @@ import {
   resolveWorkflowOpening,
   workflowMemberModelSelection,
 } from "./subagentRuntime.ts";
-import { resolveSubagentMetadata } from "./subagentDisplay.ts";
 import { formatSubagentEffort } from "./threadExecution.ts";
 
 const at = (iso: string) => DateTime.makeUnsafe(iso);

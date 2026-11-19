@@ -1,6 +1,7 @@
+import { describe, expect, it } from "@effect/vitest";
 import type { ExecutionEnvironmentCapabilities } from "@t3tools/contracts";
 import { ThreadId } from "@t3tools/contracts";
-import { describe, expect, it } from "@effect/vitest";
+
 import {
   canStartThreadPullRequestWatch,
   planThreadPullRequestMutation,

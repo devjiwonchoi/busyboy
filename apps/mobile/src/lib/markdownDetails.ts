@@ -1,9 +1,9 @@
-import type { RootContent } from "mdast";
-import { unified } from "unified";
-import remarkParse from "remark-parse";
 import { msg } from "gt-react-native";
-import { m, type MessageResolver } from "../i18n/messages";
+import type { RootContent } from "mdast";
+import remarkParse from "remark-parse";
+import { unified } from "unified";
 
+import { m, type MessageResolver } from "../i18n/messages";
 import { decodeHtmlEntities, markdownHtmlTags } from "./markdownDocument";
 
 export type MarkdownDetailsSegment =

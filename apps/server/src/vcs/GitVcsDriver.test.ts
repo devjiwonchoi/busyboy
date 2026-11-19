@@ -1,36 +1,37 @@
 import * as NodeNet from "node:net";
-import * as SecureRandom from "effect/crypto/SecureRandom";
+
 import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import * as NodeServices from "@effect/platform-node/NodeServices";
+import { assert, it } from "@effect/vitest";
+import { CheckpointRef, GitCommandError, VcsProcessExitError } from "@t3tools/contracts";
+import * as HostProcess from "@t3tools/shared/HostProcess";
+import { symlinksSupported } from "@t3tools/shared/testing/symlinks";
 import * as Cause from "effect/Cause";
 import * as Clock from "effect/Clock";
-import * as Duration from "effect/Duration";
-import * as Exit from "effect/Exit";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Deferred from "effect/Deferred";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
-import * as TestClock from "effect/testing/TestClock";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
+import * as Metric from "effect/Metric";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as PlatformError from "effect/PlatformError";
 import { ChildProcessSpawner } from "effect/process";
-import * as Metric from "effect/Metric";
-import { assert, it } from "@effect/vitest";
+import * as TestClock from "effect/testing/TestClock";
 
-import { CheckpointRef, GitCommandError, VcsProcessExitError } from "@t3tools/contracts";
-import * as HostProcess from "@t3tools/shared/HostProcess";
-import { symlinksSupported } from "@t3tools/shared/testing/symlinks";
+import * as CheckpointStore from "../checkpointing/CheckpointStore.ts";
 import * as ServerConfig from "../config.ts";
 import { gitCommandDuration, gitCommandsTotal } from "../observability/Metrics.ts";
-import * as CheckpointStore from "../checkpointing/CheckpointStore.ts";
 import * as ProcessRunner from "../processRunner.ts";
 import * as GitVcsDriver from "./GitVcsDriver.ts";
+import { runVcsDriverContractSuite } from "./testing/VcsDriverContractHarness.ts";
 import type * as VcsDriver from "./VcsDriver.ts";
 import * as VcsDriverRegistry from "./VcsDriverRegistry.ts";
 import * as VcsProcess from "./VcsProcess.ts";
-import { runVcsDriverContractSuite } from "./testing/VcsDriverContractHarness.ts";
 
 const layerServerConfig = ServerConfig.layerTest(process.cwd(), {
   prefix: "t3-git-vcs-contract-",

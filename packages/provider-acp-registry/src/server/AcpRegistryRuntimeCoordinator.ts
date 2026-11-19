@@ -4,8 +4,8 @@ import {
   type ProviderInstanceId,
 } from "@t3tools/contracts";
 import * as Context from "effect/Context";
-import * as Deferred from "effect/Deferred";
 import * as DateTime from "effect/DateTime";
+import * as Deferred from "effect/Deferred";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";

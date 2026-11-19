@@ -1,8 +1,10 @@
 // @effect-diagnostics nodeBuiltinImport:off - Exercises the packaging filesystem and readelf.
-import * as HostProcess from "@t3tools/shared/HostProcess";
+
 import * as NodeFSP from "node:fs/promises";
 import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
+
+import * as HostProcess from "@t3tools/shared/HostProcess";
 import { describe, expect, it } from "vite-plus/test";
 
 import afterPack from "./linux-after-pack.ts";

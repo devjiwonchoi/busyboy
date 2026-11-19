@@ -4,14 +4,6 @@ import {
   formatComposerContextHref,
   formatComposerContextReference,
 } from "@t3tools/shared/composerContextReferences";
-import {
-  markdownForNativeRendering,
-  markdownWithFileEmbeds,
-  markdownForNativeParsing,
-  markdownWithInlineFileLinks,
-  markdownWithTableBreaks,
-  markdownWithTextDirection,
-} from "../lib/markdownDocument";
 import { useGT } from "gt-react-native";
 import { isValidElement, useMemo, useState, type ReactElement, type ReactNode } from "react";
 import { Platform, Share, StyleSheet, useWindowDimensions, View } from "react-native";
@@ -23,18 +15,11 @@ import {
   type MarkdownLinkOccurrence,
   type MarkdownStyle,
 } from "react-native-enriched-markdown";
-import { codeFenceRenderer } from "./codeBlockMarkdown";
-import { HighlightedCodeBlock } from "./HighlightedCodeBlock";
-import { MermaidCodeBlock } from "./MermaidCodeBlock";
-import type { SelectableMarkdownTextProps } from "./SelectableMarkdownText.types";
 
-import { useAppearancePreferences } from "../features/settings/appearance/AppearancePreferencesProvider";
-import { Menu } from "../components/ui/Menu";
-import { useEnrichedLinkVariants } from "./useEnrichedLinkVariants";
-import { useRetryingImageSource } from "./useRetryingImageSource";
 import * as Dialog from "../components/ui/Dialog";
+import { Menu } from "../components/ui/Menu";
+import { useAppearancePreferences } from "../features/settings/appearance/AppearancePreferencesProvider";
 import { copyTextWithHaptic } from "../lib/copyTextWithHaptic";
-import type { HighlightScheme } from "../lib/highlights";
 import {
   ENRICHED_INLINE_FILE_LINK_REGEX,
   enrichedTextLinkRegex,
@@ -42,6 +27,21 @@ import {
   enrichedModelReference,
   enrichedLinkVariantPattern,
 } from "../lib/enrichedLinkPresentation";
+import type { HighlightScheme } from "../lib/highlights";
+import {
+  markdownForNativeRendering,
+  markdownWithFileEmbeds,
+  markdownForNativeParsing,
+  markdownWithInlineFileLinks,
+  markdownWithTableBreaks,
+  markdownWithTextDirection,
+} from "../lib/markdownDocument";
+import { codeFenceRenderer } from "./codeBlockMarkdown";
+import { HighlightedCodeBlock } from "./HighlightedCodeBlock";
+import { MermaidCodeBlock } from "./MermaidCodeBlock";
+import type { SelectableMarkdownTextProps } from "./SelectableMarkdownText.types";
+import { useEnrichedLinkVariants } from "./useEnrichedLinkVariants";
+import { useRetryingImageSource } from "./useRetryingImageSource";
 
 function enrichedStyle(
   style: SelectableMarkdownTextProps["textStyle"],

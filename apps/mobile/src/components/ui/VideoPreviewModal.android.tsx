@@ -4,11 +4,9 @@ import { T, useGT, useMessages } from "gt-react-native";
 import { Modal, Pressable, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { AppActivityIndicator } from "./AppActivityIndicator";
 import { useLocalAttachmentPreview } from "../../lib/localAttachmentPreview";
-import { usePreviewPresentation, videoPreviewKey } from "../../lib/previewPresentation";
-import { useMediaActions } from "../../state/mediaActions";
 import { type MediaActionsSource } from "../../lib/mediaActionsSource";
+import { usePreviewPresentation, videoPreviewKey } from "../../lib/previewPresentation";
 import {
   mediaVideoPreviewUri,
   mediaVideoThumbnailKey,
@@ -17,10 +15,12 @@ import {
   type VideoPreviewSource,
 } from "../../lib/videoPreviewSource";
 import { useAssetUrlState, useRefreshAssetUrl } from "../../state/assets";
+import { useMediaActions } from "../../state/mediaActions";
 import { usePreparedConnection } from "../../state/session";
-import { AppText } from "./AppText";
 import { MediaPreviewHeader } from "../MediaPreviewHeader";
 import { MediaVideoPlayer } from "../MediaVideoPlayer";
+import { AppActivityIndicator } from "./AppActivityIndicator";
+import { AppText } from "./AppText";
 
 export type { VideoPreviewSource } from "../../lib/videoPreviewSource";
 

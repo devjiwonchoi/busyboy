@@ -3,8 +3,8 @@ import { page, userEvent } from "vite-plus/test/browser";
 
 import { act, render } from "../../../test/render";
 import { SidebarProvider } from "../ui/sidebar";
-import { SettingsSidebarNav } from "./SettingsSidebarNav";
 import { SETTINGS_NAV_GROUPS, SETTINGS_SECTION_LABELS } from "./settingsSearch";
+import { SettingsSidebarNav } from "./SettingsSidebarNav";
 
 vi.mock("./useAvailableSettingsSearchItems", () => ({
   useAvailableSettingsSearchItems: () => [

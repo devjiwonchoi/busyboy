@@ -1,7 +1,8 @@
 import type { PullRequestDetail } from "@t3tools/contracts";
+
 import { Menu } from "../../components/ui/Menu";
-import { PullRequestCardRow } from "./PullRequestControls";
 import type { PullRequestAgentTask } from "./pullRequestAgentTasks";
+import { PullRequestCardRow } from "./PullRequestControls";
 import { usePullRequestAgentActions } from "./usePullRequestAgentActions";
 import type { PullRequestParams } from "./usePullRequestDiff";
 

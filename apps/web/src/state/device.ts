@@ -15,14 +15,14 @@ import {
   WS_METHODS,
 } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
-import { useMessages } from "gt-react";
 import * as Option from "effect/Option";
 import { AsyncResult, Atom, AtomRegistry } from "effect/reactivity";
+import { useMessages } from "gt-react";
 
 import { connectionAtomRuntime } from "../connection/runtime";
 import { appAtomRegistry } from "../rpc/atomRegistry";
-import { environmentSession } from "./session";
 import { formatEnvironmentQueryError, useEnvironmentQuery } from "./query";
+import { environmentSession } from "./session";
 
 export const deviceEnvironment = createDeviceEnvironmentAtoms(connectionAtomRuntime);
 

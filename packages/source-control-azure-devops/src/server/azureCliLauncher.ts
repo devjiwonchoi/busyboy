@@ -1,7 +1,9 @@
 // @effect-diagnostics nodeBuiltinImport:off -- The interpreter sits beside the launcher it belongs to.
-import * as Context from "effect/Context";
+
 import * as NodeFS from "node:fs";
 import * as NodePath from "node:path";
+
+import * as Context from "effect/Context";
 
 /** The `AZ_INSTALLER` value each launcher sets, which `az` only reads for its user agent. */
 export type AzureCliInstaller = "MSI" | "ZIP";

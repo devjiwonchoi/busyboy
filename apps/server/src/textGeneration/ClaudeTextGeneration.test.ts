@@ -1,6 +1,8 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { it } from "@effect/vitest";
 import { ClaudeSettings, ProviderInstanceId } from "@t3tools/contracts";
+import { sanitizeThreadTitle } from "@t3tools/provider-core/server/textGenerationUtils";
+import { writeFakeCli } from "@t3tools/provider-testing/fakeCli";
 import * as HostProcess from "@t3tools/shared/HostProcess";
 import { createModelSelection } from "@t3tools/shared/model";
 import * as Effect from "effect/Effect";
@@ -11,17 +13,15 @@ import * as Schema from "effect/Schema";
 import { expect } from "vite-plus/test";
 
 import * as ServerConfig from "../config.ts";
-import { processProbeSource } from "../testUtils/processProbe.ts";
 import {
   SYNTHETIC_CLAUDE_CAPABLE_MODEL,
   SYNTHETIC_CLAUDE_COLLIDING_ALIAS,
   SYNTHETIC_CLAUDE_MODEL_CATALOG,
   SYNTHETIC_CLAUDE_STANDARD_MODEL,
 } from "../provider/ClaudeModelCatalog.testFixtures.ts";
-import * as TextGeneration from "./TextGeneration.ts";
-import { sanitizeThreadTitle } from "@t3tools/provider-core/server/textGenerationUtils";
+import { processProbeSource } from "../testUtils/processProbe.ts";
 import { makeClaudeTextGeneration } from "./ClaudeTextGeneration.ts";
-import { writeFakeCli } from "@t3tools/provider-testing/fakeCli";
+import * as TextGeneration from "./TextGeneration.ts";
 const decodeClaudeSettings = Schema.decodeSync(ClaudeSettings);
 
 const layerClaudeTextGenerationTest = ServerConfig.ServerConfig.layerTest(process.cwd(), {

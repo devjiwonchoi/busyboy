@@ -4,8 +4,9 @@ import { CHATGPT_USAGE_URL } from "@t3tools/shared/usageLimits";
 import { collectExternalUsageLinks } from "@t3tools/shared/usageLimitsCopy";
 import { T, useMessages, Var } from "gt-react-native";
 import { Linking, Pressable, View } from "react-native";
-import { AppText as Text } from "../../components/ui/AppText";
+
 import { ProviderIcon } from "../../components/ProviderIcon";
+import { AppText as Text } from "../../components/ui/AppText";
 import { environmentPresentations } from "../../state/presentation";
 
 export function ChatGptUsageSummary({

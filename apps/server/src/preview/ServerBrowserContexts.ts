@@ -1,10 +1,12 @@
 // @effect-diagnostics nodeBuiltinImport:off globalTimers:off -- Owns Playwright resources and their idle timer outside the Effect runtime.
-import { INCOGNITO_BROWSER_PROFILE_ID } from "@t3tools/contracts";
-import { constVoid } from "effect/Function";
+
 import * as NodeFSP from "node:fs/promises";
 import * as NodeModule from "node:module";
 import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
+
+import { INCOGNITO_BROWSER_PROFILE_ID } from "@t3tools/contracts";
+import { constVoid } from "effect/Function";
 import type { Browser, BrowserContext, CDPSession } from "playwright-core";
 
 import { sandboxDisabled } from "./PreviewBrowserHost.ts";

@@ -1,26 +1,25 @@
 import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import { EnvironmentId } from "@t3tools/contracts";
 import { expect, it } from "@effect/vitest";
+import { EnvironmentId } from "@t3tools/contracts";
+import * as Deferred from "effect/Deferred";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
-import * as Deferred from "effect/Deferred";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
-import * as TestClock from "effect/testing/TestClock";
 import * as SqlClient from "effect/sql/SqlClient";
+import * as TestClock from "effect/testing/TestClock";
 
 import * as ServerConfig from "../config.ts";
 import * as ServerEnvironment from "../environment/ServerEnvironment.ts";
-
 import * as SqlitePersistence from "../persistence/Sqlite.ts";
-import * as SessionStore from "./SessionStore.ts";
-import * as ServerSecretStore from "./ServerSecretStore.ts";
-import { base64UrlDecodeUtf8, base64UrlEncode } from "./utils.ts";
 import * as PayloadSigner from "./PayloadSigner.ts";
+import * as ServerSecretStore from "./ServerSecretStore.ts";
+import * as SessionStore from "./SessionStore.ts";
+import { base64UrlDecodeUtf8, base64UrlEncode } from "./utils.ts";
 
 const layerServerConfig = (overrides?: Partial<ServerConfig.ServerConfig["Service"]>) =>
   Layer.effect(

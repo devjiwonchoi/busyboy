@@ -7,9 +7,9 @@ import { WsRpcGroup } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
+import { RpcClient, RpcSerialization } from "effect/rpc";
 import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
-import { RpcClient, RpcSerialization } from "effect/rpc";
 import * as Socket from "effect/socket/Socket";
 
 export class TransferHttpRequestError extends Schema.TaggedError<TransferHttpRequestError>()(

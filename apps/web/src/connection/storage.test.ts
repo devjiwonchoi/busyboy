@@ -1,12 +1,12 @@
+import { describe, expect, it } from "@effect/vitest";
 import {
   ConnectionTransientError,
   PrimaryConnectionTarget,
 } from "@t3tools/client-runtime/connection";
-import { EnvironmentId, ThreadId } from "@t3tools/contracts";
 import { ConnectionCatalogDocument, Persistence } from "@t3tools/client-runtime/platform";
-import { describe, expect, it } from "@effect/vitest";
-import * as Effect from "effect/Effect";
+import { EnvironmentId, ThreadId } from "@t3tools/contracts";
 import * as Deferred from "effect/Deferred";
+import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";

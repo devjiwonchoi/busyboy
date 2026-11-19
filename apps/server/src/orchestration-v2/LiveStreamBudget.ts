@@ -1,11 +1,11 @@
-import * as Schema from "effect/Schema";
 import * as Arr from "effect/Array";
 import type * as Cause from "effect/Cause";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
-import * as Queue from "effect/Queue";
 import * as PubSub from "effect/PubSub";
+import * as Queue from "effect/Queue";
+import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
 import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";

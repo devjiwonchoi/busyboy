@@ -1,9 +1,9 @@
-import { formatProviderSkillDisplayName } from "@t3tools/shared/inlineSkills";
-import type { ServerProviderSkill } from "@t3tools/contracts";
 import {
   dedupeProviderSkillsByName,
   isProviderSkillUserInvocable,
 } from "@t3tools/client-runtime/providerSkills";
+import type { ServerProviderSkill } from "@t3tools/contracts";
+import { formatProviderSkillDisplayName } from "@t3tools/shared/inlineSkills";
 import {
   insertRankedSearchResult,
   normalizeSearchQuery,

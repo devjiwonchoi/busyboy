@@ -2,10 +2,10 @@ import type { EnvironmentId } from "@t3tools/contracts";
 import * as Clock from "effect/Clock";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
-import * as Option from "effect/Option";
-import * as Redacted from "effect/Redacted";
 import type { HttpClient } from "effect/http";
+import * as Option from "effect/Option";
 import { AsyncResult, Atom, AtomRegistry } from "effect/reactivity";
+import * as Redacted from "effect/Redacted";
 
 import type { PreparedConnection } from "../connection/model.ts";
 import { environmentEndpointUrl } from "../environment/endpoint.ts";

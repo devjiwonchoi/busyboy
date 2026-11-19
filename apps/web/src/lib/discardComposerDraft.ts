@@ -1,3 +1,4 @@
+import * as ThreadUndo from "@t3tools/client-runtime/state/thread-undo";
 import * as Cause from "effect/Cause";
 import { AsyncResult } from "effect/reactivity";
 import { msg } from "gt-react";
@@ -12,7 +13,6 @@ import {
 } from "../composerDraftStore";
 import { showThreadUndoNotice } from "../hooks/showThreadUndoNotice";
 import { m } from "../i18n/messages";
-import * as ThreadUndo from "@t3tools/client-runtime/state/thread-undo";
 import { releaseDraftAttachments } from "./attachmentUploadQueue";
 
 export function discardComposerDraft(target: ComposerThreadTarget): void {

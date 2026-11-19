@@ -1,8 +1,4 @@
-import { injectHtmlRenderBootstrap } from "@t3tools/shared/htmlRender";
-import { HtmlRenderDocument } from "../files/BrowserDocumentFrame";
-import { flushSync } from "react-dom";
-import { AudioPreview } from "../files/AudioPreview";
-import { cdp, page, userEvent } from "vite-plus/test/browser";
+import { LegendList, type LegendListRef } from "@legendapp/list/react";
 import {
   ComposerContextId,
   EnvironmentId,
@@ -18,7 +14,21 @@ import {
   ThreadId,
   type OrchestrationV2Subagent,
 } from "@t3tools/contracts";
-import { LegendList, type LegendListRef } from "@legendapp/list/react";
+import {
+  COMPOSER_CONTEXT_CLIPBOARD_MIME,
+  decodeComposerContextFragment,
+} from "@t3tools/shared/composerContextClipboard";
+import { collectComposerContextReferences } from "@t3tools/shared/composerContextReferences";
+import { injectHtmlRenderBootstrap } from "@t3tools/shared/htmlRender";
+import { parseMarkdownWithMath } from "@t3tools/shared/markdownMath";
+import { searchableMessageSegments } from "@t3tools/shared/threadFindText";
+import { countThreadSearchOccurrences } from "@t3tools/shared/threadSearch";
+import * as DateTime from "effect/DateTime";
+import { Atom, AsyncResult } from "effect/reactivity";
+import type { Root } from "mdast";
+
+import "~/index.css";
+
 import {
   createRef,
   Profiler,
@@ -27,40 +37,31 @@ import {
   type ComponentProps,
   type ReactElement,
 } from "react";
-import * as DateTime from "effect/DateTime";
-import { Atom, AsyncResult } from "effect/reactivity";
+import { flushSync } from "react-dom";
 import { describe, expect, it, onTestFinished, vi } from "vite-plus/test";
+import { cdp, page, userEvent } from "vite-plus/test/browser";
 
-import "~/index.css";
-
-import { environmentThreadDetails } from "../../state/threads";
 import { act, fakeTimers, render, stubGlobal } from "../../../test/render";
-import { ChangedFilesCard } from "./ChangedFilesTree";
-import { MessagesTimeline } from "./MessagesTimeline";
 import { createWorkspaceFocusController, workspaceAreaProps } from "../../lib/workspaceFocus";
-import { resolveTimelineIsAtEnd } from "./MessagesTimeline.logic";
-import { makeStreamingTimelineFixture } from "../../test-fixtures";
 import {
   type PendingApproval,
   deriveTimelineEntriesFromVisibleTurnItems,
 } from "../../session-logic";
-import type { Root } from "mdast";
+import { environmentThreadDetails } from "../../state/threads";
+import { makeStreamingTimelineFixture } from "../../test-fixtures";
+import { AudioPreview } from "../files/AudioPreview";
+import { HtmlRenderDocument } from "../files/BrowserDocumentFrame";
+import { toastManager } from "../ui/toast";
+import { ChangedFilesCard } from "./ChangedFilesTree";
+import type { CitedHistory } from "./citationProcedure";
+import { MessagesTimeline } from "./MessagesTimeline";
+import { resolveTimelineIsAtEnd } from "./MessagesTimeline.logic";
+import { collectThreadFindRanges } from "./threadFindHighlights";
+import { TimelineRowCtx } from "./timelineRowContext";
+import { rememberTimelinePosition } from "./timelineScrollAnchoring";
+import type { TimelineNavigation } from "./timelineViewport";
 import { ViewedImagesTimelineRow } from "./TimelineWorkEntryRow";
 import { remarkThoughtPreview, THOUGHT_PREVIEW_MAX_LENGTH } from "./TimelineWorkEntryRow.logic";
-import { TimelineRowCtx } from "./timelineRowContext";
-import { parseMarkdownWithMath } from "@t3tools/shared/markdownMath";
-import { searchableMessageSegments } from "@t3tools/shared/threadFindText";
-import { countThreadSearchOccurrences } from "@t3tools/shared/threadSearch";
-import { collectThreadFindRanges } from "./threadFindHighlights";
-import { toastManager } from "../ui/toast";
-import type { CitedHistory } from "./citationProcedure";
-import type { TimelineNavigation } from "./timelineViewport";
-import { rememberTimelinePosition } from "./timelineScrollAnchoring";
-import {
-  COMPOSER_CONTEXT_CLIPBOARD_MIME,
-  decodeComposerContextFragment,
-} from "@t3tools/shared/composerContextClipboard";
-import { collectComposerContextReferences } from "@t3tools/shared/composerContextReferences";
 
 const environmentQuery = vi.hoisted(() => ({
   error: "Pull request not found" as string | null,

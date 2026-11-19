@@ -8,8 +8,8 @@ import {
 } from "@t3tools/contracts";
 import { msg, T, useGT, useMessages } from "gt-react";
 
-import { m, type MessageResolver } from "../../i18n/messages";
 import { useUpdateEnvironmentSettings } from "../../hooks/useSettings";
+import { m, type MessageResolver } from "../../i18n/messages";
 import { useEnvironmentScope } from "../../state/session";
 import { ENVIRONMENT_MACHINE_KIND_LABELS, EnvironmentMachineIcon } from "../EnvironmentMachineIcon";
 import {

@@ -23,8 +23,8 @@ import * as Stream from "effect/Stream";
 
 import * as ElectronApp from "../electron/ElectronApp.ts";
 import * as ElectronPowerMonitor from "../electron/ElectronPowerMonitor.ts";
-import * as DesktopRendererHistory from "./DesktopRendererHistory.ts";
 import * as DesktopShellEnvironment from "../shell/DesktopShellEnvironment.ts";
+import * as DesktopRendererHistory from "./DesktopRendererHistory.ts";
 
 const LIVE_SAMPLE_INTERVAL = Duration.seconds(1);
 const BATTERY_SAMPLE_INTERVAL = Duration.seconds(5);

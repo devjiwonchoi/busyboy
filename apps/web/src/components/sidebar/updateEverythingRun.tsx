@@ -7,9 +7,9 @@ import {
 import { EnvironmentId, type ServerConfig } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
+import { AsyncResult, Atom, AtomRegistry } from "effect/reactivity";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
-import { AsyncResult, Atom, AtomRegistry } from "effect/reactivity";
 import { msg } from "gt-react";
 
 import { APP_VERSION } from "~/branding";
@@ -19,6 +19,7 @@ import { appAtomRegistry } from "~/rpc/atomRegistry";
 import { desktopUpdateStateAtom } from "~/state/desktopUpdate";
 import { serverEnvironment } from "~/state/server";
 import { resolveVersionMismatch } from "~/versionSkew";
+
 import type { ServerUpdateOutcome, ServerUpdateTarget } from "../ServerUpdateAction";
 import { stackedThreadToast, toastManager } from "../ui/toast";
 import {

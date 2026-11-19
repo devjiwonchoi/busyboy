@@ -1,9 +1,6 @@
-import { msg, useMessages } from "gt-react-native";
-
-import { SymbolView } from "../../components/ui/AppSymbol";
-import { Menu } from "../../components/ui/Menu";
 import type { MenuAction } from "@react-native-menu/menu";
 import * as Haptics from "expo-haptics";
+import { msg, useMessages } from "gt-react-native";
 import {
   createContext,
   use,
@@ -42,7 +39,9 @@ import Animated, {
   withTiming,
 } from "react-native-reanimated";
 
+import { SymbolView } from "../../components/ui/AppSymbol";
 import { AppText as Text } from "../../components/ui/AppText";
+import { Menu } from "../../components/ui/Menu";
 import type { MessageResolver } from "../../i18n/messages";
 import { useScaledTextRole } from "../settings/appearance/useScaledTextRole";
 import { SwipeRowActivationContext, type SwipeRowActivation } from "./swipe-row-activation";

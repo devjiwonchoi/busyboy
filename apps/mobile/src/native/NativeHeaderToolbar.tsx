@@ -16,8 +16,9 @@ import {
 } from "react";
 import type { ColorValue } from "react-native";
 import type { HeaderBarButtonSearchBarPlacementItem } from "react-native-screens";
-import { NativeWorkspaceTabActivityContext } from "./v5-workspace-context";
+
 import { NativeStackScreenOptions, useScreenOptionsWriter } from "./StackHeader";
+import { NativeWorkspaceTabActivityContext } from "./v5-workspace-context";
 
 function labelFromChildren(children: ReactNode): string {
   const parts: string[] = [];

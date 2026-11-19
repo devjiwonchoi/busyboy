@@ -6,11 +6,11 @@ import {
   type EnvironmentId,
 } from "@t3tools/contracts";
 import * as Cause from "effect/Cause";
-import { msg } from "gt-react-native";
-import { m } from "../i18n/messages";
 import { AsyncResult } from "effect/reactivity";
+import { msg } from "gt-react-native";
 
 import { connectionAtomRuntime } from "../connection/runtime";
+import { m } from "../i18n/messages";
 import { readEnvironmentScope } from "./session";
 
 function requireAttachmentWriteAccess<W extends { readonly environmentId: EnvironmentId }, A, E>(

@@ -1,4 +1,3 @@
-import { describe, expect, it } from "vite-plus/test";
 import {
   ASSISTANT_CITATION_CONTEXT_LENGTH,
   EnvironmentId,
@@ -9,6 +8,7 @@ import {
   formatAssistantCitationHref,
   parseAssistantCitationHref,
 } from "@t3tools/shared/assistantCitations";
+import { describe, expect, it } from "vite-plus/test";
 
 import {
   type AssistantTextSelector,

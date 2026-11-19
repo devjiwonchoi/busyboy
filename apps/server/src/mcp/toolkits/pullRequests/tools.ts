@@ -21,25 +21,25 @@ import {
   TrimmedNonEmptyString,
   ThreadId,
 } from "@t3tools/contracts";
-import * as Schema from "effect/Schema";
 import * as McpSchema from "effect/ai/McpSchema";
 import * as Tool from "effect/ai/Tool";
 import * as Toolkit from "effect/ai/Toolkit";
+import * as Schema from "effect/Schema";
 
-import * as McpInvocationContext from "../../McpInvocationContext.ts";
+import * as GitManager from "../../../git/GitManager.ts";
 import * as Orchestrator from "../../../orchestration-v2/Orchestrator.ts";
 import * as ThreadManagementService from "../../../orchestration-v2/ThreadManagementService.ts";
-import * as GitManager from "../../../git/GitManager.ts";
 import * as ProjectService from "../../../project/ProjectService.ts";
-import * as PullRequestWatchService from "../../../pullRequest/PullRequestWatchService.ts";
+import * as PullRequestReviewGuideService from "../../../pullRequest/PullRequestReviewGuideService.ts";
+import * as PullRequestService from "../../../pullRequest/PullRequestService.ts";
 import {
   PullRequestUrlInvalidError,
   PullRequestTargetIncompleteError,
   PullRequestHostRequiredError,
   PullRequestUrlUnavailableError,
 } from "../../../pullRequest/pullRequestTarget.ts";
-import * as PullRequestService from "../../../pullRequest/PullRequestService.ts";
-import * as PullRequestReviewGuideService from "../../../pullRequest/PullRequestReviewGuideService.ts";
+import * as PullRequestWatchService from "../../../pullRequest/PullRequestWatchService.ts";
+import * as McpInvocationContext from "../../McpInvocationContext.ts";
 
 const dependencies = [
   McpInvocationContext.McpInvocationContext,

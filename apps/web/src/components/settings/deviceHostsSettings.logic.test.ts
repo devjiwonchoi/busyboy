@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
+
 import { updateDeviceHosts } from "./deviceHostsSettings.logic";
 
 describe("device host changes across environments", () => {

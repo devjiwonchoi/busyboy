@@ -1,14 +1,14 @@
 import { WS_METHODS } from "@t3tools/contracts";
 import { Atom } from "effect/reactivity";
 
+import type { EnvironmentRegistry } from "../connection/registry.ts";
+import * as Persistence from "../platform/persistence.ts";
 import {
   createAtomCommandScheduler,
   createEnvironmentRpcCommand,
   createEnvironmentRpcQueryAtomFamily,
   createEnvironmentRpcSubscriptionAtomFamily,
 } from "./runtime.ts";
-import type { EnvironmentRegistry } from "../connection/registry.ts";
-import * as Persistence from "../platform/persistence.ts";
 import { vcsCommandConcurrency, vcsCommandScheduler } from "./vcsCommandScheduler.ts";
 import { invalidateCachedVcsRefs } from "./vcsRefInvalidation.ts";
 

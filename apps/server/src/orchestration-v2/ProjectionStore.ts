@@ -1,30 +1,10 @@
-import type { ProjectThreadAwarenessV2Input } from "@t3tools/shared/agentAwareness";
 import { applyOrchestrationV2ThreadVisit, pendingGuestMessageCount } from "@t3tools/contracts";
-import { applyThreadPullRequestLinkUpdate } from "../sourceControl/threadPullRequests.ts";
-import { projectTurnItemForWire } from "./WireProjection.ts";
-import * as Stream from "effect/Stream";
-import * as NodeSqliteClient from "@t3tools/shared/nodeSqliteClient";
-import { makeThreadFind } from "./ThreadFind.ts";
-import { unsentManualContinuationSource } from "./manualContinuation.ts";
 import type {
   OrchestrationV2ThreadLinkMetadata,
   OrchestrationV2SearchThreadInput,
   OrchestrationV2SearchThreadResult,
   OrchestrationV2ThreadHistoryPage,
 } from "@t3tools/contracts";
-import {
-  latestRootProviderFailure,
-  latestUnheldRun,
-  runRanAfter,
-  threadErrorSummary,
-  usageLimitRunPresentedAsLatest,
-} from "@t3tools/shared/orchestrationV2ThreadError";
-import { threadPullRequestsOf } from "../sourceControl/threadPullRequests.ts";
-import {
-  anchorsModelSwitch,
-  isModelSwitchCandidate,
-  isShownUserMessageItem,
-} from "./modelSwitch.ts";
 import type {
   OrchestrationV2AppThread,
   OrchestrationV2Checkpoint,
@@ -87,11 +67,21 @@ import {
   ProjectId,
   ProviderInstanceId,
 } from "@t3tools/contracts";
-import { createOrchestrationV2TurnItemVisibility } from "@t3tools/shared/orchestrationV2Timeline";
+import type { ProjectThreadAwarenessV2Input } from "@t3tools/shared/agentAwareness";
+import { MCP_APP_OUTPUT_KEY } from "@t3tools/shared/mcpApp";
+import * as NodeSqliteClient from "@t3tools/shared/nodeSqliteClient";
 import {
   deriveBlockedOnThreadWait,
   derivePendingBackgroundWork,
 } from "@t3tools/shared/orchestrationV2PendingBackgroundWork";
+import {
+  latestRootProviderFailure,
+  latestUnheldRun,
+  runRanAfter,
+  threadErrorSummary,
+  usageLimitRunPresentedAsLatest,
+} from "@t3tools/shared/orchestrationV2ThreadError";
+import { createOrchestrationV2TurnItemVisibility } from "@t3tools/shared/orchestrationV2Timeline";
 import * as Context from "effect/Context";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
@@ -100,10 +90,19 @@ import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import * as SqlClient from "effect/sql/SqlClient";
 import type * as Statement from "effect/sql/Statement";
+import * as Stream from "effect/Stream";
 
-import { MCP_APP_OUTPUT_KEY } from "@t3tools/shared/mcpApp";
 import { threadHtmlRenderAttachmentIds } from "../attachmentStore.ts";
+import { applyThreadPullRequestLinkUpdate } from "../sourceControl/threadPullRequests.ts";
+import { threadPullRequestsOf } from "../sourceControl/threadPullRequests.ts";
+import { unsentManualContinuationSource } from "./manualContinuation.ts";
 import { readableSearchText } from "./messageSearchIndex.ts";
+import {
+  anchorsModelSwitch,
+  isModelSwitchCandidate,
+  isShownUserMessageItem,
+} from "./modelSwitch.ts";
+import { makeThreadFind } from "./ThreadFind.ts";
 import {
   isFoldableWorkItem,
   isThreadHistoryUserTurn,
@@ -125,6 +124,7 @@ import {
   type SelectTimelinePageResult,
   type ThreadHistoryPrefix,
 } from "./threadHistoryPaging.ts";
+import { projectTurnItemForWire } from "./WireProjection.ts";
 
 export class ProjectionStoreApplyEventError extends Schema.TaggedError<ProjectionStoreApplyEventError>()(
   "ProjectionStoreApplyEventError",

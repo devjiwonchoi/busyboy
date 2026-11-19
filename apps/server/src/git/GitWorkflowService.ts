@@ -1,8 +1,3 @@
-import * as Context from "effect/Context";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import * as FileSystem from "effect/FileSystem";
-
 import {
   GitManagerError,
   GitCommandError,
@@ -28,11 +23,15 @@ import {
   type VcsStatusRemoteResult,
   type VcsStatusResult,
 } from "@t3tools/contracts";
+import * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Layer from "effect/Layer";
 
-import * as GitManager from "./GitManager.ts";
 import * as GitVcsDriver from "../vcs/GitVcsDriver.ts";
 import * as VcsDriverRegistry from "../vcs/VcsDriverRegistry.ts";
 import { withWorkspaceLease } from "../workspace/workspaceLease.ts";
+import * as GitManager from "./GitManager.ts";
 
 export class GitWorkflowService extends Context.Service<
   GitWorkflowService,

@@ -23,11 +23,11 @@ import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Schema from "effect/Schema";
 
 import { makeIsServerInternalPath } from "../auth/serverInternalPaths.ts";
+import { fileHeaderMimeType } from "./fileHeaderMimeType.ts";
+import { toHostDrivePath } from "./hostDrivePath.ts";
 import * as KnownWorkspaces from "./KnownWorkspaces.ts";
 import * as WorkspaceEntries from "./WorkspaceEntries.ts";
 import * as WorkspacePaths from "./WorkspacePaths.ts";
-import { fileHeaderMimeType } from "./fileHeaderMimeType.ts";
-import { toHostDrivePath } from "./hostDrivePath.ts";
 
 const PROJECT_READ_FILE_MAX_BYTES = 1024 * 1024;
 

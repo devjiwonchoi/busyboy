@@ -1,17 +1,31 @@
-import { msg } from "gt-react";
-import { m } from "~/i18n/messages";
-import type { ChatComposerProps } from "./ChatComposer";
+import {
+  fileAttachmentTooLargeMessage,
+  formatAttachmentSize,
+} from "@t3tools/client-runtime/state/attachments";
+import {
+  nextPastedTextFileName,
+  pastedTextDisposition,
+  wouldTextPasteExceedLimit,
+} from "@t3tools/client-runtime/text-paste";
 import {
   type ChatFileAttachment,
   PROVIDER_SEND_TURN_MAX_ATTACHMENTS,
   PROVIDER_SEND_TURN_MAX_IMAGE_BYTES,
   PROVIDER_SEND_TURN_MAX_INPUT_CHARS,
 } from "@t3tools/contracts";
+import { msg } from "gt-react";
+import { type RefObject, useRef } from "react";
+
+import { requestConfirmDialog } from "~/confirmDialog";
+import { m } from "~/i18n/messages";
+import { fileContextReference, imageContextReference } from "~/lib/composerContextRecords";
 import {
   type ComposerContextReference,
   collectInlineContextIds,
   stripInlineContextReferences,
 } from "~/lib/composerContextReferences";
+import { isMacPlatform, randomUUID } from "~/lib/utils";
+
 import {
   type ComposerFileAttachment,
   type ComposerImageAttachment,
@@ -19,14 +33,20 @@ import {
   composerFileMatchesReattachMarker,
   composerFileNeedsReattach,
 } from "../../composerDraftStore";
-import { type ComposerPromptEditorHandle } from "../ComposerPromptEditorTiptap";
+import {
+  inheritComposerImageThumbnail,
+  prepareImageForAttachment,
+} from "../../lib/imageCompression";
 import type { PendingUserInputProgress } from "../../pendingUserInput";
-import type { ComposerAttachmentInsertion } from "../composerAttachmentInsertion";
-import { type PendingUserInput } from "../../session-logic";
 import {
   changeQuestionAttachmentPreparation,
   useQuestionAttachmentPreparation,
 } from "../../questionAttachments";
+import { type PendingUserInput } from "../../session-logic";
+import type { ComposerAttachmentInsertion } from "../composerAttachmentInsertion";
+import { type ComposerPromptEditorHandle } from "../ComposerPromptEditorTiptap";
+import { toastManager } from "../ui/toast";
+import type { ChatComposerProps } from "./ChatComposer";
 import {
   classifyComposerAttachmentFile,
   composerFileAttachmentMimeType,
@@ -35,24 +55,6 @@ import {
   normalizeComposerImageFileMimeType,
   rememberComposerImageSource,
 } from "./composerAttachmentFiles";
-import {
-  fileAttachmentTooLargeMessage,
-  formatAttachmentSize,
-} from "@t3tools/client-runtime/state/attachments";
-import { fileContextReference, imageContextReference } from "~/lib/composerContextRecords";
-import { isMacPlatform, randomUUID } from "~/lib/utils";
-import {
-  nextPastedTextFileName,
-  pastedTextDisposition,
-  wouldTextPasteExceedLimit,
-} from "@t3tools/client-runtime/text-paste";
-import {
-  inheritComposerImageThumbnail,
-  prepareImageForAttachment,
-} from "../../lib/imageCompression";
-import { requestConfirmDialog } from "~/confirmDialog";
-import { toastManager } from "../ui/toast";
-import { type RefObject, useRef } from "react";
 import {
   addPreparingComposerImages,
   getPreparingComposerImages,

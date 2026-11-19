@@ -5,10 +5,11 @@ import type {
   VoiceInputErrorCode,
   VoiceTranscriptionOptions,
 } from "@t3tools/client-runtime/voice-input";
-import { requestMicrophone } from "./requestMicrophone";
-import workletUrl from "./pcmWorklet.ts?worker&url";
 import { msg } from "gt-react";
+
 import { m } from "../i18n/messages";
+import workletUrl from "./pcmWorklet.ts?worker&url";
+import { requestMicrophone } from "./requestMicrophone";
 
 type PreparedBrowserTranscription = PreparedVoiceTranscription & {
   readonly streaming?: VoiceStreamingSession & { readonly feed: (pcm: Float32Array) => void };

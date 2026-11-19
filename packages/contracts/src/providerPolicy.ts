@@ -1,11 +1,11 @@
+import * as Schema from "effect/Schema";
+
+import { TrimmedNonEmptyString } from "./baseSchemas.ts";
 import {
   ChatImageAttachment,
   ChatFileAttachment,
   PROVIDER_SEND_TURN_MAX_ATTACHMENTS,
 } from "./chatAttachment.ts";
-import * as Schema from "effect/Schema";
-
-import { TrimmedNonEmptyString } from "./baseSchemas.ts";
 
 export const ProviderApprovalPolicy = Schema.Literals([
   "untrusted",

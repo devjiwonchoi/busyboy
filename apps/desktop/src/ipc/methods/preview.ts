@@ -1,3 +1,5 @@
+import * as NodeURL from "node:url";
+
 import {
   DesktopPreviewAnnotationSendEnabledInputSchema,
   DesktopPreviewAnnotationThemeInputSchema,
@@ -32,17 +34,16 @@ import {
   MAX_KEYBINDINGS_COUNT,
 } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
-import * as Schema from "effect/Schema";
 import * as Option from "effect/Option";
-import * as NodeURL from "node:url";
+import * as Schema from "effect/Schema";
 
 import * as ElectronWindow from "../../electron/ElectronWindow.ts";
 import * as BrowserImport from "../../preview/BrowserImport/BrowserImport.ts";
+import { normalizeCaptureFailure } from "../../preview/captureErrors.ts";
 import * as LoopbackTunnel from "../../preview/LoopbackTunnel.ts";
 import * as PreviewManager from "../../preview/Manager.ts";
-import { normalizeCaptureFailure } from "../../preview/captureErrors.ts";
-import * as DesktopClientSettings from "../../settings/DesktopClientSettings.ts";
 import { PREVIEW_WEBVIEW_PREFERENCES } from "../../preview/WebviewPreferences.ts";
+import * as DesktopClientSettings from "../../settings/DesktopClientSettings.ts";
 import * as IpcChannels from "../channels.ts";
 import * as DesktopIpc from "../DesktopIpc.ts";
 

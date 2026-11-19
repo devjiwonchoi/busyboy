@@ -1,15 +1,15 @@
-import type { Root, RootContent } from "mdast";
-import { unified, type Processor } from "unified";
-import remarkParse from "remark-parse";
-import remarkGfm from "remark-gfm";
-import { remarkKeepWindowsProsePaths } from "@t3tools/shared/markdownWindowsPaths";
 import {
   absoluteFilePathMatches,
   inlineCodeFilePathCandidate,
   parseMarkdownFileLink,
 } from "@t3tools/shared/markdownLinks";
+import { remarkKeepWindowsProsePaths } from "@t3tools/shared/markdownWindowsPaths";
 import { isWindowsAbsolutePath } from "@t3tools/shared/path";
 import { hasRightToLeftLetter, textDirection } from "@t3tools/shared/textDirection";
+import type { Root, RootContent } from "mdast";
+import remarkGfm from "remark-gfm";
+import remarkParse from "remark-parse";
+import { unified, type Processor } from "unified";
 
 const parser = unified().use(remarkParse).use(remarkGfm).use(remarkKeepWindowsProsePaths);
 export type MarkdownNode = Root | RootContent;

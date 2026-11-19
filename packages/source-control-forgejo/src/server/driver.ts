@@ -5,7 +5,6 @@ import {
 import * as Effect from "effect/Effect";
 
 import { definition } from "../shared/definition.ts";
-
 import * as ForgejoCli from "./ForgejoCli.ts";
 import * as ForgejoIssueTracker from "./ForgejoIssueTracker.ts";
 import * as ForgejoPullRequestProvider from "./ForgejoPullRequestProvider.ts";

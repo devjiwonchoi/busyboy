@@ -1,5 +1,3 @@
-import { msg } from "gt-i18n";
-import { type MarkedText, markedTextEnglish } from "../errors/translatable.ts";
 import {
   type EnvironmentId,
   ProjectId,
@@ -7,20 +5,26 @@ import {
   type ScopedProjectRef,
   WS_METHODS,
 } from "@t3tools/contracts";
+import { resolveWorkspaceFilePath } from "@t3tools/shared/path";
 import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
+import { Atom, AtomRegistry } from "effect/reactivity";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
-import { Atom, AtomRegistry } from "effect/reactivity";
+import { msg } from "gt-i18n";
 
+import type { EnvironmentRegistry } from "../connection/registry.ts";
+import { type MarkedText, markedTextEnglish } from "../errors/translatable.ts";
+import { createProject, deleteProject, updateProject } from "../operations/commands.ts";
 import {
   type EnvironmentRpcInput,
   type EnvironmentRpcSuccess,
   request,
   requestGuarded,
 } from "../rpc/client.ts";
+import { createFileMetadataAtoms } from "./fileMetadata.ts";
 import type { EnvironmentProject } from "./models.ts";
 import {
   createAtomCommandScheduler,
@@ -28,10 +32,6 @@ import {
   createEnvironmentRpcCommand,
   createEnvironmentRpcQueryAtomFamily,
 } from "./runtime.ts";
-import { createProject, deleteProject, updateProject } from "../operations/commands.ts";
-import type { EnvironmentRegistry } from "../connection/registry.ts";
-import { createFileMetadataAtoms } from "./fileMetadata.ts";
-import { resolveWorkspaceFilePath } from "@t3tools/shared/path";
 
 export type {
   CreateProjectInput,

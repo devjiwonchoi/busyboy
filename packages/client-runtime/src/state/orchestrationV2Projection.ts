@@ -1,4 +1,3 @@
-import { applyThreadPullRequestLinkUpdate } from "../threadPullRequests.ts";
 import {
   applyOrchestrationV2ThreadVisit,
   isQueuedProviderThreadPlaceholder,
@@ -18,6 +17,8 @@ import {
   createOrchestrationV2TurnItemVisibility,
   isOrchestrationV2TurnItemVisible,
 } from "@t3tools/shared/orchestrationV2Timeline";
+
+import { applyThreadPullRequestLinkUpdate } from "../threadPullRequests.ts";
 
 export type ApplyOrchestrationV2ProjectionEventOptions = {
   readonly partialTimeline?: boolean;

@@ -1,10 +1,10 @@
 import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
-import * as HostProcess from "@t3tools/shared/HostProcess";
 import { describe, expect, it } from "@effect/vitest";
+import * as HostProcess from "@t3tools/shared/HostProcess";
 import * as Effect from "effect/Effect";
+import { HttpClient, HttpClientError, HttpClientResponse } from "effect/http";
 import * as Schema from "effect/Schema";
 import * as TestClock from "effect/testing/TestClock";
-import { HttpClient, HttpClientError, HttpClientResponse } from "effect/http";
 
 import { makeCliproxyApi } from "./cliproxyApi.ts";
 

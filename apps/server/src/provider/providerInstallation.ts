@@ -8,23 +8,23 @@ import {
   ProviderSetupError,
   type ProviderSetupInput,
 } from "@t3tools/contracts";
+import { mergeProviderInstanceEnvironment } from "@t3tools/provider-core/server/instanceEnvironment";
 import { resolveCommandPath } from "@t3tools/shared/shell";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 import * as FileSystem from "effect/FileSystem";
-import * as Path from "effect/Path";
+import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 
-import * as CodexInstallation from "./CodexInstallation.ts";
 import * as ServerSettings from "../serverSettings.ts";
 import * as AntigravityInstallation from "./AntigravityInstallation.ts";
-import { deriveProviderInstanceConfigMap } from "./ProviderInstanceRegistryHydration.ts";
+import * as CodexInstallation from "./CodexInstallation.ts";
 import * as ProviderInstanceRegistry from "./ProviderInstanceRegistry.ts";
+import { deriveProviderInstanceConfigMap } from "./ProviderInstanceRegistryHydration.ts";
 import * as ProviderRegistry from "./ProviderRegistry.ts";
-import { mergeProviderInstanceEnvironment } from "@t3tools/provider-core/server/instanceEnvironment";
 
 const ANTIGRAVITY = ProviderDriverKind.make("antigravity");
 const hasBinaryPath = Schema.is(Schema.Struct({ binaryPath: Schema.String }));

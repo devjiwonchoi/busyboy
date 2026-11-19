@@ -1,11 +1,10 @@
-import { msg } from "gt-react";
+import { scopeThreadRef } from "@t3tools/client-runtime/environment";
 import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
-import { m } from "~/i18n/messages";
+import {
+  isAtomCommandInterrupted,
+  squashAtomCommandFailure,
+} from "@t3tools/client-runtime/state/runtime";
 import type { EnvironmentThreadShell, ThreadStructure } from "@t3tools/client-runtime/state/shell";
-import type { ComposerThreadTarget } from "../../composerDraftStore";
-import type { ComposerHandleRef } from "../../composerHandleContext";
-import type { SessionPhase } from "../../types";
-import { useStableCallback } from "../../hooks/useStableCallback";
 import {
   AuthOrchestrationOperateScope,
   type EnvironmentId,
@@ -14,28 +13,31 @@ import {
   type ThreadId,
   type RunId,
 } from "@t3tools/contracts";
-import { scopeThreadRef } from "@t3tools/client-runtime/environment";
 import { useNavigate } from "@tanstack/react-router";
-import {
-  isAtomCommandInterrupted,
-  squashAtomCommandFailure,
-} from "@t3tools/client-runtime/state/runtime";
+import { msg } from "gt-react";
+
+import { m } from "~/i18n/messages";
+import { newThreadId } from "~/lib/utils";
+
+import type { ComposerThreadTarget } from "../../composerDraftStore";
+import { useComposerDraftStore } from "../../composerDraftStore";
+import type { ComposerHandleRef } from "../../composerHandleContext";
+import { useStableCallback } from "../../hooks/useStableCallback";
 import { readLocalApi } from "../../localApi";
 import { findRevertCheckpoint } from "../../session-logic";
-import { type ChatMessage } from "../../types";
-import { newThreadId } from "~/lib/utils";
-import { buildThreadRouteParams } from "../../threadRoutes";
-import { useComposerDraftStore } from "../../composerDraftStore";
-import { threadEnvironment } from "../../state/threads";
-import { waitForThreadShell } from "../../state/entities";
-import { openRevertConfirm } from "./ChatOverlayHosts";
 import { assetEnvironment } from "../../state/assets";
+import { waitForThreadShell } from "../../state/entities";
 import { readEnvironmentScope } from "../../state/session";
+import { threadEnvironment } from "../../state/threads";
 import { useAtomCommand } from "../../state/use-atom-command";
-import { useOrchestrationCommand } from "../../state/use-orchestration-command";
 import { useAtomQueryRunner } from "../../state/use-atom-query-runner";
-import { rewindToMessage } from "./chatViewSend";
+import { useOrchestrationCommand } from "../../state/use-orchestration-command";
+import { buildThreadRouteParams } from "../../threadRoutes";
+import type { SessionPhase } from "../../types";
+import { type ChatMessage } from "../../types";
 import { makeThreadErrorSetter } from "../ChatView.logic";
+import { openRevertConfirm } from "./ChatOverlayHosts";
+import { rewindToMessage } from "./chatViewSend";
 interface TimelineRewindInput {
   readonly environmentId: EnvironmentId;
   readonly routeThreadRef: ScopedThreadRef;

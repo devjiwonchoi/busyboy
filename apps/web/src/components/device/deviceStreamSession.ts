@@ -1,5 +1,5 @@
-import { createCanvasFrameSink } from "@t3tools/client-runtime/device/frame";
 import type { DuoControlState } from "@t3tools/client-runtime/device/duo-control";
+import { createCanvasFrameSink } from "@t3tools/client-runtime/device/frame";
 import {
   createDeviceStreamClient,
   type DeviceScreenSize,

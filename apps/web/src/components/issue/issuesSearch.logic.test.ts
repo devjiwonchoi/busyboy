@@ -1,7 +1,6 @@
-import { describe, expect, it } from "vite-plus/test";
-
 import type { EnvironmentProject } from "@t3tools/client-runtime/state/models";
 import { EnvironmentId, ProjectId } from "@t3tools/contracts";
+import { describe, expect, it } from "vite-plus/test";
 
 import { issueFilterProjects, issuesSearchFromUrl } from "./issuesSearch.logic";
 

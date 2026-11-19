@@ -1,8 +1,8 @@
 import { describe, expect, it } from "@effect/vitest";
+import type { UsageRecord } from "@t3tools/provider-core/server/usage";
 
 import { resolveModelAliases, UsageAggregator } from "./usageAggregation.ts";
 import type { RateTable } from "./usagePricing.ts";
-import type { UsageRecord } from "@t3tools/provider-core/server/usage";
 
 const rates: RateTable = new Map([
   [

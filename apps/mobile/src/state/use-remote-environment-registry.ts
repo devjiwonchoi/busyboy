@@ -1,29 +1,29 @@
-import * as Dialog from "../components/ui/Dialog";
-import { errorDisplayMessage } from "@t3tools/client-runtime/errors";
 import { useAtomValue } from "@effect/atom-react";
 import { useNavigation } from "@react-navigation/native";
+import { errorDisplayMessage } from "@t3tools/client-runtime/errors";
 import { Discovery } from "@t3tools/client-runtime/relay";
+import { runAtomCommand } from "@t3tools/client-runtime/state/runtime";
 import type { EnvironmentId } from "@t3tools/contracts";
 import * as Cause from "effect/Cause";
-import { msg } from "gt-react-native";
 import { AsyncResult, Atom } from "effect/reactivity";
-import { runAtomCommand } from "@t3tools/client-runtime/state/runtime";
+import { msg } from "gt-react-native";
 
+import * as Dialog from "../components/ui/Dialog";
+import { environmentCatalog } from "../connection/catalog";
+import { connectPairingUrl as connectPairingUrlCommand } from "../connection/onboarding";
 import { hasCloudPublicConfig } from "../features/cloud/publicConfig";
-import { m } from "../i18n/messages";
 import { useConnectionController } from "../features/connection/useConnectionController";
 import { useRetryEnvironment } from "../features/connection/useRetryEnvironment";
-import { environmentPresentations } from "./presentation";
-import { useWorkspaceConnectionState, useWorkspaceEnvironments } from "./workspace";
+import { m } from "../i18n/messages";
 import type { SavedRemoteConnection } from "../lib/connection";
 import { appAtomRegistry } from "./atom-registry";
-import type { ConnectedEnvironmentSummary, EnvironmentRuntimeState } from "./remote-runtime-types";
-import { environmentSession } from "./session";
-import { environmentCatalog } from "../connection/catalog";
-import { createRemoteEnvironmentProjectionAtoms } from "./remote-environment-projections";
-import { serverEnvironment } from "./server";
+import { environmentPresentations } from "./presentation";
 import { relayEnvironmentDiscovery } from "./relay";
-import { connectPairingUrl as connectPairingUrlCommand } from "../connection/onboarding";
+import { createRemoteEnvironmentProjectionAtoms } from "./remote-environment-projections";
+import type { ConnectedEnvironmentSummary, EnvironmentRuntimeState } from "./remote-runtime-types";
+import { serverEnvironment } from "./server";
+import { environmentSession } from "./session";
+import { useWorkspaceConnectionState, useWorkspaceEnvironments } from "./workspace";
 
 const RELAY_REMOVAL_ACCOUNT_NOTE: Record<Discovery.RelayEnvironmentRegistration, string> = {
   registered: msg(

@@ -1,9 +1,9 @@
+import { describe, expect, it } from "@effect/vitest";
 import type {
   DesktopHostTelemetrySnapshot,
   ResourceMonitorProcessSample,
   ResourceMonitorSnapshotEvent,
 } from "@t3tools/contracts";
-import { describe, expect, it } from "@effect/vitest";
 import * as DateTime from "effect/DateTime";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";

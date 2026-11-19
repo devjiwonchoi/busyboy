@@ -1,4 +1,5 @@
 import { expect, it } from "vite-plus/test";
+
 import { createBitmapImageResolver } from "./word-images";
 
 it("asks the window to rasterize SVG pictures at their drawn size, and draws the bitmaps it returns", async () => {

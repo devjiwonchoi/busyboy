@@ -12,16 +12,12 @@ import {
   DEFAULT_UNIFIED_SETTINGS,
   type UnifiedSettings,
 } from "@t3tools/contracts/settings";
-import { describe, expect, it } from "vite-plus/test";
 import { createModelSelection } from "@t3tools/shared/model";
-import { deriveEffectiveComposerModelState } from "./composerDraftStore";
+import { describe, expect, it } from "vite-plus/test";
+
 import { getComposerProviderState } from "./components/chat/composerProviderState";
 import { resolveComposerProviderSelection } from "./components/ChatView.logic";
-import {
-  deriveProviderInstanceEntries,
-  NO_PROVIDER_MODEL_SELECTION,
-  providerInstanceEntriesFor,
-} from "./providerInstances";
+import { deriveEffectiveComposerModelState } from "./composerDraftStore";
 import {
   defaultModelSelectionsAreMixed,
   getAppModelOptionsForInstance,
@@ -31,6 +27,11 @@ import {
   resolveAppModelSelectionState,
   resolveEffectiveDefaultModelSelection,
 } from "./modelSelection";
+import {
+  deriveProviderInstanceEntries,
+  NO_PROVIDER_MODEL_SELECTION,
+  providerInstanceEntriesFor,
+} from "./providerInstances";
 
 function provider(input: {
   provider?: ProviderDriverKind;

@@ -3,23 +3,23 @@ import {
   markdownImageSourceFragment,
 } from "@t3tools/client-runtime/markdown-images";
 import {
-  audioMimeTypeFromExtension,
-  mediaMimeTypeFromExtension,
-} from "@t3tools/shared/mediaPreview";
-import { splitFilePathPosition } from "@t3tools/shared/fileLinks";
-import { parseMarkdownFileLink } from "@t3tools/shared/markdownLinks";
-import {
   mediaFileReference,
   mediaUrlReference,
   mediaReferenceFileName,
 } from "@t3tools/client-runtime/media-reference";
 import type { EnvironmentId, ThreadId } from "@t3tools/contracts";
-import { normalizeNativeMarkdownUrl, resolveMarkdownLinkPresentation } from "./markdownLinks";
-import { resolveMobileMarkdownMediaSource } from "./markdownMediaSource";
+import { splitFilePathPosition } from "@t3tools/shared/fileLinks";
+import { parseMarkdownFileLink } from "@t3tools/shared/markdownLinks";
+import {
+  audioMimeTypeFromExtension,
+  mediaMimeTypeFromExtension,
+} from "@t3tools/shared/mediaPreview";
 
 import type { FilePreviewSource } from "../components/ui/FilePreviewModal";
-import type { MediaVideoPreviewSource } from "./videoPreviewSource";
+import { normalizeNativeMarkdownUrl, resolveMarkdownLinkPresentation } from "./markdownLinks";
+import { resolveMobileMarkdownMediaSource } from "./markdownMediaSource";
 import type { MediaActionsSource } from "./mediaActionsSource";
+import type { MediaVideoPreviewSource } from "./videoPreviewSource";
 
 const DOCUMENT_MIME_TYPES: Readonly<Record<string, string>> = {
   ".pdf": "application/pdf",

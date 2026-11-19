@@ -1,13 +1,14 @@
 import { useAtomValue } from "@effect/atom-react";
-import { AuthOrchestrationOperateScope, type ScopedThreadRef } from "@t3tools/contracts";
-import type { ChildThreadApproval } from "@t3tools/client-runtime/state/thread-requests";
-import { fullAccessOverrideExplanation } from "@t3tools/client-runtime/state/thread-requests";
 import {
   isAtomCommandInterrupted,
   squashAtomCommandFailure,
 } from "@t3tools/client-runtime/state/runtime";
+import type { ChildThreadApproval } from "@t3tools/client-runtime/state/thread-requests";
+import { fullAccessOverrideExplanation } from "@t3tools/client-runtime/state/thread-requests";
+import { AuthOrchestrationOperateScope, type ScopedThreadRef } from "@t3tools/contracts";
 import { T, useGT, useMessages, Var } from "gt-react";
 import { useState } from "react";
+
 import { useEnvironmentScope } from "../../state/session";
 import { childThreadApprovalsAtom, threadEnvironment } from "../../state/threads";
 import { useAtomCommand } from "../../state/use-atom-command";

@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vite-plus/test";
 import * as Option from "effect/Option";
+import { describe, expect, it } from "vite-plus/test";
 
 import {
   newEasDeviceHost,

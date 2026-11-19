@@ -8,16 +8,16 @@ import {
   DeviceToolScreenshotResult,
   DeviceToolTargetInput,
 } from "@t3tools/contracts";
-import * as Schema from "effect/Schema";
+import { McpSchema, Tool, Toolkit } from "effect/ai";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
-import * as ServerConfig from "../../../config.ts";
-import { McpSchema, Tool, Toolkit } from "effect/ai";
+import * as Schema from "effect/Schema";
 
-import * as McpInvocationContext from "../../McpInvocationContext.ts";
+import * as ServerConfig from "../../../config.ts";
 import * as DeviceService from "../../../device/DeviceService.ts";
 import * as ThreadManagementService from "../../../orchestration-v2/ThreadManagementService.ts";
 import * as ProjectService from "../../../project/ProjectService.ts";
+import * as McpInvocationContext from "../../McpInvocationContext.ts";
 
 const dependencies = [
   McpInvocationContext.McpInvocationContext,

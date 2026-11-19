@@ -1,4 +1,5 @@
 import type { DisplayList } from "@betteroffice/xlsx";
+
 import { loadFace, sheetFace } from "./fonts";
 
 /**

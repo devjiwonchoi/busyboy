@@ -1,6 +1,5 @@
-import { SourceControlProviderKind } from "@t3tools/contracts";
 import { assert, describe, expect, it } from "@effect/vitest";
-import * as DateTime from "effect/DateTime";
+import { SourceControlProviderKind } from "@t3tools/contracts";
 import {
   DEFAULT_SERVER_SETTINGS,
   ProjectId,
@@ -24,6 +23,7 @@ import {
 } from "@t3tools/contracts";
 import { applyServerSettingsPatch } from "@t3tools/shared/serverSettings";
 import * as SecureRandom from "effect/crypto/SecureRandom";
+import * as DateTime from "effect/DateTime";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -43,9 +43,9 @@ import * as PullRequestService from "../pullRequest/PullRequestService.ts";
 import * as ServerActivation from "../serverActivation.ts";
 import * as ServerSettings from "../serverSettings.ts";
 import * as TerminalManager from "../terminal/Manager.ts";
-import * as ProjectStore from "./ProjectStore.ts";
 import * as Orchestrator from "./Orchestrator.ts";
 import * as ProjectionStore from "./ProjectionStore.ts";
+import * as ProjectStore from "./ProjectStore.ts";
 import * as ThreadSettlementService from "./ThreadSettlementService.ts";
 
 const NOW_MS = Date.parse("2026-06-10T12:00:00.000Z");

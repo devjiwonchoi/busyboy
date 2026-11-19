@@ -1,11 +1,12 @@
 // @effect-diagnostics nodeBuiltinImport:off -- Resolves the real CLI entrypoint for subprocess tests.
 import * as NodeURL from "node:url";
+
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
-import * as Stream from "effect/Stream";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
+import * as Stream from "effect/Stream";
 
 it.live("loads the CLI with its cache settings only when the command needs it", () =>
   Effect.gen(function* () {

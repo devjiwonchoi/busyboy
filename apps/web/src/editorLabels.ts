@@ -1,7 +1,7 @@
 import { EDITORS, type EditorId } from "@t3tools/contracts";
+import { msg } from "gt-react";
 
 import { getLocalFileManagerName } from "~/lib/utils";
-import { msg } from "gt-react";
 
 import { m, type MessageResolver } from "./i18n/messages";
 

@@ -1,25 +1,24 @@
-import type { EnvironmentThreadShell } from "@t3tools/client-runtime/state/shell";
-import type {
-  PullRequestSummary,
-  ThreadPullRequestKey,
-  ThreadPullRequestLink,
-  VcsStatusResult,
-} from "@t3tools/contracts";
 import {
   sourceControlClients,
   type ChangeRequestTerminology,
 } from "@t3tools/client-runtime/source-control-clients";
-import { changeRequestTermKind } from "../lib/changeRequestTerm";
-
+import type { EnvironmentThreadShell } from "@t3tools/client-runtime/state/shell";
 import {
   legacyThreadPullRequestKey,
   resolveThreadCurrentPullRequestLink,
   resolveThreadPullRequestBadge,
   threadPullRequestKeyOf,
 } from "@t3tools/client-runtime/thread-pull-requests";
+import type {
+  PullRequestSummary,
+  ThreadPullRequestKey,
+  ThreadPullRequestLink,
+  VcsStatusResult,
+} from "@t3tools/contracts";
 import { msg } from "gt-react-native";
 
 import { m, type MessageResolver } from "../i18n/messages";
+import { changeRequestTermKind } from "../lib/changeRequestTerm";
 
 export type ThreadPr = NonNullable<VcsStatusResult["pr"]>;
 

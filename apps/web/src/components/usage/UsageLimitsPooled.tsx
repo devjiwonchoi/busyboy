@@ -1,3 +1,5 @@
+import type { Popover as PopoverPrimitive } from "@base-ui/react/popover";
+import { normalizeProviderAccentColor } from "@t3tools/client-runtime/state/provider-instance-display";
 import {
   CHATGPT_USAGE_URL,
   collectLimitAccounts,
@@ -11,9 +13,14 @@ import {
   remainingPercent,
   type ResetCreditChoice,
 } from "@t3tools/shared/usageLimits";
+import {
+  collectExternalUsageLinks,
+  collectLimitNotices,
+  cursorUsageWindowDetails,
+  formatResetsIn,
+  resetCreditChoices,
+} from "@t3tools/shared/usageLimitsCopy";
 import { T, useGT, useMessages } from "gt-react";
-import type { Popover as PopoverPrimitive } from "@base-ui/react/popover";
-import { normalizeProviderAccentColor } from "@t3tools/client-runtime/state/provider-instance-display";
 import { AlertTriangleIcon, ExternalLinkIcon, TicketIcon } from "lucide-react";
 import {
   createContext,
@@ -26,25 +33,18 @@ import {
   useState,
 } from "react";
 
-import { ensureLocalApi } from "../../localApi";
 import { usePrimarySettings } from "../../hooks/useSettings";
 import { cn } from "../../lib/utils";
+import { ensureLocalApi } from "../../localApi";
 import { formatUpcomingTimestamp } from "../../timestampFormat";
 import { ProviderInstanceIcon } from "../chat/ProviderInstanceIcon";
+import { OpenAI } from "../Icons";
 import { providerClients } from "../settings/providerDriverMeta";
 import { RedactedSensitiveText } from "../settings/RedactedSensitiveText";
-import { Button } from "../ui/button";
-import { OpenAI } from "../Icons";
 import { Alert, AlertTitle } from "../ui/alert";
+import { Button } from "../ui/button";
 import { Popover, PopoverCreateHandle, PopoverPopup, PopoverTrigger } from "../ui/popover";
 import { PaceIcon, ResetCreditDialog, barColor, usePaceMark, useResetCredit } from "./UsageLimits";
-import {
-  collectExternalUsageLinks,
-  collectLimitNotices,
-  cursorUsageWindowDetails,
-  formatResetsIn,
-  resetCreditChoices,
-} from "@t3tools/shared/usageLimitsCopy";
 
 function accountInitials(email: string): string {
   const [local = "", domain = ""] = email.split("@");

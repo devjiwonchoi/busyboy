@@ -1,17 +1,17 @@
 import { sourceControlClients } from "@t3tools/client-runtime/source-control-clients";
-import { useAtomCommand } from "~/state/use-atom-command";
 import type { EnvironmentId, PullRequestDetailView, PullRequestRef } from "@t3tools/contracts";
-import { SendIcon } from "lucide-react";
 import { msg, T, useGT } from "gt-react";
+import { SendIcon } from "lucide-react";
 import { useEffect, useState, type RefObject } from "react";
 
 import { m } from "~/i18n/messages";
-
 import { TextFieldSpeechControls, useTextFieldSpeech } from "~/speech/useTextFieldSpeech";
 import { pullRequestEnvironment } from "~/state/pullRequests";
+import { useAtomCommand } from "~/state/use-atom-command";
 
 import { Button } from "../ui/button";
 import { toastManager } from "../ui/toast";
+import { changeRequestTermKind } from "./changeRequestTerm";
 import { PullRequestGlyph } from "./pullRequestIcons";
 import {
   PullRequestMarkdownTextarea,
@@ -19,8 +19,6 @@ import {
 } from "./PullRequestMarkdownTextarea";
 import { pullRequestReviewKey } from "./pullRequestReviewStore";
 import { useInlineActionConfirm } from "./useInlineActionConfirm";
-
-import { changeRequestTermKind } from "./changeRequestTerm";
 
 export function PullRequestCommentForm({
   environmentId,

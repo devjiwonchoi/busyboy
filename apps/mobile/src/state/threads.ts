@@ -1,5 +1,6 @@
-import { createChildThreadApprovalsAtom } from "@t3tools/client-runtime/state/thread-requests";
 import { useAtomValue } from "@effect/atom-react";
+import { createSteadyShellAtoms } from "@t3tools/client-runtime/state/shell";
+import { createChildThreadApprovalsAtom } from "@t3tools/client-runtime/state/thread-requests";
 import {
   createEnvironmentThreadDetailAtoms,
   createEnvironmentThreadShellAtoms,
@@ -10,7 +11,6 @@ import {
   createThreadEnvironmentAtoms,
   createThreadFamilyAtoms,
 } from "@t3tools/client-runtime/state/threads";
-import { createSteadyShellAtoms } from "@t3tools/client-runtime/state/shell";
 import type { EnvironmentId, ThreadId } from "@t3tools/contracts";
 import { AsyncResult, Atom } from "effect/reactivity";
 

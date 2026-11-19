@@ -2,8 +2,8 @@ import type { EnvironmentId, ProjectId } from "@t3tools/contracts";
 
 import type { OpenPreviewMutation } from "./browser/openFileInPreview";
 import type { ClosedView, ClosedViewEntry } from "./closedViewStore";
-import type { PullRequestListPreferences } from "./components/pullRequest/pullRequestListPreferences";
 import { openPreviewSession } from "./components/preview/openPreviewSession";
+import type { PullRequestListPreferences } from "./components/pullRequest/pullRequestListPreferences";
 import {
   rightPanelHostRef,
   type RightPanelSurface,

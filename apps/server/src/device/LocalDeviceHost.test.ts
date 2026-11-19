@@ -1,23 +1,22 @@
-import { describe, expect, it } from "@effect/vitest";
 import * as NodePath from "@effect/platform-node/NodePath";
+import * as NodeServices from "@effect/platform-node/NodeServices";
+import { describe, expect, it } from "@effect/vitest";
 import * as HostProcess from "@t3tools/shared/HostProcess";
+import * as NetService from "@t3tools/shared/Net";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
+import * as FileSystem from "effect/FileSystem";
+import { HttpClient, HttpClientResponse } from "effect/http";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as PlatformError from "effect/PlatformError";
+import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Ref from "effect/Ref";
-import * as FileSystem from "effect/FileSystem";
 import * as Sink from "effect/Sink";
 import * as Stream from "effect/Stream";
 
-import * as LocalDeviceHost from "./LocalDeviceHost.ts";
-import * as NodeServices from "@effect/platform-node/NodeServices";
-import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
-import { HttpClient, HttpClientResponse } from "effect/http";
-import * as NetService from "@t3tools/shared/Net";
 import * as ServerConfig from "../config.ts";
 import * as ProcessRunner from "../processRunner.ts";
 import {
@@ -25,6 +24,7 @@ import {
   DEVICE_HUB_VERSION,
   agentDeviceStateDir,
 } from "./DeviceToolchain.ts";
+import * as LocalDeviceHost from "./LocalDeviceHost.ts";
 
 const processOutput = (code: number, stdout = "", stderr = "", timedOut = false) => ({
   code: ChildProcessSpawner.ExitCode(code),

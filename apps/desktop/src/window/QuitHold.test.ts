@@ -1,3 +1,4 @@
+import type { QuitConfirmationMode, QuitShortcutHintEvent } from "@t3tools/contracts";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 import {
@@ -6,7 +7,6 @@ import {
   QUIT_HOLD_DURATION_MS,
 } from "./QuitHold.ts";
 import type { QuitHoldKeyInput } from "./QuitHold.ts";
-import type { QuitConfirmationMode, QuitShortcutHintEvent } from "@t3tools/contracts";
 
 const DOUBLE_CLICK_DOWN = { state: "down", mode: "double-click" } as const;
 const UP = { state: "up" } as const;

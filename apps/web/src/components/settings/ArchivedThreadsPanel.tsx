@@ -1,30 +1,31 @@
-import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
-import { m as resolveMessage } from "~/i18n/messages";
-import { settingsScopeEnvironmentLabels } from "./settingsScopeAxis";
-import { Spinner } from "~/components/ui/spinner";
-import { ArchiveIcon, ArchiveX, Trash2Icon } from "lucide-react";
 import { scopeThreadRef, scopedThreadKey } from "@t3tools/client-runtime/environment";
-import { presentThreadShell } from "@t3tools/client-runtime/state/shell";
+import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
 import {
   type AtomCommandResult,
   isAtomCommandInterrupted,
   settlePromise,
   squashAtomCommandFailure,
 } from "@t3tools/client-runtime/state/runtime";
-import { useSettingsScope } from "./SettingsScopeContext";
+import { presentThreadShell } from "@t3tools/client-runtime/state/shell";
+import { msg, T, useGT, useMessages } from "gt-react";
+import { ArchiveIcon, ArchiveX, Trash2Icon } from "lucide-react";
+import { useRef, useState } from "react";
+
+import { Spinner } from "~/components/ui/spinner";
+import { m as resolveMessage } from "~/i18n/messages";
+
 import { useThreadActions } from "../../hooks/useThreadActions";
-import { readLocalApi } from "../../localApi";
 import { useArchivedThreadSnapshots } from "../../lib/archivedThreadsState";
+import { readLocalApi } from "../../localApi";
+import { ProjectFavicon } from "../ProjectFavicon";
 import { RelativeTime } from "../RelativeTime";
 import { Button } from "../ui/button";
 import { stackedThreadToast, toastManager } from "../ui/toast";
-import { SettingsPageContainer, SettingsRow, SettingsSection } from "./settingsLayout";
-import { useSearchableSetting } from "./settingsSearch";
-import { ProjectFavicon } from "../ProjectFavicon";
-
-import { msg, T, useGT, useMessages } from "gt-react";
-import { useRef, useState } from "react";
 import { Tooltip, TooltipTrigger, TooltipPopup } from "../ui/tooltip";
+import { SettingsPageContainer, SettingsRow, SettingsSection } from "./settingsLayout";
+import { settingsScopeEnvironmentLabels } from "./settingsScopeAxis";
+import { useSettingsScope } from "./SettingsScopeContext";
+import { useSearchableSetting } from "./settingsSearch";
 
 const ARCHIVE_ACTIONS = [
   {

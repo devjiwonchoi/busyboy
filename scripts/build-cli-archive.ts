@@ -2,6 +2,10 @@
 /** Runtime archives must run without host Node, npm, or compilers. */
 import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
 import * as NodeServices from "@effect/platform-node/NodeServices";
+import * as HostProcess from "@t3tools/shared/HostProcess";
+import { fromYaml } from "@t3tools/shared/schemaYaml";
+import { resolveSpawnCommand } from "@t3tools/shared/shell";
+import { Command, Flag } from "effect/cli";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -10,28 +14,23 @@ import * as Logger from "effect/Logger";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as PlatformError from "effect/PlatformError";
+import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
-import { Command, Flag } from "effect/cli";
-import { ChildProcess, ChildProcessSpawner } from "effect/process";
 
-import * as HostProcess from "@t3tools/shared/HostProcess";
-import { fromYaml } from "@t3tools/shared/schemaYaml";
-import { resolveSpawnCommand } from "@t3tools/shared/shell";
-import rootPackageJson from "../package.json" with { type: "json" };
 import serverPackageJson from "../apps/server/package.json" with { type: "json" };
-
+import rootPackageJson from "../package.json" with { type: "json" };
 import {
   createStagePatchedDependencies,
   createStageWorkspaceConfig,
   resolveFffNativeDependencies,
   STAGE_INSTALL_ARGS,
 } from "./build-desktop-artifact.ts";
-import { assertLinuxArm64PageCompatibility } from "./lib/linux-arm64-sea.ts";
 import { selectCliRuntimeExternalDependencies } from "./lib/cli-external-packages.ts";
+import { assertLinuxArm64PageCompatibility } from "./lib/linux-arm64-sea.ts";
+import { resolveCatalogDependencies } from "./lib/resolve-catalog.ts";
 import { signWithJsign } from "./lib/windows-jsign.ts";
 import { windowsSystemTar } from "./lib/windows-tar.ts";
-import { resolveCatalogDependencies } from "./lib/resolve-catalog.ts";
 
 const BuildPlatform = Schema.Literals(["mac", "linux", "win"]);
 const BuildArch = Schema.Literals(["arm64", "x64"]);

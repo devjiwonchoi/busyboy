@@ -1,6 +1,5 @@
-import { describe, expect, it } from "vite-plus/test";
-
 import * as ThreadUndo from "@t3tools/client-runtime/state/thread-undo";
+import { describe, expect, it } from "vite-plus/test";
 
 describe("thread action ownership", () => {
   it("does not revive the first Undo after a later pin and unpin", () => {

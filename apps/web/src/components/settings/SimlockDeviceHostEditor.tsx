@@ -1,7 +1,5 @@
-import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
-import { m } from "~/i18n/messages";
 import { useAtomValue } from "@effect/atom-react";
-import { useId, useState, type ReactNode } from "react";
+import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
 import {
   isSecretReference,
   type EnvironmentId,
@@ -11,12 +9,14 @@ import {
 import * as Cause from "effect/Cause";
 import * as Option from "effect/Option";
 import { AsyncResult, Atom } from "effect/reactivity";
-import { XIcon } from "lucide-react";
 import { T, useGT, useMessages } from "gt-react";
+import { XIcon } from "lucide-react";
+import { useId, useState, type ReactNode } from "react";
+
+import { m } from "~/i18n/messages";
 
 import { deviceSimlockIdentityCheck } from "../../state/device";
 import { environmentAtomList, environmentIdsKey } from "../../state/environmentAtomList";
-
 import { Button } from "../ui/button";
 import {
   Dialog,

@@ -1,19 +1,21 @@
 // @effect-diagnostics nodeBuiltinImport:off
-import * as NodeOS from "node:os";
-import * as NodePath from "node:path";
+
 import * as NodeChildProcess from "node:child_process";
 import * as NodeFS from "node:fs";
+import * as NodeOS from "node:os";
+import * as NodePath from "node:path";
+
+import type { ShellEnvironmentPatch } from "@t3tools/contracts";
 import * as Cache from "effect/Cache";
 import * as Clock from "effect/Clock";
+import * as Context from "effect/Context";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 
-import type { ShellEnvironmentPatch } from "@t3tools/contracts";
 import * as HostProcess from "./HostProcess.ts";
-import * as Context from "effect/Context";
 const SHELL_ENV_NAME_PATTERN = /^[A-Z0-9_]+$/;
 const WINDOWS_PATH_DELIMITER = ";";
 const POSIX_PATH_DELIMITER = ":";

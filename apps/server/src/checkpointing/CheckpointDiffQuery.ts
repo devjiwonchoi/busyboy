@@ -13,9 +13,11 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
 
-import { CHECKPOINT_DIFF_MAX_OUTPUT_BYTES } from "../vcs/VcsDriver.ts";
 import { checkpointRefForScopeOrdinal } from "../orchestration-v2/CheckpointService.ts";
 import * as ThreadManagement from "../orchestration-v2/ThreadManagementService.ts";
+import { CHECKPOINT_DIFF_MAX_OUTPUT_BYTES } from "../vcs/VcsDriver.ts";
+import * as CheckpointStore from "./CheckpointStore.ts";
+import { isGitImport, parseTurnDiffFilesFromNumstat, type TurnDiffFileSummary } from "./Diffs.ts";
 import {
   CheckpointDiffResultInvalidError,
   CheckpointRefUnavailableError,
@@ -24,8 +26,6 @@ import {
   CheckpointWorkspacePathMissingError,
   type CheckpointServiceError,
 } from "./Errors.ts";
-import * as CheckpointStore from "./CheckpointStore.ts";
-import { isGitImport, parseTurnDiffFilesFromNumstat, type TurnDiffFileSummary } from "./Diffs.ts";
 
 // Windows limits a command line to 32,767 characters. Leave room for the rest of git's arguments.
 const MAX_PATHSPEC_CHARS = 24_000;

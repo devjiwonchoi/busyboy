@@ -1,66 +1,63 @@
-import { useGT, useMessages } from "gt-react-native";
-import { useActiveNewTask } from "../../state/active-new-task";
-import { ThreadUndoNotice } from "../home/ThreadUndoNotice";
-import { useAndroidControlSizing } from "../../components/ui/useAndroidControlSizing";
+import { useAtomValue } from "@effect/atom-react";
+import { AnimatedLegendList } from "@legendapp/list/reanimated";
 import { pickableProjectGroups } from "@t3tools/client-runtime/state/project-grouping";
-import {
-  useAppearancePreferences,
-  useAndroidFloatingTabs,
-} from "../settings/appearance/AppearancePreferencesProvider";
 import type {
   EnvironmentProject,
   EnvironmentThreadShell,
 } from "@t3tools/client-runtime/state/shell";
 import { threadSearchMatchKey } from "@t3tools/client-runtime/state/thread-search";
-import { AnimatedLegendList } from "@legendapp/list/reanimated";
-import { THREAD_LIST_ROW_LAYOUT } from "./threadListAnimations";
-import { useAtomValue } from "@effect/atom-react";
+import { useGT, useMessages } from "gt-react-native";
 import { useMemo, useRef, useState } from "react";
 import { Platform, StyleSheet, View } from "react-native";
 import { GestureDetector, useNativeGesture } from "react-native-gesture-handler";
 import type { SwipeableMethods } from "react-native-gesture-handler/ReanimatedSwipeable";
-import { FLOATING_TABS } from "../layout/workspace/floating-workspace-tabs";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AppText as Text } from "../../components/ui/AppText";
 import { Button } from "../../components/ui/Button";
+import { useAndroidControlSizing } from "../../components/ui/useAndroidControlSizing";
 import { scopedProjectKey, scopedThreadKey } from "../../lib/scopedEntities";
+import { NativeScrollView } from "../../native/NativeScrollViewMarker";
+import { useActiveNewTask } from "../../state/active-new-task";
 import { useProjects } from "../../state/entities";
-import { steadyNavigationThreadShellsAtom } from "../../state/threads";
-import { useThreadSearch } from "../../state/queries";
-import { useThreadListV2ShelfPreferences } from "./use-thread-list-v2-shelf-preferences";
-import { useThreadListNow } from "./use-thread-list-now";
-import { usePendingThreadOrder } from "../../state/thread-order";
 import { threadListEnvironmentsAtom } from "../../state/presentation";
+import { useThreadSearch } from "../../state/queries";
+import { usePendingThreadOrder } from "../../state/thread-order";
+import { ThreadPrDemandProvider } from "../../state/thread-pr-demand";
+import type { ThreadPrPresentation } from "../../state/thread-pr-presentation";
+import { steadyNavigationThreadShellsAtom } from "../../state/threads";
 import {
   useLaunchingThreads,
   usePendingNewTasks,
   type PendingNewTask,
 } from "../../state/use-pending-new-tasks";
+import { useSavedRemoteConnections } from "../../state/use-remote-environment-registry";
 import { useQueuedThreadKeys } from "../../state/use-thread-outbox";
 import { useWorkspaceState } from "../../state/workspace";
-import { useSavedRemoteConnections } from "../../state/use-remote-environment-registry";
-import { useThreadListV2 } from "./useThreadListV2";
-import { useSidebarRowThreadKey } from "./useSidebarRowThreadKey";
-import { useThreadJumpShortcuts } from "../keyboard/threadKeyboardShortcuts";
-import { requestThreadMessageJump } from "./threadMessageJump";
-import { useThreadListSearchMatches } from "./useThreadListSearchMatches";
-import { useHomeListOptions } from "../home/home-list-options";
+import { useFabScroll } from "../home/FabScrollContext";
 import {
   buildHomeListFilterMenuItems,
   homeListFilterEnvironments,
 } from "../home/home-list-filter-menu";
+import { useHomeListOptions } from "../home/home-list-options";
 import {
   buildHomeProjectScopes,
   resolveHomeProjectFilterScope,
   sortHomeProjectScopes,
 } from "../home/homeThreadList";
 import { SwipeableScrollGateProvider, useSwipeableScrollGate } from "../home/thread-swipe-actions";
+import { ThreadUndoNotice } from "../home/ThreadUndoNotice";
 import { usePendingTaskListActions } from "../home/usePendingTaskListActions";
 import { useThreadListActions } from "../home/useThreadListActions";
-import { useFabScroll } from "../home/FabScrollContext";
+import { useThreadJumpShortcuts } from "../keyboard/threadKeyboardShortcuts";
+import { FLOATING_TABS } from "../layout/workspace/floating-workspace-tabs";
+import { useSelectWorkspaceDetail } from "../layout/workspace/useSelectWorkspaceDetail";
 import { WorkspaceListHeader } from "../layout/workspace/WorkspaceListHeader";
 import { WorkspaceSidebarColumn } from "../layout/workspace/WorkspaceSidebarColumn";
+import {
+  useAppearancePreferences,
+  useAndroidFloatingTabs,
+} from "../settings/appearance/AppearancePreferencesProvider";
 import {
   ThreadListV2PendingRow,
   ThreadListV2Row,
@@ -70,8 +67,7 @@ import {
   ThreadListV2WorkingShelfHeader,
 } from "./thread-list-v2-items";
 import { useThreadRowProviderInstanceResolver } from "./thread-provider-instance";
-import type { ThreadPrPresentation } from "../../state/thread-pr-presentation";
-import { ThreadPrDemandProvider } from "../../state/thread-pr-demand";
+import { THREAD_LIST_ROW_LAYOUT } from "./threadListAnimations";
 import {
   isThreadListV2ListItem,
   threadListV2ListItemsAreEqual,
@@ -79,8 +75,12 @@ import {
   THREAD_LIST_V2_SETTLED_PAGE_COUNT,
   type ThreadListV2ListItem,
 } from "./threadListV2";
-import { useSelectWorkspaceDetail } from "../layout/workspace/useSelectWorkspaceDetail";
-import { NativeScrollView } from "../../native/NativeScrollViewMarker";
+import { requestThreadMessageJump } from "./threadMessageJump";
+import { useThreadListNow } from "./use-thread-list-now";
+import { useThreadListV2ShelfPreferences } from "./use-thread-list-v2-shelf-preferences";
+import { useSidebarRowThreadKey } from "./useSidebarRowThreadKey";
+import { useThreadListSearchMatches } from "./useThreadListSearchMatches";
+import { useThreadListV2 } from "./useThreadListV2";
 
 type SidebarListItem =
   | ThreadListV2ListItem

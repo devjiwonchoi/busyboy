@@ -6,27 +6,28 @@ import {
   ProviderInstanceId,
   type ServerProvider,
 } from "@t3tools/contracts";
-import * as HostProcess from "@t3tools/shared/HostProcess";
 import {
   enrichProviderSnapshotWithVersionAdvisory,
   invalidateLatestProviderVersion,
 } from "@t3tools/provider-core/server/maintenanceResolver";
-import * as ProviderLatestVersions from "@t3tools/provider-core/server/ProviderLatestVersions";
-import * as ProviderHost from "@t3tools/provider-core/server/ProviderHost";
 import { makeManagedServerProvider } from "@t3tools/provider-core/server/managedProvider";
+import * as ProviderHost from "@t3tools/provider-core/server/ProviderHost";
+import * as ProviderLatestVersions from "@t3tools/provider-core/server/ProviderLatestVersions";
+import * as HostProcess from "@t3tools/shared/HostProcess";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as FileSystem from "effect/FileSystem";
-import * as Layer from "effect/Layer";
-import * as Path from "effect/Path";
-import * as Queue from "effect/Queue";
-import * as Stream from "effect/Stream";
-import * as TestClock from "effect/testing/TestClock";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientResponse from "effect/http/HttpClientResponse";
-import * as Sink from "effect/Sink";
+import * as Layer from "effect/Layer";
+import * as Path from "effect/Path";
 import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
+import * as Queue from "effect/Queue";
+import * as Sink from "effect/Sink";
+import * as Stream from "effect/Stream";
+import * as TestClock from "effect/testing/TestClock";
+
 import { makeClaudeMaintenanceResolution } from "./ClaudeMaintenance.ts";
 
 const snapshot: ServerProvider = {

@@ -1,6 +1,6 @@
+import type { EnvironmentId, ScopedThreadRef, ThreadId } from "@t3tools/contracts";
 import { memo, useRef } from "react";
 import { describe, expect, it } from "vite-plus/test";
-import type { EnvironmentId, ScopedThreadRef, ThreadId } from "@t3tools/contracts";
 
 import { act, render } from "../../../test/render";
 import { THREAD_CONTEXT_DROP_EVENT, useThreadContextDrop } from "./threadContextDrag";

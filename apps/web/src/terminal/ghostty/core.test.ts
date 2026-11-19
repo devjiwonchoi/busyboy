@@ -1,4 +1,3 @@
-import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import {
   applyTerminalAttachStreamEvent,
   DEFAULT_MAX_TERMINAL_BUFFER_BYTES,
@@ -8,11 +7,12 @@ import {
   terminalOutputText,
   type TerminalBufferState,
 } from "@t3tools/client-runtime/state/terminal";
+import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 
 import { writeTerminalOutputUpdate } from "../../components/ThreadTerminalDrawer";
+import { terminalNavigationShortcutData } from "../../keybindings";
 import { GHOSTTY_CELL_WIDE, GhosttyTerminalCore, ghosttyCellText } from "./core";
 import { loadGhosttyRuntime } from "./runtime";
-import { terminalNavigationShortcutData } from "../../keybindings";
 
 vi.mock("./vendor/ghostty-vt.wasm?url", async () => ({
   default: (await import("./vendor/ghostty-vt.wasm?inline")).default,

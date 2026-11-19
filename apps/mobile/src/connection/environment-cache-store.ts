@@ -13,11 +13,11 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 
-import * as MobileDatabase from "../persistence/mobile-database";
 import {
   attachProjectFaviconDatabase,
   projectFaviconDatabaseCache,
 } from "../lib/projectFaviconDatabaseCache";
+import * as MobileDatabase from "../persistence/mobile-database";
 import { decodeStoredShellSnapshot } from "./shell-cache-decoding";
 
 const SERVER_CONFIG_CACHE_SCHEMA_VERSION = 1;

@@ -1,3 +1,5 @@
+import { PositiveInt, TrimmedNonEmptyString } from "@t3tools/contracts";
+import { decodeJsonResult } from "@t3tools/shared/schemaJson";
 import { trimOptionalString } from "@t3tools/source-control-core/server/pullRequestUtils";
 import * as Cause from "effect/Cause";
 import * as DateTime from "effect/DateTime";
@@ -5,8 +7,6 @@ import * as Exit from "effect/Exit";
 import * as Option from "effect/Option";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
-import { PositiveInt, TrimmedNonEmptyString } from "@t3tools/contracts";
-import { decodeJsonResult } from "@t3tools/shared/schemaJson";
 
 export interface NormalizedGitLabMergeRequestRecord {
   readonly number: number;

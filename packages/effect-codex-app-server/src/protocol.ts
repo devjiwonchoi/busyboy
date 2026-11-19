@@ -6,14 +6,14 @@ import * as FiberMap from "effect/FiberMap";
 import * as Option from "effect/Option";
 import * as Queue from "effect/Queue";
 import * as Ref from "effect/Ref";
-import * as Scope from "effect/Scope";
 import * as Schema from "effect/Schema";
+import * as Scope from "effect/Scope";
 import * as Stdio from "effect/Stdio";
 import * as Stream from "effect/Stream";
 
 import * as CodexRpc from "./_generated/meta.gen.ts";
-import * as CodexError from "./errors.ts";
 import { JsonRpcId, JsonRpcResponseEnvelope } from "./_internal/shared.ts";
+import * as CodexError from "./errors.ts";
 const isJsonRpcId = Schema.is(JsonRpcId);
 const isJsonRpcResponseEnvelope = Schema.is(JsonRpcResponseEnvelope);
 const isCodexAppServerError = Schema.is(CodexError.CodexAppServerError);

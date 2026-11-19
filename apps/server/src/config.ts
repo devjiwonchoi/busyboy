@@ -1,16 +1,4 @@
-import * as Context from "effect/Context";
-import * as Clock from "effect/Clock";
-import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
-import * as Layer from "effect/Layer";
-import * as LogLevel from "effect/LogLevel";
-import * as Path from "effect/Path";
-import type * as Redacted from "effect/Redacted";
-import * as Schema from "effect/Schema";
-
 import type { OtlpEndpointSource } from "@t3tools/contracts";
-import { sweepStalePendingAttachments } from "./attachmentStore.ts";
-import { markNoCopyOnWrite } from "./noCopyOnWrite.ts";
 import {
   DEFAULT_SIGNAL_EXPORT,
   nodeProcessRuntimeAttributes,
@@ -19,7 +7,19 @@ import {
 } from "@t3tools/shared/observability";
 import * as OtelEnvironment from "@t3tools/shared/otelEnvironment";
 import { type ReleaseChannel, releaseResourceAttributes } from "@t3tools/shared/releaseResource";
+import * as Clock from "effect/Clock";
+import * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Layer from "effect/Layer";
+import * as LogLevel from "effect/LogLevel";
+import * as Path from "effect/Path";
+import type * as Redacted from "effect/Redacted";
+import * as Schema from "effect/Schema";
+
 import packageJson from "../package.json" with { type: "json" };
+import { sweepStalePendingAttachments } from "./attachmentStore.ts";
+import { markNoCopyOnWrite } from "./noCopyOnWrite.ts";
 
 // Official release workflows set this telemetry channel; other builds report dev.
 // Unlike __T3CODE_BUILD_CHANNEL__, this is not the sign-in page's latest/nightly channel.

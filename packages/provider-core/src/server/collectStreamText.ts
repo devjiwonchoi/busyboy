@@ -1,6 +1,7 @@
+import * as NodeBuffer from "node:buffer";
+
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
-import * as NodeBuffer from "node:buffer";
 
 export interface CollectedUint8StreamText {
   readonly text: string;

@@ -1,13 +1,14 @@
-import { useGT } from "gt-react-native";
-import { useState } from "react";
-import type { NativeSyntheticEvent } from "react-native";
 import { useNavigation } from "@react-navigation/native";
+import type { EnvironmentId, ThreadId } from "@t3tools/contracts";
 import * as Arr from "effect/Array";
 import { pipe } from "effect/Function";
 import * as Result from "effect/Result";
+import { useGT } from "gt-react-native";
+import { useState } from "react";
+import type { NativeSyntheticEvent } from "react-native";
 
-import type { EnvironmentId, ThreadId } from "@t3tools/contracts";
 import { scopedThreadKey } from "../../lib/scopedEntities";
+import type { NativeReviewDiffData } from "./nativeReviewDiffAdapter";
 import {
   buildReviewCommentTarget,
   clearReviewCommentTarget,
@@ -20,7 +21,6 @@ import {
   startReviewCommentRange,
   useReviewCommentSelection,
 } from "./reviewCommentSelection";
-import type { NativeReviewDiffData } from "./nativeReviewDiffAdapter";
 import type { ReviewSectionItem } from "./reviewModel";
 
 export function useReviewCommentSelectionController(input: {

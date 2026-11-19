@@ -25,20 +25,21 @@ import * as Context from "effect/Context";
 import * as Digest from "effect/crypto/Digest";
 import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
+import { HttpServerRequest } from "effect/http";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
 import * as Ref from "effect/Ref";
 import * as Schema from "effect/Schema";
-import { HttpServerRequest } from "effect/http";
 
 import { hostedAppUrlConfig } from "../cloud/publicConfig.ts";
 import * as ServerEnvironment from "../environment/ServerEnvironment.ts";
-import * as ServerSettings from "../serverSettings.ts";
 import * as McpHttpServer from "../mcp/McpHttpServer.ts";
 import type * as McpInvocationContext from "../mcp/McpInvocationContext.ts";
-import * as PayloadSigner from "./PayloadSigner.ts";
+import { requestUrl } from "../requestUrl.ts";
+import * as ServerSettings from "../serverSettings.ts";
 import * as EnvironmentAuth from "./EnvironmentAuth.ts";
+import * as PayloadSigner from "./PayloadSigner.ts";
 import * as ServerSecretStore from "./ServerSecretStore.ts";
 import {
   base64UrlDecodeUtf8,
@@ -46,7 +47,6 @@ import {
   deriveAuthClientMetadata,
   timingSafeEqualBase64Url,
 } from "./utils.ts";
-import { requestUrl } from "../requestUrl.ts";
 
 // Request-derived origins support loopback, Tailscale and tunnels.
 // Signed client metadata keeps unauthenticated registration stateless.

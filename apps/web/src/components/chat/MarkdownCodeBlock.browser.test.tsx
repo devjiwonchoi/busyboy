@@ -1,6 +1,7 @@
 import { expect, it, vi } from "vite-plus/test";
 
 import { act, render } from "../../../test/render";
+
 import "../../index.css";
 
 import { ensureClientSettingsHydrated, persistClientSettingsPatch } from "../../hooks/useSettings";

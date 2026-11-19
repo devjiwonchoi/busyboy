@@ -1,4 +1,12 @@
 import {
+  AVAILABLE_CONNECTION_STATE,
+  presentConnectionState,
+  type EnvironmentPresentation,
+} from "@t3tools/client-runtime/connection";
+import { createOutdatedServerUpdateCommand } from "@t3tools/client-runtime/state/outdatedServerUpdate";
+import { createServerEnvironmentAtoms } from "@t3tools/client-runtime/state/server";
+import { createEnvironmentServerConfigsAtom } from "@t3tools/client-runtime/state/shell";
+import {
   DEFAULT_SERVER_SETTINGS,
   type EnvironmentId,
   type EnvironmentTheme,
@@ -9,14 +17,6 @@ import {
   type ServerProvider,
   type ServerSettings,
 } from "@t3tools/contracts";
-import {
-  AVAILABLE_CONNECTION_STATE,
-  presentConnectionState,
-  type EnvironmentPresentation,
-} from "@t3tools/client-runtime/connection";
-import { createServerEnvironmentAtoms } from "@t3tools/client-runtime/state/server";
-import { createOutdatedServerUpdateCommand } from "@t3tools/client-runtime/state/outdatedServerUpdate";
-import { createEnvironmentServerConfigsAtom } from "@t3tools/client-runtime/state/shell";
 import { mergeWithDefaultKeybindings } from "@t3tools/shared/keybindings";
 import * as Option from "effect/Option";
 import { AsyncResult, Atom } from "effect/reactivity";
@@ -26,8 +26,8 @@ import { environmentCatalog } from "../connection/catalog";
 import { connectionAtomRuntime } from "../connection/runtime";
 import { environmentAtomList } from "./environmentAtomList";
 import { primaryEnvironmentIdAtom, localEnvironmentIdAtom } from "./primaryEnvironment";
-import { environmentSession } from "./session";
 import { reuseProvidersIgnoringCheckedAt } from "./serverProviders.logic";
+import { environmentSession } from "./session";
 
 // Subscribe to every environment's themes; primary can change without reconnecting or updating the subscription.
 export const serverEnvironment = createServerEnvironmentAtoms(connectionAtomRuntime, {

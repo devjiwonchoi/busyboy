@@ -1,4 +1,10 @@
-import { EasDeviceHostConfigs, SimlockDeviceHostConfigs, SshDeviceHostConfigs } from "./device.ts";
+import * as Duration from "effect/Duration";
+import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
+import * as SchemaTransformation from "effect/SchemaTransformation";
+import * as Struct from "effect/Struct";
+
 import {
   AuthOrchestrationOperateScope,
   AuthAccessWriteScope,
@@ -6,12 +12,6 @@ import {
   AuthProvidersManageScope,
   type AuthEnvironmentScope,
 } from "./auth.ts";
-import * as Effect from "effect/Effect";
-import * as Option from "effect/Option";
-import * as Duration from "effect/Duration";
-import * as Schema from "effect/Schema";
-import * as Struct from "effect/Struct";
-import * as SchemaTransformation from "effect/SchemaTransformation";
 import {
   EnvironmentId,
   ForwardCompatibleNullable,
@@ -22,10 +22,8 @@ import {
   TrimmedNonEmptyString,
   TrimmedString,
 } from "./baseSchemas.ts";
-import { UsageLimitSourceId } from "./usageLimitSourceId.ts";
-import { UsageModelFilter } from "./usage.ts";
-import { SecretProviderId, SecretProviderSlug } from "./secretReference.ts";
-import { containsSecretReference, SettingsSecretValue } from "./settingsSecretValue.ts";
+import { BrowserProfile, BrowserProfileId, DEFAULT_BROWSER_PROFILE_ID } from "./browserProfile.ts";
+import { EasDeviceHostConfigs, SimlockDeviceHostConfigs, SshDeviceHostConfigs } from "./device.ts";
 import { EnvironmentMachineKind, ThreadEnvMode, WorktreeSubmodules } from "./environment.ts";
 import { KeybindingShortcut } from "./keybindings.ts";
 import {
@@ -35,9 +33,6 @@ import {
   ProviderOptionSelections,
 } from "./model.ts";
 import { ModelSelection } from "./modelSelection.ts";
-import { ProjectScript, type ProjectMutation } from "./project.ts";
-import { DEFAULT_RUNTIME_MODE, RuntimeMode } from "./providerPolicy.ts";
-import { BrowserProfile, BrowserProfileId, DEFAULT_BROWSER_PROFILE_ID } from "./browserProfile.ts";
 import {
   BrowserRecordingFrameRate,
   DEFAULT_BROWSER_RECORDING_FRAME_RATE,
@@ -48,12 +43,16 @@ import {
   PreviewViewportSetting,
   PreviewZoomFactor,
 } from "./preview.ts";
+import { ProjectScript, type ProjectMutation } from "./project.ts";
 import {
   ProviderInstanceConfig,
   ProviderInstanceId,
   ProviderDriverKind,
 } from "./providerInstance.ts";
+import { DEFAULT_RUNTIME_MODE, RuntimeMode } from "./providerPolicy.ts";
 import { PullRequestMergeMethod } from "./pullRequest.ts";
+import { SecretProviderId, SecretProviderSlug } from "./secretReference.ts";
+import { containsSecretReference, SettingsSecretValue } from "./settingsSecretValue.ts";
 import {
   CloudSpeechModelId,
   SpeechAcceleration,
@@ -63,6 +62,8 @@ import {
   SpeechModelUnloadTimeout,
   SpeechPostProcessingPromptSettings,
 } from "./speech.ts";
+import { UsageModelFilter } from "./usage.ts";
+import { UsageLimitSourceId } from "./usageLimitSourceId.ts";
 
 export const TimestampFormat = Schema.Literals(["locale", "12-hour", "24-hour"]);
 export type TimestampFormat = typeof TimestampFormat.Type;

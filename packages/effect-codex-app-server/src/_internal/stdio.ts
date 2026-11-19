@@ -1,14 +1,14 @@
 import * as NodeUtil from "node:util";
 
 import * as Cause from "effect/Cause";
-import * as Fiber from "effect/Fiber";
 import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
+import { ChildProcessSpawner } from "effect/process";
 import * as Queue from "effect/Queue";
 import * as Ref from "effect/Ref";
 import * as Sink from "effect/Sink";
 import * as Stdio from "effect/Stdio";
 import * as Stream from "effect/Stream";
-import { ChildProcessSpawner } from "effect/process";
 
 import * as CodexError from "../errors.ts";
 

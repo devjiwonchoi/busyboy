@@ -1,6 +1,5 @@
-import { errorDisplayMessage } from "@t3tools/client-runtime/errors";
-import * as Dialog from "../../components/ui/Dialog";
 import { RegistryContext, useAtomMount, useAtomValue } from "@effect/atom-react";
+import { errorDisplayMessage } from "@t3tools/client-runtime/errors";
 import { normalizeProviderAccentColor } from "@t3tools/client-runtime/state/provider-instance-display";
 import {
   AuthProvidersManageScope,
@@ -19,19 +18,20 @@ import {
   resetCountdown,
 } from "@t3tools/shared/usageLimits";
 import { formatDuration, limitsNotice, resetCreditChoices } from "@t3tools/shared/usageLimitsCopy";
+import { Atom } from "effect/reactivity";
 import { msg, T, useGT, useMessages, Var } from "gt-react-native";
 import { type ReactNode, useContext, useRef, useState } from "react";
-import { Atom } from "effect/reactivity";
 import { Linking, Pressable, View } from "react-native";
 
-import { AppText as Text } from "../../components/ui/AppText";
 import { ProviderIcon } from "../../components/ProviderIcon";
+import { AppText as Text } from "../../components/ui/AppText";
+import * as Dialog from "../../components/ui/Dialog";
 import { m as resolveNow, type MessageResolver } from "../../i18n/messages";
+import { useNowMinuteMs } from "../../lib/clock";
 import { environmentPresentations } from "../../state/presentation";
 import { serverEnvironment } from "../../state/server";
 import { readEnvironmentScope, useEnvironmentScope } from "../../state/session";
 import { useAtomCommand } from "../../state/use-atom-command";
-import { useNowMinuteMs } from "../../lib/clock";
 import {
   environmentIdsKey,
   limitsAutoRefreshSetAtom,

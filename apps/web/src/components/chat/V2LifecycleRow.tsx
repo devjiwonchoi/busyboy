@@ -1,20 +1,5 @@
-import { T, Var, msg, useGT, useMessages } from "gt-react";
-import { ThreadHoverCardPopup } from "../ThreadHoverCard";
-import { AgentElapsed } from "./AgentElapsed";
-import { projectedSubagentsToRuntime } from "@t3tools/client-runtime/state/subagentRuntime";
-import type { ReactNode } from "react";
-import { useThreadShell, useProject } from "../../state/entities";
-import { useEnvironment } from "../../state/environments";
-import { buildThreadRouteParams } from "../../threadRoutes";
-import { useNavigate } from "@tanstack/react-router";
-import { SubagentTooltipContent } from "./SubagentTooltipContent";
 import { useAtomValue } from "@effect/atom-react";
 import { scopeThreadRef, scopeProjectRef } from "@t3tools/client-runtime/environment";
-import { environmentThreadDetails } from "../../state/threads";
-import { EMPTY_SERVER_PROVIDERS, serverEnvironment } from "../../state/server";
-import { MiddleTruncate } from "../ui/middle-truncate";
-import * as DateTime from "effect/DateTime";
-import { WorkLogRow } from "./WorkLog";
 import {
   resolveHandoffEndpoints,
   type HandoffEndpoints,
@@ -25,6 +10,7 @@ import {
   formatSubagentDisplayTitle,
   subagentCardDetail,
 } from "@t3tools/client-runtime/state/subagent-display";
+import { projectedSubagentsToRuntime } from "@t3tools/client-runtime/state/subagentRuntime";
 import {
   ProviderDriverKind,
   type ModelSelection,
@@ -41,6 +27,9 @@ import {
   type ScopedThreadRef,
 } from "@t3tools/contracts";
 import type { TimestampFormat } from "@t3tools/contracts/settings";
+import { useNavigate } from "@tanstack/react-router";
+import * as DateTime from "effect/DateTime";
+import { T, Var, msg, useGT, useMessages } from "gt-react";
 import {
   BotIcon,
   ChevronRightIcon,
@@ -51,8 +40,10 @@ import {
   GitForkIcon,
   MessageSquareIcon,
 } from "lucide-react";
+import type { ReactNode } from "react";
 
-import { Tooltip, TooltipTrigger, TooltipPopup } from "../ui/tooltip";
+import { cn } from "~/lib/utils";
+
 import {
   applyProviderInstanceSettings,
   brandProviderInstanceEntries,
@@ -61,14 +52,24 @@ import {
   shouldShowInstanceBadge,
   type ProviderInstanceEntry,
 } from "../../providerInstances";
+import { useThreadShell, useProject } from "../../state/entities";
+import { useEnvironment } from "../../state/environments";
+import { EMPTY_SERVER_PROVIDERS, serverEnvironment } from "../../state/server";
+import { environmentThreadDetails } from "../../state/threads";
+import { buildThreadRouteParams } from "../../threadRoutes";
 import { formatShortTimestamp } from "../../timestampFormat";
+import { T3Wordmark } from "../T3Wordmark";
+import { ThreadHoverCardPopup } from "../ThreadHoverCard";
+import { Button, InlineButton } from "../ui/button";
+import { MiddleTruncate } from "../ui/middle-truncate";
+import { Tooltip, TooltipTrigger, TooltipPopup } from "../ui/tooltip";
+import { AgentElapsed } from "./AgentElapsed";
 import { getTriggerDisplayModelName } from "./providerIconUtils";
 import { ProviderInstanceIcon, providerTextColor } from "./ProviderInstanceIcon";
-import { cn } from "~/lib/utils";
+import { SubagentTooltipContent } from "./SubagentTooltipContent";
 import { TimelineSystemDivider } from "./TimelineSystemDivider";
 import { subagentResumedSince } from "./V2LifecycleRow.logic";
-import { Button, InlineButton } from "../ui/button";
-import { T3Wordmark } from "../T3Wordmark";
+import { WorkLogRow } from "./WorkLog";
 
 export type { HandoffTimelineRun } from "@t3tools/client-runtime/handoff";
 

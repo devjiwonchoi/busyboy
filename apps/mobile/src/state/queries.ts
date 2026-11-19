@@ -1,24 +1,5 @@
-import {
-  legacyThreadPullRequestKey,
-  threadPullRequestKeyOf,
-} from "@t3tools/client-runtime/thread-pull-requests";
-import {
-  composerPullRequestsFromLinks,
-  filterComposerPullRequestMatches,
-  withLinkedComposerPullRequestsFirst,
-} from "@t3tools/shared/composerPullRequestMatches";
+import { useAtomValue } from "@effect/atom-react";
 import { resolveFilesystemReadAccess } from "@t3tools/client-runtime/state/filesystem";
-import { environmentSession } from "./session";
-import { useEnvironmentPresentation } from "./presentation";
-import type { VcsRefTarget } from "@t3tools/client-runtime/state/vcs";
-import type {
-  EnvironmentId,
-  OrchestrationV2ProjectedTurnItem,
-  ProjectId,
-  ThreadPullRequestLink,
-  VcsListRefsResult,
-  VcsRef,
-} from "@t3tools/contracts";
 import {
   createThreadSearchResultsAtomFamily,
   makeThreadSearchKey,
@@ -28,28 +9,47 @@ import {
   type ThreadSearchResultsState,
   type ThreadSearchScope,
 } from "@t3tools/client-runtime/state/thread-search";
-import { THREAD_SEARCH_QUERY_MAX_LENGTH } from "@t3tools/contracts";
-import { messageSearchTokens } from "@t3tools/shared/paletteSearch";
-import { useAtomValue } from "@effect/atom-react";
-import * as Cause from "effect/Cause";
+import type { VcsRefTarget } from "@t3tools/client-runtime/state/vcs";
+import {
+  legacyThreadPullRequestKey,
+  threadPullRequestKeyOf,
+} from "@t3tools/client-runtime/thread-pull-requests";
 import { turnItemDetailRevision } from "@t3tools/client-runtime/work-log/item-detail";
+import type {
+  EnvironmentId,
+  OrchestrationV2ProjectedTurnItem,
+  ProjectId,
+  ThreadPullRequestLink,
+  VcsListRefsResult,
+  VcsRef,
+} from "@t3tools/contracts";
+import { THREAD_SEARCH_QUERY_MAX_LENGTH } from "@t3tools/contracts";
+import {
+  composerPullRequestsFromLinks,
+  filterComposerPullRequestMatches,
+  withLinkedComposerPullRequestsFirst,
+} from "@t3tools/shared/composerPullRequestMatches";
+import { messageSearchTokens } from "@t3tools/shared/paletteSearch";
+import * as Cause from "effect/Cause";
 import * as Option from "effect/Option";
 import { AsyncResult, Atom } from "effect/reactivity";
+import { msg, useMessages } from "gt-react-native";
 import { useEffect, useMemo, useState } from "react";
 
 import { appAtomRegistry } from "./atom-registry";
 import { orchestrationEnvironment } from "./orchestration";
-import { olderSettledThreads, threadFamilies } from "./threads";
+import { useEnvironmentPresentation } from "./presentation";
 import { projectEnvironment } from "./projects";
-import { useEnvironmentQuery } from "./query";
-import { msg, useMessages } from "gt-react-native";
-import { vcsEnvironment } from "./vcs";
 import { composerPullRequests } from "./pull-requests";
+import { useEnvironmentQuery } from "./query";
 import {
   buildCheckpointDiffTargets,
   normalizeComposerPathSearchQuery,
   type CheckpointDiffTarget,
 } from "./queryTargets";
+import { environmentSession } from "./session";
+import { olderSettledThreads, threadFamilies } from "./threads";
+import { vcsEnvironment } from "./vcs";
 
 const COMPOSER_PATH_SEARCH_DEBOUNCE_MS = 200;
 const COMPOSER_PATH_SEARCH_LIMIT = 20;

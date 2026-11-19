@@ -1,13 +1,12 @@
-import type { OrchestrationV2RunStatus, RunId } from "@t3tools/contracts";
-
-import { msg } from "gt-react";
-
-import { m, type MessageResolver } from "../i18n/messages";
-import type { SidebarThreadSummary } from "../types";
 import {
   runOutcomeText,
   THREAD_STATUS_TEXT,
 } from "@t3tools/client-runtime/state/thread-activity-announcement";
+import type { OrchestrationV2RunStatus, RunId } from "@t3tools/contracts";
+import { msg } from "gt-react";
+
+import { m, type MessageResolver } from "../i18n/messages";
+import type { SidebarThreadSummary } from "../types";
 
 export interface BackgroundThreadSnapshot {
   readonly key: string;

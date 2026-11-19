@@ -1,17 +1,18 @@
 import { useGT, useMessages } from "gt-react-native";
-import { selectedNavigationTab, visibleNavigationTabs } from "./navigation-tab-order";
+
 import { Toolbar } from "../../../components/ui/Toolbar";
 import { useControlTheme } from "../../../components/ui/useControlTheme";
 import { useDeviceType } from "../../../native/native-layout-metrics";
+import { selectedNavigationTab, visibleNavigationTabs } from "./navigation-tab-order";
 import {
   NAVIGATION_TAB_ICONS,
   WORKSPACE_TAB_LABELS,
   useNavigationTabOrder,
   useHiddenNavigationTabs,
 } from "./navigation-tabs";
-import { useWorkspaceTabs } from "./WorkspaceTabsContext";
 import { useSelectWorkspaceTab } from "./useSelectWorkspaceTab";
 import { useCompactWorkspaceTabs, useSidebarWorkspaceTabs } from "./useSystemWorkspaceTabBar";
+import { useWorkspaceTabs } from "./WorkspaceTabsContext";
 
 const PULL_REQUEST_ICON = require("../../../../assets/icons/pull-request.png");
 const ISSUE_ICON = require("../../../../assets/icons/issue.png");

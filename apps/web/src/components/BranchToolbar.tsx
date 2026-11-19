@@ -1,18 +1,9 @@
-import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
-import {
-  ClipboardApiUnavailableError,
-  ClipboardWriteError,
-  writeTextToClipboard,
-} from "../hooks/useCopyToClipboard";
-import * as Schema from "effect/Schema";
-import { formatFilePathForClipboard } from "@t3tools/client-runtime/media-actions";
-import { readLocalApi } from "../localApi";
-import { stackedThreadToast, toastManager } from "./ui/toast";
-import { ComposerContextLabel } from "./ComposerContextLabel";
 import { scopeProjectRef, scopeThreadRef } from "@t3tools/client-runtime/environment";
+import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
+import { formatFilePathForClipboard } from "@t3tools/client-runtime/media-actions";
 import type { EnvironmentId, ProjectId, ThreadId } from "@t3tools/contracts";
+import * as Schema from "effect/Schema";
 import { msg, T, useGT, useMessages } from "gt-react";
-import { m as resolveMessage } from "../i18n/messages";
 import { FolderGit2Icon, FolderGitIcon, FolderIcon, PlusIcon, ScaleIcon } from "lucide-react";
 import {
   type Ref,
@@ -25,9 +16,20 @@ import {
 } from "react";
 import { flushSync } from "react-dom";
 
+import { observeResize } from "~/lib/observeResize";
+import { cn } from "~/lib/utils";
+
 import { useComposerDraftStore, type DraftId } from "../composerDraftStore";
-import { EnvironmentMachineIcon } from "./EnvironmentMachineIcon";
+import { type AddProjectTarget, useAddProjectTargets } from "../hooks/useAddProjectTargets";
+import {
+  ClipboardApiUnavailableError,
+  ClipboardWriteError,
+  writeTextToClipboard,
+} from "../hooks/useCopyToClipboard";
+import { m as resolveMessage } from "../i18n/messages";
+import { readLocalApi } from "../localApi";
 import { useProject, useThreadShellsForProjectRefs } from "../state/entities";
+import { openAddProjectToMachine } from "./AddProjectToMachineDialog";
 import {
   ADD_TO_MACHINE_LABEL_CLASS,
   type EnvMode,
@@ -45,16 +47,18 @@ import {
   type BranchToolbarBranchSelectorHandle,
 } from "./BranchToolbarBranchSelector";
 import { BranchToolbarEnvironmentSelector } from "./BranchToolbarEnvironmentSelector";
-import { openAddProjectToMachine } from "./AddProjectToMachineDialog";
-import { type AddProjectTarget, useAddProjectTargets } from "../hooks/useAddProjectTargets";
 import { BranchToolbarEnvModeSelector } from "./BranchToolbarEnvModeSelector";
-import { PreviousWorktreeItemContent } from "./PreviousWorktreeItemContent";
+import { ComposerControl } from "./chat/ComposerControl";
+import { useComposerMenuProps } from "./chat/composerEventScope";
+import { ComposerSurface } from "./chat/ComposerSurface";
 import { ThreadDetailsControl } from "./chat/ThreadDetailsControl";
 import {
   THREAD_DETAILS_PANEL_ICON_CLASS,
   THREAD_DETAILS_PANEL_LOCKED_ROW_CLASS,
 } from "./chat/threadDetailsPanelStyles";
-import { ComposerControl } from "./chat/ComposerControl";
+import { ComposerContextLabel } from "./ComposerContextLabel";
+import { EnvironmentMachineIcon } from "./EnvironmentMachineIcon";
+import { PreviousWorktreeItemContent } from "./PreviousWorktreeItemContent";
 import {
   Menu,
   MenuGroup,
@@ -69,14 +73,10 @@ import {
   MenuSubTrigger,
   MenuTrigger,
 } from "./ui/menu";
-import { Separator } from "./ui/separator";
-import { Tooltip, TooltipPopup, TooltipTrigger } from "./ui/tooltip";
 import { MiddleTruncate } from "./ui/middle-truncate";
-import { ComposerSurface } from "./chat/ComposerSurface";
-import { useComposerMenuProps } from "./chat/composerEventScope";
-import { cn } from "~/lib/utils";
-
-import { observeResize } from "~/lib/observeResize";
+import { Separator } from "./ui/separator";
+import { stackedThreadToast, toastManager } from "./ui/toast";
+import { Tooltip, TooltipPopup, TooltipTrigger } from "./ui/tooltip";
 
 const isClipboardApiUnavailableError = Schema.is(ClipboardApiUnavailableError);
 const isClipboardWriteError = Schema.is(ClipboardWriteError);

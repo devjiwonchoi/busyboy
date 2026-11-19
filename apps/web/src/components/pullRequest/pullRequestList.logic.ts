@@ -1,6 +1,6 @@
+import { isStalePullRequestReply } from "@t3tools/client-runtime/pull-request-reply";
 import { sourceControlClients } from "@t3tools/client-runtime/source-control-clients";
-import { msg } from "gt-react";
-
+import { toSortableTimestamp } from "@t3tools/client-runtime/state/thread-sort";
 import { resolvePullRequestAuthorFilter } from "@t3tools/contracts";
 import type {
   EnvironmentId,
@@ -20,9 +20,8 @@ import type {
   PullRequestState,
   PullRequestSummary,
 } from "@t3tools/contracts";
+import { msg } from "gt-react";
 
-import { isStalePullRequestReply } from "@t3tools/client-runtime/pull-request-reply";
-import { toSortableTimestamp } from "@t3tools/client-runtime/state/thread-sort";
 import type { PullRequestListSort } from "./pullRequestListPreferences";
 
 export interface EnvironmentPullRequestEntry extends PullRequestListEntry {

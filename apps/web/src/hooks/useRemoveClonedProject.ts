@@ -1,17 +1,17 @@
 import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
-import { useRouter } from "@tanstack/react-router";
 import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
 import type { ScopedProjectRef } from "@t3tools/contracts";
+import { useRouter } from "@tanstack/react-router";
 import { msg } from "gt-react";
 
+import { stackedThreadToast, toastManager } from "../components/ui/toast";
 import { useComposerDraftStore } from "../composerDraftStore";
-import { resolveThreadRouteTarget } from "../threadRoutes";
+import { m } from "../i18n/messages";
 import { releaseProjectDraftUploads } from "../lib/composerDraftUploads";
 import { waitForProjectRemoval } from "../state/entities";
 import { projectEnvironment } from "../state/projects";
 import { useAtomCommand } from "../state/use-atom-command";
-import { stackedThreadToast, toastManager } from "../components/ui/toast";
-import { m } from "../i18n/messages";
+import { resolveThreadRouteTarget } from "../threadRoutes";
 
 export function useRemoveClonedProject() {
   const router = useRouter();

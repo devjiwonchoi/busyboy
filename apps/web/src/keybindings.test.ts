@@ -1,16 +1,16 @@
-import { assert, describe, it } from "vite-plus/test";
-import {
-  compileResolvedKeybindingsConfig,
-  DEFAULT_RESOLVED_KEYBINDINGS,
-  mergeWithDefaultKeybindings,
-} from "@t3tools/shared/keybindings";
-
 import {
   type KeybindingCommand,
   type KeybindingShortcut,
   type KeybindingWhenNode,
   type ResolvedKeybindingsConfig,
 } from "@t3tools/contracts";
+import {
+  compileResolvedKeybindingsConfig,
+  DEFAULT_RESOLVED_KEYBINDINGS,
+  mergeWithDefaultKeybindings,
+} from "@t3tools/shared/keybindings";
+import { assert, describe, it } from "vite-plus/test";
+
 import {
   effectiveShortcutsForCommand,
   formatShortcutLabel,

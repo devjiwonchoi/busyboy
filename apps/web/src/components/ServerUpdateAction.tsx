@@ -1,45 +1,46 @@
-import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
 import { useAtomValue } from "@effect/atom-react";
-import {
-  AuthEnvironmentMaintainScope,
-  type AuthSessionState,
-  sessionGrantsScope,
-} from "@t3tools/contracts";
 import { managedUpdatesDenial } from "@t3tools/client-runtime/contract-labels";
-import type { AsyncResult } from "effect/reactivity";
-import { environmentSession } from "~/state/session";
-import type {
-  DesktopUpdateChannel,
-  EnvironmentId,
-  ServerInstallation,
-  ServerSelfUpdateCapability,
-} from "@t3tools/contracts";
+import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
+import {
+  isAtomCommandInterrupted,
+  settlePromise,
+  squashAtomCommandFailure,
+} from "@t3tools/client-runtime/state/runtime";
 import {
   serverUpdateFailureText,
   type ServerUpdateStage,
   type ServerUpdateState,
 } from "@t3tools/client-runtime/state/server";
 import {
-  isAtomCommandInterrupted,
-  settlePromise,
-  squashAtomCommandFailure,
-} from "@t3tools/client-runtime/state/runtime";
+  AuthEnvironmentMaintainScope,
+  type AuthSessionState,
+  sessionGrantsScope,
+} from "@t3tools/contracts";
+import type {
+  DesktopUpdateChannel,
+  EnvironmentId,
+  ServerInstallation,
+  ServerSelfUpdateCapability,
+} from "@t3tools/contracts";
+import { crossesReleaseTrack } from "@t3tools/shared/cliRelease";
+import type { AsyncResult } from "effect/reactivity";
+import { msg, T, useGT, useMessages } from "gt-react";
 import { CircleArrowUpIcon } from "lucide-react";
 import { type ComponentProps, useRef, useState } from "react";
-import { msg, T, useGT, useMessages } from "gt-react";
-import { m, type MessageResolver } from "../i18n/messages";
 
 import { requestConfirmDialog } from "~/confirmDialog";
 import { useCopyToClipboard } from "~/hooks/useCopyToClipboard";
-import { serverEnvironment, updateOutdatedServer } from "~/state/server";
 import { appAtomRegistry } from "~/rpc/atomRegistry";
-import { useAtomCommand } from "~/state/use-atom-command";
 import { useServerConfigs } from "~/state/entities";
 import { useManagedPolicy } from "~/state/managedPolicy";
 import { environmentPresentations } from "~/state/presentation";
-import { ManagedControl } from "./ManagedPolicy";
+import { serverEnvironment, updateOutdatedServer } from "~/state/server";
+import { environmentSession } from "~/state/session";
+import { useAtomCommand } from "~/state/use-atom-command";
 import { manualServerUpdateCommand } from "~/versionSkew";
-import { crossesReleaseTrack } from "@t3tools/shared/cliRelease";
+
+import { m, type MessageResolver } from "../i18n/messages";
+import { ManagedControl } from "./ManagedPolicy";
 import { Button } from "./ui/button";
 import { toastManager } from "./ui/toast";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "./ui/tooltip";

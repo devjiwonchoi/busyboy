@@ -1,4 +1,3 @@
-import { AppActivityIndicator } from "../../components/ui/AppActivityIndicator";
 import { useGT, useMessages } from "gt-react-native";
 import { useState, type ReactNode } from "react";
 import { Linking, Platform, Pressable, useWindowDimensions, View } from "react-native";
@@ -15,13 +14,14 @@ import Animated, {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { FullWindowOverlay } from "react-native-screens";
 
-import { AppText as Text } from "../../components/ui/AppText";
+import { AppActivityIndicator } from "../../components/ui/AppActivityIndicator";
 import { SymbolView } from "../../components/ui/AppSymbol";
+import { AppText as Text } from "../../components/ui/AppText";
 import { useAndroidControlSizing } from "../../components/ui/useAndroidControlSizing";
 import { cn } from "../../lib/cn";
 import { CompactVoiceWaveform, DictationElapsedTime } from "./ComposerDictationControl";
-import { useGlobalVoiceInput } from "./VoiceInputProvider";
 import { resolveVoiceComposerPresentation } from "./voiceInputPresentation";
+import { useGlobalVoiceInput } from "./VoiceInputProvider";
 
 const PILL_HEIGHT = 36;
 const COLLAPSED_WIDTH = 64;

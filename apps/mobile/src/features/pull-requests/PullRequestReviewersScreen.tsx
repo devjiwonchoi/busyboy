@@ -1,14 +1,7 @@
-import { errorDisplayMessage } from "@t3tools/client-runtime/errors";
-import { LegendList, type LegendListRef } from "@legendapp/list/react-native";
-import { AppBar, type AppBarSearch } from "../../components/ui/AppBar";
-import { AsyncResult } from "effect/reactivity";
-import { AppActivityIndicator } from "../../components/ui/AppActivityIndicator";
-import { usePullRequestConnected } from "./usePullRequestConnected";
 import { useAtomValue } from "@effect/atom-react";
+import { LegendList, type LegendListRef } from "@legendapp/list/react-native";
 import { useNavigation, type StaticScreenProps } from "@react-navigation/native";
-import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
-import { sourceControlClients } from "@t3tools/client-runtime/source-control-clients";
-import { changeRequestTermKind } from "../../lib/changeRequestTerm";
+import { errorDisplayMessage } from "@t3tools/client-runtime/errors";
 import {
   hostReviewerQuery,
   reviewerCandidateView,
@@ -21,25 +14,33 @@ import {
   selectionChanges,
   toggleSelection,
 } from "@t3tools/client-runtime/pull-request-selection";
+import { sourceControlClients } from "@t3tools/client-runtime/source-control-clients";
+import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
 import type { PullRequestReviewerCandidate } from "@t3tools/contracts";
+import { AsyncResult } from "effect/reactivity";
 import { msg, T, useGT, useMessages } from "gt-react-native";
 import { useEffect, useRef, useState } from "react";
 import { Pressable, ScrollView, View } from "react-native";
-import { NativeScrollView } from "../../native/NativeScrollViewMarker";
-import { useContentTopInset, useSearchToolbarInset } from "../../components/ui/useBarInset";
+
+import { AppActivityIndicator } from "../../components/ui/AppActivityIndicator";
+import { AppBar, type AppBarSearch } from "../../components/ui/AppBar";
+import { SymbolView } from "../../components/ui/AppSymbol";
 import { AppText as Text, AppTextInput as TextInput } from "../../components/ui/AppText";
-import { EmptyState } from "../../components/ui/EmptyState";
 import { Button } from "../../components/ui/Button";
 import * as Dialog from "../../components/ui/Dialog";
-import { SymbolView } from "../../components/ui/AppSymbol";
-import { composerPullRequests } from "../../state/pull-requests";
-import { useEnvironmentQuery } from "../../state/query";
-import { useDebouncedValue } from "../../state/queries";
-import { useAtomCommand } from "../../state/use-atom-command";
-import { PullRequestAvatar } from "./PullRequestPresentation";
-import { pullRequestTarget, type PullRequestParams } from "./usePullRequestDiff";
+import { EmptyState } from "../../components/ui/EmptyState";
+import { useContentTopInset, useSearchToolbarInset } from "../../components/ui/useBarInset";
 import type { MessageResolver } from "../../i18n/messages";
 import { m as resolveMessage } from "../../i18n/messages";
+import { changeRequestTermKind } from "../../lib/changeRequestTerm";
+import { NativeScrollView } from "../../native/NativeScrollViewMarker";
+import { composerPullRequests } from "../../state/pull-requests";
+import { useDebouncedValue } from "../../state/queries";
+import { useEnvironmentQuery } from "../../state/query";
+import { useAtomCommand } from "../../state/use-atom-command";
+import { PullRequestAvatar } from "./PullRequestPresentation";
+import { usePullRequestConnected } from "./usePullRequestConnected";
+import { pullRequestTarget, type PullRequestParams } from "./usePullRequestDiff";
 
 const TRUNCATED_LABELS: Record<
   ReviewerTruncation,

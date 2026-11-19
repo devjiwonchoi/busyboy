@@ -1,11 +1,12 @@
 import { useAtomValue } from "@effect/atom-react";
 import { EnvironmentId } from "@t3tools/contracts";
 import { Atom } from "effect/reactivity";
-import { ChevronRightIcon } from "lucide-react";
 import { msg, T, useGT, useMessages } from "gt-react";
+import { ChevronRightIcon } from "lucide-react";
 import { Fragment, type RefObject, useRef } from "react";
 
 import { environmentThreadShells } from "~/state/threads";
+
 import {
   AlertDialog,
   AlertDialogClose,

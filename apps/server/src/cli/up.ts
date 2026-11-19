@@ -1,12 +1,12 @@
 import * as HostProcess from "@t3tools/shared/HostProcess";
+import { Command, Flag, GlobalFlag, Prompt } from "effect/cli";
+import * as CliError from "effect/cli/CliError";
 import * as Config from "effect/Config";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
-import { Command, Flag, GlobalFlag, Prompt } from "effect/cli";
-import * as CliError from "effect/cli/CliError";
 
 import packageJson from "../../package.json" with { type: "json" };
 import * as ServerSecretStore from "../auth/ServerSecretStore.ts";

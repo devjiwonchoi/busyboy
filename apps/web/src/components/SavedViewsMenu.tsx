@@ -1,11 +1,11 @@
-import { T, useGT, useMessages } from "gt-react";
-import { BookmarkIcon, CheckIcon, ChevronDownIcon, PlusIcon } from "lucide-react";
-import { useId, useState } from "react";
-import type * as Schema from "effect/Schema";
 import {
   SAVED_VIEW_NAME_MAX_LENGTH,
   savedViewNameError,
 } from "@t3tools/client-runtime/saved-views";
+import type * as Schema from "effect/Schema";
+import { T, useGT, useMessages } from "gt-react";
+import { BookmarkIcon, CheckIcon, ChevronDownIcon, PlusIcon } from "lucide-react";
+import { useId, useState } from "react";
 
 import { getLocalStorageItem, useLocalStorage } from "../hooks/useLocalStorage";
 import { randomUUID } from "../lib/utils";

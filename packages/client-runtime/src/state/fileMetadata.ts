@@ -12,13 +12,13 @@ import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Option from "effect/Option";
+import { AsyncResult, Atom, AtomRegistry } from "effect/reactivity";
 import * as Request from "effect/Request";
 import * as RequestResolver from "effect/RequestResolver";
 import * as SubscriptionRef from "effect/SubscriptionRef";
-import { AsyncResult, Atom, AtomRegistry } from "effect/reactivity";
 
-import * as EnvironmentSupervisor from "../connection/supervisor.ts";
 import type { EnvironmentRegistry } from "../connection/registry.ts";
+import * as EnvironmentSupervisor from "../connection/supervisor.ts";
 import {
   request,
   type EnvironmentRpcFailure,

@@ -1,12 +1,11 @@
+import { useAtomValue } from "@effect/atom-react";
 import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
-import { m } from "~/i18n/messages";
-import type { EnvironmentId, SourceControlSignInPrompt } from "@t3tools/contracts";
 import {
   readHostCredentialSettings,
   type SourceControlAppSignIn,
   type SourceControlDefinition,
 } from "@t3tools/client-runtime/source-control-clients";
-import { useAtomValue } from "@effect/atom-react";
+import type { EnvironmentId, SourceControlSignInPrompt } from "@t3tools/contracts";
 import * as Cause from "effect/Cause";
 import { msg, T, useGT, Var } from "gt-react";
 import { CheckIcon, ExternalLinkIcon, CopyIcon } from "lucide-react";
@@ -14,6 +13,8 @@ import { useState, type ReactNode } from "react";
 
 import { T3AppIcon } from "~/components/T3AppIcon";
 import { useCopyToClipboard } from "~/hooks/useCopyToClipboard";
+import { m } from "~/i18n/messages";
+
 import { useEnvironmentSettings } from "../../hooks/useSettings";
 import { cn } from "../../lib/utils";
 import { serverEnvironment } from "../../state/server";

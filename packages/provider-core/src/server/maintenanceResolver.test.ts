@@ -1,24 +1,27 @@
 // @effect-diagnostics nodeBuiltinImport:off
-import { expect, it } from "@effect/vitest";
+
 import * as NodeFS from "node:fs";
-import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
-import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
+
+import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
+import * as NodeServices from "@effect/platform-node/NodeServices";
+import { expect, it } from "@effect/vitest";
 import { ProviderDriverKind, ProviderInstanceId, type ServerProvider } from "@t3tools/contracts";
 import * as HostProcess from "@t3tools/shared/HostProcess";
+import { symlinksSupported } from "@t3tools/shared/testing/symlinks";
 import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientResponse from "effect/http/HttpClientResponse";
 import * as Layer from "effect/Layer";
+import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Sink from "effect/Sink";
 import * as Stream from "effect/Stream";
 import * as TestClock from "effect/testing/TestClock";
-import * as HttpClient from "effect/http/HttpClient";
-import * as HttpClientResponse from "effect/http/HttpClientResponse";
-import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
-import * as ProviderLatestVersions from "./ProviderLatestVersions.ts";
+
 import {
   createProviderVersionAdvisory,
   makeTargetedProviderUpdateAction,
@@ -39,7 +42,7 @@ import {
   type PackageManagedProviderMaintenanceDefinition,
   type ProviderMaintenanceCapabilities,
 } from "./maintenanceResolver.ts";
-import { symlinksSupported } from "@t3tools/shared/testing/symlinks";
+import * as ProviderLatestVersions from "./ProviderLatestVersions.ts";
 
 const driver = (value: string) => ProviderDriverKind.make(value);
 // Shell stubs use POSIX paths; Windows temp paths cannot split on colon.

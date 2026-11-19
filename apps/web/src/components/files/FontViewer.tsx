@@ -2,9 +2,8 @@ import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
 import { msg, T, useGT } from "gt-react";
 import { useEffect, useState } from "react";
 
-import { m } from "~/i18n/messages";
-
 import { useTheme } from "~/hooks/useTheme";
+import { m } from "~/i18n/messages";
 
 import { FileSurfaceLoading } from "./fileSurfaceChrome";
 

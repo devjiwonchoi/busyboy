@@ -1,8 +1,9 @@
-import { describe, expect, it } from "vite-plus/test";
-import { unified } from "unified";
-import remarkParse from "remark-parse";
-import remarkGfm from "remark-gfm";
 import type { Root, RootContent } from "mdast";
+import remarkGfm from "remark-gfm";
+import remarkParse from "remark-parse";
+import { unified } from "unified";
+import { describe, expect, it } from "vite-plus/test";
+
 import { ENRICHED_INLINE_FILE_LINK_REGEX } from "./enrichedLinkPresentation";
 import {
   markdownForNativeRendering,

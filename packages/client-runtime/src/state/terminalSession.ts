@@ -7,6 +7,7 @@ import type {
   ThreadId,
 } from "@t3tools/contracts";
 import { DEFAULT_MAX_TERMINAL_BUFFER_BYTES } from "@t3tools/contracts";
+
 import {
   appendOutput,
   clearOutput,

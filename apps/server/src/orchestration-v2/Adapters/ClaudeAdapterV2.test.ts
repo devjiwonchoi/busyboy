@@ -5,8 +5,6 @@ import * as NodePath from "node:path";
 import * as NodeStream from "node:stream";
 
 import * as ClaudeSdk from "@anthropic-ai/claude-agent-sdk";
-import { beforeEach, vi } from "vite-plus/test";
-
 import type {
   ElicitationRequest,
   ElicitationResult,
@@ -27,7 +25,7 @@ import type {
 } from "@anthropic-ai/claude-agent-sdk/sdk-tools";
 import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import { toolOutputImages } from "@t3tools/shared/toolOutput";
+import { assert, describe, it } from "@effect/vitest";
 import {
   ChatAttachmentId,
   type ChatAttachment,
@@ -54,17 +52,31 @@ import {
   RunId,
   ThreadId,
 } from "@t3tools/contracts";
+import { makeProviderFailure } from "@t3tools/provider-core/server/failure";
+import * as IdAllocator from "@t3tools/provider-core/server/IdAllocator";
+import * as McpProviderSessions from "@t3tools/provider-core/server/McpProviderSessions";
+import * as McpProviderSession from "@t3tools/provider-core/server/mcpSession";
+import { T3_CODE_DEVICE_TOOL_INSTRUCTIONS_WITH_TOOL_SEARCH } from "@t3tools/provider-core/server/orchestrationInstructions";
+import * as ProviderAdapter from "@t3tools/provider-core/server/ProviderAdapter";
+import type * as ProviderContinuationRequests from "@t3tools/provider-core/server/ProviderContinuationRequests";
+import * as ProviderEventLoggers from "@t3tools/provider-core/server/ProviderEventLoggers";
+import { formatClaudeResumeCompactionQuestion } from "@t3tools/shared/claudeCompaction";
+import * as HostProcess from "@t3tools/shared/HostProcess";
+import { getModelSelectionStringOptionValue } from "@t3tools/shared/model";
+import { backgroundWorkHoldsCompletion } from "@t3tools/shared/orchestrationV2PendingBackgroundWork";
+import { SpawnExecutableResolution } from "@t3tools/shared/shell";
+import { toolOutputImages } from "@t3tools/shared/toolOutput";
 import { mcpAppFromToolItem } from "@t3tools/shared/toolOutput";
-import { assert, describe, it } from "@effect/vitest";
+import { Tool } from "effect/ai";
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as DateTime from "effect/DateTime";
 import * as Deferred from "effect/Deferred";
-import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
-import * as FileSystem from "effect/FileSystem";
 import * as Fiber from "effect/Fiber";
+import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
@@ -75,30 +87,24 @@ import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 import * as TestClock from "effect/testing/TestClock";
-import { Tool } from "effect/ai";
-import { formatClaudeResumeCompactionQuestion } from "@t3tools/shared/claudeCompaction";
-import { backgroundWorkHoldsCompletion } from "@t3tools/shared/orchestrationV2PendingBackgroundWork";
-import * as HostProcess from "@t3tools/shared/HostProcess";
-import { getModelSelectionStringOptionValue } from "@t3tools/shared/model";
-import { SpawnExecutableResolution } from "@t3tools/shared/shell";
+import { beforeEach, vi } from "vite-plus/test";
 
-import * as PortScanner from "../../preview/PortScanner.ts";
 import { attachmentRelativePath } from "../../attachmentStore.ts";
-import { WorkflowAgentTranscriptReadObserver } from "../workflowAgentTranscript.ts";
 import * as ServerConfig from "../../config.ts";
-import * as McpProviderSession from "@t3tools/provider-core/server/mcpSession";
-import { T3_CODE_DEVICE_TOOL_INSTRUCTIONS_WITH_TOOL_SEARCH } from "@t3tools/provider-core/server/orchestrationInstructions";
-import * as McpProviderSessions from "@t3tools/provider-core/server/McpProviderSessions";
-import { PreviewControlsToolkit } from "../../mcp/toolkits/previewControls/tools.ts";
+import { EnvironmentToolkit } from "../../mcp/toolkits/environment/tools.ts";
 import { HtmlToolkit } from "../../mcp/toolkits/html/tools.ts";
 import { MessageToolkit } from "../../mcp/toolkits/message/tools.ts";
-import { EnvironmentToolkit } from "../../mcp/toolkits/environment/tools.ts";
-import { ThemeToolkit } from "../../mcp/toolkits/theme/tools.ts";
-import { ProjectToolkit } from "../../mcp/toolkits/project/tools.ts";
-import { WorktreeToolkit } from "../../mcp/toolkits/worktree/tools.ts";
-import { ThreadToolkit } from "../../mcp/toolkits/thread/tools.ts";
 import { OrchestratorToolkit } from "../../mcp/toolkits/orchestrator/tools.ts";
-import { ClaudeExecutableFileCheck } from "../../provider/Drivers/ClaudeExecutable.ts";
+import { PreviewControlsToolkit } from "../../mcp/toolkits/previewControls/tools.ts";
+import { ProjectToolkit } from "../../mcp/toolkits/project/tools.ts";
+import { ThemeToolkit } from "../../mcp/toolkits/theme/tools.ts";
+import { ThreadToolkit } from "../../mcp/toolkits/thread/tools.ts";
+import { WorktreeToolkit } from "../../mcp/toolkits/worktree/tools.ts";
+import * as PortScanner from "../../preview/PortScanner.ts";
+import {
+  makeClaudeCodeModelRoutes,
+  resolveClaudeModelSettingsKey,
+} from "../../provider/ClaudeCodeModelRoutes.ts";
 import {
   BUNDLED_CLAUDE_MODEL_CATALOG,
   type ClaudeModelCatalog,
@@ -106,23 +112,11 @@ import {
   scopeClaudeModelCatalog,
   withClaudeCodeModelRoutes,
 } from "../../provider/ClaudeModelCatalog.ts";
-import {
-  makeClaudeCodeModelRoutes,
-  resolveClaudeModelSettingsKey,
-} from "../../provider/ClaudeCodeModelRoutes.ts";
+import { ClaudeExecutableFileCheck } from "../../provider/Drivers/ClaudeExecutable.ts";
 import { resolveProviderCatalog } from "../../provider/ModelManifest.ts";
-import * as ProviderEventLoggers from "@t3tools/provider-core/server/ProviderEventLoggers";
-import * as ProviderAdapter from "@t3tools/provider-core/server/ProviderAdapter";
-import type * as ProviderContinuationRequests from "@t3tools/provider-core/server/ProviderContinuationRequests";
-import { makeProviderFailure } from "@t3tools/provider-core/server/failure";
-import * as ClaudeAdapterV2 from "./ClaudeAdapterV2.ts";
-import * as IdAllocator from "@t3tools/provider-core/server/IdAllocator";
 import * as ProviderInstallationGate from "../../provider/ProviderInstallationGate.ts";
-import { ClaudeOrchestratorReplayHarness } from "./ClaudeAdapterV2.testkit.ts";
 import { withInlineContext } from "../ContextHandoffDelivery.ts";
 import { provideDeterministicTestRuntime } from "../testkit/DeterministicRuntime.ts";
-import { runOrchestratorV2Scenario } from "../testkit/OrchestratorScenario.ts";
-import { layerProviderReplay } from "../testkit/ProviderReplayHarness.ts";
 import {
   assertBaseProjection,
   assertSemanticProjectionIntegrity,
@@ -130,6 +124,11 @@ import {
   materializeFixtureInput,
   projectionFor,
 } from "../testkit/fixtures/shared.ts";
+import { runOrchestratorV2Scenario } from "../testkit/OrchestratorScenario.ts";
+import { layerProviderReplay } from "../testkit/ProviderReplayHarness.ts";
+import { WorkflowAgentTranscriptReadObserver } from "../workflowAgentTranscript.ts";
+import { ClaudeOrchestratorReplayHarness } from "./ClaudeAdapterV2.testkit.ts";
+import * as ClaudeAdapterV2 from "./ClaudeAdapterV2.ts";
 
 vi.mock("@anthropic-ai/claude-agent-sdk", async (importOriginal) => ({
   ...(await importOriginal<typeof ClaudeSdk>()),

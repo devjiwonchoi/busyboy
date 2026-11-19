@@ -1,22 +1,17 @@
-import { parsePullRequestAnchor } from "@t3tools/shared/pullRequestAnchor";
-import { usePullRequestConnected } from "./usePullRequestConnected";
 import { useAtomValue } from "@effect/atom-react";
 import { useNavigation } from "@react-navigation/native";
-import type { PullRequestAction, PullRequestDetail } from "@t3tools/contracts";
 import { sourceControlClients } from "@t3tools/client-runtime/source-control-clients";
-import { changeRequestTermKind } from "../../lib/changeRequestTerm";
-import Animated from "react-native-reanimated";
-import { PR_ROW_LAYOUT, PR_DISCLOSURE_ENTER, PR_ROW_EXIT } from "./pullRequestAnimations";
+import type { PullRequestAction, PullRequestDetail } from "@t3tools/contracts";
+import { parsePullRequestAnchor } from "@t3tools/shared/pullRequestAnchor";
 import { T, useGT, useMessages } from "gt-react-native";
 import { useState } from "react";
 import { Linking, Pressable, View } from "react-native";
-import { AppText as Text } from "../../components/ui/AppText";
+import Animated from "react-native-reanimated";
+
 import { SymbolView } from "../../components/ui/AppSymbol";
+import { AppText as Text } from "../../components/ui/AppText";
 import { Menu } from "../../components/ui/Menu";
-import { PullRequestAvatar } from "./PullRequestPresentation";
-import { PullRequestCardRow } from "./PullRequestControls";
-import { PullRequestAgentRow } from "./PullRequestAgentRow";
-import { PullRequestGlyph } from "./pullRequestGlyphs";
+import { changeRequestTermKind } from "../../lib/changeRequestTerm";
 import { composerPullRequests } from "../../state/pull-requests";
 import { useEnvironmentQuery } from "../../state/query";
 import {
@@ -24,6 +19,11 @@ import {
   PR_ACTION_ICONS,
   pullRequestActionLabel,
 } from "./pullRequestActions";
+import { PullRequestAgentRow } from "./PullRequestAgentRow";
+import { PR_ROW_LAYOUT, PR_DISCLOSURE_ENTER, PR_ROW_EXIT } from "./pullRequestAnimations";
+import { PullRequestCardRow } from "./PullRequestControls";
+import { PullRequestGlyph } from "./pullRequestGlyphs";
+import { PullRequestAvatar } from "./PullRequestPresentation";
 import {
   checkStatus,
   isFailingCheck,
@@ -32,9 +32,10 @@ import {
   pullRequestReviewSummary,
   pullRequestStatus,
 } from "./pullRequestStatus";
-import { pullRequestTarget, type PullRequestParams } from "./usePullRequestDiff";
 import { usePullRequestAction } from "./usePullRequestAction";
 import { usePullRequestAgentActions } from "./usePullRequestAgentActions";
+import { usePullRequestConnected } from "./usePullRequestConnected";
+import { pullRequestTarget, type PullRequestParams } from "./usePullRequestDiff";
 
 type RowProps = { readonly pr: PullRequestDetail; readonly params: PullRequestParams };
 const STATUS_ACTIONS: readonly PullRequestAction[] = [

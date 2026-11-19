@@ -1,7 +1,8 @@
 // @effect-diagnostics-next-line nodeBuiltinImport:off -- Effect's Crypto has no generateKeyPairSync or sign.
 import * as NodeCrypto from "node:crypto";
-import * as NodeCryptoLayer from "@effect/platform-node/NodeCrypto";
 
+import * as NodeCryptoLayer from "@effect/platform-node/NodeCrypto";
+import { describe, expect, it } from "@effect/vitest";
 import {
   RelayCloudEnvironmentHealthRequest,
   RelayCloudMintCredentialRequest,
@@ -12,21 +13,20 @@ import {
   RelayEnvironmentMintResponse,
   RelayEnvironmentMintResponseProofPayload,
 } from "@t3tools/contracts/relay";
-import { describe, expect, it } from "@effect/vitest";
-import * as DateTime from "effect/DateTime";
 import { RELAY_HEALTH_RESPONSE_TYP, RELAY_MINT_RESPONSE_TYP } from "@t3tools/shared/relayJwt";
+import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
+import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import * as Tracer from "effect/Tracer";
-import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http";
 
 import * as CloudMintSigner from "../auth/CloudMintSigner.ts";
-import * as EnvironmentLinks from "./EnvironmentLinks.ts";
 import * as RelayConfiguration from "../Config.ts";
 import * as EnvironmentConnector from "./EnvironmentConnector.ts";
+import * as EnvironmentLinks from "./EnvironmentLinks.ts";
 import * as ManagedEndpointAllocations from "./ManagedEndpointAllocations.ts";
 
 const cloudKeyPair = NodeCrypto.generateKeyPairSync("ed25519", {

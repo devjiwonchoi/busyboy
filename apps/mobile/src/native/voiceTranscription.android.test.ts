@@ -22,12 +22,12 @@ vi.mock("expo", () => ({
   requireOptionalNativeModule: () => ({ isAvailable: () => true, ...mocks }),
 }));
 
+import { Platform } from "react-native";
+
 import {
   VoiceInputController,
   resetVoiceInputGlobalsForTests,
 } from "../../../../packages/client-runtime/src/voice-input/controller";
-import { Platform } from "react-native";
-
 import { createLiveVoiceRecorder, getLocalVoiceTranscriber } from "./voiceTranscription.android";
 
 it.each([

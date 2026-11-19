@@ -1,15 +1,15 @@
-import { requireOptionalNativeModule } from "expo";
-import type { RecorderState, RecordingStatus } from "expo-audio";
-import { msg } from "gt-react-native";
-import { Platform } from "react-native";
-import type { NativeVoiceRecorder } from "../features/voice-input/lazyVoiceRecorder";
-import { m } from "../i18n/messages";
-
 import {
   VoiceTranscriptionError,
   throwIfVoiceTranscriptionAborted,
   type VoiceTranscriber,
 } from "@t3tools/client-runtime/voice-input";
+import { requireOptionalNativeModule } from "expo";
+import type { RecorderState, RecordingStatus } from "expo-audio";
+import { msg } from "gt-react-native";
+import { Platform } from "react-native";
+
+import type { NativeVoiceRecorder } from "../features/voice-input/lazyVoiceRecorder";
+import { m } from "../i18n/messages";
 
 type PreparedGoogleTranscription = { readonly locale: string; readonly mode: number };
 

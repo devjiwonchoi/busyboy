@@ -1,13 +1,13 @@
 import * as NodeFS from "node:fs";
 
+import { T3_CHAT_THEME } from "@t3tools/shared/themePalettes";
+
 import {
   createMobileThemeVariables,
   type MobileThemeVariable,
   type MobileThemeAppearance,
   type MobileThemeVariables,
 } from "./mobileTheme";
-
-import { T3_CHAT_THEME } from "@t3tools/shared/themePalettes";
 
 const MOBILE_THEME_VARIABLE_NAMES = Object.keys(
   createMobileThemeVariables(T3_CHAT_THEME.colors, "light"),

@@ -1,4 +1,3 @@
-import { ThreadDetailsIssueRows } from "./ThreadDetailsIssueRows";
 import type { EnvironmentProject } from "@t3tools/client-runtime/state/shell";
 import {
   EnvironmentId,
@@ -9,9 +8,12 @@ import {
   type PullRequestCheck,
   type ScopedThreadRef,
 } from "@t3tools/contracts";
-import { DraftId } from "~/composerDraftStore";
 import { AsyncResult } from "effect/reactivity";
 import { expect, it, vi } from "vite-plus/test";
+
+import { DraftId } from "~/composerDraftStore";
+
+import { ThreadDetailsIssueRows } from "./ThreadDetailsIssueRows";
 
 const state = vi.hoisted(() => ({
   issuesSupported: false,
@@ -125,9 +127,10 @@ vi.mock(import("../ui/toast"), async (original) => {
   };
 });
 
-import { act, render as renderUi } from "../../../test/render";
 import { useComposerDraftStore } from "~/composerDraftStore";
 import { useUiStateStore } from "~/uiStateStore";
+
+import { act, render as renderUi } from "../../../test/render";
 import { ThreadDetailsPrRow } from "./ThreadDetailsPrRow";
 import { ThreadDetailsThreadPrRows } from "./ThreadDetailsPrRows";
 

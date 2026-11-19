@@ -1,11 +1,3 @@
-/**
- * Forgejo's issue tracker over `ForgejoCli.api`, which resolves the server and login from the
- * checkout's remote. Forgejo pages by number and announces a next page in a `Link` header the
- * CLI surfaces on stderr, so every cursor here is the next page number.
- */
-import * as Effect from "effect/Effect";
-import * as Result from "effect/Result";
-import * as Schema from "effect/Schema";
 import {
   IssueTrackerKind,
   type IssueCapabilities,
@@ -18,6 +10,14 @@ import {
   IssueTrackerError,
   type IssueTrackerApi,
 } from "@t3tools/source-control-core/server/IssueTracker";
+/**
+ * Forgejo's issue tracker over `ForgejoCli.api`, which resolves the server and login from the
+ * checkout's remote. Forgejo pages by number and announces a next page in a `Link` header the
+ * CLI surfaces on stderr, so every cursor here is the next page number.
+ */
+import * as Effect from "effect/Effect";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
 
 import * as ForgejoCli from "./ForgejoCli.ts";
 import {

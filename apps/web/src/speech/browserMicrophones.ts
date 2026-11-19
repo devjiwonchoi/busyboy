@@ -1,16 +1,17 @@
+import { msg } from "gt-react";
+
 import {
   getClientSettings,
   isClientSettingsHydrated,
   updateClientSettings,
 } from "../hooks/useSettings";
+import { m } from "../i18n/messages";
 import {
   type MicrophoneEntry,
   microphoneOrder,
   preferredMicrophoneId,
   rememberMicrophones,
 } from "./microphoneOrder";
-import { msg } from "gt-react";
-import { m } from "../i18n/messages";
 
 export type BrowserMicrophone = Pick<MediaDeviceInfo, "deviceId" | "label">;
 

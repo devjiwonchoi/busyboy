@@ -1,26 +1,27 @@
 import {
+  mapAtomCommandResult,
+  type AtomCommandFailure,
+  type AtomCommandResult,
+} from "@t3tools/client-runtime/state/runtime";
+import {
   AuthOrchestrationOperateScope,
   EDITORS,
   EditorId,
   EnvironmentAuthorizationError,
   EnvironmentId,
 } from "@t3tools/contracts";
-import {
-  mapAtomCommandResult,
-  type AtomCommandFailure,
-  type AtomCommandResult,
-} from "@t3tools/client-runtime/state/runtime";
 import { parseFileUrlHref, splitFilePathPosition } from "@t3tools/shared/fileLinks";
 import { safeDecodeURIComponent } from "@t3tools/shared/markdownLinks";
 import * as Cause from "effect/Cause";
-import * as Schema from "effect/Schema";
 import { AsyncResult } from "effect/reactivity";
+import * as Schema from "effect/Schema";
 import { msg } from "gt-react";
+
 import { getLocalStorageItem, setLocalStorageItem, useLocalStorage } from "./hooks/useLocalStorage";
 import { m } from "./i18n/messages";
+import { readEnvironmentScope } from "./state/session";
 import { shellEnvironment } from "./state/shell";
 import { useAtomCommand } from "./state/use-atom-command";
-import { readEnvironmentScope } from "./state/session";
 
 const LAST_EDITOR_KEY = "t3code:last-editor";
 

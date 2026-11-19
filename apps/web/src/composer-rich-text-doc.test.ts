@@ -1,18 +1,17 @@
+import { serializeComposerFileLink } from "@t3tools/shared/composerTrigger";
 import { Editor, getSchemaByResolvedExtensions, Node, resolveExtensions } from "@tiptap/core";
-import StarterKit from "@tiptap/starter-kit";
 import { TaskList } from "@tiptap/extension-task-list";
+import { splitBlockKeepMarks } from "@tiptap/pm/commands";
 import { Node as ProseMirrorNode } from "@tiptap/pm/model";
 import { EditorState, TextSelection } from "@tiptap/pm/state";
-import { splitBlockKeepMarks } from "@tiptap/pm/commands";
+import StarterKit from "@tiptap/starter-kit";
 import { describe, expect, it, onTestFinished } from "vite-plus/test";
-import { serializeComposerFileLink } from "@t3tools/shared/composerTrigger";
 
 import {
   collapseExpandedComposerCursor,
   expandCollapsedComposerCursor,
   pastedPathQueryLength,
 } from "./composer-logic";
-
 import {
   buildDocJson,
   buildTiptapContent,

@@ -6,26 +6,10 @@ import {
   type ScopedThreadRef,
 } from "@t3tools/contracts";
 import * as Option from "effect/Option";
-import * as Schema from "effect/Schema";
 import { AsyncResult, Atom } from "effect/reactivity";
+import * as Schema from "effect/Schema";
 
-import {
-  deriveThreadQueueWorkflowState,
-  getUserQueuedThreadRuns,
-  type ThreadQueueWorkflowState,
-} from "./threadWorkflows.ts";
-import { deriveThreadTurnSubagents, type ThreadTurnSubagents } from "./threadSubagents.ts";
-import {
-  deriveUsageLimitNoticeRows,
-  presentRunStop,
-  withoutUsageLimitNoticeRows,
-  type RunStopPresentation,
-  type UsageLimitNoticeRows,
-} from "./threadExecution.ts";
-import {
-  deriveThreadCheckpointSummaries,
-  type ThreadCheckpointSummary,
-} from "./threadCheckpoints.ts";
+import { arrayElementsEqual, parseThreadKey, threadKey } from "./entities.ts";
 import type {
   EnvironmentThread,
   EnvironmentThreadStructure,
@@ -34,14 +18,30 @@ import type {
   ThreadStructureTurnItem,
   ThreadStructureVisibleTurnItem,
 } from "./models.ts";
-import { EMPTY_ENVIRONMENT_THREAD_STATE, type EnvironmentThreadState } from "./threadState.ts";
+import { getProjectionArrayReplacementIndex } from "./orchestrationV2Projection.ts";
+import {
+  deriveThreadCheckpointSummaries,
+  type ThreadCheckpointSummary,
+} from "./threadCheckpoints.ts";
+import {
+  deriveUsageLimitNoticeRows,
+  presentRunStop,
+  withoutUsageLimitNoticeRows,
+  type RunStopPresentation,
+  type UsageLimitNoticeRows,
+} from "./threadExecution.ts";
 import {
   createQuestionHistoryProjector,
   derivePendingThreadRequests,
   type PendingThreadRequests,
 } from "./threadRequests.ts";
-import { arrayElementsEqual, parseThreadKey, threadKey } from "./entities.ts";
-import { getProjectionArrayReplacementIndex } from "./orchestrationV2Projection.ts";
+import { EMPTY_ENVIRONMENT_THREAD_STATE, type EnvironmentThreadState } from "./threadState.ts";
+import { deriveThreadTurnSubagents, type ThreadTurnSubagents } from "./threadSubagents.ts";
+import {
+  deriveThreadQueueWorkflowState,
+  getUserQueuedThreadRuns,
+  type ThreadQueueWorkflowState,
+} from "./threadWorkflows.ts";
 
 const EMPTY_VISIBLE_TURN_ITEMS: OrchestrationV2ThreadProjection["visibleTurnItems"] = Object.freeze(
   [],

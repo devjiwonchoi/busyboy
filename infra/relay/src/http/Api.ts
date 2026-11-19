@@ -1,28 +1,4 @@
 import { createClerkClient, verifyToken } from "@clerk/backend";
-import { sql as drizzleSql } from "drizzle-orm";
-import * as SecureRandom from "effect/crypto/SecureRandom";
-import * as Context from "effect/Context";
-import * as DateTime from "effect/DateTime";
-import * as Duration from "effect/Duration";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import * as Option from "effect/Option";
-import * as Record from "effect/Record";
-import * as Redacted from "effect/Redacted";
-import * as Schema from "effect/Schema";
-import * as Tracer from "effect/Tracer";
-import * as Headers from "effect/http/Headers";
-import * as HttpEffect from "effect/http/HttpEffect";
-import * as HttpMiddleware from "effect/http/HttpMiddleware";
-import * as HttpRouter from "effect/http/HttpRouter";
-import * as HttpServerRequest from "effect/http/HttpServerRequest";
-import * as HttpServerResponse from "effect/http/HttpServerResponse";
-import * as HttpTraceContext from "effect/http/HttpTraceContext";
-import * as HttpApiBuilder from "effect/http-api/HttpApiBuilder";
-import * as HttpApiError from "effect/http-api/HttpApiError";
-import { encodeOAuthScope } from "@t3tools/shared/oauthScope";
-import * as HttpObservability from "@t3tools/shared/httpObservability";
-
 import {
   RelayApi,
   RelayAgentActivityPublishProofExpiredError,
@@ -53,35 +29,58 @@ import {
   type RelayDpopAccessTokenScope,
   RelayInternalError,
 } from "@t3tools/contracts/relay";
+import * as HttpObservability from "@t3tools/shared/httpObservability";
+import { encodeOAuthScope } from "@t3tools/shared/oauthScope";
 import {
   normalizeRelayIssuer,
   RELAY_MANAGED_TUNNEL_RECOVERY_TYP,
   verifyRelayJwt,
 } from "@t3tools/shared/relayJwt";
+import { sql as drizzleSql } from "drizzle-orm";
+import * as Context from "effect/Context";
+import * as SecureRandom from "effect/crypto/SecureRandom";
+import * as DateTime from "effect/DateTime";
+import * as Duration from "effect/Duration";
+import * as Effect from "effect/Effect";
+import * as HttpApiBuilder from "effect/http-api/HttpApiBuilder";
+import * as HttpApiError from "effect/http-api/HttpApiError";
+import * as Headers from "effect/http/Headers";
+import * as HttpEffect from "effect/http/HttpEffect";
+import * as HttpMiddleware from "effect/http/HttpMiddleware";
+import * as HttpRouter from "effect/http/HttpRouter";
+import * as HttpServerRequest from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import * as HttpTraceContext from "effect/http/HttpTraceContext";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as Record from "effect/Record";
+import * as Redacted from "effect/Redacted";
+import * as Schema from "effect/Schema";
+import * as Tracer from "effect/Tracer";
 
-import * as DeliveryAttempts from "../agentActivity/DeliveryAttempts.ts";
+import * as AgentActivityPublisher from "../agentActivity/AgentActivityPublisher.ts";
 import * as AgentActivityRows from "../agentActivity/AgentActivityRows.ts";
+import * as DeliveryAttempts from "../agentActivity/DeliveryAttempts.ts";
 import * as Devices from "../agentActivity/Devices.ts";
+import * as LiveActivities from "../agentActivity/LiveActivities.ts";
+import * as MobileRegistrations from "../agentActivity/MobileRegistrations.ts";
 import * as DpopProofs from "../auth/DpopProofs.ts";
 import * as RelayTokens from "../auth/RelayTokens.ts";
-import * as EnvironmentCredentials from "../environments/EnvironmentCredentials.ts";
-import * as EnvironmentLinks from "../environments/EnvironmentLinks.ts";
-import * as HeldHooks from "../hooks/HeldHooks.ts";
-import * as HookInbox from "../hooks/HookInbox.ts";
-import * as LiveActivities from "../agentActivity/LiveActivities.ts";
 import * as RelayConfiguration from "../Config.ts";
-import * as AgentActivityPublisher from "../agentActivity/AgentActivityPublisher.ts";
+import * as RelayDb from "../db.ts";
 import * as EnvironmentConnector from "../environments/EnvironmentConnector.ts";
+import * as EnvironmentCredentials from "../environments/EnvironmentCredentials.ts";
 import * as EnvironmentLinker from "../environments/EnvironmentLinker.ts";
+import * as EnvironmentLinks from "../environments/EnvironmentLinks.ts";
+import * as EnvironmentPublishSignatures from "../environments/EnvironmentPublishSignatures.ts";
+import * as ManagedEndpointAllocations from "../environments/ManagedEndpointAllocations.ts";
 import * as ManagedEndpointProvider from "../environments/ManagedEndpointProvider.ts";
 import * as ManagedTunnelLimits from "../environments/ManagedTunnelLimits.ts";
-import * as ManagedEndpointAllocations from "../environments/ManagedEndpointAllocations.ts";
-import * as EnvironmentPublishSignatures from "../environments/EnvironmentPublishSignatures.ts";
-import * as MobileRegistrations from "../agentActivity/MobileRegistrations.ts";
-import * as T3ChatAccounts from "../t3chat/T3ChatAccounts.ts";
-import { withSpanAttributes } from "../observability.ts";
+import * as HeldHooks from "../hooks/HeldHooks.ts";
 import { isRelayHookPath, redactRelayHookUrl } from "../hooks/HookForwarder.ts";
-import * as RelayDb from "../db.ts";
+import * as HookInbox from "../hooks/HookInbox.ts";
+import { withSpanAttributes } from "../observability.ts";
+import * as T3ChatAccounts from "../t3chat/T3ChatAccounts.ts";
 
 // Delegated IDs exceed the router's default 100-character limit; match the environment server.
 export const RELAY_HTTP_ROUTER_CONFIG = {

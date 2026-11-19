@@ -1,4 +1,5 @@
 import { describe, expect, it } from "@effect/vitest";
+
 import { antigravityCliTarget, parseAntigravityCliRelease } from "./antigravityCliRelease.ts";
 
 const manifest = {

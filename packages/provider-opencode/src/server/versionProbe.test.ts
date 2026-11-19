@@ -6,15 +6,15 @@ import * as HttpClientRequest from "effect/http/HttpClientRequest";
 
 import * as OpenCodeRuntime from "./OpenCodeRuntime.ts";
 import {
-  classifyOpenCodeCliVersion,
-  makeOpenCodeRuntimeProbe,
-  probeOpenCodeRuntime,
-} from "./versionProbe.ts";
-import {
   OPENCODE_1_RESPONSES,
   OPENCODE_2_RESPONSES,
   replayOpenCodeServer,
 } from "./probeResponses.fixture.ts";
+import {
+  classifyOpenCodeCliVersion,
+  makeOpenCodeRuntimeProbe,
+  probeOpenCodeRuntime,
+} from "./versionProbe.ts";
 
 const noBinary = {
   runOpenCodeCommand: () => Effect.die("A configured server must not run the local binary"),

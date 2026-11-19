@@ -1,26 +1,4 @@
-import { T, useGT, useMessages } from "gt-react-native";
-import { errorDisplayMessage } from "@t3tools/client-runtime/errors";
-import { DraftEnvironmentControl } from "./DraftEnvironmentControl";
-import { NativeScrollEdgeEffectsContext } from "../../native/NativeScrollViewMarker";
-import { DraftThreadHeader } from "./DraftThreadHeader";
-import { useComposerAttachmentActions } from "../../state/use-composer-attachment-actions";
-import { useWorkspaceBackNavigation } from "../layout/workspace/useAndroidWorkspaceNavigation";
-import { submittedThreadParams } from "./thread-route-state";
-import { ThreadScreenBinding, ThreadScreenFallback } from "./ThreadScreenHost";
-import { draftThreadShell } from "./draft-thread-shell";
-import { useRememberThreadProject } from "./useRememberThreadProject";
-import { scopedProjectKey } from "../../lib/scopedEntities";
-import { connectionTone } from "../connection/connectionTone";
-import { runtimeConnectionErrorText } from "../connection/environmentStatusText";
-import { AppBar } from "../../components/ui/AppBar";
-import { ThreadId } from "@t3tools/contracts";
-
-import * as Dialog from "../../components/ui/Dialog";
 import { useAtomValue } from "@effect/atom-react";
-import * as Cause from "effect/Cause";
-import { AsyncResult } from "effect/reactivity";
-import { pickableProjectGroups } from "@t3tools/client-runtime/state/project-grouping";
-import { settlePromise, squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
 import {
   CommonActions,
   StackActions,
@@ -29,78 +7,93 @@ import {
   usePreventRemove,
   useRoute,
 } from "@react-navigation/native";
-import { useEffect, useRef, useState } from "react";
-import { Platform, Pressable, View } from "react-native";
-import { ScreenScrollView as ScrollView } from "../../components/ui/ScreenScrollView";
-import { KeyboardController } from "react-native-keyboard-controller";
-
+import { errorDisplayMessage } from "@t3tools/client-runtime/errors";
+import { pickableProjectGroups } from "@t3tools/client-runtime/state/project-grouping";
+import { settlePromise, squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
+import { ThreadId } from "@t3tools/contracts";
 import {
   AuthOrchestrationOperateScope,
   DEFAULT_PROVIDER_INTERACTION_MODE,
   PROVIDER_SEND_TURN_MAX_ATTACHMENTS,
   resolveEnvironmentMachineKind,
 } from "@t3tools/contracts";
+import { threadContextsOutsideEnvironment } from "@t3tools/shared/composerContextReferences";
+import * as Cause from "effect/Cause";
+import { AsyncResult } from "effect/reactivity";
+import { T, useGT, useMessages } from "gt-react-native";
+import { useEffect, useRef, useState } from "react";
+import { Platform, Pressable, View } from "react-native";
+import { KeyboardController } from "react-native-keyboard-controller";
 
 import { ComposerEditor, type ComposerEditorHandle } from "../../components/ComposerEditor";
-import { composerContextImportsAtom } from "../../state/use-composer-drafts";
-import { abortComposerDraftOperations } from "../../state/composerDraftOperations";
-import { composerContextSendBlockReason } from "../../lib/composerContext";
 import { ComposerInlineControl } from "../../components/ComposerToolbar";
-
+import { EnvironmentMachineSymbol } from "../../components/EnvironmentMachineSymbol";
+import { AppBar } from "../../components/ui/AppBar";
+import { SymbolView } from "../../components/ui/AppSymbol";
+import { AppText as Text } from "../../components/ui/AppText";
+import * as Dialog from "../../components/ui/Dialog";
+import { ScreenScrollView as ScrollView } from "../../components/ui/ScreenScrollView";
+import { makeTurnCommandMetadata } from "../../lib/commandMetadata";
+import { composerContextSendBlockReason } from "../../lib/composerContext";
+import {
+  describeUnavailableModelSelection,
+  isModelSelectionUnavailable,
+  resolveSelectableModelSelection,
+} from "../../lib/modelOptions";
+import { scopedProjectKey } from "../../lib/scopedEntities";
+import { NativeScrollEdgeEffectsContext } from "../../native/NativeScrollViewMarker";
+import { appAtomRegistry } from "../../state/atom-registry";
 import {
   composerAttachmentUploadBlockReason,
   composerAttachmentsStillUploading,
   composerAttachmentUploadsAtom,
 } from "../../state/composer-attachment-uploads";
-
-import { SymbolView } from "../../components/ui/AppSymbol";
-import { AppText as Text } from "../../components/ui/AppText";
-import { threadContextsOutsideEnvironment } from "@t3tools/shared/composerContextReferences";
-
-import { makeTurnCommandMetadata } from "../../lib/commandMetadata";
-
+import { abortComposerDraftOperations } from "../../state/composerDraftOperations";
+import { useEnvironmentServerConfig, useProjects } from "../../state/entities";
+import { mobilePreferencesAtom } from "../../state/preferences";
+import { useProjectClone } from "../../state/projectClones";
+import { projectEnvironment } from "../../state/projects";
+import { readEnvironmentScope, useEnvironmentScope } from "../../state/session";
+import { sourceControlEnvironment } from "../../state/sourceControl";
+import { enqueueThreadOutboxMessage } from "../../state/thread-outbox";
+import { useAtomCommand } from "../../state/use-atom-command";
+import { useComposerAttachmentActions } from "../../state/use-composer-attachment-actions";
+import { composerContextImportsAtom } from "../../state/use-composer-drafts";
 import {
   clearComposerDraftContent,
   getComposerDraftSnapshot,
   updateComposerDraftSettings,
   scheduleUnusedComposerAttachmentCleanup,
 } from "../../state/use-composer-drafts";
-import { useEnvironmentServerConfig, useProjects } from "../../state/entities";
-import { useProjectClone } from "../../state/projectClones";
-import { projectEnvironment } from "../../state/projects";
-import { sourceControlEnvironment } from "../../state/sourceControl";
-import { useAtomCommand } from "../../state/use-atom-command";
-import { ProjectCloneBanner } from "./ProjectCloneBanner";
-import {
-  describeUnavailableModelSelection,
-  isModelSelectionUnavailable,
-  resolveSelectableModelSelection,
-} from "../../lib/modelOptions";
-import { enqueueThreadOutboxMessage } from "../../state/thread-outbox";
 import {
   useRemoteConnections,
   useRemoteEnvironmentRuntime,
 } from "../../state/use-remote-environment-registry";
-import { useNewTaskFlow } from "./new-task-flow-provider";
+import { ConnectionStatusDot } from "../connection/ConnectionStatusDot";
+import { connectionTone } from "../connection/connectionTone";
+import { runtimeConnectionErrorText } from "../connection/environmentStatusText";
 import {
   nextEnvironmentId,
   useHardwareKeyboardCommand,
 } from "../keyboard/hardwareKeyboardCommands";
-import { resolveProjectThreadCreationBranch } from "./projectThreadCreationValidation";
-import { resolveDraftProjectSelection } from "./new-task-project-selection";
+import { useWorkspaceBackNavigation } from "../layout/workspace/useAndroidWorkspaceNavigation";
+import { incomingShareImports, useIncomingShare } from "../sharing/IncomingShareProvider";
+import { draftThreadShell } from "./draft-thread-shell";
+import { DraftEnvironmentControl } from "./DraftEnvironmentControl";
+import { DraftThreadHeader } from "./DraftThreadHeader";
+import { idleShareFlagAtom, idleShareImportPhaseAtom } from "./incomingShareImport";
 import {
   resolveNewTaskBranchLabel,
   resolveNewTaskWorkspaceLabel,
 } from "./new-task-context-presentation";
-import { incomingShareImports, useIncomingShare } from "../sharing/IncomingShareProvider";
-import { idleShareFlagAtom, idleShareImportPhaseAtom } from "./incomingShareImport";
+import { useNewTaskFlow } from "./new-task-flow-provider";
 import { newTaskFlowKey } from "./new-task-flow-state";
-import { EnvironmentMachineSymbol } from "../../components/EnvironmentMachineSymbol";
-import { ConnectionStatusDot } from "../connection/ConnectionStatusDot";
-import { appAtomRegistry } from "../../state/atom-registry";
-import { mobilePreferencesAtom } from "../../state/preferences";
-
-import { readEnvironmentScope, useEnvironmentScope } from "../../state/session";
+import { resolveDraftProjectSelection } from "./new-task-project-selection";
+import { ProjectCloneBanner } from "./ProjectCloneBanner";
+import { resolveProjectThreadCreationBranch } from "./projectThreadCreationValidation";
+import { submittedThreadParams } from "./thread-route-state";
+import { ThreadScreenBinding, ThreadScreenFallback } from "./ThreadScreenHost";
+import { useRememberThreadProject } from "./useRememberThreadProject";
 
 // Below this (keyboard up on iPad, phone landscape) the hero cannot fit above the composer,
 // so the project and environment pickers move into the composer controls instead.

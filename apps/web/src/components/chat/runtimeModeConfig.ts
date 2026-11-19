@@ -1,7 +1,6 @@
 import { managedRuntimeModeDenial } from "@t3tools/client-runtime/contract-labels";
 import type { ManagedPolicySummary, RuntimeMode } from "@t3tools/contracts";
 import { msg } from "gt-react";
-import { m, type MessageResolver } from "~/i18n/messages";
 import {
   type LucideIcon,
   LockIcon,
@@ -9,6 +8,8 @@ import {
   ShieldCheckIcon,
   ShieldOffIcon,
 } from "lucide-react";
+
+import { m, type MessageResolver } from "~/i18n/messages";
 
 export const runtimeModeConfig: Record<
   RuntimeMode,

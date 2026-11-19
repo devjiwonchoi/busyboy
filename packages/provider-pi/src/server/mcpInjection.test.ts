@@ -1,5 +1,11 @@
+import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, describe, expect, it } from "@effect/vitest";
 import { EnvironmentId, ProviderInstanceId, ThreadId } from "@t3tools/contracts";
+import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
+import * as NodeFS from "effect/FileSystem";
+import * as Option from "effect/Option";
+import * as NodePath from "effect/Path";
 
 import {
   T3_MCP_BEARER_ENV,
@@ -7,18 +13,12 @@ import {
   T3_PI_RUNTIME_MODE_ENV,
   T3_PI_MCP_EXTENSION_PATH_ENV,
 } from "./mcpExtensionSource.ts";
-import * as Effect from "effect/Effect";
-import * as Fiber from "effect/Fiber";
-import * as Option from "effect/Option";
-import * as NodePath from "effect/Path";
-import * as NodeFS from "effect/FileSystem";
-import * as NodeServices from "@effect/platform-node/NodeServices";
+import { PI_T3_MCP_EXTENSION_SOURCE } from "./mcpExtensionSource.ts";
 import {
   buildPiRpcLaunch,
   materializePiT3McpExtension,
   resolvePiLaunchArgs,
 } from "./mcpInjection.ts";
-import { PI_T3_MCP_EXTENSION_SOURCE } from "./mcpExtensionSource.ts";
 
 const threadId = ThreadId.make("thread-pi-t3-mcp");
 

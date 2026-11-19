@@ -1,25 +1,28 @@
-import type {
-  ThreadPendingApproval,
-  ThreadPendingUserInput,
-} from "@t3tools/client-runtime/state/thread-requests";
 import { linkRequestTargetName } from "@t3tools/client-runtime/link-request";
-import { turnItemIsWorkspacePreparation } from "@t3tools/client-runtime/state/turn-item-presentation";
-import type { ThreadCheckpointSummary } from "@t3tools/client-runtime/state/thread-checkpoints";
 import { formatSubagentDisplayTitle } from "@t3tools/client-runtime/state/subagent-display";
 import {
   isLiveSubagentTurnItem,
   waitingOnSubagentsLabel,
 } from "@t3tools/client-runtime/state/subagentRuntime";
-import { extractToolActivityPresentation } from "@t3tools/client-runtime/work-log/tool-presentation";
+import type { ThreadCheckpointSummary } from "@t3tools/client-runtime/state/thread-checkpoints";
+import type {
+  ThreadPendingApproval,
+  ThreadPendingUserInput,
+} from "@t3tools/client-runtime/state/thread-requests";
+import { turnItemIsWorkspacePreparation } from "@t3tools/client-runtime/state/turn-item-presentation";
+import {
+  IDLE_COMPACTION_TITLES,
+  IDLE_COMPACTING_LABELS,
+} from "@t3tools/client-runtime/user-message";
+import {
+  commandDisplayText,
+  commandProgramName,
+} from "@t3tools/client-runtime/work-log/command-label";
 import {
   turnItemDetailRevision,
   turnItemHasDetail,
   turnItemNeedsDetailFetch,
 } from "@t3tools/client-runtime/work-log/item-detail";
-import {
-  commandDisplayText,
-  commandProgramName,
-} from "@t3tools/client-runtime/work-log/command-label";
 import {
   contextCompactionLabel,
   liveThoughtLine,
@@ -36,13 +39,7 @@ import {
   type WorkLogToolLifecycleStatus,
   workEntryHiddenByToolCallVisibility,
 } from "@t3tools/client-runtime/work-log/presentation";
-import type { ToolCallVisibility } from "@t3tools/contracts/settings";
-import {
-  resolveT3McpToolDefinition,
-  type T3McpToolLogo,
-  type T3McpToolPresentation,
-} from "@t3tools/shared/t3McpToolPresentation";
-import { resolveT3McpToolPresentation } from "@t3tools/shared/t3McpToolPresentationCopy";
+import { extractToolActivityPresentation } from "@t3tools/client-runtime/work-log/tool-presentation";
 import type {
   ChatAttachment,
   MessageId,
@@ -60,6 +57,18 @@ import type {
   TurnItemId,
 } from "@t3tools/contracts";
 import { idleCompactionOf, isCompactionCommandMessage, RunId, ThreadId } from "@t3tools/contracts";
+import type { ToolCallVisibility } from "@t3tools/contracts/settings";
+import { claudeResumeCompactionAge } from "@t3tools/shared/claudeCompaction";
+import type { HtmlRenderReference } from "@t3tools/shared/htmlRender";
+import type { McpAppReference } from "@t3tools/shared/mcpApp";
+import { formatDuration } from "@t3tools/shared/orchestrationTimingCopy";
+import { truncate } from "@t3tools/shared/String";
+import {
+  resolveT3McpToolDefinition,
+  type T3McpToolLogo,
+  type T3McpToolPresentation,
+} from "@t3tools/shared/t3McpToolPresentation";
+import { resolveT3McpToolPresentation } from "@t3tools/shared/t3McpToolPresentationCopy";
 import {
   classifyToolActivity,
   collectToolFilePaths,
@@ -70,11 +79,6 @@ import {
   formatReadToolLabel,
   formatSearchToolLabel,
 } from "@t3tools/shared/toolActivityCopy";
-import { claudeResumeCompactionAge } from "@t3tools/shared/claudeCompaction";
-import { formatDuration } from "@t3tools/shared/orchestrationTimingCopy";
-import { truncate } from "@t3tools/shared/String";
-import type { HtmlRenderReference } from "@t3tools/shared/htmlRender";
-import type { McpAppReference } from "@t3tools/shared/mcpApp";
 import {
   compactDynamicToolOutput,
   htmlRenderFromToolItem,
@@ -83,11 +87,8 @@ import {
 } from "@t3tools/shared/toolOutput";
 import * as DateTime from "effect/DateTime";
 import { msg } from "gt-react-native";
+
 import { m, type MessageResolver } from "../i18n/messages";
-import {
-  IDLE_COMPACTION_TITLES,
-  IDLE_COMPACTING_LABELS,
-} from "@t3tools/client-runtime/user-message";
 
 export type PendingApproval = ThreadPendingApproval;
 export type PendingUserInput = ThreadPendingUserInput;

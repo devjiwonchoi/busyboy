@@ -1,5 +1,6 @@
 import { useGT } from "gt-react";
 import type { ComponentProps } from "react";
+
 import { OpenAI } from "../Icons";
 import { Button } from "../ui/button";
 

@@ -2,11 +2,11 @@ import { assert } from "@effect/vitest";
 import type { ProviderReplayTranscript } from "@t3tools/contracts";
 
 import type { OrchestratorV2ScenarioResult } from "../../OrchestratorScenario.ts";
-import { assertSemanticProjectionIntegrity, projectionFor } from "../shared.ts";
 import {
   CLAUDE_BACKGROUND_SUBAGENT_LIFECYCLE_RESUME_PROMPT,
   CLAUDE_BACKGROUND_SUBAGENT_LIFECYCLE_STOP_PROMPT,
 } from "../claude_background_subagent_lifecycle/input.ts";
+import { assertSemanticProjectionIntegrity, projectionFor } from "../shared.ts";
 
 export function assertClaudeBackgroundWakeBeforeQueuedPromptNoEchoOutput(
   result: OrchestratorV2ScenarioResult,

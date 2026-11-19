@@ -3,16 +3,15 @@ import type {
   ToolActivityNativeAppReference,
   ToolActivitySource,
 } from "@t3tools/contracts";
-import * as Digest from "effect/crypto/Digest";
-import * as Effect from "effect/Effect";
-import * as Hex from "effect/encoding/Hex";
-import type * as EffectCodexSchema from "effect-codex-app-server/schema";
-
 import {
   mcpToolPresentation as integrationToolPresentation,
   normalizeMcpHttpUrl as normalizedHttpUrl,
   normalizeMcpText as normalizedDisplayName,
 } from "@t3tools/provider-core/server/mcpToolPresentation";
+import type * as EffectCodexSchema from "effect-codex-app-server/schema";
+import * as Digest from "effect/crypto/Digest";
+import * as Effect from "effect/Effect";
+import * as Hex from "effect/encoding/Hex";
 
 type CodexLifecycleItem = EffectCodexSchema.V2ItemCompletedNotification["item"];
 

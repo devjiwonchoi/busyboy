@@ -1,4 +1,5 @@
 import type { StyleProp, ViewStyle } from "react-native";
+
 import type { AppSymbolName } from "./AppSymbol";
 
 export type FloatingActionButtonProps = {

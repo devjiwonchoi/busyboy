@@ -1,4 +1,8 @@
+import { EnvironmentId, ThreadId } from "@t3tools/contracts";
+import { parseMarkdown } from "react-native-enriched-markdown/src/web/parseMarkdown";
 import { describe, expect, it } from "vite-plus/test";
+
+import { ENRICHED_INLINE_FILE_LINK_REGEX } from "./enrichedLinkPresentation";
 import {
   markdownForNativeRendering,
   markdownHtmlContent,
@@ -8,11 +12,8 @@ import {
   type MarkdownNode,
 } from "./markdownDocument";
 import { markdownImageSources } from "./markdownImageSources";
-import { markdownFileEmbedLabel, resolveMarkdownMediaPreview } from "./markdownMedia";
 import { resolveMarkdownLinkPresentation } from "./markdownLinks";
-import { ENRICHED_INLINE_FILE_LINK_REGEX } from "./enrichedLinkPresentation";
-import { EnvironmentId, ThreadId } from "@t3tools/contracts";
-import { parseMarkdown } from "react-native-enriched-markdown/src/web/parseMarkdown";
+import { markdownFileEmbedLabel, resolveMarkdownMediaPreview } from "./markdownMedia";
 
 describe("HTML in native Markdown", () => {
   it("preserves screenshot URLs and captions from GitHub HTML image embeds", () => {

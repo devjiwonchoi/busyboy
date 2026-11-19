@@ -1,12 +1,5 @@
 import { RegistryContext } from "@effect/atom-react";
-import {
-  EnvironmentId,
-  ProjectId,
-  ThreadId,
-  WS_METHODS,
-  type PullRequestRef,
-} from "@t3tools/contracts";
-import type { EnvironmentThreadShell } from "@t3tools/client-runtime/state/shell";
+import { expect, it } from "@effect/vitest";
 import {
   EnvironmentRegistry,
   EnvironmentSupervisor,
@@ -17,15 +10,22 @@ import {
   type ConnectionCatalogEntry,
 } from "@t3tools/client-runtime/connection";
 import type { RpcSession } from "@t3tools/client-runtime/rpc";
+import type { EnvironmentThreadShell } from "@t3tools/client-runtime/state/shell";
+import {
+  EnvironmentId,
+  ProjectId,
+  ThreadId,
+  WS_METHODS,
+  type PullRequestRef,
+} from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Latch from "effect/Latch";
 import * as Option from "effect/Option";
+import { AtomRegistry } from "effect/reactivity";
 import * as Stream from "effect/Stream";
 import * as SubscriptionRef from "effect/SubscriptionRef";
-import { AtomRegistry } from "effect/reactivity";
 import { Activity, act, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { expect, it } from "@effect/vitest";
 import { vi } from "vite-plus/test";
 
 const fixture = vi.hoisted(() => ({

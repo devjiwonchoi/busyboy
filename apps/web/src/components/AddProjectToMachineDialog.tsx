@@ -1,13 +1,10 @@
-import { m } from "../i18n/messages";
-import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
-import { useParams } from "@tanstack/react-router";
 import { scopeProjectRef } from "@t3tools/client-runtime/environment";
+import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
 import {
   getAddProjectInitialQuery,
   getCloneDestinationPath,
   getCloneDirectoryPath,
 } from "@t3tools/client-runtime/operations/projects";
-import { resolvePastedPath } from "@t3tools/shared/path";
 import {
   type EnvironmentId,
   type ProjectIgnoredFile,
@@ -19,15 +16,18 @@ import {
   cloneUrlForProtocol,
   cloneUrlProtocol,
 } from "@t3tools/shared/cloneUrl";
+import { resolvePastedPath } from "@t3tools/shared/path";
+import { useParams } from "@tanstack/react-router";
+import { T, useGT, Var } from "gt-react";
 import { ArrowRightIcon } from "lucide-react";
 import { useId, useState } from "react";
-import { T, useGT, Var } from "gt-react";
 import { create } from "zustand";
 
 import { type DraftId, useComposerDraftStore } from "../composerDraftStore";
 import { useAddProjectTargets } from "../hooks/useAddProjectTargets";
 import { useNewThreadHandler } from "../hooks/useHandleNewThread";
 import { useLogicalProjectEnvironments } from "../hooks/useLogicalProjectEnvironments";
+import { m } from "../i18n/messages";
 import {
   COPIED_FILES_MAX_COUNT,
   COPYABLE_FILE_MAX_BYTES,

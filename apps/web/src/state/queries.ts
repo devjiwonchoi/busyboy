@@ -1,10 +1,5 @@
-import { errorDisplayMessage } from "@t3tools/client-runtime/errors";
 import { useAtomValue } from "@effect/atom-react";
-import { msg } from "gt-react";
-import {
-  type CheckpointDiffTarget,
-  type ComposerPathSearchTarget,
-} from "@t3tools/client-runtime/state/threads";
+import { errorDisplayMessage } from "@t3tools/client-runtime/errors";
 import {
   createThreadSearchResultsAtomFamily,
   makeThreadSearchKey,
@@ -15,12 +10,15 @@ import {
   type ThreadSearchScope,
 } from "@t3tools/client-runtime/state/thread-search";
 import {
+  type CheckpointDiffTarget,
+  type ComposerPathSearchTarget,
+} from "@t3tools/client-runtime/state/threads";
+import { type VcsRefTarget } from "@t3tools/client-runtime/state/vcs";
+import {
   ProjectSearchContentsError,
   PROJECT_SEARCH_CONTENTS_QUERY_MAX_LENGTH,
   THREAD_SEARCH_QUERY_MAX_LENGTH,
 } from "@t3tools/contracts";
-import { messageSearchTokens } from "@t3tools/shared/paletteSearch";
-import { type VcsRefTarget } from "@t3tools/client-runtime/state/vcs";
 import type {
   EnvironmentId,
   OrchestrationV2GetTurnItemResult,
@@ -32,19 +30,21 @@ import type {
   VcsListRefsResult,
   VcsRef,
 } from "@t3tools/contracts";
+import { messageSearchTokens } from "@t3tools/shared/paletteSearch";
 import * as Cause from "effect/Cause";
-import * as Schema from "effect/Schema";
 import { AsyncResult, Atom } from "effect/reactivity";
+import * as Schema from "effect/Schema";
+import { msg } from "gt-react";
 import { useEffect, useState } from "react";
 
 import { m, type MessageResolver } from "../i18n/messages";
 import { appAtomRegistry } from "../rpc/atomRegistry";
 import { useFilesystemReadAccess } from "./filesystem";
 import { orchestrationEnvironment } from "./orchestration";
-import { olderSettledThreads, threadFamilies } from "./threads";
 import { isPaginatedBranchesNextPagePending } from "./paginatedBranches";
 import { projectContentSearch, projectEnvironment } from "./projects";
 import { useEnvironmentQuery } from "./query";
+import { olderSettledThreads, threadFamilies } from "./threads";
 import { vcsEnvironment } from "./vcs";
 
 const PROJECT_PATH_SEARCH_DEBOUNCE_MS = 120;

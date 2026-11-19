@@ -4,7 +4,16 @@ import * as NodeEvents from "node:events";
 import * as NodeFS from "node:fs";
 import * as NodeOS from "node:os";
 
+import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, expect, it } from "@effect/vitest";
+import {
+  DesktopBackendBootstrap,
+  type DesktopBackendBootstrap as DesktopBackendBootstrapValue,
+} from "@t3tools/contracts";
+import * as HostProcess from "@t3tools/shared/HostProcess";
+import * as NetService from "@t3tools/shared/Net";
+import { DEFAULT_SIGNAL_EXPORT } from "@t3tools/shared/observability";
+import * as OtelEnvironment from "@t3tools/shared/otelEnvironment";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -15,15 +24,6 @@ import * as Redacted from "effect/Redacted";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 
-import {
-  DesktopBackendBootstrap,
-  type DesktopBackendBootstrap as DesktopBackendBootstrapValue,
-} from "@t3tools/contracts";
-import * as NetService from "@t3tools/shared/Net";
-import { DEFAULT_SIGNAL_EXPORT } from "@t3tools/shared/observability";
-import * as OtelEnvironment from "@t3tools/shared/otelEnvironment";
-import * as NodeServices from "@effect/platform-node/NodeServices";
-import * as HostProcess from "@t3tools/shared/HostProcess";
 import packageJson from "../../package.json" with { type: "json" };
 import { ServiceLauncherHostProcess } from "../cloud/serviceLauncherClient.ts";
 import {

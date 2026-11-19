@@ -1,46 +1,46 @@
-import { formatFilePathForClipboard } from "@t3tools/client-runtime/media-actions";
-import { resolvePathLinkTarget } from "@t3tools/shared/fileLinks";
-import { resolveFilesystemReadAccess } from "@t3tools/client-runtime/state/filesystem";
-import { environmentSession } from "../../state/session";
 import {
   StackActions,
   useNavigation,
   usePreventRemove,
   type StaticScreenProps,
 } from "@react-navigation/native";
-import { useGT, useMessages } from "gt-react-native";
-import { type ComponentProps, type ReactNode, useId, useState } from "react";
-import { Platform, View } from "react-native";
-import Svg, { Defs, LinearGradient, Rect, Stop } from "react-native-svg";
+import { formatFilePathForClipboard } from "@t3tools/client-runtime/media-actions";
+import { mediaFileReference } from "@t3tools/client-runtime/media-reference";
+import { resolveFilesystemReadAccess } from "@t3tools/client-runtime/state/filesystem";
 import { EnvironmentId, type ProjectReadFileResult, ThreadId } from "@t3tools/contracts";
-import { videoMimeType } from "@t3tools/shared/video";
+import { filePreviewDelimiter, parseDelimitedPreview } from "@t3tools/shared/delimitedPreview";
+import { resolvePathLinkTarget } from "@t3tools/shared/fileLinks";
 import {
   isWorkspaceBrowserPreviewPath,
   isWorkspaceImagePreviewPath,
   mediaMimeTypeFromExtension,
 } from "@t3tools/shared/filePreview";
-import { mediaFileReference } from "@t3tools/client-runtime/media-reference";
+import { videoMimeType } from "@t3tools/shared/video";
+import { useGT, useMessages } from "gt-react-native";
+import { type ComponentProps, type ReactNode, useId, useState } from "react";
+import { Platform, View } from "react-native";
+import Svg, { Defs, LinearGradient, Rect, Stop } from "react-native-svg";
 
-import { ScreenContent } from "../../components/ui/ScreenContent";
-import { filePreviewDelimiter, parseDelimitedPreview } from "@t3tools/shared/delimitedPreview";
-import { DelimitedFilePreview } from "./DelimitedFilePreview";
-import { AudioFilePreview } from "./AudioFilePreview";
+import { LoadingScreen } from "../../components/LoadingScreen";
+import { AppBar } from "../../components/ui/AppBar";
 import { EmptyState } from "../../components/ui/EmptyState";
 import { FilePreviewModal, type FilePreviewSource } from "../../components/ui/FilePreviewModal";
-import { LoadingScreen } from "../../components/LoadingScreen";
+import { ScreenContent } from "../../components/ui/ScreenContent";
+import { useContentTopInset } from "../../components/ui/useBarInset";
 import { copyTextWithHaptic } from "../../lib/copyTextWithHaptic";
 import { isPdfFile } from "../../lib/filePreview";
+import { type MediaActionsSource } from "../../lib/mediaActionsSource";
 import { tryOpenExternalUrl } from "../../lib/openExternalUrl";
 import { useUniwindTheme } from "../../lib/useUniwindTheme";
 import type { MediaVideoPreviewSource } from "../../lib/videoPreviewSource";
+import type { AssetUrlFailureReason } from "../../state/asset-url-state";
 import { useMediaActions } from "../../state/mediaActions";
-import { type MediaActionsSource } from "../../lib/mediaActionsSource";
-import { useThreadSelection } from "../../state/use-thread-selection";
-import { useSelectedThreadWorktree } from "../../state/use-selected-thread-worktree";
-import { useEnvironmentQuery } from "../../state/query";
 import { useEnvironmentPresentation } from "../../state/presentation";
 import { projectEnvironment } from "../../state/projects";
-import type { AssetUrlFailureReason } from "../../state/asset-url-state";
+import { useEnvironmentQuery } from "../../state/query";
+import { environmentSession } from "../../state/session";
+import { useSelectedThreadWorktree } from "../../state/use-selected-thread-worktree";
+import { useThreadSelection } from "../../state/use-thread-selection";
 import {
   Inspector,
   useAdaptiveWorkspaceLayout,
@@ -48,19 +48,9 @@ import {
 } from "../layout/AdaptiveWorkspaceLayout";
 import { useAppearancePreferences } from "../settings/appearance/AppearancePreferencesProvider";
 import { ThreadRouteScreen } from "../threads/ThreadRouteScreen";
-import { FilePreviewLoading, FilePreviewNotice } from "./FilePreviewFeedback";
+import { AudioFilePreview } from "./AudioFilePreview";
+import { DelimitedFilePreview } from "./DelimitedFilePreview";
 import { FileMarkdownPreview } from "./FileMarkdownPreview";
-import { FileTreeBrowser } from "./FileTreeBrowser";
-import { useFileTreeEntries } from "./useFileTreeEntries";
-import { preloadWorkspaceFileContents } from "./preload-workspace-file";
-import { SourceFileSurface } from "./SourceFileSurface";
-import { ThreadFileNavigatorPane } from "./thread-file-navigator-pane";
-import { AppBar } from "../../components/ui/AppBar";
-import { useContentTopInset } from "../../components/ui/useBarInset";
-import { WorkspaceFileImagePreview } from "./WorkspaceFileImagePreview";
-import { WorkspaceFilePreviewError } from "./WorkspaceFilePreviewError";
-import { WorkspaceFileVideoPreview } from "./WorkspaceFileVideoPreview";
-import { WorkspaceFileWebPreview } from "./WorkspaceFileWebPreview";
 import {
   basename,
   fileHeaderSubtitle,
@@ -73,7 +63,17 @@ import {
   isVideoPreviewFile,
   needsWorkspaceFileContents,
 } from "./filePath";
+import { FilePreviewLoading, FilePreviewNotice } from "./FilePreviewFeedback";
+import { FileTreeBrowser } from "./FileTreeBrowser";
+import { preloadWorkspaceFileContents } from "./preload-workspace-file";
+import { SourceFileSurface } from "./SourceFileSurface";
+import { ThreadFileNavigatorPane } from "./thread-file-navigator-pane";
+import { useFileTreeEntries } from "./useFileTreeEntries";
 import { useWorkspaceFileAssetUrlState } from "./workspaceFileAssetUrl";
+import { WorkspaceFileImagePreview } from "./WorkspaceFileImagePreview";
+import { WorkspaceFilePreviewError } from "./WorkspaceFilePreviewError";
+import { WorkspaceFileVideoPreview } from "./WorkspaceFileVideoPreview";
+import { WorkspaceFileWebPreview } from "./WorkspaceFileWebPreview";
 
 function FilesBrowserHeader(props: {
   readonly projectName: string;

@@ -6,9 +6,9 @@ import {
 } from "@t3tools/contracts";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import { HttpClient, HttpClientError, HttpClientRequest, HttpClientResponse } from "effect/http";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
-import { HttpClient, HttpClientError, HttpClientRequest, HttpClientResponse } from "effect/http";
 
 import type { DeviceHostReady, DeviceOperations, HostDevice } from "./DeviceHost.ts";
 

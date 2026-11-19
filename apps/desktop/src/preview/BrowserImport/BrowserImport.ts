@@ -9,18 +9,17 @@ import {
   type ManagedPolicyDocument,
   managedPolicyDeniedMessage,
 } from "@t3tools/contracts";
+import * as HostProcess from "@t3tools/shared/HostProcess";
+import type { ManagedPolicyFileError } from "@t3tools/shared/managedPolicyFile";
 import * as Context from "effect/Context";
-import type { Session } from "electron";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
+import { ChildProcessSpawner } from "effect/process";
 import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
-import { ChildProcessSpawner } from "effect/process";
-
-import * as HostProcess from "@t3tools/shared/HostProcess";
-import type { ManagedPolicyFileError } from "@t3tools/shared/managedPolicyFile";
+import type { Session } from "electron";
 
 import * as DesktopManagedPolicy from "../../app/DesktopManagedPolicy.ts";
 import * as BrowserSession from "../BrowserSession.ts";

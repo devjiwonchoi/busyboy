@@ -9,9 +9,8 @@ import {
 } from "@t3tools/shared/usageLimits";
 import { msg } from "gt-react-native";
 
-import { m, type MessageResolver } from "../i18n/messages";
-
 import { providerColors } from "../features/usage/providerColors";
+import { m, type MessageResolver } from "../i18n/messages";
 import type { WidgetTheme } from "./widgetTheme";
 
 /**

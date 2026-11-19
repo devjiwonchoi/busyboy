@@ -4,6 +4,7 @@ import DiffsWorker from "@pierre/diffs/worker/worker.js?worker";
 import * as Schema from "effect/Schema";
 import { T } from "gt-react";
 import { useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
+
 import { getRenderedAppearance, subscribeRenderedAppearance } from "../hooks/useTheme";
 import { resolveDiffThemeName } from "../lib/diffRendering";
 import { PREFERRED_HIGHLIGHTER } from "../lib/syntaxHighlighting";

@@ -1,6 +1,7 @@
-import { useLayoutEffect } from "react";
 import type { RunId } from "@t3tools/contracts";
 import type { ToolCallVisibility } from "@t3tools/contracts/settings";
+import { useLayoutEffect } from "react";
+
 import type { TimelineEntry } from "../../session-logic";
 import {
   timelineTurnFoldRunIdsByEntryId,
@@ -8,8 +9,8 @@ import {
   type TimelineLatestRun,
 } from "./MessagesTimeline.logic";
 import type { ThreadFindPositionReader } from "./threadFind";
-import { attachThreadFindTimeline } from "./threadFindStore";
 import { readThreadFindPosition } from "./threadFindPosition";
+import { attachThreadFindTimeline } from "./threadFindStore";
 
 /** Hands thread find how to read the find position of this timeline's viewport. */
 export function useThreadFindPositionReader({

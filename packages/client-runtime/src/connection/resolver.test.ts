@@ -1,17 +1,17 @@
+import { describe, expect, it } from "@effect/vitest";
 import {
   EnvironmentId,
   ORCHESTRATION_PROTOCOL_VERSION,
   type DesktopSshEnvironmentTarget,
 } from "@t3tools/contracts";
-import { describe, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Ref from "effect/Ref";
 
-import * as ConnectionResolver from "./resolver.ts";
-import * as ClientCapabilities from "../platform/capabilities.ts";
 import * as RemoteEnvironmentAuthorization from "../authorization/service.ts";
+import * as ClientCapabilities from "../platform/capabilities.ts";
+import * as RpcHttp from "../rpc/http.ts";
 import {
   BearerConnectionCredential,
   type ConnectionCatalogEntry,
@@ -27,12 +27,12 @@ import {
   type ConnectionTarget,
 } from "./model.ts";
 import * as ConnectionProfileStore from "./profileStore.ts";
-import * as RpcHttp from "../rpc/http.ts";
 import {
   PullRequestRoutingPermissions,
   pullRequestRoutingConnectionKey,
   makePullRequestRoutingPermissions,
 } from "./pullRequestRoutingPermissions.ts";
+import * as ConnectionResolver from "./resolver.ts";
 
 const ENVIRONMENT_ID = EnvironmentId.make("environment-1");
 const ENDPOINT = {

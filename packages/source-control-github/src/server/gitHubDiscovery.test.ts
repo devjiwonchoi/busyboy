@@ -1,17 +1,17 @@
+import { assert, it } from "@effect/vitest";
 import { ServerSettings, SourceControlProviderKind } from "@t3tools/contracts";
 import * as HostProcess from "@t3tools/shared/HostProcess";
-import { assert, it } from "@effect/vitest";
+import * as SourceControlHost from "@t3tools/source-control-core/server/SourceControlHost";
+import * as TestSourceControlHost from "@t3tools/source-control-testing/TestSourceControlHost";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
-import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
-import * as TestSourceControlHost from "@t3tools/source-control-testing/TestSourceControlHost";
-import * as SourceControlHost from "@t3tools/source-control-core/server/SourceControlHost";
 
-import * as GitHubCredentials from "./GitHubCredentials.ts";
 import * as GitHubAppSignIn from "./GitHubAppSignIn.ts";
+import * as GitHubCredentials from "./GitHubCredentials.ts";
 import * as GitHubRest from "./GitHubRest.ts";
 import * as GitHubSourceControlProvider from "./GitHubSourceControlProvider.ts";
 

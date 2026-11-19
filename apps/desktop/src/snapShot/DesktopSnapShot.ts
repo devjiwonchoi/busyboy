@@ -1,6 +1,5 @@
 // @effect-diagnostics globalTimers:off -- Capture timeouts and Electron overlay animation timers run at native callback boundaries outside Effect fibers.
 
-import { pipe } from "effect/Function";
 import {
   DEFAULT_CLIENT_SETTINGS,
   DesktopPendingSnapShot,
@@ -21,6 +20,8 @@ import {
   type DesktopSnapShotEvent,
   type DesktopSnapShotId,
 } from "@t3tools/contracts";
+import * as HostProcess from "@t3tools/shared/HostProcess";
+import { readImageDimensions } from "@t3tools/shared/imageDimensions";
 import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
 import * as SecureRandom from "effect/crypto/SecureRandom";
@@ -28,6 +29,7 @@ import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Base64 from "effect/encoding/Base64";
 import * as FileSystem from "effect/FileSystem";
+import { pipe } from "effect/Function";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
@@ -35,26 +37,16 @@ import * as Predicate from "effect/Predicate";
 import * as Ref from "effect/Ref";
 import * as Schema from "effect/Schema";
 import * as Semaphore from "effect/Semaphore";
-
 import * as Electron from "electron";
 
 import * as DesktopEnvironment from "../app/DesktopEnvironment.ts";
+import { MAC_PERMISSION_SETTINGS_URLS } from "../permissions/MacPermission.ts";
+import * as MacPermissions from "../permissions/MacPermissions.ts";
 import * as DesktopClientSettings from "../settings/DesktopClientSettings.ts";
 import * as DesktopWindow from "../window/DesktopWindow.ts";
-import { startGlobalShiftShortcutProcess } from "./GlobalShiftShortcutProcess.ts";
-import { startMacModifierPairShortcutProcess } from "./MacModifierPairShortcutProcess.ts";
 import { activeWindow, type ActiveWindow } from "./ActiveWindow.ts";
-import { captureMacWindowSnapshot, type MacSnapShotSource } from "./MacSnapShot.ts";
-import type { LinuxCaptureFeedback, LinuxWindowMetadata } from "./LinuxSnapShot.ts";
-import { niriSocketPath } from "./NiriSnapShot.ts";
 import { CaptureShortcutConfig, niriCaptureConfigPath } from "./CaptureShortcutConfig.ts";
-import type { PortalCaptureShortcut } from "./PortalCaptureShortcut.ts";
-import {
-  CaptureSetupRequiredError,
-  isGnomeCaptureSession,
-  niriCaptureBinding,
-  portalShortcutTrigger,
-} from "./linuxCaptureSession.ts";
+import { startGlobalShiftShortcutProcess } from "./GlobalShiftShortcutProcess.ts";
 import {
   HyprlandCaptureSetup,
   HYPRLAND_CAPTURE_EXECUTABLE,
@@ -69,20 +61,22 @@ import {
   type KdeCapturePaths,
 } from "./KdeSnapShot.ts";
 import {
+  CaptureSetupRequiredError,
+  isGnomeCaptureSession,
+  niriCaptureBinding,
+  portalShortcutTrigger,
+} from "./linuxCaptureSession.ts";
+import type { LinuxCaptureFeedback, LinuxWindowMetadata } from "./LinuxSnapShot.ts";
+import { startMacModifierPairShortcutProcess } from "./MacModifierPairShortcutProcess.ts";
+import { captureMacWindowSnapshot, type MacSnapShotSource } from "./MacSnapShot.ts";
+import { niriSocketPath } from "./NiriSnapShot.ts";
+import type { PortalCaptureShortcut } from "./PortalCaptureShortcut.ts";
+import {
   captureRegionWindowSnapshot,
   makeRegionSnapShotPool,
   type RegionSnapShotPool,
   type RegionSnapShotSource,
 } from "./RegionSnapShot.ts";
-import { type SnapShotAnimationDestination, SnapShotTransition } from "./SnapShotTransition.ts";
-import {
-  type AccessibilityProcessPool,
-  makeSnapShotAccessibilityProcessPool,
-} from "./SnapShotAccessibilityProcess.ts";
-import * as MacPermissions from "../permissions/MacPermissions.ts";
-import { MAC_PERMISSION_SETTINGS_URLS } from "../permissions/MacPermission.ts";
-import { showWindowsCaptureOverlay } from "./WindowsCaptureFeedback.ts";
-
 import {
   boundedSnapShotString,
   isWaylandSession,
@@ -91,8 +85,12 @@ import {
   snapShotShortcutRegistrationFailureMessage,
   snapShotShortcutSystemConflict,
 } from "./snapShot.ts";
-import * as HostProcess from "@t3tools/shared/HostProcess";
-import { readImageDimensions } from "@t3tools/shared/imageDimensions";
+import {
+  type AccessibilityProcessPool,
+  makeSnapShotAccessibilityProcessPool,
+} from "./SnapShotAccessibilityProcess.ts";
+import { type SnapShotAnimationDestination, SnapShotTransition } from "./SnapShotTransition.ts";
+import { showWindowsCaptureOverlay } from "./WindowsCaptureFeedback.ts";
 
 const isCaptureSetupRequiredError = Schema.is(CaptureSetupRequiredError);
 

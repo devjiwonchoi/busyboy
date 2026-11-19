@@ -1,5 +1,5 @@
-import type { ReactNode } from "react";
 import { useGT } from "gt-react-native";
+import type { ReactNode } from "react";
 import { Pressable, View } from "react-native";
 
 import { SymbolView } from "../../../components/ui/AppSymbol";

@@ -3,9 +3,9 @@ import { it as effectIt } from "@effect/vitest";
 import * as HostProcess from "@t3tools/shared/HostProcess";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import { HttpClient, HttpClientResponse, UrlParams } from "effect/http";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
-import { HttpClient, HttpClientResponse, UrlParams } from "effect/http";
 import { describe, expect, it } from "vite-plus/test";
 
 import * as ClaudeResetCredits from "./claudeResetCredits.ts";

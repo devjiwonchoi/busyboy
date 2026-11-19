@@ -5,9 +5,10 @@ import {
 import { ApprovalRequestId, EnvironmentId, RuntimeRequestId, ThreadId } from "@t3tools/contracts";
 import { threadContextRecord } from "@t3tools/shared/composerContextReferences";
 import { beforeEach, expect, it, vi } from "vite-plus/test";
+
 import { useComposerDraftStore } from "./composerDraftStore";
-import { formatInlineContextReference } from "./lib/composerContextReferences";
 import { threadContextReference } from "./lib/composerContextRecords";
+import { formatInlineContextReference } from "./lib/composerContextReferences";
 import {
   questionAttachmentDraftId,
   countQuestionAttachments,

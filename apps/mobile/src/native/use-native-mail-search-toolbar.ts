@@ -1,5 +1,5 @@
-import { useNativeLayoutMetrics } from "./native-layout-metrics";
 import { NATIVE_LIQUID_GLASS_SUPPORTED } from "./native-glass";
+import { useNativeLayoutMetrics } from "./native-layout-metrics";
 
 export function useNativeMailSearchToolbar() {
   const metrics = useNativeLayoutMetrics();

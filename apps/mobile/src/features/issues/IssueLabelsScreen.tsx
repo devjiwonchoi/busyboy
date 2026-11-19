@@ -1,5 +1,5 @@
-import { useNavigation, type StaticScreenProps } from "@react-navigation/native";
 import { useAtom } from "@effect/atom-react";
+import { useNavigation, type StaticScreenProps } from "@react-navigation/native";
 import {
   issueLabelsAfterPicks,
   issuePicksAfterFailedWrite,
@@ -12,8 +12,8 @@ import type { IssueLabelCandidate } from "@t3tools/contracts";
 import { msg, useGT } from "gt-react-native";
 import { useEffect, useState } from "react";
 
-import { m } from "../../i18n/messages";
 import * as Dialog from "../../components/ui/Dialog";
+import { m } from "../../i18n/messages";
 import { issueEnvironment, refreshIssueLists } from "../../state/issues";
 import { useEnvironmentQuery } from "../../state/query";
 import { useAtomCommand } from "../../state/use-atom-command";

@@ -1,10 +1,20 @@
+import { RegistryContext, useAtomValue } from "@effect/atom-react";
+import { formatDiffCount } from "@t3tools/client-runtime/diff-count";
+import type {
+  EnvironmentId,
+  OrchestrationMessageContext,
+  ReviewDiffFileStat,
+  ReviewDiffPreviewSource,
+} from "@t3tools/contracts";
+import * as AsyncResult from "effect/reactivity/AsyncResult";
+import * as Atom from "effect/reactivity/Atom";
 import { msg, useLocale, useMessages } from "gt-react-native";
 import { useCallback, useContext, useEffect, useMemo, useState } from "react";
-import { formatDiffCount } from "@t3tools/client-runtime/diff-count";
 
-import { parseReviewInlineComments } from "./reviewCommentSelection";
+import type { MessageResolver } from "../../i18n/messages";
+import { reviewEnvironment } from "../../state/review";
 import { getCachedNativeReviewDiffData } from "./nativeReviewDiffAdapter";
-import { getCachedReviewParsedDiff } from "./reviewState";
+import { parseReviewInlineComments } from "./reviewCommentSelection";
 import {
   applyReviewDiffMetadata,
   buildReviewParsedDiff,
@@ -12,18 +22,7 @@ import {
   type ReviewRenderableFile,
   type ReviewSectionItem,
 } from "./reviewModel";
-
-import type {
-  EnvironmentId,
-  OrchestrationMessageContext,
-  ReviewDiffFileStat,
-  ReviewDiffPreviewSource,
-} from "@t3tools/contracts";
-import { RegistryContext, useAtomValue } from "@effect/atom-react";
-import * as AsyncResult from "effect/reactivity/AsyncResult";
-import * as Atom from "effect/reactivity/Atom";
-import { reviewEnvironment } from "../../state/review";
-import type { MessageResolver } from "../../i18n/messages";
+import { getCachedReviewParsedDiff } from "./reviewState";
 
 const EMPTY_INLINE_REVIEW_COMMENTS = Object.freeze([]);
 type ParsedFilePatch = AsyncResult.AsyncResult<

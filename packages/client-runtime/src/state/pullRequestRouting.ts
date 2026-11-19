@@ -1,5 +1,3 @@
-import { msg } from "gt-i18n";
-import { translatableMessage } from "../errors/translatable.ts";
 import {
   WS_METHODS,
   PullRequestRef,
@@ -9,29 +7,31 @@ import {
   type PullRequestRoutingResult,
   type PullRequestRoutingIdentityResult,
 } from "@t3tools/contracts";
-import * as Effect from "effect/Effect";
 import * as Cause from "effect/Cause";
 import * as Deferred from "effect/Deferred";
+import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as SubscriptionRef from "effect/SubscriptionRef";
+import { msg } from "gt-i18n";
 
-import * as EnvironmentRegistry from "../connection/registry.ts";
-import * as EnvironmentSupervisor from "../connection/supervisor.ts";
+import type { ConnectionCatalogEntry } from "../connection/catalog.ts";
+import * as ConnectionProfileStore from "../connection/profileStore.ts";
 import {
   PullRequestRoutingPermissions,
   pullRequestRoutingConnectionKey,
 } from "../connection/pullRequestRoutingPermissions.ts";
-import type { ConnectionCatalogEntry } from "../connection/catalog.ts";
-import * as ConnectionProfileStore from "../connection/profileStore.ts";
-import type { RpcSession } from "../rpc/session.ts";
+import * as EnvironmentRegistry from "../connection/registry.ts";
+import * as EnvironmentSupervisor from "../connection/supervisor.ts";
+import { translatableMessage } from "../errors/translatable.ts";
 import {
   requestGuarded as request,
   EnvironmentRpcUnavailableError,
   type EnvironmentRpcInput,
   type EnvironmentUnaryRpcTag,
 } from "../rpc/client.ts";
+import type { RpcSession } from "../rpc/session.ts";
 
 const reads = new Set<string>([
   WS_METHODS.pullRequestsSummary,

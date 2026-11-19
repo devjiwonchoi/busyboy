@@ -1,11 +1,4 @@
 import { ProviderDriverKind, type ServerProvider } from "@t3tools/contracts";
-import { compareSemverVersions } from "@t3tools/shared/semver";
-import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
-import * as Schema from "effect/Schema";
-import * as HttpClient from "effect/http/HttpClient";
-import * as HttpClientRequest from "effect/http/HttpClientRequest";
-
 import {
   enrichProviderSnapshotWithVersionAdvisory,
   makeManualOnlyProviderMaintenanceCapabilities,
@@ -16,6 +9,12 @@ import {
 } from "@t3tools/provider-core/server/maintenanceResolver";
 import * as ProviderLatestVersions from "@t3tools/provider-core/server/ProviderLatestVersions";
 import { parseGenericCliVersion } from "@t3tools/provider-core/server/snapshotProbe";
+import { compareSemverVersions } from "@t3tools/shared/semver";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
+import * as Schema from "effect/Schema";
 
 const DRIVER = ProviderDriverKind.make("muse");
 const MUSE_CHANNELS = new Set(["muse-stable", "muse-canary"]);

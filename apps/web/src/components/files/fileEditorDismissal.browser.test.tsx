@@ -3,9 +3,9 @@ import { Editor, type EditorFactory } from "@pierre/diffs/edit";
 import { EditProvider, File } from "@pierre/diffs/react";
 import { describe, expect, it, vi } from "vite-plus/test";
 
-import { render } from "../../../test/render";
-
 import { isMacPlatform } from "~/lib/utils";
+
+import { render } from "../../../test/render";
 import { installFileEditorDismissal } from "./fileEditorDismissal";
 
 describe("installFileEditorDismissal", () => {

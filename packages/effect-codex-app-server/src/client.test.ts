@@ -1,21 +1,20 @@
+import * as NodeServices from "@effect/platform-node/NodeServices";
+import { assert, expect, it } from "@effect/vitest";
 import * as Deferred from "effect/Deferred";
+import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
 import * as Path from "effect/Path";
-import * as Effect from "effect/Effect";
+import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import * as Queue from "effect/Queue";
 import * as Ref from "effect/Ref";
 import * as References from "effect/References";
 import * as Scope from "effect/Scope";
-import { ChildProcess, ChildProcessSpawner } from "effect/process";
 
-import * as NodeServices from "@effect/platform-node/NodeServices";
-import { assert, expect, it } from "@effect/vitest";
-
-import * as CodexClient from "./client.ts";
 import { makeInMemoryStdio } from "./_internal/stdio.ts";
+import * as CodexClient from "./client.ts";
 import * as CodexError from "./errors.ts";
 
 const mockPeerPath = Effect.map(Effect.service(Path.Path), (path) =>

@@ -11,10 +11,10 @@ import * as ServerConfig from "../config.ts";
 import * as GitWorkflowService from "../git/GitWorkflowService.ts";
 import { scratchFolderRoot } from "../project/ManagedProjectFolders.ts";
 import * as ProjectService from "../project/ProjectService.ts";
+import { TerminalCwdRecovery } from "../terminal/Manager.ts";
 import { makeIsManagedWorktreePath } from "../worktreesDirectory.ts";
 import { isWithinRoot } from "./KnownWorkspaces.ts";
 import { withWorkspaceLease } from "./workspaceLease.ts";
-import { TerminalCwdRecovery } from "../terminal/Manager.ts";
 
 export class WorktreeRecreateError extends Schema.TaggedError<WorktreeRecreateError>()(
   "WorktreeRecreateError",

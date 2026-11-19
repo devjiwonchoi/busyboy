@@ -1,3 +1,4 @@
+import { useAtomValue } from "@effect/atom-react";
 import type {
   DeviceServiceState,
   EnvironmentId,
@@ -6,12 +7,13 @@ import type {
   ScopedThreadRef,
   ThreadId,
 } from "@t3tools/contracts";
-import { useAtomValue } from "@effect/atom-react";
-import { T, Var } from "gt-react";
 import { Atom } from "effect/reactivity";
+import { T, Var } from "gt-react";
 
-import { appAtomRegistry } from "~/rpc/atomRegistry";
 import { useRightPanelStore } from "~/rightPanelStore";
+import { appAtomRegistry } from "~/rpc/atomRegistry";
+
+import { findRevertCheckpoint } from "../../session-logic";
 import { DeviceSetup } from "../device/DeviceSetup";
 import { PullRequestThreadDialog } from "../PullRequestThreadDialog";
 import {
@@ -26,7 +28,6 @@ import {
 import { Button } from "../ui/button";
 import { Dialog } from "../ui/dialog";
 import { WizardPopup } from "../ui/wizard";
-import { findRevertCheckpoint } from "../../session-logic";
 import { registerThreadOverlay } from "./threadOverlayRetention";
 
 /**

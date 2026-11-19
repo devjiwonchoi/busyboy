@@ -1,10 +1,10 @@
 import { useAtomValue } from "@effect/atom-react";
+import type { ComposerEnvironmentCandidate } from "@t3tools/client-runtime/composerThreadItems";
 import {
   connectionCatalogDisplayUrl,
   hasRelayRoute,
   type EnvironmentPresentation as BaseEnvironmentPresentation,
 } from "@t3tools/client-runtime/connection";
-import type { ComposerEnvironmentCandidate } from "@t3tools/client-runtime/composerThreadItems";
 import { type EnvironmentId, resolveEnvironmentMachineKind } from "@t3tools/contracts";
 
 import { environmentCatalog } from "../connection/catalog";

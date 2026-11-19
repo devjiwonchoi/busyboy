@@ -1,4 +1,3 @@
-import { scopedProjectKey, scopeProjectRef } from "../environment/scoped.ts";
 import {
   repositoryGroupingDisplayNameOf,
   repositoryGroupingKeyOf,
@@ -7,11 +6,12 @@ import {
   type SidebarProjectGroupingMode,
 } from "@t3tools/contracts";
 import type { ClientSettings } from "@t3tools/contracts/settings";
-
-import type { EnvironmentProject } from "./models.ts";
-import { normalizeProjectPathForComparison } from "./projects.ts";
 import { mFallback, msg } from "gt-i18n";
 import type { MFunctionType } from "gt-i18n/types";
+
+import { scopedProjectKey, scopeProjectRef } from "../environment/scoped.ts";
+import type { EnvironmentProject } from "./models.ts";
+import { normalizeProjectPathForComparison } from "./projects.ts";
 
 const SCRATCH_PROJECT_SCOPE_KEY = "\0no-project";
 

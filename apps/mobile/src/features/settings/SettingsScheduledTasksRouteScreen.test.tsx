@@ -134,11 +134,11 @@ vi.mock("../../state/query", () => ({
 vi.mock("../../state/use-atom-command", () => ({ useAtomCommand: () => mocks.upsert }));
 
 import { appAtomRegistry } from "../../state/atom-registry";
-import { editDraft } from "./scheduledTaskDraft";
 import {
   scheduledTaskEditorSessionAtom,
   startScheduledTaskEditor,
 } from "./scheduled-task-editor-state";
+import { editDraft } from "./scheduledTaskDraft";
 import { SettingsScheduledTaskEditRouteScreen } from "./SettingsScheduledTasksRouteScreen";
 
 let root: Root;

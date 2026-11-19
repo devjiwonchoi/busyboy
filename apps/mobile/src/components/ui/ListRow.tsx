@@ -1,6 +1,6 @@
 import { Platform, View } from "react-native";
-
 import { useResolveClassNames } from "uniwind";
+
 import { SymbolView } from "./AppSymbol";
 import { ListRowLayout, type ListRowContentProps } from "./ListRowLayout";
 import { RadioIndicator } from "./RadioIndicator";

@@ -1,25 +1,3 @@
-import * as Arr from "effect/Array";
-import * as Cache from "effect/Cache";
-import * as Clock from "effect/Clock";
-import * as Config from "effect/Config";
-import * as Context from "effect/Context";
-import * as SecureRandom from "effect/crypto/SecureRandom";
-import * as ByteSize from "effect/ByteSize";
-import * as DateTime from "effect/DateTime";
-import * as Duration from "effect/Duration";
-import * as Effect from "effect/Effect";
-import * as Exit from "effect/Exit";
-import * as FileSystem from "effect/FileSystem";
-import * as Layer from "effect/Layer";
-import * as Option from "effect/Option";
-import * as Order from "effect/Order";
-import * as Path from "effect/Path";
-import * as PubSub from "effect/PubSub";
-import * as Ref from "effect/Ref";
-import * as Schema from "effect/Schema";
-import * as Scope from "effect/Scope";
-import * as Semaphore from "effect/Semaphore";
-import * as Stream from "effect/Stream";
 import {
   GitActionProgressEvent,
   GitActionProgressPhase,
@@ -45,55 +23,77 @@ import {
   type VcsCreateWorktreeInput,
   type VcsCreateWorktreeResult,
 } from "@t3tools/contracts";
+import { GitManagerError, GitPullRequestMaterializationError } from "@t3tools/contracts";
+import type { GitManagerServiceError } from "@t3tools/contracts";
+import type { ChangeRequest } from "@t3tools/contracts";
 import {
-  hasProjectSettingsOverrides,
-  resolveProjectSettings,
-} from "@t3tools/shared/projectSettings";
+  historicalMessage,
+  renderHistory,
+  selectHistory,
+} from "@t3tools/provider-core/server/handoffBudget";
 import {
   mergeGitStatusParts,
   resolveAutoFeatureBranchName,
   sanitizeBranchFragment,
   sanitizeFeatureBranchName,
 } from "@t3tools/shared/git";
+import {
+  hasProjectSettingsOverrides,
+  resolveProjectSettings,
+} from "@t3tools/shared/projectSettings";
 import { isSshRemoteUrl } from "@t3tools/shared/sourceControl";
+import * as SourceControlProvider from "@t3tools/source-control-core/server/SourceControlProvider";
+import * as SourceControlRateLimit from "@t3tools/source-control-core/server/SourceControlRateLimit";
 import {
   type ChangeRequestTerminology,
   UNKNOWN_SOURCE_CONTROL_CLIENT,
 } from "@t3tools/source-control-core/shared/definition";
+import * as Arr from "effect/Array";
+import * as ByteSize from "effect/ByteSize";
+import * as Cache from "effect/Cache";
+import * as Clock from "effect/Clock";
+import * as Config from "effect/Config";
+import * as Context from "effect/Context";
+import * as SecureRandom from "effect/crypto/SecureRandom";
+import * as DateTime from "effect/DateTime";
+import * as Duration from "effect/Duration";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as FileSystem from "effect/FileSystem";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as Order from "effect/Order";
+import * as Path from "effect/Path";
+import * as PubSub from "effect/PubSub";
+import * as Ref from "effect/Ref";
+import * as Schema from "effect/Schema";
+import * as Scope from "effect/Scope";
+import * as Semaphore from "effect/Semaphore";
+import * as Stream from "effect/Stream";
+
+import * as ProjectionStore from "../orchestration-v2/ProjectionStore.ts";
+import * as ProjectStore from "../orchestration-v2/ProjectStore.ts";
+import * as ProjectSetupScriptRunner from "../project/ProjectSetupScriptRunner.ts";
+import * as ProviderRegistry from "../provider/ProviderRegistry.ts";
+import * as PullRequestService from "../pullRequest/PullRequestService.ts";
+import * as ServerSettings from "../serverSettings.ts";
+import { sourceControlDefinitions } from "../sourceControl/sourceControlDefinitions.ts";
+import * as SourceControlProviderRegistry from "../sourceControl/SourceControlProviderRegistry.ts";
 import {
   normalizeThreadPullRequestKey,
   threadPullRequestKeyOf,
 } from "../sourceControl/threadPullRequests.ts";
-import { sourceControlDefinitions } from "../sourceControl/sourceControlDefinitions.ts";
-
-import { GitManagerError, GitPullRequestMaterializationError } from "@t3tools/contracts";
-import {
-  historicalMessage,
-  renderHistory,
-  selectHistory,
-} from "@t3tools/provider-core/server/handoffBudget";
 import * as TextGeneration from "../textGeneration/TextGeneration.ts";
 import {
   conventionalCommitsTextGenerationPolicy,
   customTextGenerationPolicy,
   repositoryConventionsTextGenerationPolicy,
 } from "../textGeneration/TextGenerationPresets.ts";
-import * as ProjectionStore from "../orchestration-v2/ProjectionStore.ts";
-import * as ProjectStore from "../orchestration-v2/ProjectStore.ts";
-import * as ProjectSetupScriptRunner from "../project/ProjectSetupScriptRunner.ts";
-import * as PullRequestService from "../pullRequest/PullRequestService.ts";
-import { createdPullRequestKey } from "./linkCreatedPullRequest.ts";
-import * as ProviderRegistry from "../provider/ProviderRegistry.ts";
-import { extractBranchNameFromRemoteRef } from "./remoteRefs.ts";
-import { detachStackFrame } from "./detachStackFrame.ts";
-import * as ServerSettings from "../serverSettings.ts";
-import type { GitManagerServiceError } from "@t3tools/contracts";
 import * as GitVcsDriver from "../vcs/GitVcsDriver.ts";
 import { isNonRepositoryGitStderr } from "../vcs/GitVcsDriverCore.ts";
-import * as SourceControlProvider from "@t3tools/source-control-core/server/SourceControlProvider";
-import * as SourceControlRateLimit from "@t3tools/source-control-core/server/SourceControlRateLimit";
-import * as SourceControlProviderRegistry from "../sourceControl/SourceControlProviderRegistry.ts";
-import type { ChangeRequest } from "@t3tools/contracts";
+import { detachStackFrame } from "./detachStackFrame.ts";
+import { createdPullRequestKey } from "./linkCreatedPullRequest.ts";
+import { extractBranchNameFromRemoteRef } from "./remoteRefs.ts";
 
 export interface GitActionProgressReporter {
   readonly publish: (event: GitActionProgressEvent) => Effect.Effect<void, never>;

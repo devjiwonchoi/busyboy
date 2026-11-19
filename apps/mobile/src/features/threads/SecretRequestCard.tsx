@@ -1,3 +1,4 @@
+import { useAtomValue } from "@effect/atom-react";
 import {
   SECRET_REQUEST_DEFAULT_PLACEHOLDER,
   secretRequestAnswerInput,
@@ -19,19 +20,18 @@ import type {
   OrchestrationV2ProjectedTurnItem,
   SecretProviderId,
 } from "@t3tools/contracts";
-import { useAtomValue } from "@effect/atom-react";
 import { useGT, useMessages } from "gt-react-native";
 import { useRef, useState } from "react";
 import { View, type ColorValue } from "react-native";
 
 import { SymbolView, type AppSymbolName } from "../../components/ui/AppSymbol";
 import { AppText as Text, AppTextInput as TextInput } from "../../components/ui/AppText";
-import { SecretTextInput } from "../../components/ui/SecretTextInput";
-import { serverEnvironment } from "../../state/server";
-import { useAtomCommand } from "../../state/use-atom-command";
-import { tryOpenExternalUrl } from "../../lib/openExternalUrl";
 import { Button } from "../../components/ui/Button";
 import { Chip } from "../../components/ui/Chip";
+import { SecretTextInput } from "../../components/ui/SecretTextInput";
+import { tryOpenExternalUrl } from "../../lib/openExternalUrl";
+import { serverEnvironment } from "../../state/server";
+import { useAtomCommand } from "../../state/use-atom-command";
 
 const LOCK_SYMBOL: AppSymbolName = { ios: "lock", android: "lock" };
 const PRIVATE_SYMBOL: AppSymbolName = { ios: "checkmark.shield", android: "lock" };

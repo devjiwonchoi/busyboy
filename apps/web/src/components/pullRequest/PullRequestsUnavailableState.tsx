@@ -1,6 +1,7 @@
-import { RefreshIcon } from "~/components/ui/refresh-icon";
 import { T, useGT } from "gt-react";
 import { ExternalLinkIcon } from "lucide-react";
+
+import { RefreshIcon } from "~/components/ui/refresh-icon";
 
 import { Button } from "../ui/button";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "../ui/empty";

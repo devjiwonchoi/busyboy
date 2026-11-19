@@ -11,8 +11,8 @@ import type {
   ProjectId,
 } from "@t3tools/contracts";
 
-import { mergeIssueListPage } from "./state/issues.ts";
 import { sourceControlClients } from "./sourceControlClients.ts";
+import { mergeIssueListPage } from "./state/issues.ts";
 import type { EnvironmentProject } from "./state/shell.ts";
 
 export interface EnvironmentIssueEntry extends IssueListEntry {

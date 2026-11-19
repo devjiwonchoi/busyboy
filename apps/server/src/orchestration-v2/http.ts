@@ -4,10 +4,10 @@ import {
   type OrchestrationProjectShell,
 } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
-import * as Result from "effect/Result";
-import * as Predicate from "effect/Predicate";
-import * as Schema from "effect/Schema";
 import * as HttpApiBuilder from "effect/http-api/HttpApiBuilder";
+import * as Predicate from "effect/Predicate";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
 import * as SqlClient from "effect/sql/SqlClient";
 
 import {
@@ -17,10 +17,16 @@ import {
   failEnvironmentNotFound,
   requireEnvironmentScope,
 } from "../auth/http.ts";
-import * as ServerEnvironment from "../environment/ServerEnvironment.ts";
 import { traceLocalHandlerWork } from "../cloud/traceRelayRequest.ts";
+import * as ServerEnvironment from "../environment/ServerEnvironment.ts";
 import * as OrchestrationEventStore from "../persistence/OrchestrationEventStore.ts";
 import * as ProjectEnrichmentService from "../project/ProjectEnrichmentService.ts";
+import * as ProjectStore from "./ProjectStore.ts";
+import {
+  loadShellUnlessResumable,
+  loadSubscriberShellSnapshot,
+  projectIdentitiesDigest,
+} from "./ShellStream.ts";
 import {
   buildBoundedThreadProjection,
   decodeThreadHistoryCursor,
@@ -30,12 +36,6 @@ import {
   OLDER_THREAD_USER_TURN_LIMIT,
 } from "./threadHistoryPaging.ts";
 import * as ThreadManagementService from "./ThreadManagementService.ts";
-import * as ProjectStore from "./ProjectStore.ts";
-import {
-  loadShellUnlessResumable,
-  loadSubscriberShellSnapshot,
-  projectIdentitiesDigest,
-} from "./ShellStream.ts";
 import { boundedSnapshotResponseFields } from "./ThreadStream.ts";
 import { projectThreadProjectionForWire } from "./WireProjection.ts";
 

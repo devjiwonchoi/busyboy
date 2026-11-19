@@ -1,9 +1,8 @@
-import { describe, expect, it } from "vite-plus/test";
 import { upgradeLegacyContextMessage } from "@t3tools/shared/composerContextLegacy";
 import { formatComposerContextReference } from "@t3tools/shared/composerContextReferences";
+import { describe, expect, it } from "vite-plus/test";
 
 import { pullRequestComposerContext } from "../../lib/composerContext";
-
 import {
   clearReviewCommentTarget,
   completeReviewCommentRange,

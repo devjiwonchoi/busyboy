@@ -1,4 +1,7 @@
 // @effect-diagnostics nodeBuiltinImport:off -- the fake `op` reads the template the driver wrote.
+
+import * as NodeFS from "node:fs";
+
 import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import * as NodeFileSystem from "@effect/platform-node/NodeFileSystem";
 import { assert, describe, it } from "@effect/vitest";
@@ -9,11 +12,10 @@ import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
+import { ChildProcessSpawner } from "effect/process";
 import * as Sink from "effect/Sink";
 import * as Stream from "effect/Stream";
 import * as TestClock from "effect/testing/TestClock";
-import { ChildProcessSpawner } from "effect/process";
-import * as NodeFS from "node:fs";
 
 import { OnePasswordAccount } from "../shared/definition.ts";
 import { driver } from "./driver.ts";

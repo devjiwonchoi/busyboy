@@ -1,10 +1,11 @@
-import { isDuoDevice } from "../../../lib/device-type";
 import { Platform } from "react-native";
+
+import { isDuoDevice } from "../../../lib/device-type";
 import { NATIVE_LIQUID_GLASS_SUPPORTED } from "../../../native/native-glass";
-import { useAdaptiveWorkspaceLayout } from "../adaptive-workspace-context";
 import { useDeviceType, useNativeLayoutMetrics } from "../../../native/native-layout-metrics";
-import { useWorkspaceTabs } from "./WorkspaceTabsContext";
+import { useAdaptiveWorkspaceLayout } from "../adaptive-workspace-context";
 import { workspaceUsesColumns } from "./workspace-tabs-state";
+import { useWorkspaceTabs } from "./WorkspaceTabsContext";
 
 function useWorkspacePage() {
   const workspace = useWorkspaceTabs();

@@ -1,38 +1,38 @@
 import { useAtomValue } from "@effect/atom-react";
 import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
-import { ThreadDetailsControl } from "./ThreadDetailsControl";
-import { useNavigate } from "@tanstack/react-router";
-import { T, useGT, useMessages, Var } from "gt-react";
-import type { MessageResolver } from "~/i18n/messages";
-import { CalendarClockIcon, PencilIcon, PlayIcon, Settings2Icon } from "lucide-react";
-import { useState } from "react";
+import {
+  isAtomCommandInterrupted,
+  squashAtomCommandFailure,
+} from "@t3tools/client-runtime/state/runtime";
 import {
   AuthOrchestrationOperateScope,
   type EnvironmentId,
   type ScheduledTask,
   type ThreadId,
 } from "@t3tools/contracts";
-import {
-  isAtomCommandInterrupted,
-  squashAtomCommandFailure,
-} from "@t3tools/client-runtime/state/runtime";
+import { useNavigate } from "@tanstack/react-router";
+import { T, useGT, useMessages, Var } from "gt-react";
+import { CalendarClockIcon, PencilIcon, PlayIcon, Settings2Icon } from "lucide-react";
+import { useState } from "react";
 
-import { ThreadDetailsSection } from "./ThreadDetailsSection";
+import type { MessageResolver } from "~/i18n/messages";
+
 import { cn } from "../../lib/utils";
-import { ScheduledRelativeLabel } from "../settings/ScheduledTasksSettings";
-import { scheduleLabel } from "../settings/scheduledTasksSettings.logic";
 import { useEnvironmentQuery } from "../../state/query";
 import { serverEnvironment } from "../../state/server";
-import { useAtomCommand } from "../../state/use-atom-command";
-
 import { readEnvironmentScope } from "../../state/session";
+import { useAtomCommand } from "../../state/use-atom-command";
+import { ScheduledRelativeLabel } from "../settings/ScheduledTasksSettings";
+import { scheduleLabel } from "../settings/scheduledTasksSettings.logic";
 import { Switch } from "../ui/switch";
 import { stackedThreadToast, toastManager } from "../ui/toast";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
+import { ThreadDetailsControl } from "./ThreadDetailsControl";
 import {
   THREAD_DETAILS_PANEL_ICON_CLASS,
   THREAD_DETAILS_PANEL_ROW_CONTENT_CLASS,
 } from "./threadDetailsPanelStyles";
+import { ThreadDetailsSection } from "./ThreadDetailsSection";
 
 const STATUS_DOT_CLASS: Record<ScheduledTask["lastRunStatus"], string> = {
   never: "bg-muted-foreground/40",

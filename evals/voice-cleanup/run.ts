@@ -1,4 +1,5 @@
 import * as NodeUtil from "node:util";
+
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import {
   CodexSettings,
@@ -11,6 +12,7 @@ import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as Random from "effect/Random";
 import * as Schema from "effect/Schema";
+
 import * as ServerConfig from "../../apps/server/src/config.ts";
 import { makeCodexTextGeneration } from "../../apps/server/src/textGeneration/CodexTextGeneration.ts";
 import { buildTranscriptionPostProcessingPrompt } from "../../apps/server/src/textGeneration/TranscriptionPostProcessing.ts";

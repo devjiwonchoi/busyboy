@@ -1,4 +1,6 @@
 import type { ThreadStructure } from "@t3tools/client-runtime/state/shell";
+import { workspacePreparationRetryRunIds } from "@t3tools/client-runtime/state/turn-item-presentation";
+import { worktreeSetupAgentStarted } from "@t3tools/client-runtime/worktree-setup";
 import type {
   EnvironmentId,
   RunId,
@@ -6,18 +8,17 @@ import type {
   ThreadId,
   WorktreeSetupSnapshot,
 } from "@t3tools/contracts";
-import { workspacePreparationRetryRunIds } from "@t3tools/client-runtime/state/turn-item-presentation";
 import { useState } from "react";
+
 import { useStableCallback } from "../../hooks/useStableCallback";
+import { focusTerminal } from "../../lib/terminalFocus";
 import { useEnvironmentQuery } from "../../state/query";
 import { threadEnvironment } from "../../state/threads";
 import { useAtomCommand } from "../../state/use-atom-command";
 import { vcsEnvironment } from "../../state/vcs";
 import { useTerminalUiStateStore } from "../../terminalUiStateStore";
 import type { Thread } from "../../types";
-import { focusTerminal } from "../../lib/terminalFocus";
 import { resolveVisibleWorktreeSetup, resolveWorktreeSetupProgress } from "../ChatView.logic";
-import { worktreeSetupAgentStarted } from "@t3tools/client-runtime/worktree-setup";
 
 // Share in-flight preparation retries across ChatView instances.
 const retryingWorkspacePreparationRunIds = new Set<RunId>();

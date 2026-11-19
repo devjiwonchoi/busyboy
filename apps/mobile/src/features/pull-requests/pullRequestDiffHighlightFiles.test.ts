@@ -1,18 +1,17 @@
-import { highlightCode } from "../../lib/highlights";
-
+import { sourceControlClients } from "@t3tools/client-runtime/source-control-clients";
 import { EnvironmentId, ProjectId } from "@t3tools/contracts";
-import { expect, it, vi } from "vite-plus/test";
 import { AsyncResult } from "effect/reactivity";
+import { expect, it, vi } from "vite-plus/test";
 
+import { highlightCode } from "../../lib/highlights";
 import { highlightNativeReviewDiffVisibleRows } from "../diffs/nativeReviewDiffHighlighter";
 import type { NativeReviewDiffFile } from "../diffs/nativeReviewDiffTypes";
 import type { ReviewParsedDiff, ReviewRenderableFile } from "../review/reviewModel";
-import { combinePullRequestDiffPages } from "./pullRequestDiffPages";
-import { sourceControlClients } from "@t3tools/client-runtime/source-control-clients";
 import {
   createPullRequestDiffHighlightCache,
   createPullRequestDiffHighlightFiles,
 } from "./pullRequestDiffHighlightFiles";
+import { combinePullRequestDiffPages } from "./pullRequestDiffPages";
 
 vi.mock("react-native-nitro-modules", async () => {
   const { createWasmHighlightsModule } = await import("../../lib/highlights.testing");

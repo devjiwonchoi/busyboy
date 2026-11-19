@@ -1,6 +1,7 @@
-import { msg } from "gt-i18n";
-import { translatableError } from "./errors/translatable.ts";
 import { decodeFilePreviewText, FILE_TEXT_PREVIEW_MAX_BYTES } from "@t3tools/shared/filePreview";
+import { msg } from "gt-i18n";
+
+import { translatableError } from "./errors/translatable.ts";
 
 /** Consume only a bounded prefix, even when a host ignores the requested HTTP range. */
 export async function readFilePreviewResponse(

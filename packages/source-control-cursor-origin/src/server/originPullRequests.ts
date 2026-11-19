@@ -1,11 +1,3 @@
-/**
- * Origin's REST shapes, read leniently: the API is in beta and int64 fields arrive as strings.
- *
- * @module source-control-cursor-origin/server/originPullRequests
- */
-import * as DateTime from "effect/DateTime";
-import * as Option from "effect/Option";
-import * as Schema from "effect/Schema";
 import type {
   ChangeRequest,
   PullRequestActor,
@@ -17,6 +9,15 @@ import type {
 } from "@t3tools/contracts";
 import { SourceControlProviderKind } from "@t3tools/contracts";
 import { quoteGitPatchPath } from "@t3tools/shared/gitPatchPath";
+/**
+ * Origin's REST shapes, read leniently: the API is in beta and int64 fields arrive as strings.
+ *
+ * @module source-control-cursor-origin/server/originPullRequests
+ */
+import * as DateTime from "effect/DateTime";
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
+
 import { parseChangeRequestUrl } from "../shared/definition.ts";
 
 const Int64 = Schema.Union([Schema.Number, Schema.NumberFromString]);

@@ -4,15 +4,15 @@
  * without a credential. eas-cli generates its own client from the same
  * endpoint. Run `vp run generate` afterwards to regenerate the operations.
  */
-import { pipe } from "effect/Function";
 import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import { pipe } from "effect/Function";
+import { FetchHttpClient, HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
-import { FetchHttpClient, HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http";
 import {
   buildClientSchema,
   getIntrospectionQuery,

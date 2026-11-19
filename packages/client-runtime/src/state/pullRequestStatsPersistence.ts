@@ -7,6 +7,7 @@ import {
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
+
 import { persistQuery, type QueryPersistence } from "./queryPersistence.ts";
 
 const requestKey = Schema.fromJsonString(Schema.Tuple([Schema.String, PullRequestListStatsInput]));

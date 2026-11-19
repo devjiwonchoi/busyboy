@@ -3,6 +3,7 @@ import { type AtomCommandSuccess, runAtomCommand } from "@t3tools/client-runtime
 import { sentMessageFromToolItem } from "@t3tools/shared/toolOutput";
 import { Atom, type AtomRegistry } from "effect/reactivity";
 import { msg } from "gt-react";
+
 import { m } from "../../i18n/messages";
 import type { TimelineEntry } from "../../session-logic";
 import { environmentThreadDetails, threadEnvironment } from "../../state/threads";

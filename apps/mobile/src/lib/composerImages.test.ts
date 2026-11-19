@@ -1,8 +1,9 @@
-import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import {
   PROVIDER_SEND_TURN_MAX_ATTACHMENTS,
   PROVIDER_SEND_TURN_MAX_IMAGE_BYTES,
 } from "@t3tools/contracts";
+import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
+
 import type { ComposerAttachmentUploadState } from "./composerAttachmentUploadQueue";
 
 const files = new Map<

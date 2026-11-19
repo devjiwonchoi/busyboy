@@ -1,8 +1,8 @@
 /// <reference lib="dom" />
 // Holds pasted-image compression open in the page, so a scenario can act while an image is
 // still preparing, then tells it when every image decode, encode and read has settled.
-import { expect } from "e2e";
 import type { Browser } from "@e2e-dev/web";
+import { expect } from "e2e";
 
 interface CompressionHold {
   readonly release: () => void;

@@ -2,9 +2,10 @@ import { ProgressView } from "@expo/ui/swift-ui";
 import { progressViewStyle, tint } from "@expo/ui/swift-ui/modifiers";
 import { View } from "react-native";
 import { useReducedMotion } from "react-native-reanimated";
+
 import { NativeThemeHost } from "./NativeThemeHost";
-import { useControlTheme } from "./useControlTheme";
 import { clampProgress, type ProgressProps } from "./Progress.types";
+import { useControlTheme } from "./useControlTheme";
 
 export function Progress(props: ProgressProps) {
   const value = clampProgress(props.value);

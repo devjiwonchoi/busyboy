@@ -1,34 +1,37 @@
-import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
-import { m } from "~/i18n/messages";
-import { RefreshIcon } from "~/components/ui/refresh-icon";
 import type {
   ContextMenuItem as TreeContextMenuItem,
   ContextMenuOpenContext as TreeContextMenuOpenContext,
 } from "@pierre/trees";
-import type { EnvironmentId, ProjectEntry } from "@t3tools/contracts";
 import { FileTree, useFileTree, useFileTreeSearch, useFileTreeSelector } from "@pierre/trees/react";
+import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
 import { settlePromise } from "@t3tools/client-runtime/state/runtime";
+import type { EnvironmentId, ProjectEntry } from "@t3tools/contracts";
 import { serializeComposerFileLink } from "@t3tools/shared/composerTrigger";
-import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as Cause from "effect/Cause";
+import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { T, useGT, useMessages } from "gt-react";
 import { ChevronsDownUpIcon, ChevronsUpDownIcon } from "lucide-react";
 import { type Ref, useEffect, useEffectEvent, useRef, useState } from "react";
 
 import { Button } from "~/components/ui/button";
 import { InputGroup, InputGroupInput } from "~/components/ui/input-group";
+import { RefreshIcon } from "~/components/ui/refresh-icon";
 import { toastManager } from "~/components/ui/toast";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { useComposerHandleContext } from "~/composerHandleContext";
+import { useFileContextMenu, type FileContextMenuAction } from "~/fileContextMenu";
 import { writeTextToClipboard } from "~/hooks/useCopyToClipboard";
 import { useStableCallback } from "~/hooks/useStableCallback";
 import { useTheme } from "~/hooks/useTheme";
 import { useWorkspaceMutationRefresh } from "~/hooks/useWorkspaceMutationRefresh";
-import { useFileContextMenu, type FileContextMenuAction } from "~/fileContextMenu";
+import { m } from "~/i18n/messages";
+import { isMacPlatform } from "~/lib/utils";
 import { readLocalApi } from "~/localApi";
 import { T3_PIERRE_ICONS } from "~/pierre-icons";
 import { PIERRE_TREE_UNSAFE_CSS, pierreTreeStyle } from "~/pierre-tree-theme";
+import { useProjectPathSearch } from "~/state/queries";
 
+import { type PreviewAction, subscribePreviewAction } from "../preview/previewActionBus";
 import { joinHostPath } from "./filePath";
 import { createFileTreeDragMentionController } from "./fileTreeDragMention";
 import {
@@ -41,9 +44,6 @@ import {
 import { buildFileTreePathUpdates, shouldRebuildFileTree } from "./fileTreePathReconciliation";
 import { loadFileAncestors } from "./loadFileAncestors";
 import { useDirectoryEntries } from "./useDirectoryEntries";
-import { useProjectPathSearch } from "~/state/queries";
-import { isMacPlatform } from "~/lib/utils";
-import { type PreviewAction, subscribePreviewAction } from "../preview/previewActionBus";
 
 interface FileBrowserPanelProps {
   environmentId: EnvironmentId;

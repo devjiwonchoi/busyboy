@@ -1,14 +1,4 @@
-import { msg } from "gt-react-native";
-
-import { m } from "../../i18n/messages";
-import {
-  AuthOrchestrationOperateScope,
-  type CloudSpeechModelId,
-  type CloudSpeechProvider,
-  type EnvironmentId,
-  DEFAULT_SPEECH_TRANSCRIPTION_OPTIONS,
-  type VoiceTranscriptionDestination,
-} from "@t3tools/contracts";
+import type { PreparedConnection } from "@t3tools/client-runtime/connection";
 import {
   getEnvironmentSpeechModels,
   getCloudSpeechKeys,
@@ -19,20 +9,29 @@ import {
   transcribeEnvironmentPcm,
   VoiceTranscriptionError,
 } from "@t3tools/client-runtime/voice-input";
-import { FetchHttpClient, type HttpClient } from "effect/http";
-import type { PreparedConnection } from "@t3tools/client-runtime/connection";
+import {
+  AuthOrchestrationOperateScope,
+  type CloudSpeechModelId,
+  type CloudSpeechProvider,
+  type EnvironmentId,
+  DEFAULT_SPEECH_TRANSCRIPTION_OPTIONS,
+  type VoiceTranscriptionDestination,
+} from "@t3tools/contracts";
 import { effectiveSpeechLanguage } from "@t3tools/shared/speech";
 import * as Effect from "effect/Effect";
+import { FetchHttpClient, type HttpClient } from "effect/http";
 import * as Option from "effect/Option";
 import { Atom, AsyncResult, AtomRegistry } from "effect/reactivity";
 import { requireOptionalNativeModule } from "expo";
 import { fetch as expoFetch } from "expo/fetch";
+import { msg } from "gt-react-native";
 
+import { connectionAtomRuntime } from "../../connection/runtime";
+import { m } from "../../i18n/messages";
+import { uuidv4 } from "../../lib/uuid";
 import { appAtomRegistry } from "../../state/atom-registry";
 import { environmentPresentations } from "../../state/presentation";
 import { environmentSession, sessionHasScope } from "../../state/session";
-import { connectionAtomRuntime } from "../../connection/runtime";
-import { uuidv4 } from "../../lib/uuid";
 import { createEnvironmentTranscriber } from "./environmentTranscriber";
 import { readVoiceGrant, writeVoiceGrant, type VoiceGrant } from "./voiceGrantStorage";
 

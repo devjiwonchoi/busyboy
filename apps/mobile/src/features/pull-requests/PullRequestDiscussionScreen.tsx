@@ -1,41 +1,42 @@
+import { useAtomRefresh } from "@effect/atom-react";
+import { useFocusEffect, useNavigation, type StaticScreenProps } from "@react-navigation/native";
 import { errorDisplayMessage } from "@t3tools/client-runtime/errors";
+import {
+  type AtomCommandResult,
+  squashAtomCommandFailure,
+} from "@t3tools/client-runtime/state/runtime";
+import { pullRequestConversationThreads, type PullRequestThreadComment } from "@t3tools/contracts";
 import {
   parsePullRequestAnchor,
   pullRequestAnchorMatchesUrl,
   resolvePullRequestReviewAnchor,
 } from "@t3tools/shared/pullRequestAnchor";
-import { AppActivityIndicator } from "../../components/ui/AppActivityIndicator";
-import { useAtomRefresh } from "@effect/atom-react";
-import { useFocusEffect, useNavigation, type StaticScreenProps } from "@react-navigation/native";
-import {
-  type AtomCommandResult,
-  squashAtomCommandFailure,
-} from "@t3tools/client-runtime/state/runtime";
 import { AsyncResult } from "effect/reactivity";
-import { pullRequestConversationThreads, type PullRequestThreadComment } from "@t3tools/contracts";
 import { T, useGT, useMessages } from "gt-react-native";
 import { useRef, useState } from "react";
 import { ScrollView, View, type ScrollViewInstance } from "react-native";
 import { KeyboardAvoidingView, useKeyboardState } from "react-native-keyboard-controller";
-import { NativeScrollViewMarker as ScrollViewMarker } from "../../native/NativeScrollViewMarker";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { AppText as Text, AppTextInput as TextInput } from "../../components/ui/AppText";
+
+import { AppActivityIndicator } from "../../components/ui/AppActivityIndicator";
 import { AppBar } from "../../components/ui/AppBar";
+import { AppText as Text, AppTextInput as TextInput } from "../../components/ui/AppText";
 import { Button } from "../../components/ui/Button";
 import { GlassSurface } from "../../components/ui/GlassSurface";
+import { m } from "../../i18n/messages";
 import { compareTimestamps, relativeTime } from "../../lib/time";
+import { NativeScrollViewMarker as ScrollViewMarker } from "../../native/NativeScrollViewMarker";
 import { composerPullRequests } from "../../state/pull-requests";
-import { useAtomCommand } from "../../state/use-atom-command";
 import { useEnvironmentQuery } from "../../state/query";
+import { useAtomCommand } from "../../state/use-atom-command";
+import { PullRequestCompletionSuggestions } from "./PullRequestCompletionSuggestions";
 import { PullRequestMarkdown, PullRequestMarkdownRepository } from "./PullRequestMarkdown";
 import { PullRequestAvatar } from "./PullRequestPresentation";
 import { PullRequestCommentFooter } from "./PullRequestReactions";
+import { pullRequestReviewKey } from "./pullRequestReviewDrafts";
+import { usePullRequestCompletions } from "./usePullRequestCompletions";
 import { pullRequestTarget, type PullRequestParams } from "./usePullRequestDiff";
 import { usePullRequestPermissions } from "./usePullRequestPermissions";
-import { pullRequestReviewKey } from "./pullRequestReviewDrafts";
-import { PullRequestCompletionSuggestions } from "./PullRequestCompletionSuggestions";
-import { usePullRequestCompletions } from "./usePullRequestCompletions";
-import { m } from "../../i18n/messages";
 
 export function PullRequestDiscussionScreen({
   route,

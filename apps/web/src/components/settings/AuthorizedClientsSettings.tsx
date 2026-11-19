@@ -1,10 +1,9 @@
-import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
-import { m as resolveMessage } from "~/i18n/messages";
 import { managedCapabilityDenial } from "@t3tools/client-runtime/contract-labels";
-import { AUTH_SCOPE_OPTIONS as PAIRING_SCOPE_OPTIONS } from "@t3tools/shared/authScopeOptions";
-import { PlugIcon, PlusIcon, QrCodeIcon } from "lucide-react";
-import { type ReactNode, memo, useId, useState } from "react";
-import { T, useGT, useMessages } from "gt-react";
+import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
+import {
+  isAtomCommandInterrupted,
+  squashAtomCommandFailure,
+} from "@t3tools/client-runtime/state/runtime";
 import {
   AuthAccessWriteScope,
   AuthDiagnosticsReadScope,
@@ -20,23 +19,29 @@ import {
   type AdvertisedEndpoint,
   type EnvironmentId,
 } from "@t3tools/contracts";
+import { AUTH_SCOPE_OPTIONS as PAIRING_SCOPE_OPTIONS } from "@t3tools/shared/authScopeOptions";
+import { T, useGT, useMessages } from "gt-react";
+import { PlugIcon, PlusIcon, QrCodeIcon } from "lucide-react";
+import { type ReactNode, memo, useId, useState } from "react";
+
 import {
-  isAtomCommandInterrupted,
-  squashAtomCommandFailure,
-} from "@t3tools/client-runtime/state/runtime";
+  type ServerClientSessionRecord,
+  type ServerPairingLinkRecord,
+} from "~/environments/primary";
+import { m as resolveMessage } from "~/i18n/messages";
+import { authEnvironment } from "~/state/auth";
+import { useManagedPolicy, usePrimaryManagedPolicy } from "~/state/managedPolicy";
+import { readEnvironmentScope } from "~/state/session";
+import { useAtomCommand } from "~/state/use-atom-command";
 
 import { useCopyToClipboard } from "../../hooks/useCopyToClipboard";
+import { useNowSecond } from "../../hooks/useNowSecond";
 import { cn } from "../../lib/utils";
 import { formatElapsedDurationLabel, formatExpiresInLabel } from "../../timestampFormat";
-import { resolveDesktopPairingUrl, resolveHostedPairingUrl } from "./pairingUrls";
-import {
-  canRevokeOtherClients,
-  isQrShareableEndpoint,
-  selectQrEndpointOption,
-  togglePairingScopeSelection,
-} from "./ConnectionsSettings.logic";
-import { useNowSecond } from "../../hooks/useNowSecond";
-import { Input } from "../ui/input";
+import { ConnectionStatusDot } from "../ConnectionStatusDot";
+import { ManagedControl } from "../ManagedPolicy";
+import { openUseInAnotherApp } from "../mcp/UseInAnotherAppDialog";
+import { Button } from "../ui/button";
 import { Checkbox } from "../ui/checkbox";
 import {
   Dialog,
@@ -48,24 +53,18 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "../ui/dialog";
+import { Input } from "../ui/input";
 import { Popover, PopoverPopup, PopoverTrigger } from "../ui/popover";
 import { QRCodeSvg } from "../ui/qr-code";
+import { Textarea } from "../ui/textarea";
 import { stackedThreadToast, toastManager } from "../ui/toast";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
-import { Button } from "../ui/button";
-import { Textarea } from "../ui/textarea";
 import {
-  type ServerClientSessionRecord,
-  type ServerPairingLinkRecord,
-} from "~/environments/primary";
-import { authEnvironment } from "~/state/auth";
-import { readEnvironmentScope } from "~/state/session";
-import { useManagedPolicy, usePrimaryManagedPolicy } from "~/state/managedPolicy";
-import { useAtomCommand } from "~/state/use-atom-command";
-import { ManagedControl } from "../ManagedPolicy";
-import { openUseInAnotherApp } from "../mcp/UseInAnotherAppDialog";
-import { ConnectionStatusDot } from "../ConnectionStatusDot";
-import { ITEM_ROW_CLASSNAME, ITEM_ROW_INNER_CLASSNAME } from "./itemRows";
+  canRevokeOtherClients,
+  isQrShareableEndpoint,
+  selectQrEndpointOption,
+  togglePairingScopeSelection,
+} from "./ConnectionsSettings.logic";
 import {
   formatAccessTimestamp,
   selectPairingEndpoint,
@@ -76,6 +75,8 @@ import {
   isHostedAppPairingUrl,
   endpointShareHint,
 } from "./ConnectionsSettings.logic";
+import { ITEM_ROW_CLASSNAME, ITEM_ROW_INNER_CLASSNAME } from "./itemRows";
+import { resolveDesktopPairingUrl, resolveHostedPairingUrl } from "./pairingUrls";
 
 function AccessScopeSummary({
   scopes,

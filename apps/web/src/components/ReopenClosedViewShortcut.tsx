@@ -1,20 +1,20 @@
-import { m } from "../i18n/messages";
-import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
 import { useAtomValue } from "@effect/atom-react";
 import {
   scopeProjectRef,
   scopedThreadKey,
   scopeThreadRef,
 } from "@t3tools/client-runtime/environment";
+import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
 import type { ScopedThreadRef } from "@t3tools/contracts";
 import { useNavigate, useParams } from "@tanstack/react-router";
 import { useGT } from "gt-react";
 import { useEffect, useEffectEvent, useRef } from "react";
 
-import { isCommandPaletteOpen } from "../commandPaletteBus";
 import { useClosedViewStore } from "../closedViewStore";
+import { isCommandPaletteOpen } from "../commandPaletteBus";
 import { useComposerDraftStore } from "../composerDraftStore";
 import { environmentCatalog } from "../connection/catalog";
+import { m } from "../i18n/messages";
 import { effectiveShortcutsForCommand, resolveShortcutCommand } from "../keybindings";
 import { isEditableFocused } from "../lib/editableFocus";
 import { isPreviewFocused } from "../lib/previewFocus";
@@ -45,8 +45,8 @@ import {
   buildThreadRouteParams,
   resolveThreadRouteTarget,
 } from "../threadRoutes";
-import { toastManager } from "./ui/toast";
 import { readIssueListPreferences } from "./issue/issueListPreferences";
+import { toastManager } from "./ui/toast";
 
 const PREVIEW_FORWARDED_COMMANDS = [
   "workspace.focusNext",

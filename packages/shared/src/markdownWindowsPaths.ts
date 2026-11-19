@@ -1,5 +1,6 @@
-import type { Processor } from "unified";
 import { decodeString } from "micromark-util-decode-string";
+import type { Processor } from "unified";
+
 import { isWindowsAbsolutePath } from "./path.ts";
 
 interface DestinationCompileContext {

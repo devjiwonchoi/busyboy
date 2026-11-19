@@ -1,10 +1,12 @@
 // @effect-diagnostics nodeBuiltinImport:off - verifies native task caching in isolated subprocesses.
-import { describe, expect, it } from "vite-plus/test";
+
 import * as NodeChildProcess from "node:child_process";
 import * as NodeFSP from "node:fs/promises";
 import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
 import * as NodeURL from "node:url";
+
+import { describe, expect, it } from "vite-plus/test";
 
 import { cachedTestTasks, matchesTestPath, readRunSummary } from "./cached-tests.ts";
 

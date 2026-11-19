@@ -1,11 +1,11 @@
 import { assert, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
+import { HttpClient, HttpClientResponse } from "effect/http";
 import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
 import * as Stream from "effect/Stream";
 import * as TestClock from "effect/testing/TestClock";
-import { HttpClient, HttpClientResponse } from "effect/http";
 
 import * as GitHubPullRequestEvents from "./gitHubPullRequestEvents.ts";
 import { GitHubApiNotFoundError, GitHubApiResponseError } from "./GitHubRequestPolicy.ts";

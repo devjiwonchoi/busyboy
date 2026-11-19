@@ -2,10 +2,10 @@
 
 import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
 import * as NodeServices from "@effect/platform-node/NodeServices";
+import { Argument, Command } from "effect/cli";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
-import { Argument, Command } from "effect/cli";
 
 import { mergeUpdateManifestFiles, type UpdateManifestPlatform } from "./merge-update-manifests.ts";
 

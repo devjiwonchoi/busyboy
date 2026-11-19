@@ -16,8 +16,8 @@ import { T, useGT, useMessages } from "gt-react-native";
 import { useState, type ReactNode } from "react";
 import { ScrollView, View } from "react-native";
 
-import { AppText as Text } from "../../components/ui/AppText";
 import { SymbolView, type AppSymbolName } from "../../components/ui/AppSymbol";
+import { AppText as Text } from "../../components/ui/AppText";
 import { Chip } from "../../components/ui/Chip";
 import { ListRowLayout } from "../../components/ui/ListRowLayout";
 import { ListSection } from "../../components/ui/ListSection";

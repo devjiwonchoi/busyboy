@@ -13,6 +13,7 @@ import { type KeyboardEvent, type ReactNode, use, useRef, useState } from "react
 
 import { m, type MessageResolver } from "~/i18n/messages";
 import { cn } from "~/lib/utils";
+
 import {
   Menu,
   MenuPopup,
@@ -24,8 +25,8 @@ import {
 import { Switch } from "../ui/switch";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import type { ComposerControlSize } from "./ComposerControl";
-import { ComposerPermissionsSection, type RuntimeModeOption } from "./ComposerFooterControls";
 import { composerFloatingLayerProps, focusCheckedPermission } from "./composerEventScope";
+import { ComposerPermissionsSection, type RuntimeModeOption } from "./ComposerFooterControls";
 import { EffortGlyph, FastBolt, resolveEffortGlyph } from "./EffortGlyph";
 import { DockedPickerContext } from "./ProviderModelPicker";
 import {

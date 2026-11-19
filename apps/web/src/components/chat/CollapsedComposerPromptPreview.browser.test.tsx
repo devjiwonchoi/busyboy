@@ -1,19 +1,19 @@
 import "~/index.css";
-
 import { EnvironmentId, MessageId, ThreadId } from "@t3tools/contracts";
 import { serializeAssistantCitation } from "@t3tools/shared/assistantCitations";
 import { expect, it } from "vite-plus/test";
 
-import { formatInlineContextReference } from "~/lib/composerContextReferences";
 import {
   environmentContextRecord,
   environmentContextReference,
 } from "~/lib/composerContextRecords";
+import { formatInlineContextReference } from "~/lib/composerContextReferences";
+
+import { render } from "../../../test/render";
 import {
   composerContextRecordsFromDraft,
   EMPTY_COMPOSER_CONTEXT_RECORDS,
 } from "../composerContextPresentation";
-import { render } from "../../../test/render";
 import { CollapsedComposerPromptPreview } from "./CollapsedComposerPromptPreview";
 
 function quote(text: string, comment?: string): string {

@@ -1,3 +1,4 @@
+import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
 import {
   createPreviewFramePainter,
   createPreviewStreamClient,
@@ -19,6 +20,7 @@ import type {
   PreviewStreamHostSetup,
   PreviewViewportSetting,
 } from "@t3tools/contracts";
+import { msg, T, useGT, useMessages } from "gt-react";
 import {
   type ClipboardEvent,
   type FormEvent,
@@ -32,18 +34,16 @@ import {
   useRef,
   useState,
 } from "react";
-import { msg, T, useGT, useMessages } from "gt-react";
 
-import { AgentCursorMark } from "~/components/preview/AgentBrowserCursor";
 import { CommandBlock } from "~/components/CommandBlock";
+import { AgentCursorMark } from "~/components/preview/AgentBrowserCursor";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import { toastManager } from "~/components/ui/toast";
-import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
 import { m } from "~/i18n/messages";
+import { observeResize } from "~/lib/observeResize";
 import { cn } from "~/lib/utils";
 import { refreshPreviewStreamAccess, usePreviewStreamAccess } from "~/state/previewStream";
-import { observeResize } from "~/lib/observeResize";
 
 export interface ServerBrowserHandle {
   readonly navigate: (url: string) => void;

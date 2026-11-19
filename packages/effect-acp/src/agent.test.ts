@@ -1,3 +1,4 @@
+import { assert, it } from "@effect/vitest";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
@@ -8,11 +9,7 @@ import * as Ref from "effect/Ref";
 import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
 
-import { assert, it } from "@effect/vitest";
-
-import * as AcpAgent from "./agent.ts";
 import * as AcpSchema from "./_generated/schema.gen.ts";
-import type * as AcpProtocol from "./protocol.ts";
 import {
   encodeJsonl,
   jsonRpcNotification,
@@ -20,6 +17,8 @@ import {
   jsonRpcResponse,
 } from "./_internal/shared.ts";
 import { makeInMemoryStdio } from "./_internal/stdio.ts";
+import * as AcpAgent from "./agent.ts";
+import type * as AcpProtocol from "./protocol.ts";
 
 const RequestPermissionRequest = jsonRpcRequest(
   "session/request_permission",

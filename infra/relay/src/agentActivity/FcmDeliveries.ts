@@ -1,36 +1,36 @@
-import { and, eq } from "drizzle-orm";
 import {
   RelayAgentActivityState,
   RelayAgentActivityAggregateState,
   RelayAgentAwarenessPreferences,
   type RelayDeliveryResult,
 } from "@t3tools/contracts/relay";
-import * as Digest from "effect/crypto/Digest";
-import type * as PlatformError from "effect/PlatformError";
+import { and, eq } from "drizzle-orm";
 import * as Context from "effect/Context";
+import * as Digest from "effect/crypto/Digest";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import type * as PlatformError from "effect/PlatformError";
 import * as Schema from "effect/Schema";
 
 import * as RelayConfiguration from "../Config.ts";
 import * as RelayDb from "../db.ts";
-import { relayMobileDevices } from "../persistence/schema.ts";
 import * as EnvironmentLinks from "../environments/EnvironmentLinks.ts";
-import * as AgentActivityRows from "./AgentActivityRows.ts";
-import * as LiveActivities from "./LiveActivities.ts";
-import * as FcmDeliveryQueueSender from "./FcmDeliveryQueueSender.ts";
-import * as FcmClient from "./FcmClient.ts";
-import { androidActivityData, fitFcmData } from "./fcmPayloads.ts";
+import { relayMobileDevices } from "../persistence/schema.ts";
 import { makeAggregateState, statusForPhase } from "./agentActivityAggregate.ts";
-import { isExpiredAgentActivityState, notificationForActivity } from "./agentActivityPayloads.ts";
 import {
   alertForActivityRows,
   attentionTransitionRows,
   terminalTransitionRows,
   shouldAlertForActivity,
 } from "./agentActivityAlerts.ts";
+import { isExpiredAgentActivityState, notificationForActivity } from "./agentActivityPayloads.ts";
+import * as AgentActivityRows from "./AgentActivityRows.ts";
+import * as FcmClient from "./FcmClient.ts";
+import * as FcmDeliveryQueueSender from "./FcmDeliveryQueueSender.ts";
+import { androidActivityData, fitFcmData } from "./fcmPayloads.ts";
+import * as LiveActivities from "./LiveActivities.ts";
 
 export const FcmDeliveryJob = Schema.Struct({
   userId: Schema.String,

@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { validateScheduledTasksSearch } from "../components/settings/scheduledTasksSettings.logic";
 
 import { ScheduledTasksSettings } from "../components/settings/ScheduledTasksSettings";
+import { validateScheduledTasksSearch } from "../components/settings/scheduledTasksSettings.logic";
 
 function SettingsScheduledTasksRoute() {
   const target = Route.useSearch();

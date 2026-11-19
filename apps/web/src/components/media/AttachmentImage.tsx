@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ComponentProps, type SyntheticEvent } from "react";
+
 import { isHeicImageFile } from "../../lib/imageCompression";
 
 type AttachmentImageProps = ComponentProps<"img"> & { name: string; mimeType?: string | undefined };

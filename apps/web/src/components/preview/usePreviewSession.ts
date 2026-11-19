@@ -5,16 +5,16 @@ import {
   scopedThreadKey,
 } from "@t3tools/client-runtime/environment";
 import { type EnvironmentId, type ScopedThreadRef, ThreadId } from "@t3tools/contracts";
-import * as Schema from "effect/Schema";
 import { AsyncResult, Atom } from "effect/reactivity";
+import * as Schema from "effect/Schema";
 
+import { isElectron } from "~/env";
 import {
   applyPreviewServerEvent,
   previewStateAtom,
   readThreadPreviewState,
   reconcilePreviewServerSessions,
 } from "~/previewStateStore";
-import { isElectron } from "~/env";
 import { previewEnvironment } from "~/state/preview";
 
 class PreviewSessionThreadKeyParseError extends Schema.TaggedError<PreviewSessionThreadKeyParseError>()(

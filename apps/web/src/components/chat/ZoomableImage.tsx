@@ -6,7 +6,6 @@ import {
   onWindowControlsOverlayGeometryChange,
   windowControlsOverlayHeight,
 } from "../../lib/windowControlsOverlay";
-
 import { AttachmentImage } from "../media/AttachmentImage";
 
 const MAX_ZOOM = 8;

@@ -1,12 +1,12 @@
 import type { TextGeneratorKind, TextGeneratorModel } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
-import * as Schema from "effect/Schema";
 import {
   FetchHttpClient,
   HttpClient,
   HttpClientRequest,
   type HttpClientResponse,
 } from "effect/http";
+import * as Schema from "effect/Schema";
 
 /** Where a text generator is reached, with its key already read from wherever settings keep it. */
 export interface TextGeneratorConnection {

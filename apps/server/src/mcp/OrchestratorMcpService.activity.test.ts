@@ -1,3 +1,4 @@
+import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import {
   EnvironmentId,
   NodeId,
@@ -19,23 +20,22 @@ import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
 import * as Metric from "effect/Metric";
 import * as TestClock from "effect/testing/TestClock";
-import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import { expect, it } from "vite-plus/test";
 
-import * as ProviderAdapterRegistry from "../orchestration-v2/ProviderAdapterRegistry.ts";
-import * as ProviderRegistry from "../provider/ProviderRegistry.ts";
-import * as ProjectService from "../project/ProjectService.ts";
-import * as ScheduledTaskService from "../scheduledTasks/ScheduledTaskService.ts";
-import * as ServerSettings from "../serverSettings.ts";
-import * as SecretRequests from "../secrets/SecretRequests.ts";
-import * as ThreadLaunchService from "../orchestration-v2/ThreadLaunchService.ts";
-import * as GitVcsDriver from "../vcs/GitVcsDriver.ts";
-import * as RemoteDelegation from "../peer/RemoteDelegation.ts";
 import * as Orchestrator from "../orchestration-v2/Orchestrator.ts";
+import * as ProviderAdapterRegistry from "../orchestration-v2/ProviderAdapterRegistry.ts";
+import * as ThreadLaunchService from "../orchestration-v2/ThreadLaunchService.ts";
 import * as ThreadManagementService from "../orchestration-v2/ThreadManagementService.ts";
+import * as RemoteDelegation from "../peer/RemoteDelegation.ts";
+import * as ProjectService from "../project/ProjectService.ts";
+import * as ProviderRegistry from "../provider/ProviderRegistry.ts";
+import * as ScheduledTaskService from "../scheduledTasks/ScheduledTaskService.ts";
+import * as SecretRequests from "../secrets/SecretRequests.ts";
+import * as ServerSettings from "../serverSettings.ts";
+import * as GitVcsDriver from "../vcs/GitVcsDriver.ts";
 import type * as McpInvocationContext from "./McpInvocationContext.ts";
-import * as OrchestratorMcpService from "./OrchestratorMcpService.ts";
 import { liveThreadShell } from "./McpToolAccess.testkit.ts";
+import * as OrchestratorMcpService from "./OrchestratorMcpService.ts";
 
 const layerOrchestratorService = OrchestratorMcpService.layer.pipe(
   Layer.provide(Layer.mock(ThreadLaunchService.ThreadLaunchService)({})),

@@ -3,23 +3,25 @@ import * as NodeCrypto from "node:crypto";
 import * as NodePath from "node:path";
 
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import { createPackageWithOptions, extractFile } from "@electron/asar";
 import { assert, it } from "@effect/vitest";
+import { createPackageWithOptions, extractFile } from "@electron/asar";
+import * as HostProcess from "@t3tools/shared/HostProcess";
+import { fromYaml } from "@t3tools/shared/schemaYaml";
+import { symlinksSupported } from "@t3tools/shared/testing/symlinks";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Deferred from "effect/Deferred";
-import * as Fiber from "effect/Fiber";
-import * as Exit from "effect/Exit";
-import * as FileSystem from "effect/FileSystem";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Fiber from "effect/Fiber";
+import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
-import * as PlatformError from "effect/PlatformError";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
-import * as Sink from "effect/Sink";
-import * as Schema from "effect/Schema";
-import * as Stream from "effect/Stream";
+import * as PlatformError from "effect/PlatformError";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
-import { fromYaml } from "@t3tools/shared/schemaYaml";
+import * as Schema from "effect/Schema";
+import * as Sink from "effect/Sink";
+import * as Stream from "effect/Stream";
 
 import {
   buildDesktopBundles,
@@ -72,8 +74,6 @@ import {
   ReleasePackageManifestError,
   releasePackageFiles,
 } from "./update-release-package-versions.ts";
-import * as HostProcess from "@t3tools/shared/HostProcess";
-import { symlinksSupported } from "@t3tools/shared/testing/symlinks";
 
 const encodeModuleUrl = Schema.encodeEffect(Schema.fromJsonString(Schema.String));
 const decodePackageVersion = Schema.decodeUnknownEffect(

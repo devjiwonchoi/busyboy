@@ -1,4 +1,3 @@
-import { describe, expect, it } from "vite-plus/test";
 import {
   type ThreadPullRequestLink,
   type OrchestrationV2DomainEvent,
@@ -17,6 +16,7 @@ import {
   TurnItemId,
 } from "@t3tools/contracts";
 import * as DateTime from "effect/DateTime";
+import { describe, expect, it } from "vite-plus/test";
 
 import { applyOrchestrationV2ProjectionEvent } from "./orchestrationV2Projection.ts";
 

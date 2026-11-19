@@ -13,6 +13,7 @@ import {
 import * as Duration from "effect/Duration";
 import * as Schema from "effect/Schema";
 import { describe, expect, it } from "vite-plus/test";
+
 import { resolveServerBackgroundActivitySettings } from "./backgroundActivitySettings.ts";
 import { createModelSelection } from "./model.ts";
 import { resolveProjectScripts } from "./projectScripts.ts";

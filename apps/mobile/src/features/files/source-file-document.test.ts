@@ -1,4 +1,5 @@
 import { expect, it } from "vite-plus/test";
+
 import { prepareSourceFileDocument, selectableSourceHtml } from "./source-file-document";
 
 it("preserves source whitespace and markup as literal selectable text", () => {

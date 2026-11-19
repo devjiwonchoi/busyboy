@@ -1,21 +1,26 @@
 import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
 import { sourceControlClients } from "@t3tools/client-runtime/source-control-clients";
-import { RefreshIcon } from "~/components/ui/refresh-icon";
+import { msg, T, useGT, useMessages, Var } from "gt-react";
 import { ExternalLinkIcon, PackagePlusIcon, PaletteIcon, SearchIcon } from "lucide-react";
 import { type ReactNode, useState } from "react";
+
+import { RefreshIcon } from "~/components/ui/refresh-icon";
+
+import { m } from "../../i18n/messages";
 import {
   importOpenVsxThemeExtension,
   searchOpenVsxThemes,
   type OpenVsxThemeExtension,
   type OpenVsxThemeSort,
 } from "../../openVsxThemes";
+import { sourceControlIcon } from "../../sourceControlPresentation";
 import {
   getCustomThemes,
   getStoredCustomThemeCollection,
   replaceCustomThemeCollection,
   type ThemeDefinition,
 } from "../../themePalette";
-import { sourceControlIcon } from "../../sourceControlPresentation";
+import { Alert, AlertDescription } from "../ui/alert";
 import {
   AlertDialog,
   AlertDialogClose,
@@ -25,13 +30,10 @@ import {
   AlertDialogPopup,
   AlertDialogTitle,
 } from "../ui/alert-dialog";
-import { Alert, AlertDescription } from "../ui/alert";
 import { Button } from "../ui/button";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "../ui/input-group";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
 import { Spinner } from "../ui/spinner";
-import { msg, T, useGT, useMessages, Var } from "gt-react";
-import { m } from "../../i18n/messages";
 
 const DOWNLOAD_FORMAT = new Intl.NumberFormat(undefined, {
   notation: "compact",

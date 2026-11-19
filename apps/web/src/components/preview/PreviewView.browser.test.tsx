@@ -13,7 +13,6 @@ import { page, userEvent } from "vite-plus/test/browser";
 
 import "~/index.css";
 import { act, render } from "../../../test/render";
-
 import type { PreviewableServer } from "./useDiscoveredLocalServers";
 
 const mocks = vi.hoisted(() => ({
@@ -181,15 +180,16 @@ vi.mock(import("~/browser/ServerBrowserSurface"), async (original) => ({
   )) as never,
 }));
 
-import { useComposerDraftStore } from "~/composerDraftStore";
+import { useBrowserPointerStore } from "~/browser/browserPointerStore";
 import { commitBrowserViewportChange } from "~/browser/browserViewportActions";
 import { resolveResponsiveBrowserViewportSize } from "~/browser/browserViewportLayout";
-import { useBrowserPointerStore } from "~/browser/browserPointerStore";
 import { previewRuntimeTabId } from "~/browser/previewRuntimeTabId";
+import { ToastProvider } from "~/components/ui/toast";
+import { useComposerDraftStore } from "~/composerDraftStore";
 import { usePreviewMiniPlayerStore } from "~/previewMiniPlayerStore";
+
 import { dispatchPreviewAction } from "./previewActionBus";
 import { PreviewView } from "./PreviewView";
-import { ToastProvider } from "~/components/ui/toast";
 
 const TEST_THREAD_REF = {
   environmentId: EnvironmentId.make("environment-1"),

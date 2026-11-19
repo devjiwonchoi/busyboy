@@ -1,3 +1,4 @@
+import { describe, expect, it } from "@effect/vitest";
 import {
   CommandId,
   EnvironmentId,
@@ -6,7 +7,6 @@ import {
   ThreadId,
   type OrchestrationV2ShellSnapshot,
 } from "@t3tools/contracts";
-import { describe, expect, it } from "@effect/vitest";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";

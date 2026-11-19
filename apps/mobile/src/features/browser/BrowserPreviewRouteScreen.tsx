@@ -1,6 +1,3 @@
-import { SheetHeader } from "../../components/ui/SheetHeader";
-import { AppActivityIndicator } from "../../components/ui/AppActivityIndicator";
-import * as Dialog from "../../components/ui/Dialog";
 import { useIsFocused, useNavigation, type StaticScreenProps } from "@react-navigation/native";
 import { EnvironmentId, ThreadId } from "@t3tools/contracts";
 import { normalizePreviewUrl, previewPdfAssetUrl } from "@t3tools/shared/preview";
@@ -10,12 +7,14 @@ import { useEffect, useRef, useState } from "react";
 import { Platform, View } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { AppActivityIndicator } from "../../components/ui/AppActivityIndicator";
 import { ControlPill } from "../../components/ui/ControlPill";
+import * as Dialog from "../../components/ui/Dialog";
 import { Menu } from "../../components/ui/Menu";
+import { SheetHeader } from "../../components/ui/SheetHeader";
 import { useContentTopInset } from "../../components/ui/useBarInset";
 import { m } from "../../i18n/messages";
 import { useAppForeground } from "../../lib/appState";
-
 import { useThreadServerBrowserTabs } from "../../state/preview";
 import { usePreparedConnection } from "../../state/session";
 import { useAppearancePreferences } from "../settings/appearance/AppearancePreferencesProvider";

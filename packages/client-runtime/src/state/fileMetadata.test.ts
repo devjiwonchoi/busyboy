@@ -9,16 +9,16 @@ import {
   WS_METHODS,
 } from "@t3tools/contracts";
 import * as Clock from "effect/Clock";
-import * as Effect from "effect/Effect";
 import * as Deferred from "effect/Deferred";
+import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
-import * as Stream from "effect/Stream";
+import { Atom, AtomRegistry } from "effect/reactivity";
 import * as Schema from "effect/Schema";
+import * as Stream from "effect/Stream";
 import * as SubscriptionRef from "effect/SubscriptionRef";
 import * as TestClock from "effect/testing/TestClock";
-import { Atom, AtomRegistry } from "effect/reactivity";
 
 import { AVAILABLE_CONNECTION_STATE, BearerConnectionTarget } from "../connection/model.ts";
 import * as EnvironmentRegistry from "../connection/registry.ts";

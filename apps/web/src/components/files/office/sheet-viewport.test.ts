@@ -1,4 +1,5 @@
 import { expect, it } from "vite-plus/test";
+
 import { bufferedViewport, cachedViewport, retainCachedViewport } from "./sheet-viewport";
 
 it.each([

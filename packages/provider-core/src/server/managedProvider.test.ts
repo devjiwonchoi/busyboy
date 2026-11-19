@@ -17,8 +17,8 @@ import * as Ref from "effect/Ref";
 import * as Stream from "effect/Stream";
 import * as TestClock from "effect/testing/TestClock";
 
-import * as ProviderHost from "./ProviderHost.ts";
 import { makeManagedServerProvider } from "./managedProvider.ts";
+import * as ProviderHost from "./ProviderHost.ts";
 
 const emptyCapabilities = createModelCapabilities({ optionDescriptors: [] });
 const fastModeCapabilities = createModelCapabilities({

@@ -10,8 +10,8 @@ import { describe, expect, it, vi } from "vite-plus/test";
 import type { RightPanelSurface } from "~/rightPanelStore";
 
 import { act, render } from "../../../test/render";
-
 import { DevicePanel } from "./DevicePanel";
+
 import "~/index.css";
 
 type CommandResult =

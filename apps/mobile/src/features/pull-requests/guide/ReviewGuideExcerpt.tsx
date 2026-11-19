@@ -1,17 +1,18 @@
+import type { FileDiffMetadata } from "@pierre/diffs";
+import { excerptRows, fileDiffRows, rowsToPatch } from "@t3tools/client-runtime/review-guide-tour";
+import type { PullRequestReviewGuideExcerpt } from "@t3tools/contracts";
 import { useGT, useMessages } from "gt-react-native";
 import { useState } from "react";
 import { Pressable, View } from "react-native";
-import type { FileDiffMetadata } from "@pierre/diffs";
-import type { PullRequestReviewGuideExcerpt } from "@t3tools/contracts";
-import { excerptRows, fileDiffRows, rowsToPatch } from "@t3tools/client-runtime/review-guide-tour";
-import { AppText as Text } from "../../../components/ui/AppText";
+
 import { SymbolView } from "../../../components/ui/AppSymbol";
+import { AppText as Text } from "../../../components/ui/AppText";
 import { resolveNativeReviewDiffView } from "../../diffs/nativeReviewDiffSurface";
 import { buildNativeReviewDiffData } from "../../review/nativeReviewDiffAdapter";
 import { buildReviewParsedDiff } from "../../review/reviewModel";
 import { useNativeReviewDiffBridge } from "../../review/useNativeReviewDiffBridge";
-import { useAppearanceCodeSurface } from "../../settings/appearance/useAppearanceCodeSurface";
 import { useAppearancePreferences } from "../../settings/appearance/AppearancePreferencesProvider";
+import { useAppearanceCodeSurface } from "../../settings/appearance/useAppearanceCodeSurface";
 import { PullRequestMarkdown } from "../PullRequestMarkdown";
 
 const EMPTY_IDS: readonly string[] = [];

@@ -2,13 +2,15 @@ import type { LegendListRef } from "@legendapp/list/react";
 import type { AssistantCitation, MessageId, ScopedThreadRef } from "@t3tools/contracts";
 import { msg } from "gt-react";
 import { useEffect, useRef, type ReactNode, type RefObject } from "react";
+
+import { m } from "~/i18n/messages";
 import {
   resolveAssistantCitationRange,
   type AssistantCitationSourceAnchor,
 } from "~/lib/assistantTextSelection";
-import { m } from "~/i18n/messages";
-import { toastManager } from "../ui/toast";
 import { observeResize } from "~/lib/observeResize";
+
+import { toastManager } from "../ui/toast";
 
 const CITATION_PULSE_DURATION_MS = 650;
 const CITATION_HIGHLIGHT_HOLD_MS = 1575;

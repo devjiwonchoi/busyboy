@@ -2,13 +2,13 @@ import { T, useGT, Var } from "gt-react";
 import { ChevronDownIcon } from "lucide-react";
 
 import { updateClientSettings, useClientSettings } from "../../hooks/useSettings";
-import { ThreadDetailsItemsMenuItems } from "../chat/ThreadDetailsItemsMenu";
 import {
   isDefaultThreadDetailsVisibility,
   resolveThreadDetailsVisibility,
   RESET_THREAD_DETAILS_ITEMS,
   THREAD_DETAILS_ITEMS,
 } from "../chat/threadDetailsItems";
+import { ThreadDetailsItemsMenuItems } from "../chat/ThreadDetailsItemsMenu";
 import { Button } from "../ui/button";
 import { Menu, MenuPopup, MenuTrigger } from "../ui/menu";
 import { SettingResetButton, SettingsRow } from "./settingsLayout";

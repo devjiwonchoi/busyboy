@@ -1,6 +1,7 @@
 // @effect-diagnostics nodeBuiltinImport:off -- exclusive copy and streaming hashes are filesystem boundaries missing from Effect's API.
 import * as NodeCrypto from "node:crypto";
 import * as NodeFSP from "node:fs/promises";
+
 import {
   ATTACHMENT_UPLOAD_URL_TTL_MS,
   type AttachmentCreateUploadUrlInput,
@@ -11,13 +12,14 @@ import * as Clock from "effect/Clock";
 import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import type * as HttpServerRequest from "effect/http/HttpServerRequest";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as PlatformError from "effect/PlatformError";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
-import type * as HttpServerRequest from "effect/http/HttpServerRequest";
 
+import { resolveAttachmentRelativePath } from "../attachmentPaths.ts";
 import {
   attachmentFileExtension,
   createPendingAttachmentId,
@@ -26,12 +28,11 @@ import {
   resolveAttachmentPathById,
   sweepStalePendingAttachments,
 } from "../attachmentStore.ts";
-import { resolveAttachmentRelativePath } from "../attachmentPaths.ts";
 import { base64UrlDecodeUtf8, base64UrlEncode } from "../auth/utils.ts";
-import * as AssetSigner from "./AssetSigner.ts";
 import * as ServerConfig from "../config.ts";
 import { inferImageExtension } from "../imageMime.ts";
 import * as DocumentText from "../provider/DocumentText.ts";
+import * as AssetSigner from "./AssetSigner.ts";
 
 export const ATTACHMENT_UPLOAD_ROUTE_PREFIX = "/api/attachments/upload";
 

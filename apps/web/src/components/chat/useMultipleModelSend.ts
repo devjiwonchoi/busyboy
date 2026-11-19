@@ -1,18 +1,20 @@
-import { msg } from "gt-react";
+import { scopeThreadRef } from "@t3tools/client-runtime/environment";
 import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
-import { m } from "~/i18n/messages";
+import { deriveThreadTitleSeed } from "@t3tools/client-runtime/operations";
+import { settlePromise, squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
+import type { EnvironmentProject } from "@t3tools/client-runtime/state/shell";
 import {
   type EnvironmentId,
   type ModelSelection,
   type RuntimeMode,
   type ThreadId,
 } from "@t3tools/contracts";
-import { scopeThreadRef } from "@t3tools/client-runtime/environment";
-import { deriveThreadTitleSeed } from "@t3tools/client-runtime/operations";
-import { settlePromise, squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
-import type { EnvironmentProject } from "@t3tools/client-runtime/state/shell";
 import { useNavigate } from "@tanstack/react-router";
+import { msg } from "gt-react";
+
+import { m } from "~/i18n/messages";
 import { newMessageId } from "~/lib/utils";
+
 import { collapseExpandedComposerCursor } from "../../composer-logic";
 import {
   type ComposerThreadTarget,
@@ -28,13 +30,13 @@ import { threadEnvironment } from "../../state/threads";
 import { useOrchestrationCommand } from "../../state/use-orchestration-command";
 import { buildThreadRouteParams } from "../../threadRoutes";
 import { DEFAULT_INTERACTION_MODE } from "../../types";
-import { stackedThreadToast, toastManager } from "../ui/toast";
 import {
   boundAttachmentIds,
   type ComposerSendSnapshot,
   type makeThreadErrorSetter,
   withMessageContext,
 } from "../ChatView.logic";
+import { stackedThreadToast, toastManager } from "../ui/toast";
 import {
   draftFanoutSelectionsAtom,
   draftSendState,

@@ -1,11 +1,4 @@
 import {
-  backgroundWorkHoldsCompletion,
-  isPullRequestWatchTask,
-  turnItemUpdateCanEndBackgroundWork,
-} from "@t3tools/shared/orchestrationV2PendingBackgroundWork";
-import { resolveProjectSettings } from "@t3tools/shared/projectSettings";
-import { visibleThreadPullRequests } from "@t3tools/shared/threadPullRequests";
-import {
   CommandId,
   isOrchestrationV2WorkActive,
   type ThreadId,
@@ -13,6 +6,13 @@ import {
   type OrchestrationV2ThreadShell,
 } from "@t3tools/contracts";
 import { makeDrainableWorker } from "@t3tools/shared/DrainableWorker";
+import {
+  backgroundWorkHoldsCompletion,
+  isPullRequestWatchTask,
+  turnItemUpdateCanEndBackgroundWork,
+} from "@t3tools/shared/orchestrationV2PendingBackgroundWork";
+import { resolveProjectSettings } from "@t3tools/shared/projectSettings";
+import { visibleThreadPullRequests } from "@t3tools/shared/threadPullRequests";
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
 import * as SecureRandom from "effect/crypto/SecureRandom";
@@ -22,22 +22,22 @@ import * as FiberSet from "effect/FiberSet";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as Schedule from "effect/Schedule";
-import * as Semaphore from "effect/Semaphore";
 import type * as Scope from "effect/Scope";
+import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
 
 import * as GitManager from "../git/GitManager.ts";
 import * as ProjectSetupScriptRunner from "../project/ProjectSetupScriptRunner.ts";
 import * as PullRequestService from "../pullRequest/PullRequestService.ts";
-import * as ServerSettings from "../serverSettings.ts";
 import { forkParked } from "../serverActivation.ts";
+import * as ServerSettings from "../serverSettings.ts";
+import { sourceControlDefinitions } from "../sourceControl/sourceControlDefinitions.ts";
 import * as TerminalManager from "../terminal/Manager.ts";
 import * as GitVcsDriver from "../vcs/GitVcsDriver.ts";
-import * as ProjectStore from "./ProjectStore.ts";
-import { sourceControlDefinitions } from "../sourceControl/sourceControlDefinitions.ts";
 import { makeNoPullRequestRechecks } from "./noPullRequestRechecks.ts";
 import * as Orchestrator from "./Orchestrator.ts";
 import * as ProjectionStore from "./ProjectionStore.ts";
+import * as ProjectStore from "./ProjectStore.ts";
 import { QUIET_AFTER_MS, QUIET_SYNC_INTERVAL_MS } from "./PullRequestSyncReactor.ts";
 
 export interface SettlementPullRequest {

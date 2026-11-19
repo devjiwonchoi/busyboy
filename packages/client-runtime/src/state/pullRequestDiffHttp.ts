@@ -1,5 +1,3 @@
-import { msg } from "gt-i18n";
-import { type MarkedText, markedTextEnglish } from "../errors/translatable.ts";
 import {
   EnvironmentAuthInvalidError,
   type PullRequestDiffInput,
@@ -7,13 +5,15 @@ import {
 } from "@t3tools/contracts";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
+import { HttpClient } from "effect/http";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
-import { HttpClient } from "effect/http";
+import { msg } from "gt-i18n";
 
 import * as RemoteEnvironmentAuthorization from "../authorization/service.ts";
 import type { PreparedConnection } from "../connection/model.ts";
+import { type MarkedText, markedTextEnglish } from "../errors/translatable.ts";
 import * as ManagedRelay from "../relay/managedRelay.ts";
 import { type RemoteEnvironmentRequestError } from "../rpc/http.ts";
 import { executeAuthenticatedEnvironmentHttpRequest } from "./environmentHttpAuth.ts";

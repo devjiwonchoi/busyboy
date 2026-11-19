@@ -1,4 +1,3 @@
-import { expandHomePath } from "@t3tools/provider-core/server/pathExpansion";
 import * as NodePath from "@effect/platform-node/NodePath";
 import {
   EDITORS,
@@ -13,6 +12,7 @@ import {
   type FileManagerRevealKind,
   type LaunchEditorInput,
 } from "@t3tools/contracts";
+import { expandHomePath } from "@t3tools/provider-core/server/pathExpansion";
 import { resolveEditorCommand } from "@t3tools/shared/editor";
 import * as HostProcess from "@t3tools/shared/HostProcess";
 import {
@@ -28,10 +28,10 @@ import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
-import * as Schema from "effect/Schema";
-import * as Stream from "effect/Stream";
 import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
+import * as Schema from "effect/Schema";
+import * as Stream from "effect/Stream";
 
 import { makeStaleWhileRevalidate } from "../environment/staleWhileRevalidate.ts";
 import { WindowsVerbatimSpawn } from "./windowsVerbatimSpawn.ts";

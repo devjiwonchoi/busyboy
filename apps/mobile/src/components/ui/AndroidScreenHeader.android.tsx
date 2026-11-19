@@ -1,18 +1,18 @@
-import { AppActivityIndicator } from "./AppActivityIndicator";
 import { Column, Text as NativeText, RNHostView } from "@expo/ui/jetpack-compose";
 import { useGT } from "gt-react-native";
 import { use, useState, type ReactNode } from "react";
 import { View } from "react-native";
 
-import type { AppSymbolName } from "./AppSymbol";
-import { NativeAppBar } from "./NativeAppBar.android";
-import { IconButton } from "./IconButton";
-import { AndroidAnchoredMenu } from "./AndroidAnchoredMenu.android";
-import { splitAndroidHeaderActions } from "./headerMenu.android";
 import { useScaledTextRole } from "../../features/settings/appearance/useScaledTextRole";
-import { useToolbarLayout } from "./useToolbarLayout";
-import { useControlTheme } from "./useControlTheme";
+import { AndroidAnchoredMenu } from "./AndroidAnchoredMenu.android";
+import { AppActivityIndicator } from "./AppActivityIndicator";
+import type { AppSymbolName } from "./AppSymbol";
+import { splitAndroidHeaderActions } from "./headerMenu.android";
+import { IconButton } from "./IconButton";
+import { NativeAppBar } from "./NativeAppBar.android";
 import { RoutedFormSheetContext } from "./RoutedFormSheetContext";
+import { useControlTheme } from "./useControlTheme";
+import { useToolbarLayout } from "./useToolbarLayout";
 
 export interface AndroidHeaderAction {
   readonly accessibilityLabel: string;

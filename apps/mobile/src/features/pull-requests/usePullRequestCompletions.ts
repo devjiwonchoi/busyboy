@@ -12,8 +12,8 @@ import { useState } from "react";
 import type { TextInputSelectionChangeEvent } from "react-native";
 
 import { composerPullRequests } from "../../state/pull-requests";
-import { useEnvironmentQuery } from "../../state/query";
 import { useDebouncedValue } from "../../state/queries";
+import { useEnvironmentQuery } from "../../state/query";
 
 const COMPLETION_SUGGESTION_LIMIT = 6;
 

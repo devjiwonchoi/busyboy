@@ -16,15 +16,15 @@ import {
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
+import { AsyncResult, Atom, AtomRegistry } from "effect/reactivity";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import * as Semaphore from "effect/Semaphore";
-import { AsyncResult, Atom, AtomRegistry } from "effect/reactivity";
 
 import * as EnvironmentRegistry from "../connection/registry.ts";
 import * as EnvironmentSupervisor from "../connection/supervisor.ts";
-import { request } from "../rpc/client.ts";
 import type { ProjectFaviconCache, ProjectFaviconTarget } from "../projectFaviconCache.ts";
+import { request } from "../rpc/client.ts";
 import { createEnvironmentQueryAtomFamily } from "./runtime.ts";
 
 const ASSET_URL_REFRESH_INTERVAL_MS = 30 * 60_000;

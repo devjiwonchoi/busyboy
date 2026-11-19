@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
+
 import { nextThreadFindAnnouncement, type ThreadFindAnnouncement } from "./threadFind";
 
 type Step = Omit<ThreadFindAnnouncement, "provisional"> & { readonly provisional?: boolean };

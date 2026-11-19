@@ -1,8 +1,4 @@
 import {
-  threadPullRequestKeysEqual,
-  threadPullRequestsOf,
-} from "../../sourceControl/threadPullRequests.ts";
-import {
   ChatAttachment,
   OrchestrationMessageContext,
   DEFAULT_MODEL,
@@ -21,6 +17,7 @@ import {
   ThreadPullRequestLink,
   TurnItemId,
 } from "@t3tools/contracts";
+import { randomUuidV4 } from "@t3tools/provider-core/server/randomUuid";
 import * as KeyedLock from "@t3tools/shared/KeyedLock";
 import * as NodeSqliteClient from "@t3tools/shared/nodeSqliteClient";
 import * as Cause from "effect/Cause";
@@ -32,8 +29,11 @@ import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as SqlClient from "effect/sql/SqlClient";
 
+import {
+  threadPullRequestKeysEqual,
+  threadPullRequestsOf,
+} from "../../sourceControl/threadPullRequests.ts";
 import * as EventSink from "../EventSink.ts";
-import { randomUuidV4 } from "@t3tools/provider-core/server/randomUuid";
 
 const IMPORT_EVENT_PREFIX = "migration:v1";
 const TRANSCRIPT_EVENT_BATCH_SIZE = 100;

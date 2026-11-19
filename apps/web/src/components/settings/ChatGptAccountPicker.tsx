@@ -1,7 +1,8 @@
+import type { ProviderAuthMethod } from "@t3tools/contracts";
 import { T, useGT } from "gt-react";
 import { useState } from "react";
-import type { ProviderAuthMethod } from "@t3tools/contracts";
-import { RadioGroup, Radio } from "../ui/radio-group";
+
+import { Button } from "../ui/button";
 import {
   Dialog,
   DialogPopup,
@@ -10,7 +11,7 @@ import {
   DialogDescription,
   DialogFooter,
 } from "../ui/dialog";
-import { Button } from "../ui/button";
+import { RadioGroup, Radio } from "../ui/radio-group";
 import { ChatGptConnectionButton } from "./ChatGptConnectionButton";
 
 export function ChatGptAccountPicker({

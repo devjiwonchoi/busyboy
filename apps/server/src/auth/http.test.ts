@@ -1,33 +1,33 @@
 import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import * as NodeServices from "@effect/platform-node/NodeServices";
+import { expect, it } from "@effect/vitest";
 import {
   AuthTokenExchangeGrantType,
   AuthEnvironmentBootstrapTokenType,
   AuthAccessTokenType,
   EnvironmentHttpApi,
 } from "@t3tools/contracts";
-import { expect, it } from "@effect/vitest";
 import * as Context from "effect/Context";
-import * as DateTime from "effect/DateTime";
 import * as SecureRandom from "effect/crypto/SecureRandom";
+import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
+import * as HttpApi from "effect/http-api/HttpApi";
+import * as HttpApiBuilder from "effect/http-api/HttpApiBuilder";
+import * as Etag from "effect/http/Etag";
+import * as HttpPlatform from "effect/http/HttpPlatform";
+import * as HttpRouter from "effect/http/HttpRouter";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
-import * as Etag from "effect/http/Etag";
-import * as HttpPlatform from "effect/http/HttpPlatform";
-import * as HttpApiBuilder from "effect/http-api/HttpApiBuilder";
-import * as HttpApi from "effect/http-api/HttpApi";
-import * as HttpRouter from "effect/http/HttpRouter";
 
 import * as ServerConfig from "../config.ts";
 import * as ServerEnvironment from "../environment/ServerEnvironment.ts";
 import * as SqlitePersistence from "../persistence/Sqlite.ts";
-import * as EnvironmentAuth from "./EnvironmentAuth.ts";
-import { makeDpopKey } from "./dpop.testkit.ts";
-import * as ServerSecretStore from "./ServerSecretStore.ts";
-import * as AuthHttp from "./http.ts";
 import * as ManagedPolicy from "../policy/ManagedPolicy.ts";
+import { makeDpopKey } from "./dpop.testkit.ts";
+import * as EnvironmentAuth from "./EnvironmentAuth.ts";
+import * as AuthHttp from "./http.ts";
+import * as ServerSecretStore from "./ServerSecretStore.ts";
 
 const DEV_TOKEN = "reusable-dev-auth-token-that-is-long-enough";
 class AuthTestApi extends HttpApi.make("environment").add(EnvironmentHttpApi.groups.auth) {}

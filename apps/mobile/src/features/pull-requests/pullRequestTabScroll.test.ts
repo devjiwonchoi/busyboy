@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
+
 import { pullRequestTabOffset } from "./pullRequestTabScroll";
 
 describe("pull request tab scroll", () => {

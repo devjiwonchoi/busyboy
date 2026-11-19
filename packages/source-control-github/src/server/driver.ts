@@ -5,19 +5,18 @@ import {
   type SourceControlSignIn,
 } from "@t3tools/source-control-core/server/driver";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 import { HttpClient } from "effect/http";
+import * as Layer from "effect/Layer";
 
 import { definition } from "../shared/definition.ts";
-
 import * as GitHubAppAccess from "./GitHubAppAccess.ts";
 import * as GitHubAppSignIn from "./GitHubAppSignIn.ts";
+import * as GitHubHttpClient from "./GitHubHttpClient.ts";
+import * as GitHubIssueTracker from "./GitHubIssueTracker.ts";
 import * as GitHubMediaFetch from "./gitHubMediaFetch.ts";
 import * as GitHubPullRequestApi from "./GitHubPullRequestApi.ts";
 import * as GitHubPullRequestProvider from "./GitHubPullRequestProvider.ts";
 import * as GitHubRest from "./GitHubRest.ts";
-import * as GitHubHttpClient from "./GitHubHttpClient.ts";
-import * as GitHubIssueTracker from "./GitHubIssueTracker.ts";
 import * as GitHubSourceControlProvider from "./GitHubSourceControlProvider.ts";
 
 // `GitHubRest.layerWithDependencies` carries the quota reserve every GitHub reader shares, so it

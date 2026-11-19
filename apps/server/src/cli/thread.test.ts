@@ -4,6 +4,7 @@ import { assert, it } from "@effect/vitest";
 import { AuthSessionId, ProjectId, RunId, ThreadId } from "@t3tools/contracts";
 import * as HostProcess from "@t3tools/shared/HostProcess";
 import * as NetService from "@t3tools/shared/Net";
+import { Command } from "effect/cli";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
@@ -15,7 +16,6 @@ import * as Path from "effect/Path";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import * as TestClock from "effect/testing/TestClock";
 import * as TestConsole from "effect/testing/TestConsole";
-import { Command } from "effect/cli";
 import { vi } from "vite-plus/test";
 
 import * as McpBridge from "../mcp/AcpMcpStdioBridge.ts";

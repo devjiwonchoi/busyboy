@@ -1,10 +1,3 @@
-import { WorkspaceNoTabs } from "./WorkspaceNoTabs";
-import { isSharedSlotTab } from "./navigation-tab-order";
-import { SharedSlotTitle } from "./SharedSlotTitle";
-import { WORKSPACE_TAB_LABELS, useEnabledNavigationTabs } from "./navigation-tabs";
-import { WorkspaceExtraTab } from "./WorkspaceExtraTab";
-import { WorkspaceSettingsList } from "../../settings/SettingsRouteScreen";
-import { WorkspaceSectionToolbar } from "./WorkspaceSectionToolbar";
 import { useNavigation } from "@react-navigation/native";
 import { useGT, useMessages } from "gt-react-native";
 import { use } from "react";
@@ -13,38 +6,45 @@ import { useKeyboardState } from "react-native-keyboard-controller";
 import { SafeAreaInsetsContext, useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { CompactBrandTitle } from "../../../components/CompactBrandTitle";
-import { HeaderItemsWidthContext } from "../../../native/header-items-width";
-import { NativeStackScreenOptions } from "../../../native/StackHeader";
-import {
-  NativePrimaryColumnContext,
-  NativeWorkspaceTabActivityContext,
-} from "../../../native/v5-workspace-context";
 import { isDuoDevice } from "../../../lib/device-type";
+import { HeaderItemsWidthContext } from "../../../native/header-items-width";
 import { NATIVE_LIQUID_GLASS_SUPPORTED } from "../../../native/native-glass";
 import {
   useDeviceType,
   useNativeColumnLayoutMetrics,
   useNativeLayoutMetrics,
 } from "../../../native/native-layout-metrics";
+import { NativeStackScreenOptions } from "../../../native/StackHeader";
+import {
+  NativePrimaryColumnContext,
+  NativeWorkspaceTabActivityContext,
+} from "../../../native/v5-workspace-context";
 import { HomeRouteScreen } from "../../home/HomeRouteScreen";
 import { WorkspaceConnectionTitle } from "../../home/WorkspaceConnectionTitle";
-import { useAdaptiveWorkspaceLayout } from "../AdaptiveWorkspaceLayout";
-import { PullRequestsScreen } from "../../pull-requests/PullRequestsScreen";
 import { IssuesScreen } from "../../issues/IssuesScreen";
+import { PullRequestsScreen } from "../../pull-requests/PullRequestsScreen";
+import { openSettings } from "../../settings/settings-navigation";
+import { WorkspaceSettingsList } from "../../settings/SettingsRouteScreen";
+import { useAdaptiveWorkspaceLayout } from "../AdaptiveWorkspaceLayout";
+import { isSharedSlotTab } from "./navigation-tab-order";
+import { WORKSPACE_TAB_LABELS, useEnabledNavigationTabs } from "./navigation-tabs";
+import { SharedSlotTitle } from "./SharedSlotTitle";
+import {
+  useCompactWorkspaceTabs,
+  useSidebarWorkspaceTabs,
+  useSystemWorkspaceTabBar,
+} from "./useSystemWorkspaceTabBar";
+import { WORKSPACE_DOCK, workspaceDockBottomClearance } from "./workspace-tabs-state";
+import { WorkspaceExtraTab } from "./WorkspaceExtraTab";
+import { WorkspaceNoTabs } from "./WorkspaceNoTabs";
+import { WorkspaceSectionToolbar } from "./WorkspaceSectionToolbar";
+import { WorkspaceSidebarTabs } from "./WorkspaceSidebarTabs";
 import {
   WorkspaceTabsContext,
   WorkspaceTabsProvider,
   useWorkspaceTabs,
 } from "./WorkspaceTabsContext";
 import { WorkspaceToolbar } from "./WorkspaceToolbar";
-import { WORKSPACE_DOCK, workspaceDockBottomClearance } from "./workspace-tabs-state";
-import { WorkspaceSidebarTabs } from "./WorkspaceSidebarTabs";
-import {
-  useCompactWorkspaceTabs,
-  useSidebarWorkspaceTabs,
-  useSystemWorkspaceTabBar,
-} from "./useSystemWorkspaceTabBar";
-import { openSettings } from "../../settings/settings-navigation";
 
 const TAB_TITLES = WORKSPACE_TAB_LABELS;
 

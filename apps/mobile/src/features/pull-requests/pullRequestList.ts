@@ -11,9 +11,10 @@ import {
   type PullRequestListStatsInput,
 } from "@t3tools/contracts";
 import { msg } from "gt-react-native";
-import type { PullRequestListControls } from "../../persistence/mobile-preferences";
-import { compareTimestamps } from "../../lib/time";
+
 import { m, type MessageResolver } from "../../i18n/messages";
+import { compareTimestamps } from "../../lib/time";
+import type { PullRequestListControls } from "../../persistence/mobile-preferences";
 
 export const PR_LIST_PAGE_SIZE = 30;
 export type { PullRequestListControls } from "../../persistence/mobile-preferences";

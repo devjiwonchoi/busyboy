@@ -10,8 +10,8 @@ import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import * as TestClock from "effect/testing/TestClock";
 
-import * as CloudMintSigner from "./CloudMintSigner.ts";
 import * as RelayConfiguration from "../Config.ts";
+import * as CloudMintSigner from "./CloudMintSigner.ts";
 import * as RelayTokens from "./RelayTokens.ts";
 
 const keyPair = NodeCrypto.generateKeyPairSync("ed25519", {

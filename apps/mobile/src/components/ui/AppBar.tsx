@@ -1,28 +1,28 @@
-import { useGT, useLocale, useMessages } from "gt-react-native";
-
-import { Toolbar } from "./Toolbar";
-import { AppActivityIndicator } from "./AppActivityIndicator";
-import type { HeaderBarButtonMailSearchToolbarItem, SearchBarCommands } from "react-native-screens";
 import { NavigationContext, NavigationRouteContext } from "@react-navigation/native";
+import { useGT, useLocale, useMessages } from "gt-react-native";
 import { use, useId, useLayoutEffect, useRef, useSyncExternalStore } from "react";
 import { View } from "react-native";
-import { createNativeHeaderMenu } from "./nativeHeaderMenu.ios";
-import { ScreenHeaderButton } from "./ScreenHeaderButton";
-import { NativeStackScreenOptions, useScreenOptionsWriter } from "../../native/StackHeader";
-import { useNativeWorkspaceColumnsSupported } from "../../native/NativeWorkspaceColumns";
-import { useDeviceType } from "../../native/native-layout-metrics";
-import { isDuoDevice } from "../../lib/device-type";
+import type { HeaderBarButtonMailSearchToolbarItem, SearchBarCommands } from "react-native-screens";
+
 import { useAdaptiveWorkspaceLayout } from "../../features/layout/AdaptiveWorkspaceLayout";
-import { useSidebarToggle } from "../../features/layout/useSidebarToggle";
 import { InspectorCloseContext } from "../../features/layout/inspector-bar-store";
 import {
   createNativeMailSearchToolbarItem,
   NATIVE_MAIL_SEARCH_TOOLBAR_SUPPORTED,
 } from "../../features/layout/native-mail-search-toolbar";
+import { useSidebarToggle } from "../../features/layout/useSidebarToggle";
 import { useAppearancePreferences } from "../../features/settings/appearance/AppearancePreferencesProvider";
+import { isDuoDevice } from "../../lib/device-type";
+import { useDeviceType } from "../../native/native-layout-metrics";
+import { useNativeWorkspaceColumnsSupported } from "../../native/NativeWorkspaceColumns";
+import { NativeStackScreenOptions, useScreenOptionsWriter } from "../../native/StackHeader";
+import { useNativeMailSearchToolbar } from "../../native/use-native-mail-search-toolbar";
+import { AppActivityIndicator } from "./AppActivityIndicator";
 import type { AppBarMenu, AppBarMenuItem, AppBarProps } from "./AppBar.types";
 import type { AppSymbolName } from "./AppSymbol";
-import { useNativeMailSearchToolbar } from "../../native/use-native-mail-search-toolbar";
+import { createNativeHeaderMenu } from "./nativeHeaderMenu.ios";
+import { ScreenHeaderButton } from "./ScreenHeaderButton";
+import { Toolbar } from "./Toolbar";
 import { useControlTheme } from "./useControlTheme";
 
 function iosIcon(icon: AppSymbolName) {

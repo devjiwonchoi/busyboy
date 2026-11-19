@@ -9,13 +9,12 @@ import * as Schema from "effect/Schema";
 import { msg, T, useGT, useMessages } from "gt-react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 
-import type { MessageResolver } from "../../i18n/messages";
-
 import { DESKTOP_DOWNLOAD_URL } from "~/branding";
 import { useLocalStorage } from "~/hooks/useLocalStorage";
 import { isHostedStaticApp } from "~/hostedPairing";
 import { useEnvironments } from "~/state/environments";
 
+import type { MessageResolver } from "../../i18n/messages";
 import { Alert, AlertDescription, AlertTitle } from "../ui/alert";
 import { Button } from "../ui/button";
 import { Checkbox } from "../ui/checkbox";

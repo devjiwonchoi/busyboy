@@ -2,10 +2,11 @@ import { useGT } from "gt-react";
 import { InfoIcon } from "lucide-react";
 import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
 
+import { observeResize } from "~/lib/observeResize";
+
 import { Button } from "../ui/button";
 import { Popover, PopoverPopup, PopoverTrigger } from "../ui/popover";
 import { ComposerBanner, type ComposerBannerVariant } from "./ComposerBanner";
-import { observeResize } from "~/lib/observeResize";
 
 /**
  * Where a notice sits in the stack. The machine comes first, then what needs you; the

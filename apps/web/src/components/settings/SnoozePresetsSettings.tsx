@@ -1,4 +1,8 @@
-import { useState } from "react";
+import {
+  resolveSnoozePreset,
+  resolveSnoozePresets,
+  snoozePresetId,
+} from "@t3tools/client-runtime/state/thread-settled";
 import {
   DEFAULT_SNOOZE_PRESETS,
   MAX_SNOOZE_PRESET_MINUTES,
@@ -6,18 +10,13 @@ import {
   SnoozePresetDay,
   type SnoozePresetSetting,
 } from "@t3tools/contracts/settings";
-import {
-  resolveSnoozePreset,
-  resolveSnoozePresets,
-  snoozePresetId,
-} from "@t3tools/client-runtime/state/thread-settled";
 import * as Equal from "effect/Equal";
 import * as Schema from "effect/Schema";
 import { msg, T, useGT, useLocale, useMessages, Var } from "gt-react";
 import { PlusIcon, XIcon } from "lucide-react";
+import { useState } from "react";
 
 import { useNowMinute } from "../../hooks/useNowMinute";
-import { reconcileSnoozeDraft, sortSnoozeRows } from "./SnoozePresetsSettings.logic";
 import { formatShortTimestamp } from "../../timestampFormat";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
@@ -31,6 +30,7 @@ import {
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
 import { SettingResetButton, SettingsRow } from "./settingsLayout";
 import { useSearchableSetting } from "./settingsSearch";
+import { reconcileSnoozeDraft, sortSnoozeRows } from "./SnoozePresetsSettings.logic";
 import {
   useScopedSettings,
   useScopedSettingsMixed,

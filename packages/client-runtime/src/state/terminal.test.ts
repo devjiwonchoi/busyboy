@@ -10,6 +10,7 @@ import * as Cause from "effect/Cause";
 import { AsyncResult, Atom, AtomRegistry } from "effect/reactivity";
 import { expect, it } from "vite-plus/test";
 
+import { runAtomCommand } from "./runtime.ts";
 import {
   createTerminalSession,
   INITIAL_TERMINAL_LIFECYCLE,
@@ -17,7 +18,6 @@ import {
   type TerminalLifecycleEvent,
   type TerminalSessionMode,
 } from "./terminal.ts";
-import { runAtomCommand } from "./runtime.ts";
 import { EMPTY_TERMINAL_BUFFER_STATE, type TerminalBufferState } from "./terminalSession.ts";
 
 function run(events: ReadonlyArray<TerminalLifecycleEvent>) {

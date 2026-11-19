@@ -1,4 +1,5 @@
 import type { NavigationState } from "@react-navigation/native";
+
 import { isSettingsRoute } from "../features/settings/settings-navigation";
 import { resetRootStack, type RootStackNavigation } from "./root-stack-reset";
 

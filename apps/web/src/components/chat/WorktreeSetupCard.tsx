@@ -1,8 +1,7 @@
-import { T, msg, useGT, useMessages } from "gt-react";
-import { type MessageResolver } from "~/i18n/messages";
-import { type WorktreeSetupSnapshot, type WorktreeSetupStage } from "@t3tools/contracts";
 import { worktreeSetupStageLabel } from "@t3tools/client-runtime/contract-labels";
+import { type WorktreeSetupSnapshot, type WorktreeSetupStage } from "@t3tools/contracts";
 import { formatDuration } from "@t3tools/shared/orchestrationTimingCopy";
+import { T, msg, useGT, useMessages } from "gt-react";
 import {
   CheckIcon,
   CircleAlertIcon,
@@ -18,10 +17,12 @@ import { useState, type ReactNode } from "react";
 
 import { Button } from "~/components/ui/button";
 import { Spinner } from "~/components/ui/spinner";
-import { MiddleTruncate } from "../ui/middle-truncate";
-import { observeVisibleAnimation } from "~/lib/visibleAnimation";
-import { cn } from "~/lib/utils";
 import { useNowSecond } from "~/hooks/useNowSecond";
+import { type MessageResolver } from "~/i18n/messages";
+import { cn } from "~/lib/utils";
+import { observeVisibleAnimation } from "~/lib/visibleAnimation";
+
+import { MiddleTruncate } from "../ui/middle-truncate";
 import { WorkLogRow } from "./WorkLog";
 
 interface WorktreeSetupCardProps {

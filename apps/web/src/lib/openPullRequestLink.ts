@@ -1,35 +1,32 @@
-import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
-import { parsePullRequestAnchor } from "@t3tools/shared/pullRequestAnchor";
-import type { EnvironmentId, ScopedThreadRef } from "@t3tools/contracts";
 import { useAtomValue } from "@effect/atom-react";
-import { useNavigate } from "@tanstack/react-router";
-import { type MouseEvent } from "react";
-import { msg } from "gt-react";
-
 import {
   resolveChangeRequestLinkTarget,
   resolvePullRequestPreviewTarget,
 } from "@t3tools/client-runtime/change-request-links";
-
+import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
 import { sourceControlClients } from "@t3tools/client-runtime/source-control-clients";
+import type { EnvironmentId, ScopedThreadRef } from "@t3tools/contracts";
+import { parsePullRequestAnchor } from "@t3tools/shared/pullRequestAnchor";
+import { useNavigate } from "@tanstack/react-router";
+import { msg } from "gt-react";
+import { type MouseEvent } from "react";
 
 import { canOpenLinksInApp } from "../browser/browserLinkTarget";
 import { useOpenLink } from "../browser/useOpenLink";
-import { useClientSettings } from "../hooks/useSettings";
 import { stackedThreadToast, toastManager } from "../components/ui/toast";
-import { m } from "../i18n/messages";
-import { useRightPanelStore } from "../rightPanelStore";
 import {
   selectThreadBranchBaseRef,
   selectThreadDiffPanelSelection,
   useDiffPanelStore,
 } from "../diffPanelStore";
-
+import { useClientSettings } from "../hooks/useSettings";
+import { m } from "../i18n/messages";
+import { useRightPanelStore } from "../rightPanelStore";
 import { appAtomRegistry } from "../rpc/atomRegistry";
 import { readProject, readProjects, readThreadShell, useProjects } from "../state/entities";
-import { environmentServerConfigsAtom, serverEnvironment } from "../state/server";
 import { usePrimaryEnvironmentId } from "../state/environments";
 import { reviewEnvironment } from "../state/review";
+import { environmentServerConfigsAtom, serverEnvironment } from "../state/server";
 import { useAtomQueryRunner } from "../state/use-atom-query-runner";
 
 export function usePullRequestPreviewTarget(environmentId: EnvironmentId | null, url: string) {

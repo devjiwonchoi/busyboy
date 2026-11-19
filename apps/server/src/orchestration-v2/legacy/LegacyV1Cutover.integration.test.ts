@@ -1,6 +1,6 @@
-import { assert, describe, it } from "@effect/vitest";
 import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import * as NodeServices from "@effect/platform-node/NodeServices";
+import { assert, describe, it } from "@effect/vitest";
 import {
   CommandId,
   MessageId,
@@ -14,6 +14,8 @@ import {
   type OrchestrationV2ProviderThread,
   type OrchestrationV2ThreadProjection,
 } from "@t3tools/contracts";
+import * as ProviderAdapter from "@t3tools/provider-core/server/ProviderAdapter";
+import { checkpointWorkspace } from "@t3tools/provider-testing/replayWorkspace";
 import * as NodeSqliteClient from "@t3tools/shared/nodeSqliteClient";
 import * as Digest from "effect/crypto/Digest";
 import * as DateTime from "effect/DateTime";
@@ -23,13 +25,12 @@ import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
 import * as Path from "effect/Path";
 import * as PubSub from "effect/PubSub";
-import * as References from "effect/References";
 import * as Ref from "effect/Ref";
-import * as Stream from "effect/Stream";
+import * as References from "effect/References";
 import * as SqlClient from "effect/sql/SqlClient";
+import * as Stream from "effect/Stream";
 
 import { runMigrations } from "../../persistence/Migrations.ts";
-import * as SqlitePersistence from "../../persistence/Sqlite.ts";
 import Migration0042 from "../../persistence/Migrations/042_ProjectionThreadLinkedPullRequest.ts";
 import Migration0043 from "../../persistence/Migrations/043_ProjectionThreadsUnsettledAt.ts";
 import Migration0044 from "../../persistence/Migrations/044_ClearAutomaticProjectModelDefaults.ts";
@@ -38,18 +39,17 @@ import Migration0046 from "../../persistence/Migrations/046_RepairAutomaticSettl
 import Migration0047 from "../../persistence/Migrations/047_ProjectionProjectIcon.ts";
 import Migration0048 from "../../persistence/Migrations/048_ProjectionThreadBranchPullRequest.ts";
 import Migration0049 from "../../persistence/Migrations/049_ProjectionThreadsActiveOrderKey.ts";
+import * as SqlitePersistence from "../../persistence/Sqlite.ts";
 import { CodexProviderCapabilitiesV2 } from "../Adapters/CodexAdapterV2.ts";
 import * as EffectWorker from "../EffectWorker.ts";
 import * as EventSink from "../EventSink.ts";
 import * as EventStore from "../EventStore.ts";
-import * as LegacyV1ThreadImporter from "./LegacyV1ThreadImporter.ts";
 import * as Orchestrator from "../Orchestrator.ts";
-import * as ProjectionReplay from "../testkit/ProjectionReplay.ts";
 import * as ProjectionStore from "../ProjectionStore.ts";
 import * as ProviderAdapterRegistry from "../ProviderAdapterRegistry.ts";
+import * as ProjectionReplay from "../testkit/ProjectionReplay.ts";
 import * as ProviderReplayHarness from "../testkit/ProviderReplayHarness.ts";
-import { checkpointWorkspace } from "@t3tools/provider-testing/replayWorkspace";
-import * as ProviderAdapter from "@t3tools/provider-core/server/ProviderAdapter";
+import * as LegacyV1ThreadImporter from "./LegacyV1ThreadImporter.ts";
 
 const PROJECT_ID = "project:cutover";
 const ACTIVE_THREAD = "thread:cutover:active";

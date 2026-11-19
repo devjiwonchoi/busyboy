@@ -19,8 +19,9 @@ vi.mock(import("~/state/use-atom-command"), async (importOriginal) => ({
   useAtomCommand: (() => async () => ({ _tag: "Success" })) as never,
 }));
 
-import { render } from "../../../test/render";
 import type { EnvironmentPresentation } from "~/state/environments";
+
+import { render } from "../../../test/render";
 import { EnvironmentRoutesList } from "./EnvironmentRoutesList";
 
 const ENVIRONMENT_ID = EnvironmentId.make("environment-1");

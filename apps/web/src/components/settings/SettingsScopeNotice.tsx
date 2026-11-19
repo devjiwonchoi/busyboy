@@ -13,7 +13,6 @@ import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { ITEM_ROW_CLASSNAME } from "./itemRows";
 import { SettingsGroup } from "./SettingsGroup";
 import { SettingsPageContainer, SettingsSection } from "./settingsLayout";
-import { useSettingsScope } from "./SettingsScopeContext";
 import type { SettingsScopeSearch } from "./settingsScope";
 import {
   projectScopeMenuGroups,
@@ -22,6 +21,7 @@ import {
   settingsScopeEnvironmentLabels,
   settingsScopeProjectMachines,
 } from "./settingsScopeAxis";
+import { useSettingsScope } from "./SettingsScopeContext";
 
 interface ScopeChoice {
   label: string;

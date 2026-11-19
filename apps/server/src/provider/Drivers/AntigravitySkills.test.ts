@@ -1,11 +1,11 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, it } from "@effect/vitest";
+import { symlinksSupported } from "@t3tools/shared/testing/symlinks";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 
 import { discoverAntigravitySkills } from "./AntigravitySkills.ts";
-import { symlinksSupported } from "@t3tools/shared/testing/symlinks";
 
 const writeSkill = Effect.fn("writeSkill")(function* (directory: string, contents: string) {
   const fileSystem = yield* FileSystem.FileSystem;

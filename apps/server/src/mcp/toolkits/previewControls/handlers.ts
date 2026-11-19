@@ -1,10 +1,11 @@
 import * as Effect from "effect/Effect";
+
 import * as Preview from "../../../preview/Manager.ts";
 import { requireThreadMcpCapability } from "../../McpInvocationContext.ts";
 import * as McpToolAccess from "../../McpToolAccess.ts";
+import * as PreviewAutomationBroker from "../../PreviewAutomationBroker.ts";
 import { unavailable } from "../../threadAccess.ts";
 import { PreviewControlsToolkit } from "./tools.ts";
-import * as PreviewAutomationBroker from "../../PreviewAutomationBroker.ts";
 
 const access = Effect.gen(function* () {
   const scope = yield* requireThreadMcpCapability("preview");

@@ -11,9 +11,11 @@ import {
   WS_METHODS,
 } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
-import * as Stream from "effect/Stream";
 import { AsyncResult, Atom, type AtomRegistry } from "effect/reactivity";
+import * as Stream from "effect/Stream";
 
+import type { EnvironmentRegistry } from "../connection/registry.ts";
+import { subscribe, subscribeDynamic, type EnvironmentRpcInput } from "../rpc/client.ts";
 import {
   type AtomCommand,
   createAtomCommandScheduler,
@@ -22,8 +24,7 @@ import {
   isAtomCommandInterrupted,
   runAtomCommand,
 } from "./runtime.ts";
-import type { EnvironmentRegistry } from "../connection/registry.ts";
-import { subscribe, subscribeDynamic, type EnvironmentRpcInput } from "../rpc/client.ts";
+import { terminalOutputText } from "./terminalOutput.ts";
 import {
   applyTerminalAttachStreamEvent,
   applyTerminalMetadataStreamEvent,
@@ -31,7 +32,6 @@ import {
   nextTerminalAttachSeedState,
   type TerminalBufferState,
 } from "./terminalSession.ts";
-import { terminalOutputText } from "./terminalOutput.ts";
 
 interface TerminalMetadataFeed {
   readonly terminals: ReadonlyArray<TerminalSummary>;

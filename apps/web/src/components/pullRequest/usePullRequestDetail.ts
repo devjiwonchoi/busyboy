@@ -12,8 +12,6 @@ import { useState } from "react";
 
 import { usePullRequestChecksRefresh } from "~/hooks/usePullRequestChecksRefresh";
 import { useServerConfigs } from "~/state/entities";
-import { useEnvironmentQuery } from "~/state/query";
-import { useEnvironmentScope } from "~/state/session";
 import {
   newestDisplayedPullRequestSummary,
   newestPullRequestSummary,
@@ -21,6 +19,9 @@ import {
   pullRequestListEntryToSummary,
   useSharedPullRequestSummary,
 } from "~/state/pullRequests";
+import { useEnvironmentQuery } from "~/state/query";
+import { useEnvironmentScope } from "~/state/session";
+
 import {
   readPullRequestDetailSnapshot,
   resolveDisplayedPullRequestDetail,

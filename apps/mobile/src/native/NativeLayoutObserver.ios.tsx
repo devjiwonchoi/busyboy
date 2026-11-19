@@ -1,5 +1,6 @@
 import { requireNativeView, requireOptionalNativeModule } from "expo";
 import type { NativeSyntheticEvent, ViewProps } from "react-native";
+
 import type { NativeLayoutMetrics } from "../lib/reserved-regions";
 
 interface ObserverProps extends ViewProps {

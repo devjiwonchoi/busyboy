@@ -3,8 +3,8 @@ import {
   DesktopAppActivationPlatform,
 } from "@t3tools/contracts";
 import * as Schema from "effect/Schema";
-import { FolderPlusIcon } from "lucide-react";
 import { useGT } from "gt-react";
+import { FolderPlusIcon } from "lucide-react";
 import { useState, type DragEvent, type ReactNode } from "react";
 
 import { useOpenLocalWorkspace } from "../../hooks/useOpenLocalWorkspace";

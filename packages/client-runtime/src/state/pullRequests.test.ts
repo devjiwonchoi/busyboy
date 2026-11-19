@@ -1,6 +1,4 @@
-import { createCommandPermissions } from "./commandPermissions.ts";
-import { RpcPermissionGuard } from "../rpc/client.ts";
-import { vi } from "vite-plus/test";
+import { expect, it } from "@effect/vitest";
 import {
   EnvironmentId,
   AuthSourceControlWriteScope,
@@ -13,20 +11,21 @@ import {
   type PullRequestListInput,
   type PullRequestListEntry,
 } from "@t3tools/contracts";
-import { expect, it } from "@effect/vitest";
-import * as Schema from "effect/Schema";
 import * as Deferred from "effect/Deferred";
-import * as Fiber from "effect/Fiber";
-import * as TestClock from "effect/testing/TestClock";
 import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
 import * as Latch from "effect/Latch";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as PubSub from "effect/PubSub";
+import { AsyncResult, Atom, AtomRegistry } from "effect/reactivity";
+import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import * as SubscriptionRef from "effect/SubscriptionRef";
-import { AsyncResult, Atom, AtomRegistry } from "effect/reactivity";
+import * as TestClock from "effect/testing/TestClock";
+import { vi } from "vite-plus/test";
 
+import { SshConnectionProfile, type ConnectionCatalogEntry } from "../connection/catalog.ts";
 import {
   AVAILABLE_CONNECTION_STATE,
   ConnectionTransientError,
@@ -35,12 +34,16 @@ import {
   type PreparedConnection,
   type SupervisorConnectionState,
 } from "../connection/model.ts";
-import * as EnvironmentRegistry from "../connection/registry.ts";
-import { SshConnectionProfile, type ConnectionCatalogEntry } from "../connection/catalog.ts";
 import * as ConnectionProfileStore from "../connection/profileStore.ts";
+import { PullRequestRoutingPermissions } from "../connection/pullRequestRoutingPermissions.ts";
+import * as EnvironmentRegistry from "../connection/registry.ts";
 import * as EnvironmentSupervisor from "../connection/supervisor.ts";
+import { RpcPermissionGuard } from "../rpc/client.ts";
 import type { WsRpcProtocolClient } from "../rpc/protocol.ts";
 import type { RpcSession } from "../rpc/session.ts";
+import { createCommandPermissions } from "./commandPermissions.ts";
+import * as PullRequestDiffLoader from "./pullRequestDiffHttp.ts";
+import { createPullRequestRouter } from "./pullRequestRouting.ts";
 import {
   applyPullRequestSummaryEdits,
   createLinkedPullRequestSummaryAtomFamily,
@@ -52,11 +55,8 @@ import {
   pullRequestPendingEditsAtom,
   pullRequestPendingEditsFor,
 } from "./pullRequests.ts";
-import * as PullRequestDiffLoader from "./pullRequestDiffHttp.ts";
-import { executeAtomQuery, queryPersistenceKey } from "./runtime.ts";
 import { EnvironmentQueryStore } from "./queryPersistence.ts";
-import { createPullRequestRouter } from "./pullRequestRouting.ts";
-import { PullRequestRoutingPermissions } from "../connection/pullRequestRoutingPermissions.ts";
+import { executeAtomQuery, queryPersistenceKey } from "./runtime.ts";
 
 const trustedRouting = {
   get: () => Effect.succeed("read-write" as const),

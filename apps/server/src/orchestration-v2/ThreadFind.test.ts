@@ -1,5 +1,4 @@
 import { assert, it, describe } from "@effect/vitest";
-import { searchableMessageSegments } from "@t3tools/shared/threadFindText";
 import {
   EventId,
   MessageId,
@@ -15,6 +14,7 @@ import {
   ThreadId,
   type OrchestrationV2DomainEvent,
 } from "@t3tools/contracts";
+import { searchableMessageSegments } from "@t3tools/shared/threadFindText";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -25,9 +25,9 @@ import * as Tracer from "effect/Tracer";
 import { vi } from "vite-plus/test";
 
 import * as SqlitePersistence from "../persistence/Sqlite.ts";
+import * as EventStore from "./EventStore.ts";
 import * as ProjectionStore from "./ProjectionStore.ts";
 import * as ProjectStore from "./ProjectStore.ts";
-import * as EventStore from "./EventStore.ts";
 import {
   encodeThreadHistoryCursor,
   selectHistoryPageFromCursor,

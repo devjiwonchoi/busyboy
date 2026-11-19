@@ -1,12 +1,3 @@
-import * as Context from "effect/Context";
-import * as Duration from "effect/Duration";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import * as Match from "effect/Match";
-import * as Schedule from "effect/Schedule";
-import * as Semaphore from "effect/Semaphore";
-import { ChildProcessSpawner } from "effect/process";
-
 import {
   type VcsError,
   type VcsProcessErrorContext,
@@ -21,6 +12,14 @@ import {
 } from "@t3tools/contracts";
 import * as HostProcess from "@t3tools/shared/HostProcess";
 import type { SourceControlProcessInput } from "@t3tools/source-control-core/server/SourceControlHost";
+import * as Context from "effect/Context";
+import * as Duration from "effect/Duration";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Match from "effect/Match";
+import { ChildProcessSpawner } from "effect/process";
+import * as Schedule from "effect/Schedule";
+import * as Semaphore from "effect/Semaphore";
 
 import { gitCommandDuration, gitCommandsTotal, withMetrics } from "../observability/Metrics.ts";
 import * as ProcessRunner from "../processRunner.ts";

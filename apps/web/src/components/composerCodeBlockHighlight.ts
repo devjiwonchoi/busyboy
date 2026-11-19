@@ -1,11 +1,12 @@
 import { Extension } from "@tiptap/core";
+import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 import { type EditorState, Plugin, PluginKey } from "@tiptap/pm/state";
 import { Decoration, DecorationSet } from "@tiptap/pm/view";
-import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 
-import type { DiffThemeName } from "~/lib/diffRendering";
 import { languageOfInfoString } from "~/composer-code-languages";
+import type { DiffThemeName } from "~/lib/diffRendering";
 import { getSyntaxHighlighterPromise } from "~/lib/syntaxHighlighting";
+
 import { highlighterLanguageOf } from "./chat/MarkdownCodeBlock.logic";
 
 interface HighlightedBlock {

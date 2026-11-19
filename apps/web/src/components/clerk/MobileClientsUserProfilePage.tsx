@@ -8,15 +8,15 @@ import { Button } from "../ui/button";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "../ui/empty";
 import { Skeleton } from "../ui/skeleton";
 import {
-  mobileClientNotificationDetail,
-  mobileClientPlatformLabel,
-  mobileClientUpdatedAtLabel,
-} from "./MobileClientsUserProfilePage.logic";
-import {
   ClerkUserProfilePage,
   ClerkUserProfileRefreshButton,
   ClerkUserProfileRow,
 } from "./ClerkUserProfilePage";
+import {
+  mobileClientNotificationDetail,
+  mobileClientPlatformLabel,
+  mobileClientUpdatedAtLabel,
+} from "./MobileClientsUserProfilePage.logic";
 
 const MOBILE_CLIENT_SKELETON_ROWS = ["primary", "secondary"] as const;
 

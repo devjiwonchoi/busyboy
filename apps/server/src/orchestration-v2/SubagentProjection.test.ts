@@ -17,10 +17,7 @@ import {
   ProviderThreadId,
   ThreadId,
 } from "@t3tools/contracts";
-import * as DateTime from "effect/DateTime";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-
+import * as IdAllocator from "@t3tools/provider-core/server/IdAllocator";
 import {
   makeSubagentChildThread,
   delegatedTaskProgress,
@@ -30,7 +27,9 @@ import {
   endRunlessRootTurns,
   PROVIDER_STOP_REASON_SIGNAL,
 } from "@t3tools/provider-core/server/subagentProjection";
-import * as IdAllocator from "@t3tools/provider-core/server/IdAllocator";
+import * as DateTime from "effect/DateTime";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 
 import * as SqlitePersistence from "../persistence/Sqlite.ts";
 import * as ProjectionStore from "./ProjectionStore.ts";

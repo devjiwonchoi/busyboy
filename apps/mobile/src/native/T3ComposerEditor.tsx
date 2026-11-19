@@ -2,8 +2,8 @@ import { TextInputWrapper } from "expo-paste-input";
 import { useImperativeHandle, useRef } from "react";
 import { TextInput, type TextInputInstance } from "react-native";
 
-import { FONT_FAMILIES } from "../lib/fontFamilies";
 import { useScaledTextRole } from "../features/settings/appearance/useScaledTextRole";
+import { FONT_FAMILIES } from "../lib/fontFamilies";
 import { useNativePaste } from "../lib/useNativePaste";
 import type { ComposerEditorProps } from "./T3ComposerEditor.types";
 

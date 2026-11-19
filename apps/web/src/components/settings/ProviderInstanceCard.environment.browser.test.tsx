@@ -1,5 +1,5 @@
-import { userEvent } from "vite-plus/test/browser";
 import { describe, expect, it, vi } from "vite-plus/test";
+import { userEvent } from "vite-plus/test/browser";
 
 import { render } from "../../../test/render";
 import { ProviderEnvironmentSection } from "./ProviderInstanceCard";

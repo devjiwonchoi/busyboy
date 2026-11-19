@@ -1,23 +1,26 @@
 import { useNavigation, type StaticScreenProps } from "@react-navigation/native";
-import { TextInputWrapper } from "expo-paste-input";
 import type { EnvironmentId, ThreadId } from "@t3tools/contracts";
+import { TextInputWrapper } from "expo-paste-input";
 import { T, useGT } from "gt-react-native";
 import { useMemo, useState } from "react";
 import { ScrollView, View, useWindowDimensions } from "react-native";
+
+import { ComposerAttachmentStrip } from "../../components/ComposerAttachmentStrip";
+import { AppText as Text, AppTextInput as TextInput } from "../../components/ui/AppText";
+import { ControlPill } from "../../components/ui/ControlPill";
 import * as Dialog from "../../components/ui/Dialog";
 import { FilePreviewModal, type FilePreviewSource } from "../../components/ui/FilePreviewModal";
-
-import { AppText as Text, AppTextInput as TextInput } from "../../components/ui/AppText";
 import { KeyboardSheetBody } from "../../components/ui/KeyboardSheetBody";
 import { SheetHeader } from "../../components/ui/SheetHeader";
-import { ComposerAttachmentStrip } from "../../components/ComposerAttachmentStrip";
-import { ControlPill } from "../../components/ui/ControlPill";
 import { cn } from "../../lib/cn";
 import type { DraftComposerImageAttachment } from "../../lib/composerImages";
 import { convertPastedImagesToAttachments, pickComposerImages } from "../../lib/composerImages";
 import { useNativePaste } from "../../lib/useNativePaste";
 import { setPendingConnectionError } from "../../state/use-remote-environment-registry";
 import { appendReviewCommentToDraft } from "../../state/use-thread-composer-state";
+import { useAppearancePreferences } from "../settings/appearance/AppearancePreferencesProvider";
+import { useAppearanceCodeSurface } from "../settings/appearance/useAppearanceCodeSurface";
+import { highlightReviewSelectedLines } from "./highlightReviewSelectedLines";
 import {
   clearReviewCommentTarget,
   formatReviewCommentContext,
@@ -25,10 +28,7 @@ import {
   getSelectedReviewCommentLines,
   useReviewCommentTarget,
 } from "./reviewCommentSelection";
-import { useAppearanceCodeSurface } from "../settings/appearance/useAppearanceCodeSurface";
-import { useAppearancePreferences } from "../settings/appearance/AppearancePreferencesProvider";
 import { changeTone, DiffTokenText, ReviewChangeBar } from "./reviewDiffRendering";
-import { highlightReviewSelectedLines } from "./highlightReviewSelectedLines";
 
 const REVIEW_COMMENT_PREVIEW_MAX_LINES = 5;
 const NO_LINES: ReturnType<typeof getSelectedReviewCommentLines> = [];

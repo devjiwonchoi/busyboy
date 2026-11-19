@@ -1,22 +1,21 @@
 import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import * as Layer from "effect/Layer";
 import { assert, describe, it } from "@effect/vitest";
-import * as Deferred from "effect/Deferred";
-import * as Queue from "effect/Queue";
 import * as Context from "effect/Context";
+import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientError from "effect/http/HttpClientError";
 import * as HttpClientResponse from "effect/http/HttpClientResponse";
+import * as Layer from "effect/Layer";
+import * as Queue from "effect/Queue";
 import * as TestClock from "effect/testing/TestClock";
 
-import * as CursorAccountReader from "./CursorAccountReader.ts";
-
-import { makeCursorAccountUsageReader } from "./accountUsage.ts";
 import type { CursorCredentialSource } from "./accountCache.ts";
+import { makeCursorAccountUsageReader } from "./accountUsage.ts";
+import * as CursorAccountReader from "./CursorAccountReader.ts";
 
 interface DashboardRequest {
   readonly url: string;

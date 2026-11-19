@@ -1,5 +1,5 @@
-import { DesktopWslStateSchema } from "@t3tools/contracts";
 import { assert, describe, it } from "@effect/vitest";
+import { DesktopWslStateSchema } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";

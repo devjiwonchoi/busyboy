@@ -1,7 +1,6 @@
-import { errorDisplayMessage } from "@t3tools/client-runtime/errors";
-import { T, useGT, useLocale, Var } from "gt-react-native";
 import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import { useNavigation } from "@react-navigation/native";
+import { errorDisplayMessage } from "@t3tools/client-runtime/errors";
 import {
   cancelEnvironmentSpeechModelDownload,
   downloadEnvironmentSpeechModel,
@@ -13,9 +12,9 @@ import {
   type EnvironmentSpeechModel,
 } from "@t3tools/contracts";
 import { AsyncResult } from "effect/reactivity";
+import { T, useGT, useLocale, Var } from "gt-react-native";
 import { type ReactNode, useEffect, useState } from "react";
 import { Platform, Text as NativeText, View } from "react-native";
-import { m } from "../../i18n/messages";
 
 import { SymbolView } from "../../components/ui/AppSymbol";
 import { AppText as Text } from "../../components/ui/AppText";
@@ -24,6 +23,7 @@ import { ListActionRow } from "../../components/ui/ListActionRow";
 import { ListChoiceRow } from "../../components/ui/ListChoiceRow";
 import { ListRow } from "../../components/ui/ListRow";
 import { Progress } from "../../components/ui/Progress";
+import { m } from "../../i18n/messages";
 import { formatBytes } from "../../lib/formatBytes";
 import { useEnvironmentScope } from "../../state/session";
 import {

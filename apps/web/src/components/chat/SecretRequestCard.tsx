@@ -1,4 +1,4 @@
-import { pipe } from "effect/Function";
+import { useAtomValue } from "@effect/atom-react";
 import {
   SECRET_REQUEST_DEFAULT_PLACEHOLDER,
   secretRequestAnswerInput,
@@ -21,7 +21,7 @@ import type {
   OrchestrationV2ProjectedTurnItem,
   SecretProviderId,
 } from "@t3tools/contracts";
-import { useAtomValue } from "@effect/atom-react";
+import { pipe } from "effect/Function";
 import { T, useMessages, Var } from "gt-react";
 import { CheckIcon, ExternalLinkIcon, LockIcon, MinusIcon, ShieldCheckIcon } from "lucide-react";
 import { useId, useRef, useState, type FormEvent } from "react";
@@ -29,9 +29,9 @@ import { useId, useRef, useState, type FormEvent } from "react";
 import { isSecretsFeatureEnabled } from "../../env";
 import { serverEnvironment } from "../../state/server";
 import { useAtomCommand } from "../../state/use-atom-command";
+import { SecretSourceSelect } from "../settings/SecretSourceInput";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
-import { SecretSourceSelect } from "../settings/SecretSourceInput";
 import { WorkLogRow } from "./WorkLog";
 
 export function SecretRequestCard(props: {

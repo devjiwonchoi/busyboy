@@ -1,3 +1,4 @@
+import { describe, expect, it } from "@effect/vitest";
 import {
   CommandId,
   EnvironmentId,
@@ -10,14 +11,13 @@ import {
   type OrchestrationV2ThreadProjection,
   type OrchestrationV2TurnItem,
 } from "@t3tools/contracts";
-import { describe, expect, it } from "@effect/vitest";
 import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import type * as RpcMessage from "effect/rpc/RpcMessage";
 import * as Schema from "effect/Schema";
 import * as SubscriptionRef from "effect/SubscriptionRef";
-import type * as RpcMessage from "effect/rpc/RpcMessage";
 
 import {
   AVAILABLE_CONNECTION_STATE,

@@ -7,8 +7,6 @@ import * as NodeFS from "node:fs";
 import * as NodeFSP from "node:fs/promises";
 import * as NodePath from "node:path";
 import * as NodeUtil from "node:util";
-import { acquireServiceSelectionLock } from "./cloud/serviceSelectionLock.ts";
-import { isNoCopyOnWrite, markNoCopyOnWrite } from "./noCopyOnWrite.ts";
 
 import type {
   PendingServiceUpdate,
@@ -41,10 +39,12 @@ import {
   SERVICE_UNIT_ENV,
   systemdUnitDirectoryOf,
 } from "./cloud/serviceProtocol.ts";
+import { acquireServiceSelectionLock } from "./cloud/serviceSelectionLock.ts";
 import {
   legacyOwnerStartedBeforeRecord,
   legacyOwnerStartTimeCommand,
 } from "./legacyServerOwner.ts";
+import { isNoCopyOnWrite, markNoCopyOnWrite } from "./noCopyOnWrite.ts";
 
 const HANDOFF_DELAY_MS = 2_000;
 /**

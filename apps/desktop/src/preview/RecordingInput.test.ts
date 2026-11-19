@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
+
 import { recordingKeysAreSensitive } from "./RecordingInput.ts";
 
 describe("recording key privacy", () => {

@@ -6,10 +6,11 @@ import * as NodeNet from "node:net";
 import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
 import * as NodeURL from "node:url";
+
 import * as Schema from "effect/Schema";
 
-import type { LinuxWindowSnapshot } from "./LinuxSnapShot.ts";
 import { readPortalPng } from "./linuxCaptureSession.ts";
+import type { LinuxWindowSnapshot } from "./LinuxSnapShot.ts";
 
 const MAX_MESSAGE_BYTES = 4 * 1024 * 1024;
 const TIMEOUT_MS = 5_000;

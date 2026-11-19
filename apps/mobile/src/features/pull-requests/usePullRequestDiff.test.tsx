@@ -10,9 +10,9 @@ import { expect, it, vi } from "vite-plus/test";
 const mocks = vi.hoisted(() => ({ diff: vi.fn() }));
 vi.mock("../../state/pull-requests", () => ({ composerPullRequests: { diff: mocks.diff } }));
 
-import { usePullRequestDiff, usePullRequestDiffEntry } from "./usePullRequestDiff";
-import * as reviewModel from "../review/reviewModel";
 import { getCachedNativeReviewDiffData } from "../review/nativeReviewDiffAdapter";
+import * as reviewModel from "../review/reviewModel";
+import { usePullRequestDiff, usePullRequestDiffEntry } from "./usePullRequestDiff";
 
 function patch(path: string, nextCursor: string | null = null): PullRequestDiffResult {
   return {

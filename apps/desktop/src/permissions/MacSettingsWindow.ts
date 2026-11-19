@@ -1,5 +1,6 @@
 // @effect-diagnostics nodeBuiltinImport:off -- This native boundary keeps one JXA process open while the permission helper tracks System Settings.
 import * as NodeChildProcess from "node:child_process";
+
 import * as Schema from "effect/Schema";
 import type * as Electron from "electron";
 

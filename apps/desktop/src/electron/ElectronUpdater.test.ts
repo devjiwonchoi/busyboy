@@ -1,14 +1,16 @@
 // @effect-diagnostics nodeBuiltinImport:off -- Intercepts the spawn electron-updater requires natively.
+
+import type * as NodeChildProcess from "node:child_process";
+import * as NodeModule from "node:module";
+
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, describe, it } from "@effect/vitest";
+import * as HostProcess from "@t3tools/shared/HostProcess";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
-import * as HostProcess from "@t3tools/shared/HostProcess";
 import { autoUpdater } from "electron-updater";
-import type * as NodeChildProcess from "node:child_process";
-import * as NodeModule from "node:module";
 import { vi } from "vite-plus/test";
 
 // electron-updater requires Electron natively, outside vi.mock's reach, and builds its

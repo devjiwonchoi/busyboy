@@ -3,19 +3,18 @@ import * as NodeFSP from "node:fs/promises";
 
 import type { DesktopCliCommandState } from "@t3tools/contracts";
 import * as HostProcess from "@t3tools/shared/HostProcess";
+import { pathSetup, readUserLoginShell } from "@t3tools/shared/shell";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as ChildProcess from "effect/process/ChildProcess";
+import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Random from "effect/Random";
 import * as Schema from "effect/Schema";
 import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
-import * as ChildProcess from "effect/process/ChildProcess";
-import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
-
-import { pathSetup, readUserLoginShell } from "@t3tools/shared/shell";
 
 import * as DesktopCliShim from "./DesktopCliShim.ts";
 import * as DesktopEnvironment from "./DesktopEnvironment.ts";

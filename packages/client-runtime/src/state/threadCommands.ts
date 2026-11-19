@@ -1,26 +1,18 @@
 import { CommandId, type ModelSelection, type ThreadId } from "@t3tools/contracts";
-import * as SecureRandom from "effect/crypto/SecureRandom";
-import * as Effect from "effect/Effect";
-import * as Option from "effect/Option";
-import { AsyncResult, Atom, type AtomRegistry } from "effect/reactivity";
 import {
   WS_METHODS,
   type EnvironmentId,
   type OrchestrationV2ShellSnapshot,
 } from "@t3tools/contracts";
-
-import { createOptimisticThreadLifecycle } from "./threadLifecycle.ts";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as DateTime from "effect/DateTime";
+import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
+import { AsyncResult, Atom, type AtomRegistry } from "effect/reactivity";
 
-import {
-  type AtomCommand,
-  createAtomCommandScheduler,
-  createEnvironmentCommand,
-  createEnvironmentRpcCommand,
-  environmentConnectionAtom,
-  mapAtomCommandResult,
-} from "./runtime.ts";
-import { waitForTitleRegenerationOutcome } from "./threadTitleRegeneration.ts";
+import { connectionProjectionPhase } from "../connection/model.ts";
+import type { EnvironmentRegistry } from "../connection/registry.ts";
+import * as EnvironmentSupervisor from "../connection/supervisor.ts";
 import {
   type InterruptThreadTurnInput,
   type UpdateThreadMetadataInput,
@@ -65,10 +57,17 @@ import {
   visitThread,
   watchThreadPullRequest,
 } from "../operations/commands.ts";
-import { connectionProjectionPhase } from "../connection/model.ts";
-import type { EnvironmentRegistry } from "../connection/registry.ts";
-import * as EnvironmentSupervisor from "../connection/supervisor.ts";
+import {
+  type AtomCommand,
+  createAtomCommandScheduler,
+  createEnvironmentCommand,
+  createEnvironmentRpcCommand,
+  environmentConnectionAtom,
+  mapAtomCommandResult,
+} from "./runtime.ts";
 import * as ThreadHistoryController from "./threadHistoryController.ts";
+import { createOptimisticThreadLifecycle } from "./threadLifecycle.ts";
+import { waitForTitleRegenerationOutcome } from "./threadTitleRegeneration.ts";
 
 export type LoadEarlierThreadHistoryInput = {
   readonly threadId: ThreadId;

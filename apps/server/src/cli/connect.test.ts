@@ -3,10 +3,11 @@ import * as NodeHttp from "node:http";
 
 import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import * as NodeServices from "@effect/platform-node/NodeServices";
+import { assert, it } from "@effect/vitest";
 import * as HostProcess from "@t3tools/shared/HostProcess";
 import * as NetService from "@t3tools/shared/Net";
 import * as RelayClient from "@t3tools/shared/relayClient";
-import { assert, it } from "@effect/vitest";
+import { Command } from "effect/cli";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
@@ -14,7 +15,6 @@ import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as TestConsole from "effect/testing/TestConsole";
-import { Command } from "effect/cli";
 
 import { makeCli } from "../binCli.ts";
 import { CLOUD_CLI_DESIRED_LINK_SECRET } from "../cloud/CliState.ts";

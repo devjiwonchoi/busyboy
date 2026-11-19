@@ -1,17 +1,17 @@
-import { ScreenScrollView as ScrollView } from "../../components/ui/ScreenScrollView";
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
+import { SYSTEM_LANGUAGE, nativeLanguageName } from "@t3tools/client-runtime/locales";
 import { AsyncResult } from "effect/reactivity";
+import { useGT } from "gt-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { useGT } from "gt-react-native";
+import { ListChoiceRow as SettingsChoiceRow } from "../../components/ui/ListChoiceRow";
+import { ScreenScrollView as ScrollView } from "../../components/ui/ScreenScrollView";
 import { useLanguagePreference } from "../../i18n/I18nProvider";
-import { SYSTEM_LANGUAGE, nativeLanguageName } from "@t3tools/client-runtime/locales";
 import { SUPPORTED_LOCALES } from "../../i18n/locales";
 import { mobilePreferencesAtom, updateMobilePreferencesAtom } from "../../state/preferences";
-import { ListChoiceRow as SettingsChoiceRow } from "../../components/ui/ListChoiceRow";
 import { SettingsRow } from "./components/SettingsRow";
-import { SettingsSection } from "./components/SettingsSection";
 import { SettingsScreen } from "./components/SettingsScreen";
+import { SettingsSection } from "./components/SettingsSection";
 
 /** General's row that opens the language picker, showing the current choice. */
 export function LanguageSettingsSection() {

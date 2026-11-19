@@ -1,14 +1,12 @@
-import { msg } from "gt-i18n";
-import { translatableDetail } from "../errors/translatable.ts";
 import type {
   RelayClientEnvironmentRecord,
   RelayEnvironmentStatusResponse,
 } from "@t3tools/contracts/relay";
-import { decodeRelayJwt } from "@t3tools/shared/relayJwt";
 import {
   RelayEnvironmentConnectScope,
   RelayEnvironmentStatusScope,
 } from "@t3tools/contracts/relay";
+import { decodeRelayJwt } from "@t3tools/shared/relayJwt";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -17,13 +15,15 @@ import * as Ref from "effect/Ref";
 import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
 import * as SubscriptionRef from "effect/SubscriptionRef";
+import { msg } from "gt-i18n";
 
-import * as ManagedRelay from "./managedRelay.ts";
-import * as ClientCapabilities from "../platform/capabilities.ts";
 import * as Connectivity from "../connection/connectivity.ts";
 import { mapManagedRelayError } from "../connection/errors.ts";
 import { ConnectionBlockedError, type ConnectionAttemptError } from "../connection/model.ts";
 import * as ConnectionWakeups from "../connection/wakeups.ts";
+import { translatableDetail } from "../errors/translatable.ts";
+import * as ClientCapabilities from "../platform/capabilities.ts";
+import * as ManagedRelay from "./managedRelay.ts";
 
 export type RelayEnvironmentAvailability = "checking" | "online" | "offline" | "error";
 

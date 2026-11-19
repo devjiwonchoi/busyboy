@@ -1,4 +1,3 @@
-import type { ArchivedSnapshotEntry } from "@t3tools/client-runtime/state/threads";
 import {
   scopeProject,
   scopeThreadShell,
@@ -6,6 +5,7 @@ import {
   type EnvironmentThreadShell,
 } from "@t3tools/client-runtime/state/shell";
 import { threadSearchSubject } from "@t3tools/client-runtime/state/thread-search";
+import type { ArchivedSnapshotEntry } from "@t3tools/client-runtime/state/threads";
 import type { EnvironmentId } from "@t3tools/contracts";
 import { foldSearchQuery, rankSearchItems, scoreThreadSearch } from "@t3tools/shared/paletteSearch";
 import * as Arr from "effect/Array";

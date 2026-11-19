@@ -1,13 +1,13 @@
-import { assert, describe, it } from "@effect/vitest";
 import * as NodeServices from "@effect/platform-node/NodeServices";
+import { assert, describe, it } from "@effect/vitest";
 import { ProviderDriverKind } from "@t3tools/contracts";
 import * as ModelCatalog from "@t3tools/provider-core/server/ModelCatalog";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import { HttpClient, HttpClientResponse } from "effect/http";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as TestClock from "effect/testing/TestClock";
-import { HttpClient, HttpClientResponse } from "effect/http";
 
 import * as ServerConfig from "../config.ts";
 import * as ServerSettings from "../serverSettings.ts";

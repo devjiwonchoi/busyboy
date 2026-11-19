@@ -9,8 +9,8 @@ import remarkMath from "remark-math";
 import type { PluggableList } from "unified";
 import { describe, expect, it } from "vite-plus/test";
 
-import { splitMarkdownBlocks } from "./markdownStreamBlocks";
 import { rehypeHeadingIds } from "./markdownFragments";
+import { splitMarkdownBlocks } from "./markdownStreamBlocks";
 
 const MATH_PLUGINS: PluggableList = [[remarkMath, { singleDollarTextMath: true }]];
 

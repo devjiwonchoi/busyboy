@@ -14,14 +14,13 @@ import * as Layer from "effect/Layer";
 import * as SqlClient from "effect/sql/SqlClient";
 import * as Statement from "effect/sql/Statement";
 
+import { layerReaderDatabase, traceSqlRouting } from "../../persistence/testkit/SqliteRouting.ts";
 import { listLinkedPullRequestThreads } from "../../pullRequest/linkedThreads.ts";
 import * as EventSink from "../EventSink.ts";
 import * as EventStore from "../EventStore.ts";
-import * as LegacyV1ThreadImporter from "./LegacyV1ThreadImporter.ts";
-import * as ProjectionReplay from "../testkit/ProjectionReplay.ts";
 import * as ProjectionStore from "../ProjectionStore.ts";
-
-import { layerReaderDatabase, traceSqlRouting } from "../../persistence/testkit/SqliteRouting.ts";
+import * as ProjectionReplay from "../testkit/ProjectionReplay.ts";
+import * as LegacyV1ThreadImporter from "./LegacyV1ThreadImporter.ts";
 
 const layerDatabase = layerReaderDatabase;
 const layerEventStoreProvided = EventStore.layer.pipe(Layer.provideMerge(layerDatabase));

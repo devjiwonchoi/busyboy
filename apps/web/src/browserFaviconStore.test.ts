@@ -17,7 +17,6 @@ vi.mock("~/state/session", () => ({
     metadata.httpBaseUrl ? { httpBaseUrl: metadata.httpBaseUrl } : null,
 }));
 
-import { DraftId, useComposerDraftStore } from "./composerDraftStore";
 import {
   lookupFavicon,
   lookupFaviconForThread,
@@ -27,6 +26,7 @@ import {
   resolveBrowserFaviconStorage,
   useBrowserFaviconStore,
 } from "./browserFaviconStore";
+import { DraftId, useComposerDraftStore } from "./composerDraftStore";
 
 const environmentId = EnvironmentId.make("env-1");
 const projectRef = scopeProjectRef(environmentId, ProjectId.make("project-1"));

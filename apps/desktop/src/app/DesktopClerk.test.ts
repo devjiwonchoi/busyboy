@@ -3,11 +3,12 @@ import * as NodeFS from "node:fs";
 import * as NodeHttp from "node:http";
 import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
+
 import * as NodePathLayer from "@effect/platform-node/NodePath";
-import { codexAuthHandoffUrl, readCodexAuthDelivery } from "@t3tools/shared/codexAuthHandoff";
-import { EnvironmentId, ProviderInstanceId } from "@t3tools/contracts";
-import * as HostProcess from "@t3tools/shared/HostProcess";
 import { assert, describe, it } from "@effect/vitest";
+import { EnvironmentId, ProviderInstanceId } from "@t3tools/contracts";
+import { codexAuthHandoffUrl, readCodexAuthDelivery } from "@t3tools/shared/codexAuthHandoff";
+import * as HostProcess from "@t3tools/shared/HostProcess";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { afterAll, beforeEach, vi } from "vite-plus/test";
@@ -38,13 +39,14 @@ vi.mock("@clerk/electron/storage", () => ({
 }));
 import * as Exit from "effect/Exit";
 import * as FileSystem from "effect/FileSystem";
+
 import * as ElectronApp from "../electron/ElectronApp.ts";
 import * as ElectronShell from "../electron/ElectronShell.ts";
 import * as ElectronWindow from "../electron/ElectronWindow.ts";
 import * as DesktopClerk from "./DesktopClerk.ts";
-import * as DesktopWebLinks from "./DesktopWebLinks.ts";
 import * as DesktopEnvironment from "./DesktopEnvironment.ts";
 import * as DesktopPreReadyFileSystem from "./DesktopPreReadyFileSystem.ts";
+import * as DesktopWebLinks from "./DesktopWebLinks.ts";
 
 const ignoreWebLinks = DesktopWebLinks.DesktopWebLinks.of({
   receive: () => Effect.void,

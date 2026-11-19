@@ -1,10 +1,10 @@
+import type { PullRequestCompletion } from "@t3tools/shared/pullRequestComposerTrigger";
 import { msg, useGT, useMessages } from "gt-react-native";
 import { Pressable, ScrollView, StyleSheet, View } from "react-native";
 
 import { AppText as Text } from "../../components/ui/AppText";
 import { GlassSurface } from "../../components/ui/GlassSurface";
 import { PullRequestAvatar } from "./PullRequestPresentation";
-import type { PullRequestCompletion } from "@t3tools/shared/pullRequestComposerTrigger";
 import type { usePullRequestCompletions } from "./usePullRequestCompletions";
 
 const COPY = {

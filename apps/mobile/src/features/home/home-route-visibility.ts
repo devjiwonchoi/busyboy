@@ -1,7 +1,7 @@
 import { RegistryContext } from "@effect/atom-react";
 import { useNavigation } from "@react-navigation/native";
-import { useContext, useRef, useSyncExternalStore } from "react";
 import type { Atom } from "effect/reactivity";
+import { useContext, useRef, useSyncExternalStore } from "react";
 
 import {
   NativePrimaryColumnContext,

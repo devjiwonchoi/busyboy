@@ -5,13 +5,13 @@ import {
 } from "@t3tools/shared/composerContextReferences";
 import { describe, expect, it } from "vite-plus/test";
 
+import { environmentContextRecord } from "../../lib/composerContextRecords";
 import {
   buildComposerPromptHistoryEntries,
   recallableComposerPrompt,
   stepComposerPromptHistory,
   type ComposerPromptHistoryPosition,
 } from "./composerPromptHistory";
-import { environmentContextRecord } from "../../lib/composerContextRecords";
 
 const entries = buildComposerPromptHistoryEntries([
   { id: "m1", role: "user", text: "first" },

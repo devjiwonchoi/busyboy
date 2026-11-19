@@ -1,9 +1,6 @@
 import { PASTED_TEXT_ATTACHMENT_THRESHOLD_BYTES } from "@t3tools/client-runtime/text-paste";
 import { PROVIDER_SEND_TURN_MAX_INPUT_CHARS } from "@t3tools/contracts";
 import { collectComposerInlineTokens } from "@t3tools/shared/composerInlineTokens";
-import { composerContextEditorTokens, composerSkillLabels } from "../lib/composerContext";
-import { DEFAULT_COMPOSER_ENTER_BEHAVIOR } from "../lib/composerEnterBehavior";
-import { useComposerModelTokens } from "./useComposerModelTokens";
 import { requireNativeView } from "expo";
 import { TextInputWrapper } from "expo-paste-input";
 import {
@@ -18,6 +15,7 @@ import {
 import type { NativeSyntheticEvent, ViewProps } from "react-native";
 import { Platform, StyleSheet } from "react-native";
 
+import { useAppearancePreferences } from "../features/settings/appearance/AppearancePreferencesProvider";
 import {
   composerChipSizeSuffix,
   contextChipIcon,
@@ -25,13 +23,14 @@ import {
   contextChipPresentation,
   contextRecordFileName,
 } from "../lib/composerChipPresentation";
+import { composerContextEditorTokens, composerSkillLabels } from "../lib/composerContext";
+import { DEFAULT_COMPOSER_ENTER_BEHAVIOR } from "../lib/composerEnterBehavior";
 import { contextChipIconUri, modelChipIcon, modelChipIconUri } from "../lib/contextChipIconSource";
+import { FONT_FAMILIES } from "../lib/fontFamilies";
+import { createNativeComposerTheme } from "../lib/nativeComposerTheme";
 import { MOBILE_TYPOGRAPHY } from "../lib/typography";
 import { useNativePaste } from "../lib/useNativePaste";
-import { FONT_FAMILIES } from "../lib/fontFamilies";
-import { useAppearancePreferences } from "../features/settings/appearance/AppearancePreferencesProvider";
 import { useUniwindTheme } from "../lib/useUniwindTheme";
-import { createNativeComposerTheme } from "../lib/nativeComposerTheme";
 import {
   acknowledgeComposerNativeEvent,
   assumeComposerControlledState,
@@ -41,6 +40,7 @@ import {
   type ComposerNativeEventSnapshot,
 } from "./composerEditorRevision";
 import type { ComposerEditorProps, ComposerEditorSelection } from "./T3ComposerEditor.types";
+import { useComposerModelTokens } from "./useComposerModelTokens";
 
 const NATIVE_MODULE_NAME = "T3ComposerEditor";
 const EMPTY_SKILLS: NonNullable<ComposerEditorProps["skills"]> = [];

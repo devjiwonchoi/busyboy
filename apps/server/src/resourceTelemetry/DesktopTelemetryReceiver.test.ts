@@ -1,16 +1,17 @@
 // @effect-diagnostics nodeBuiltinImport:off
 
-import { it } from "@effect/vitest";
-import * as NodeTls from "node:tls";
 import * as NodeCrypto from "node:crypto";
+import * as NodeTls from "node:tls";
+
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import * as Effect from "effect/Effect";
+import { it } from "@effect/vitest";
 import * as Cause from "effect/Cause";
+import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Logger from "effect/Logger";
 import * as Path from "effect/Path";
-import * as Stream from "effect/Stream";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
+import * as Stream from "effect/Stream";
 import { describe, expect } from "vite-plus/test";
 
 import {

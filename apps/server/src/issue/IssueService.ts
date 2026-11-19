@@ -1,10 +1,6 @@
 // A project bound to a standalone tracker (Linear) in settings lists it beside its git host's.
 // References outside the project's canonical repository may be read on the same host,
 // but every write must pass through requireWritable.
-import * as Context from "effect/Context";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import * as Option from "effect/Option";
 import {
   IssueOperationError,
   IssueTrackerKind,
@@ -32,7 +28,7 @@ import {
   type OrchestrationProjectShell,
   type ProjectId,
 } from "@t3tools/contracts";
-import * as SourceControlRateLimit from "@t3tools/source-control-core/server/SourceControlRateLimit";
+import { parseUrl } from "@t3tools/shared/url";
 import {
   IssueTrackerError,
   isStandaloneIssueTracker,
@@ -41,7 +37,11 @@ import {
   type StandaloneIssueTrackerApi,
   type TrackerIssueDetail,
 } from "@t3tools/source-control-core/server/IssueTracker";
-import { parseUrl } from "@t3tools/shared/url";
+import * as SourceControlRateLimit from "@t3tools/source-control-core/server/SourceControlRateLimit";
+import * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 
 import * as IssueTrackerBindings from "../persistence/IssueTrackerBindings.ts";
 import * as ProjectService from "../project/ProjectService.ts";

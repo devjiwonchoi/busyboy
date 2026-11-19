@@ -1,3 +1,4 @@
+import { describe, expect, it } from "@effect/vitest";
 import {
   CommandId,
   ProjectId,
@@ -8,21 +9,20 @@ import {
   type OrchestrationProjectShell,
   SourceControlProviderKind,
 } from "@t3tools/contracts";
-import { describe, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Ref from "effect/Ref";
 
 import * as Orchestrator from "../orchestration-v2/Orchestrator.ts";
+import * as ProjectStore from "../orchestration-v2/ProjectStore.ts";
 import {
   type PullRequestTestThread,
   v2PullRequestThread,
 } from "../orchestration-v2/testkit/pullRequestFixtures.ts";
-import * as ProjectStore from "../orchestration-v2/ProjectStore.ts";
 import * as ProjectService from "../project/ProjectService.ts";
-import { refreshPushedPullRequests } from "./refreshPushedPullRequests.ts";
 import * as PullRequestService from "../pullRequest/PullRequestService.ts";
 import { createdPullRequestKey, linkCreatedPullRequest } from "./linkCreatedPullRequest.ts";
+import { refreshPushedPullRequests } from "./refreshPushedPullRequests.ts";
 
 const PROJECT_ID = ProjectId.make("project-1");
 const THREAD_ID = ThreadId.make("thread-1");

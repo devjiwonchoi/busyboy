@@ -6,12 +6,12 @@ import {
   type ChatAttachment,
 } from "@t3tools/contracts";
 import * as HostProcess from "@t3tools/shared/HostProcess";
+import type * as EffectAcpSchema from "effect-acp/compat";
+import * as EffectAcpErrors from "effect-acp/errors";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as Stream from "effect/Stream";
-import * as EffectAcpErrors from "effect-acp/errors";
-import type * as EffectAcpSchema from "effect-acp/compat";
 
 import { resolveAttachmentPath } from "../../attachmentStore.ts";
 import {

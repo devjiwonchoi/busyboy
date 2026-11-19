@@ -1,14 +1,14 @@
 import { assert, it, describe } from "@effect/vitest";
+import type { VcsDriverKind } from "@t3tools/contracts";
+import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import type * as PlatformError from "effect/PlatformError";
 import type * as Scope from "effect/Scope";
-import * as DateTime from "effect/DateTime";
-import * as Option from "effect/Option";
 
-import type { VcsDriverKind } from "@t3tools/contracts";
 import * as VcsDriver from "../VcsDriver.ts";
 
 function normalizePathForComparison(value: string): string {

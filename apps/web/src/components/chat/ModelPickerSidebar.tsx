@@ -1,17 +1,19 @@
 import { Toolbar } from "@base-ui/react/toolbar";
 import { type ProviderInstanceId } from "@t3tools/contracts";
-import { memo, useLayoutEffect, useRef, useState } from "react";
 import { msg, T, useMessages } from "gt-react";
 import { StarIcon } from "lucide-react";
-import { ProviderInstanceIcon } from "./ProviderInstanceIcon";
-import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
+import { memo, useLayoutEffect, useRef, useState } from "react";
+
 import { cn } from "~/lib/utils";
+
 import type { MessageResolver } from "../../i18n/messages";
 import {
   isProviderInstancePickerReady,
   shouldShowInstanceBadge,
   type ProviderInstanceEntry,
 } from "../../providerInstances";
+import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
+import { ProviderInstanceIcon } from "./ProviderInstanceIcon";
 
 function describeUnavailableInstance(
   entry: ProviderInstanceEntry,

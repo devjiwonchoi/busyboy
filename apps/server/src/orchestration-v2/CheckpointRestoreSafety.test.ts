@@ -9,23 +9,24 @@ import {
   ProviderThreadId,
   ThreadId,
 } from "@t3tools/contracts";
+import * as IdAllocator from "@t3tools/provider-core/server/IdAllocator";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
+
 import * as ServerConfig from "../config.ts";
-import * as ServerSettings from "../serverSettings.ts";
 import * as GitWorkflowService from "../git/GitWorkflowService.ts";
-import * as CheckpointRollbackService from "./CheckpointRollbackService.ts";
+import * as ServerSettings from "../serverSettings.ts";
 import { isCheckpointRestoreIsolated } from "./CheckpointRestoreSafety.ts";
-import * as ThreadCommandExecutor from "./ThreadCommandExecutor.ts";
+import * as CheckpointRollbackService from "./CheckpointRollbackService.ts";
 import { CheckpointServiceV2 } from "./CheckpointService.ts";
 import { EventSinkV2 } from "./EventSink.ts";
-import * as IdAllocator from "@t3tools/provider-core/server/IdAllocator";
 import { ProjectionStoreV2, type ProjectionCheckpointRollbackContext } from "./ProjectionStore.ts";
 import * as ProjectStore from "./ProjectStore.ts";
 import { ProviderSessionManagerV2 } from "./ProviderSessionManager.ts";
 import { RuntimePolicyV2 } from "./RuntimePolicy.ts";
+import * as ThreadCommandExecutor from "./ThreadCommandExecutor.ts";
 
 it.effect.each([
   "nested",

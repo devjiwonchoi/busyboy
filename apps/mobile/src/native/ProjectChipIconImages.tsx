@@ -1,7 +1,7 @@
 import type { ProjectIconColor } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
-import * as Schema from "effect/Schema";
 import { Atom } from "effect/reactivity";
+import * as Schema from "effect/Schema";
 import { useRef, useSyncExternalStore } from "react";
 import { Platform, View } from "react-native";
 import Svg, { Rect, Text } from "react-native-svg";

@@ -1,8 +1,8 @@
+import type { ServerConfig } from "@t3tools/contracts";
 import { AsyncResult } from "effect/reactivity";
 import { act, type ComponentProps, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import { expect, it, onTestFinished, vi } from "vite-plus/test";
-import type { ServerConfig } from "@t3tools/contracts";
 
 import type { ZipTreeRow } from "./zipTree";
 
@@ -151,10 +151,10 @@ vi.mock("../settings/appearance/AppearancePreferencesProvider", () => ({
   }),
 }));
 
-import { ZipArchiveView } from "./ZipArchiveView";
-import { AttachmentFileScreen } from "./AttachmentFileScreen";
 import { appAtomRegistry } from "../../state/atom-registry";
 import { composerDraftsAtom } from "../../state/use-composer-drafts";
+import { AttachmentFileScreen } from "./AttachmentFileScreen";
+import { ZipArchiveView } from "./ZipArchiveView";
 
 function setup() {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);

@@ -1,15 +1,16 @@
 import type { KeybindingCommand, ResolvedKeybindingsConfig } from "@t3tools/contracts";
 import { useEffect, useEffectEvent } from "react";
+
 import { isCommandPaletteOpen } from "../../commandPaletteBus";
+import type { ComposerHandleRef } from "../../composerHandleContext";
 import { resolveChatShortcutCommand, type ShortcutMatchContext } from "../../keybindings";
+import { isInSideChatPane } from "../../lib/sideChatPane";
 import { isTerminalCloseConfirmPending } from "../../lib/terminalCloseConfirm";
 import {
   preventRepeatedTerminalCloseShortcut,
   preventTerminalCloseShortcut,
 } from "../../lib/terminalCloseShortcut";
-import { isInSideChatPane } from "../../lib/sideChatPane";
 import { getTerminalFocusOwner, type TerminalFocusOwner } from "../../lib/terminalFocus";
-import type { ComposerHandleRef } from "../../composerHandleContext";
 import type { BranchToolbarHandle } from "../BranchToolbar";
 import { shouldTypeToFocusComposer } from "./composerFocusRedirect";
 import { composerShortcutCommands } from "./composerShortcuts";

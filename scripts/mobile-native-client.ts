@@ -1,23 +1,23 @@
-import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
 import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
+import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as HostProcess from "@t3tools/shared/HostProcess";
 import { isCommandAvailable, resolveSpawnCommand } from "@t3tools/shared/shell";
+import { Argument, Command, Flag } from "effect/cli";
 import * as Clock from "effect/Clock";
 import * as Console from "effect/Console";
 import * as Context from "effect/Context";
-import * as DateTime from "effect/DateTime";
 import * as Digest from "effect/crypto/Digest";
+import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import { FetchHttpClient, HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
+import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import * as Random from "effect/Random";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
-import { Argument, Command, Flag } from "effect/cli";
-import { FetchHttpClient, HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http";
-import { ChildProcess, ChildProcessSpawner } from "effect/process";
 
 export type NativePlatform = "ios" | "android";
 const NativeClientRecord = Schema.Struct({ fingerprint: Schema.String, binary: Schema.String });

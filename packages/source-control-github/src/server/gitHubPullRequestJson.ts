@@ -1,9 +1,3 @@
-import { trimOptionalString as trimmed } from "@t3tools/source-control-core/server/pullRequestUtils";
-import * as Cause from "effect/Cause";
-import * as Exit from "effect/Exit";
-import * as Result from "effect/Result";
-import * as Schema from "effect/Schema";
-import { GraphQL } from "effect/graphql";
 import type {
   PullRequestStackMembership,
   PullRequestActor,
@@ -43,6 +37,12 @@ import {
   rollupCheckStatuses,
 } from "@t3tools/source-control-core/server/pullRequestChecks";
 import type { ProviderChangeRequestSummary } from "@t3tools/source-control-core/server/PullRequestProvider";
+import { trimOptionalString as trimmed } from "@t3tools/source-control-core/server/pullRequestUtils";
+import * as Cause from "effect/Cause";
+import * as Exit from "effect/Exit";
+import { GraphQL } from "effect/graphql";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
 
 import type * as GitHubSchema from "../../schema/github.graphql.ts";
 import type {

@@ -1,3 +1,5 @@
+import type { VcsDriverKind, VcsError, VcsRepositoryIdentity } from "@t3tools/contracts";
+import { VcsUnsupportedOperationError } from "@t3tools/contracts";
 import * as Cache from "effect/Cache";
 import * as Context from "effect/Context";
 import * as Duration from "effect/Duration";
@@ -7,11 +9,9 @@ import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 
-import type { VcsDriverKind, VcsError, VcsRepositoryIdentity } from "@t3tools/contracts";
-import { VcsUnsupportedOperationError } from "@t3tools/contracts";
 import * as GitVcsDriver from "./GitVcsDriver.ts";
-import * as VcsProjectConfig from "./VcsProjectConfig.ts";
 import * as VcsDriver from "./VcsDriver.ts";
+import * as VcsProjectConfig from "./VcsProjectConfig.ts";
 
 const DETECTION_CACHE_CAPACITY = 2_048;
 // Detection costs three git processes per cwd; cached hits still stat disk, so TTL bounds only undetectable changes.

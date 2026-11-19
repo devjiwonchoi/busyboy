@@ -1,27 +1,29 @@
 import { MISSING_FILE_ACCESS_MESSAGE } from "@t3tools/client-runtime/state/assets";
 import { EnvironmentId, ThreadId } from "@t3tools/contracts";
-import { AsyncResult } from "effect/reactivity";
-import { type ReactElement } from "react";
-import remarkGfm from "remark-gfm";
-import { describe, expect, it, vi } from "vite-plus/test";
-import { page, userEvent } from "vite-plus/test/browser";
-
-import { act, render } from "../../test/render";
-import "../index.css";
-
-import { filesystemEnvironment } from "../state/filesystem";
-import {
-  hostRightPanel,
-  selectActiveRightPanelSurface,
-  useRightPanelStore,
-} from "../rightPanelStore";
 import {
   CHAT_USER_MARKDOWN_REMARK_PLUGINS,
   remarkEnableOrderedListNumbers,
 } from "@t3tools/shared/markdownPipeline";
 import { setMarkdownTaskChecked } from "@t3tools/shared/markdownTaskList";
-import { HostImageUrlContext } from "./chat/hostImageUrl";
+import { AsyncResult } from "effect/reactivity";
+import { type ReactElement } from "react";
+import remarkGfm from "remark-gfm";
+import { describe, expect, it, vi } from "vite-plus/test";
+
+import "../index.css";
+
+import { page, userEvent } from "vite-plus/test/browser";
+
 import { getSyntaxHighlighterPromise } from "~/lib/syntaxHighlighting";
+
+import { act, render } from "../../test/render";
+import {
+  hostRightPanel,
+  selectActiveRightPanelSurface,
+  useRightPanelStore,
+} from "../rightPanelStore";
+import { filesystemEnvironment } from "../state/filesystem";
+import { HostImageUrlContext } from "./chat/hostImageUrl";
 
 const { workspaceSearch, filesystemMetadata } = vi.hoisted(() => ({
   workspaceSearch: vi.fn(),
@@ -140,8 +142,8 @@ vi.mock(import("../hooks/useSettings"), async (original) => {
   return { ...actual, useClientSettings };
 });
 
-import ChatMarkdown from "./ChatMarkdown";
 import { chatMarkdownClipboardPayload } from "../markdown-clipboard";
+import ChatMarkdown from "./ChatMarkdown";
 import { AudioPreview } from "./files/AudioPreview";
 
 it("keeps compact audio playback loaded across signed URL renewals", async () => {

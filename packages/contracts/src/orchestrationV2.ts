@@ -1,5 +1,3 @@
-import { OrchestrationMessageContext } from "./composerContext.ts";
-import { withRecordIdTable } from "./orchestrationV2IdTable.ts";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
@@ -7,6 +5,7 @@ import * as SchemaAST from "effect/SchemaAST";
 import * as SchemaGetter from "effect/SchemaGetter";
 import * as SchemaTransformation from "effect/SchemaTransformation";
 
+import { AuthMcpClientAccess } from "./auth.ts";
 import {
   CheckpointId,
   CheckpointRef,
@@ -41,33 +40,20 @@ import {
   TrimmedNonEmptyString,
   TurnItemId,
 } from "./baseSchemas.ts";
-import { AuthMcpClientAccess } from "./auth.ts";
 import { ChatAttachment } from "./chatAttachment.ts";
-import { ThreadGuestShare } from "./guestShare.ts";
-import { StoredThreadTags, ThreadTag } from "./threadTags.ts";
-import { ThreadTitleRegenerationOutcome } from "./threadTitle.ts";
-import {
-  OrchestrationSearchThreadsInput,
-  OrchestrationSearchThreadsResult,
-} from "./threadSearch.ts";
 import {
   OrchestrationGetFullThreadDiffInput,
   OrchestrationGetFullThreadDiffResult,
   OrchestrationGetTurnDiffInput,
   OrchestrationGetTurnDiffResult,
 } from "./checkpointDiff.ts";
-import { ModelSelection } from "./modelSelection.ts";
+import { OrchestrationMessageContext } from "./composerContext.ts";
+import { ThreadGuestShare } from "./guestShare.ts";
 import { ThreadIssueKey, ThreadIssueLink, ThreadIssueLinkSource } from "./issue.ts";
-import {
-  ThreadLinkedPullRequest,
-  ThreadPullRequestLink,
-  ThreadPullRequestKey,
-  ThreadPullRequestLinkSource,
-  ThreadPullRequestSnapshot,
-  ThreadPullRequestStack,
-  ThreadPullRequestWatch,
-  PullRequestWatchUntil,
-} from "./threadPullRequest.ts";
+import { ModelSelection } from "./modelSelection.ts";
+import { OrchestrationProjectShell } from "./orchestrationProject.ts";
+import { withRecordIdTable } from "./orchestrationV2IdTable.ts";
+import { ProviderDriverKind, ProviderInstanceId } from "./providerInstance.ts";
 import {
   ProviderApprovalDecision,
   ProviderApprovalFullAccessOverride,
@@ -79,8 +65,6 @@ import {
   UserInputAttachmentAnswerPayload,
   RuntimeMode,
 } from "./providerPolicy.ts";
-import { ProviderDriverKind, ProviderInstanceId } from "./providerInstance.ts";
-import { OrchestrationProjectShell } from "./orchestrationProject.ts";
 import {
   TurnTokenUsage,
   ToolActivitySurface,
@@ -88,6 +72,22 @@ import {
   ToolActivitySource,
 } from "./providerRuntime.ts";
 import { ThreadTokenUsageSnapshot } from "./providerRuntime.ts";
+import {
+  ThreadLinkedPullRequest,
+  ThreadPullRequestLink,
+  ThreadPullRequestKey,
+  ThreadPullRequestLinkSource,
+  ThreadPullRequestSnapshot,
+  ThreadPullRequestStack,
+  ThreadPullRequestWatch,
+  PullRequestWatchUntil,
+} from "./threadPullRequest.ts";
+import {
+  OrchestrationSearchThreadsInput,
+  OrchestrationSearchThreadsResult,
+} from "./threadSearch.ts";
+import { StoredThreadTags, ThreadTag } from "./threadTags.ts";
+import { ThreadTitleRegenerationOutcome } from "./threadTitle.ts";
 
 export const OrchestrationV2Actor = Schema.Literals(["user", "agent", "system"]);
 export type OrchestrationV2Actor = typeof OrchestrationV2Actor.Type;

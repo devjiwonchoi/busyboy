@@ -1,11 +1,9 @@
-import { T, useGT, useMessages } from "gt-react-native";
 import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
-import { cloudSpeechDisclosure } from "@t3tools/shared/speechCopy";
-import { setCloudSpeechKey } from "@t3tools/client-runtime/voice-input";
 import {
   configuredSecretSources,
   secretRequestReference,
 } from "@t3tools/client-runtime/secret-request";
+import { setCloudSpeechKey } from "@t3tools/client-runtime/voice-input";
 import {
   AuthSettingsWriteScope,
   CLOUD_SPEECH_LABELS,
@@ -19,19 +17,22 @@ import {
   type SettingsSecretValue,
   type VoiceTranscriptionDestination,
 } from "@t3tools/contracts";
+import { cloudSpeechDisclosure } from "@t3tools/shared/speechCopy";
+import { AsyncResult } from "effect/reactivity";
 import * as Schema from "effect/Schema";
 import Constants from "expo-constants";
-import { AsyncResult } from "effect/reactivity";
+import { T, useGT, useMessages } from "gt-react-native";
 import { type ReactNode, useState } from "react";
 import { ScrollView, TextInput, View } from "react-native";
-import { Sheet } from "../../components/ui/Sheet";
-import * as Dialog from "../../components/ui/Dialog";
+
 import { ProviderIcon } from "../../components/ProviderIcon";
 import { AppText as Text } from "../../components/ui/AppText";
+import { Chip } from "../../components/ui/Chip";
+import * as Dialog from "../../components/ui/Dialog";
 import { ListActionRow } from "../../components/ui/ListActionRow";
 import { ListChoiceRow } from "../../components/ui/ListChoiceRow";
-import { Chip } from "../../components/ui/Chip";
 import { ListSection } from "../../components/ui/ListSection";
+import { Sheet } from "../../components/ui/Sheet";
 import type { EnvironmentPresentation } from "../../state/environments";
 import { useEnvironmentScope } from "../../state/session";
 import {

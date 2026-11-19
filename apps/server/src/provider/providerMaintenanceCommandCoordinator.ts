@@ -3,12 +3,13 @@ import * as NodeCrypto from "node:crypto";
 import * as NodeFSP from "node:fs/promises";
 import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
+
 import * as KeyedLock from "@t3tools/shared/KeyedLock";
-import { lock } from "proper-lockfile";
 import * as Effect from "effect/Effect";
 import * as Ref from "effect/Ref";
 import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
+import { lock } from "proper-lockfile";
 
 export interface ProviderMaintenanceCommandCoordinatorShape<E> {
   readonly withCommandLock: <A, R>(input: {

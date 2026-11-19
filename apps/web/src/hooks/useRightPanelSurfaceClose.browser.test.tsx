@@ -1,6 +1,7 @@
-import { EnvironmentId, ThreadId, type ScopedThreadRef } from "@t3tools/contracts";
 import { scopedThreadKey } from "@t3tools/client-runtime/environment";
+import { EnvironmentId, ThreadId, type ScopedThreadRef } from "@t3tools/contracts";
 import { expect, it, vi } from "vite-plus/test";
+
 import { act, render } from "../../test/render";
 import { selectThreadRightPanelState, useRightPanelStore } from "../rightPanelStore";
 import { useTerminalUiStateStore } from "../terminalUiStateStore";

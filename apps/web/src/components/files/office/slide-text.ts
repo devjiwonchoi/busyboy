@@ -1,8 +1,8 @@
 // Adapted from opencode (MIT). Copyright (c) 2025 opencode. See LICENSE.opencode.
+import { inspectPresentation, type DeckSnapshot } from "@betteroffice/pptx";
 import { pipe } from "effect/Function";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
-import { inspectPresentation, type DeckSnapshot } from "@betteroffice/pptx";
 
 /** A text style a deck draws with. */
 export type FontStyle = { readonly bold: boolean; readonly italic: boolean };

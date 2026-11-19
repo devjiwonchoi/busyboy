@@ -1,8 +1,10 @@
-import { deriveProjectIdentity } from "../../projectIdentity";
-import { ProjectMonogram } from "../ProjectMonogram";
 import type { ProjectIconColor, ProjectIconOverride } from "@t3tools/contracts";
 import { T, useGT, useMessages } from "gt-react";
 import { createElement, useState } from "react";
+
+import { cn } from "~/lib/utils";
+
+import { lucideIconByName } from "../../lib/lucideIconByName";
 import {
   filterProjectIconNames,
   firstEmoji,
@@ -11,8 +13,8 @@ import {
   PROJECT_ICON_COLORS,
   projectIconColorClassName,
 } from "../../projectIconOptions";
-import { cn } from "~/lib/utils";
-import { lucideIconByName } from "../../lib/lucideIconByName";
+import { deriveProjectIdentity } from "../../projectIdentity";
+import { ProjectMonogram } from "../ProjectMonogram";
 import { Button } from "../ui/button";
 import {
   Dialog,

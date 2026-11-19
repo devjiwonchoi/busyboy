@@ -1,5 +1,3 @@
-import { resolveProjectSettings } from "@t3tools/shared/projectSettings";
-import { isAttachmentOnlyBootstrapPrompt } from "@t3tools/shared/composerContextReferences";
 import {
   CommandId,
   type ChatAttachment,
@@ -11,10 +9,13 @@ import {
   TextGenerationError,
   type ThreadId,
 } from "@t3tools/contracts";
+import { formatThreadTitleContext } from "@t3tools/provider-core/server/threadTitleContext";
+import { isAttachmentOnlyBootstrapPrompt } from "@t3tools/shared/composerContextReferences";
+import { resolveProjectSettings } from "@t3tools/shared/projectSettings";
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
-import * as Effect from "effect/Effect";
 import type * as DateTime from "effect/DateTime";
+import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
@@ -24,11 +25,9 @@ import * as Schema from "effect/Schema";
 import * as ServerSettings from "../serverSettings.ts";
 import * as TextGeneration from "../textGeneration/TextGeneration.ts";
 import type { OrchestratorV2Error } from "./Orchestrator.ts";
-import * as ProjectStore from "./ProjectStore.ts";
 import { forkInheritedRunOrdinals, ProjectionStoreThreadNotFoundError } from "./ProjectionStore.ts";
+import * as ProjectStore from "./ProjectStore.ts";
 import * as ThreadManagementService from "./ThreadManagementService.ts";
-
-import { formatThreadTitleContext } from "@t3tools/provider-core/server/threadTitleContext";
 export { formatThreadTitleContext } from "@t3tools/provider-core/server/threadTitleContext";
 
 export class ThreadTitleRegenerationService extends Context.Service<

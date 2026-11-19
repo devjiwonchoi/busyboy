@@ -1,7 +1,7 @@
 import { Hct, argbFromHex, hexFromArgb } from "@material/material-color-utilities";
 
-import type { MobileThemeAppearance, MobileThemeVariables } from "./mobileTheme";
 import type { MaterialYouPalette } from "./materialYouPalette";
+import type { MobileThemeAppearance, MobileThemeVariables } from "./mobileTheme";
 
 function withAlpha(color: string, alpha: number): string {
   const match = /^#([\da-f]{6})(?:[\da-f]{2})?$/iu.exec(color);

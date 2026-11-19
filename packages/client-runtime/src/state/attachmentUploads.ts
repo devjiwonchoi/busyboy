@@ -1,5 +1,3 @@
-import { msg } from "gt-i18n";
-import { MarkedText, messageFromError, translatableMessage } from "../errors/translatable.ts";
 import type { EnvironmentId } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Equal from "effect/Equal";
@@ -10,6 +8,9 @@ import * as RcMap from "effect/RcMap";
 import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
 import * as Semaphore from "effect/Semaphore";
+import { msg } from "gt-i18n";
+
+import { MarkedText, messageFromError, translatableMessage } from "../errors/translatable.ts";
 
 export class AttachmentUploadError extends Schema.TaggedError<AttachmentUploadError>()(
   "AttachmentUploadError",

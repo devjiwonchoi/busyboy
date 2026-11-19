@@ -1,18 +1,29 @@
-import {
-  matchInlineSkills,
-  formatProviderSkillDisplayName,
-  type InlineSkill,
-} from "./inlineSkills.ts";
+import type { OrchestrationV2ConversationMessage } from "@t3tools/contracts";
+import remarkParse from "remark-parse";
+import remarkRehype from "remark-rehype";
+import { unified } from "unified";
+
+import { parseAssistantCitationHref } from "./assistantCitations.ts";
+import { codexArtifactTemplatePresentationLabel } from "./codexArtifactTemplates.ts";
 import {
   artifactTemplateFromHastProperties,
   renderCodexInlineDirectivesAsMarkdown,
 } from "./codexMarkdownDirectives.ts";
-import { codexArtifactTemplatePresentationLabel } from "./codexArtifactTemplates.ts";
+import { upgradeLegacyContextMessage } from "./composerContextLegacy.ts";
+import {
+  isAttachmentOnlyBootstrapPrompt,
+  parseComposerContextHref,
+} from "./composerContextReferences.ts";
 import {
   buildFileLinkParentSuffixByPath,
   splitFilePathPosition,
   fileLinkLabel,
 } from "./fileLinks.ts";
+import {
+  matchInlineSkills,
+  formatProviderSkillDisplayName,
+  type InlineSkill,
+} from "./inlineSkills.ts";
 import {
   isMarkdownFileLinkLabel,
   extractMarkdownLinkHrefs,
@@ -20,17 +31,6 @@ import {
   inlineCodeFilePathCandidate,
   resolveMarkdownFileLinkTarget,
 } from "./markdownLinks.ts";
-import { upgradeLegacyContextMessage } from "./composerContextLegacy.ts";
-import {
-  isAttachmentOnlyBootstrapPrompt,
-  parseComposerContextHref,
-} from "./composerContextReferences.ts";
-import { parseAssistantCitationHref } from "./assistantCitations.ts";
-import type { OrchestrationV2ConversationMessage } from "@t3tools/contracts";
-import { proposedPlanTitle, stripDisplayedPlanMarkdown } from "./proposedPlanText.ts";
-import { unified } from "unified";
-import remarkParse from "remark-parse";
-import remarkRehype from "remark-rehype";
 import {
   shouldPreserveAssistantLineBreaks,
   remarkAssistantInsights,
@@ -40,6 +40,7 @@ import {
   CHAT_USER_MARKDOWN_REMARK_PLUGINS,
   decodeMarkdownLinkEscapes,
 } from "./markdownPipeline.ts";
+import { proposedPlanTitle, stripDisplayedPlanMarkdown } from "./proposedPlanText.ts";
 
 // Inline wrappers (including Shiki token spans) must not split a search phrase.
 export const THREAD_FIND_BLOCK_TAGS = new Set([

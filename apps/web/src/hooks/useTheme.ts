@@ -1,8 +1,9 @@
-import { pipe } from "effect/Function";
-import type { DesktopBridge } from "@t3tools/contracts";
 import { safeErrorLogAttributes } from "@t3tools/client-runtime/errors";
+import type { DesktopBridge } from "@t3tools/contracts";
+import { pipe } from "effect/Function";
 import * as Schema from "effect/Schema";
 import { useSyncExternalStore } from "react";
+
 import {
   applyThemePalette,
   CUSTOM_THEMES_STORAGE_KEY,

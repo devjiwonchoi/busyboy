@@ -1,4 +1,3 @@
-import * as MacPermissions from "../permissions/MacPermissions.ts";
 import { assert, it } from "@effect/vitest";
 import {
   DEFAULT_CLIENT_SETTINGS,
@@ -17,8 +16,10 @@ import * as PlatformError from "effect/PlatformError";
 import * as Schema from "effect/Schema";
 import * as TestClock from "effect/testing/TestClock";
 import type * as Electron from "electron";
-import type { PortalShortcutState } from "./PortalCaptureShortcut.ts";
 import { beforeEach, vi } from "vite-plus/test";
+
+import * as MacPermissions from "../permissions/MacPermissions.ts";
+import type { PortalShortcutState } from "./PortalCaptureShortcut.ts";
 
 beforeEach(() => {
   portalShortcutInstances.length = 0;
@@ -426,8 +427,8 @@ import * as DesktopEnvironment from "../app/DesktopEnvironment.ts";
 import * as DesktopClientSettings from "../settings/DesktopClientSettings.ts";
 import * as DesktopWindow from "../window/DesktopWindow.ts";
 import * as DesktopSnapShot from "./DesktopSnapShot.ts";
-import * as SnapShotAccessibility from "./SnapShotAccessibility.ts";
 import { CaptureSetupRequiredError } from "./linuxCaptureSession.ts";
+import * as SnapShotAccessibility from "./SnapShotAccessibility.ts";
 
 const accessibilityApp = {
   byPid: accessibilityByPidMock,

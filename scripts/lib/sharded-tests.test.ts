@@ -1,8 +1,11 @@
 // @effect-diagnostics nodeBuiltinImport:off - verifies Vitest discovery in a disposable project.
-import { expect, it } from "vite-plus/test";
+
 import * as NodeFSP from "node:fs/promises";
 import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
+
+import { expect, it } from "vite-plus/test";
+
 import { shardedTestFiles } from "./sharded-tests.ts";
 
 it("uses the configured sequencer and discovers every file exactly once", async () => {

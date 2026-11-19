@@ -1,7 +1,8 @@
 import { Pressable, View } from "react-native";
+
 import { AppActivityIndicator } from "./AppActivityIndicator";
-import { AppText } from "./AppText";
 import { SymbolView } from "./AppSymbol";
+import { AppText } from "./AppText";
 import { Menu } from "./Menu";
 import type { SplitButtonProps } from "./SplitButton.types";
 

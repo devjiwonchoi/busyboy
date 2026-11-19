@@ -1,9 +1,9 @@
-import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
+import { useAtomValue } from "@effect/atom-react";
 import {
   findProjectByPath,
   inferProjectTitleFromPath,
 } from "@t3tools/client-runtime/state/projects";
-import { useAtomValue } from "@effect/atom-react";
+import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
 import type { DesktopAppActivationRequest } from "@t3tools/contracts";
 import { msg } from "gt-react";
 
@@ -17,8 +17,8 @@ import { projectEnvironment } from "../state/projects";
 import { useEnvironmentShellHasSnapshot } from "../state/shell";
 import { useAtomCommand } from "../state/use-atom-command";
 import { useOrchestrationCommand } from "../state/use-orchestration-command";
-import { reportProjectFailure } from "./useProjectGroupUpdate";
 import { useNewThreadHandler } from "./useHandleNewThread";
+import { reportProjectFailure } from "./useProjectGroupUpdate";
 
 /**
  * Opens a folder on this computer as a project in this computer's environment: an

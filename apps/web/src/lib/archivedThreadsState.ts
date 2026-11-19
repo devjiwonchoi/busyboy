@@ -6,10 +6,10 @@ import {
 } from "@t3tools/client-runtime/state/threads";
 import type { EnvironmentId } from "@t3tools/contracts";
 
+import { appAtomRegistry } from "../rpc/atomRegistry";
 import { orchestrationEnvironment } from "../state/orchestration";
 import { serverEnvironment } from "../state/server";
 import { environmentThreadShells } from "../state/threads";
-import { appAtomRegistry } from "../rpc/atomRegistry";
 
 function archivedSnapshotAtom(environmentId: EnvironmentId) {
   return orchestrationEnvironment.archivedShellSnapshot({

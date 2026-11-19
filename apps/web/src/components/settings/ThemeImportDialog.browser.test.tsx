@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vite-plus/test";
 import { page, userEvent } from "vite-plus/test/browser";
 
 import { act, render } from "../../../test/render";
+import { importOpenVsxThemeExtension, type OpenVsxThemeExtension } from "../../openVsxThemes";
 import {
   CUSTOM_THEMES_STORAGE_KEY,
   getCustomThemes,
@@ -12,7 +13,6 @@ import {
   themeColorToHex,
   THEME_FILE_VERSION,
 } from "../../themePalette";
-import { importOpenVsxThemeExtension, type OpenVsxThemeExtension } from "../../openVsxThemes";
 import { ThemeImportDialog } from "./ThemeImportDialog";
 
 const searchOpenVsxThemes = vi.hoisted(() => vi.fn());

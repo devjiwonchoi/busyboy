@@ -2,12 +2,12 @@ import type { DesktopBridge, DesktopUpdateState } from "@t3tools/contracts";
 import { msg, T, useGT, useMessages, Var } from "gt-react";
 import { ExternalLinkIcon } from "lucide-react";
 
+import type { MessageResolver } from "../../i18n/messages";
+import { formatRelativeTimeLabel } from "../../timestampFormat";
 import {
   getDesktopUpdateReleaseHistoryUrl,
   getDesktopUpdateReleaseUrl,
 } from "../desktopUpdate.logic";
-import type { MessageResolver } from "../../i18n/messages";
-import { formatRelativeTimeLabel } from "../../timestampFormat";
 import { openDesktopUpdateReleaseNotes } from "../desktopUpdate.toast";
 
 type DesktopUpdateShell = Pick<DesktopBridge, "openExternal">;

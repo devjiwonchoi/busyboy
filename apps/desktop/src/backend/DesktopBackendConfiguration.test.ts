@@ -10,19 +10,19 @@ import * as Layer from "effect/Layer";
 import * as ManagedRuntime from "effect/ManagedRuntime";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
-import * as Stream from "effect/Stream";
 import { ChildProcessSpawner } from "effect/process";
+import * as Stream from "effect/Stream";
 
+import * as DesktopConfig from "../app/DesktopConfig.ts";
 import * as DesktopEnvironment from "../app/DesktopEnvironment.ts";
 import * as DesktopManagedPolicy from "../app/DesktopManagedPolicy.ts";
-import * as DesktopBackendConfiguration from "./DesktopBackendConfiguration.ts";
-import * as DesktopShellEnvironment from "../shell/DesktopShellEnvironment.ts";
-import * as DesktopConfig from "../app/DesktopConfig.ts";
-import * as DesktopServerExposure from "./DesktopServerExposure.ts";
 import * as DesktopState from "../app/DesktopState.ts";
 import * as DesktopAppSettings from "../settings/DesktopAppSettings.ts";
+import * as DesktopShellEnvironment from "../shell/DesktopShellEnvironment.ts";
 import * as DesktopWslEnvironment from "../wsl/DesktopWslEnvironment.ts";
 import * as DesktopWslServerTree from "../wsl/DesktopWslServerTree.ts";
+import * as DesktopBackendConfiguration from "./DesktopBackendConfiguration.ts";
+import * as DesktopServerExposure from "./DesktopServerExposure.ts";
 
 const layerShellEnvironment = (prepared = true) =>
   Layer.succeed(DesktopShellEnvironment.DesktopShellEnvironment, {

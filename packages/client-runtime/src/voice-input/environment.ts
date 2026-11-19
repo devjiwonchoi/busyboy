@@ -1,7 +1,3 @@
-import { encodeSpeechPcmRequest } from "@t3tools/shared/speech";
-import * as Effect from "effect/Effect";
-import * as Redacted from "effect/Redacted";
-import * as Schema from "effect/Schema";
 import { CloudSpeechError, SPEECH_STREAM_PATH } from "@t3tools/contracts";
 import type {
   CloudSpeechModelId,
@@ -12,6 +8,10 @@ import type {
   SpeechTranscriptionOptions,
   SpeechPostProcessingOptions,
 } from "@t3tools/contracts";
+import { encodeSpeechPcmRequest } from "@t3tools/shared/speech";
+import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
+import * as Schema from "effect/Schema";
 
 import * as RemoteEnvironmentAuthorization from "../authorization/service.ts";
 import type { PreparedConnection } from "../connection/model.ts";

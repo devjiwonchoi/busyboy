@@ -1,5 +1,5 @@
-import type { DesktopBridge } from "@t3tools/contracts";
 import { afterEach, describe, expect, it, vi } from "@effect/vitest";
+import type { DesktopBridge } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import { HttpClient } from "effect/http";

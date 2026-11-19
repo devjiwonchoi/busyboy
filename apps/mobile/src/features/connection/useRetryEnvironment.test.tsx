@@ -1,17 +1,17 @@
 import { RegistryContext } from "@effect/atom-react";
-import { EnvironmentId } from "@t3tools/contracts";
+import { describe, expect, it } from "@effect/vitest";
 import {
   EnvironmentRegistry,
   PrimaryConnectionTarget,
   type ConnectionCatalogEntry,
 } from "@t3tools/client-runtime/connection";
+import { EnvironmentId } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
-import * as SubscriptionRef from "effect/SubscriptionRef";
 import { AtomRegistry } from "effect/reactivity";
+import * as SubscriptionRef from "effect/SubscriptionRef";
 import { act, useLayoutEffect } from "react";
 import { createRoot } from "react-dom/client";
-import { describe, expect, it } from "@effect/vitest";
 import { vi } from "vite-plus/test";
 
 const fixture = vi.hoisted(() => ({

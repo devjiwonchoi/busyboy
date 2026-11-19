@@ -1,54 +1,56 @@
 // @effect-diagnostics nodeBuiltinImport:off - Effect has no incremental digest or free-space query.
-import { expandHomePath } from "@t3tools/provider-core/server/pathExpansion";
-import * as ModelManifest from "./ModelManifest.ts";
-import { resolveProviderCompatibility } from "./providerCompatibility.ts";
-import { cliArchiveTarCommand } from "@t3tools/shared/cliRelease";
-import { compareSemverVersions } from "@t3tools/shared/semver";
+
+import * as NodeCrypto from "node:crypto";
+import * as NodeFSP from "node:fs/promises";
+
 import * as EffectNodeStream from "@effect/platform-node/NodeStream";
 import { ProviderDriverKind, type ProviderInstallState } from "@t3tools/contracts";
+import { expandHomePath } from "@t3tools/provider-core/server/pathExpansion";
+import { cliArchiveTarCommand } from "@t3tools/shared/cliRelease";
 import * as HostProcess from "@t3tools/shared/HostProcess";
 import { resolveNodeExecutable, nodeRuntimeUnavailableMessage } from "@t3tools/shared/nodeRuntime";
+import { compareSemverVersions } from "@t3tools/shared/semver";
 import { resolveCommandPath } from "@t3tools/shared/shell";
-import * as Clock from "effect/Clock";
+import * as EffectAcpErrors from "effect-acp/errors";
 import * as Cause from "effect/Cause";
+import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
 import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
 import * as FileSystem from "effect/FileSystem";
+import { HttpClient, HttpClientError, HttpClientRequest, HttpClientResponse } from "effect/http";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import type { PlatformError } from "effect/PlatformError";
-import * as Schema from "effect/Schema";
+import * as ChildProcess from "effect/process/ChildProcess";
+import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Schedule from "effect/Schedule";
+import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
 import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
 import * as SubscriptionRef from "effect/SubscriptionRef";
-import { HttpClient, HttpClientError, HttpClientRequest, HttpClientResponse } from "effect/http";
-import * as ChildProcess from "effect/process/ChildProcess";
-import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
-import * as NodeCrypto from "node:crypto";
-import * as NodeFSP from "node:fs/promises";
-import * as EffectAcpErrors from "effect-acp/errors";
 
 import * as ServerConfig from "../config.ts";
 import * as ServerSettings from "../serverSettings.ts";
-import {
-  ANTIGRAVITY_CLI_MANIFEST_BASE,
-  antigravityCliTarget,
-  parseAntigravityCliRelease,
-  type AntigravityCliReleaseAsset,
-} from "./antigravityCliRelease.ts";
 import { openZipArchive } from "../zipArchive.ts";
 import { makeAntigravityAcpRuntime } from "./acp/AntigravityAcpSupport.ts";
 import {
   buildAntigravityAcpSpawnInput,
   prepareAntigravityProfile,
 } from "./antigravityAuthSupport.ts";
+import {
+  ANTIGRAVITY_CLI_MANIFEST_BASE,
+  antigravityCliTarget,
+  parseAntigravityCliRelease,
+  type AntigravityCliReleaseAsset,
+} from "./antigravityCliRelease.ts";
 import { type AntigravityReleaseAsset } from "./antigravityRelease.ts";
+import * as ModelManifest from "./ModelManifest.ts";
+import { resolveProviderCompatibility } from "./providerCompatibility.ts";
 
 const DRIVER = ProviderDriverKind.make("antigravity");
 const DOWNLOAD_TIMEOUT = "45 minutes";

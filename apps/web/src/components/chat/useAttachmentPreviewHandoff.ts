@@ -1,9 +1,10 @@
-import { type EnvironmentId, type MessageId, type ThreadId } from "@t3tools/contracts";
 import { useAtomValue } from "@effect/atom-react";
+import { type EnvironmentId, type MessageId, type ThreadId } from "@t3tools/contracts";
 import { type Dispatch, type SetStateAction, useEffect } from "react";
+
+import { useAssetUrls } from "../../assets/assetUrls";
 import { selectHandoffImageResources } from "../../session-logic";
 import type { useQuietThreadVisibleTurnItems } from "../../state/entities";
-import { useAssetUrls } from "../../assets/assetUrls";
 import {
   dropOptimisticHandoff,
   loadedHandoffMessageIdsAtom,

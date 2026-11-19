@@ -1,6 +1,9 @@
 import { useAtomValue } from "@effect/atom-react";
-import { msg } from "gt-react-native";
-import { m } from "../i18n/messages";
+import { parseScopedThreadKey, scopedThreadKey } from "@t3tools/client-runtime/environment";
+import type {
+  EnvironmentShellState,
+  EnvironmentThreadShell,
+} from "@t3tools/client-runtime/state/shell";
 import {
   EnvironmentId as EnvironmentIdSchema,
   ModelSelection as ModelSelectionSchema,
@@ -23,20 +26,6 @@ import {
   type ScopedThreadRef,
   type ThreadId,
 } from "@t3tools/contracts";
-import * as Schema from "effect/Schema";
-import { useEffect, useState } from "react";
-import { AsyncResult, Atom, type AtomRegistry } from "effect/reactivity";
-import * as Option from "effect/Option";
-import { parseScopedThreadKey, scopedThreadKey } from "@t3tools/client-runtime/environment";
-import type {
-  EnvironmentShellState,
-  EnvironmentThreadShell,
-} from "@t3tools/client-runtime/state/shell";
-import { draftModelPickMatchesThread } from "@t3tools/shared/model";
-
-import { writeFileAtomically } from "../lib/atomic-file";
-import { createComposerContextHistory, referencedComposerContext } from "../lib/composerContext";
-import { isQueuedEditDraftKey } from "./queued-edit-draft-key";
 import {
   collectComposerContextReferences,
   formatComposerContextReference,
@@ -44,7 +33,16 @@ import {
   replaceComposerContextReferences,
 } from "@t3tools/shared/composerContextReferences";
 import { imageMimeType } from "@t3tools/shared/image";
+import { draftModelPickMatchesThread } from "@t3tools/shared/model";
 import { videoMimeType } from "@t3tools/shared/video";
+import * as Option from "effect/Option";
+import { AsyncResult, Atom, type AtomRegistry } from "effect/reactivity";
+import * as Schema from "effect/Schema";
+import { msg } from "gt-react-native";
+import { useEffect, useState } from "react";
+
+import { m } from "../i18n/messages";
+import { writeFileAtomically } from "../lib/atomic-file";
 import { DraftComposerAttachmentSchema } from "../lib/composer-image-schema";
 import {
   composerAttachmentFileReferenceKey,
@@ -54,6 +52,8 @@ import {
   registerComposerAttachmentUnusedHandler,
   retainComposerAttachmentFileForPreview,
 } from "../lib/composerAttachmentPreviewRetention";
+import { composerDraftEnvironmentId } from "../lib/composerAttachmentUploadQueue";
+import { createComposerContextHistory, referencedComposerContext } from "../lib/composerContext";
 import type { DraftComposerAttachment, FileBackedComposerAttachment } from "../lib/composerImages";
 import { SerializedAsyncQueue } from "../lib/serialized-async-queue";
 import { appAtomRegistry } from "./atom-registry";
@@ -66,14 +66,14 @@ import {
   newTaskDraftKey,
   parseLegacyNewTaskDraftKey,
 } from "./new-task-draft-key";
+import { isQueuedEditDraftKey } from "./queued-edit-draft-key";
+import { flushThreadOutbox, threadOutboxManager } from "./thread-outbox";
 import {
   decodeQueuedThreadMessage,
   encodeQueuedThreadMessage,
   QueuedThreadMessageSchema,
   type QueuedThreadMessage,
 } from "./thread-outbox-model";
-import { flushThreadOutbox, threadOutboxManager } from "./thread-outbox";
-import { composerDraftEnvironmentId } from "../lib/composerAttachmentUploadQueue";
 
 const COMPOSER_DRAFTS_SCHEMA_VERSION = 1;
 const COMPOSER_DRAFTS_DIRECTORY = "composer-drafts";

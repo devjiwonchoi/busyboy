@@ -1,3 +1,11 @@
+import * as NodeHttpClient from "@effect/platform-node/NodeHttpClient";
+import { collectUint8StreamText } from "@t3tools/provider-core/server/collectStreamText";
+import { decodeJsonResult } from "@t3tools/shared/schemaJson";
+import * as SourceControlHost from "@t3tools/source-control-core/server/SourceControlHost";
+import type { SourceControlProviderContext } from "@t3tools/source-control-core/server/SourceControlProvider";
+import { repositoryPathFromRemoteUrl } from "@t3tools/source-control-core/server/SourceControlProvider";
+import { retryAtFromHeader } from "@t3tools/source-control-core/server/SourceControlRateLimit";
+import { parseGitRemoteHost } from "@t3tools/source-control-core/shared/definition";
 /**
  * Requests borrow the `origin` CLI's session token and go straight to `api.cursor.com/v1/origin`
  * over one long-lived HTTP/2 connection: spawning the CLI per request costs about 0.8s, a warm
@@ -6,22 +14,15 @@
 import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
+import { HttpClient, HttpClientRequest } from "effect/http";
 import * as Layer from "effect/Layer";
 import * as PlatformError from "effect/PlatformError";
 import * as Redacted from "effect/Redacted";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import * as Semaphore from "effect/Semaphore";
-import { HttpClient, HttpClientRequest } from "effect/http";
-import * as NodeHttpClient from "@effect/platform-node/NodeHttpClient";
-import { collectUint8StreamText } from "@t3tools/provider-core/server/collectStreamText";
-import { decodeJsonResult } from "@t3tools/shared/schemaJson";
-import { parseGitRemoteHost } from "@t3tools/source-control-core/shared/definition";
+
 import { CURSOR_ORIGIN_GIT_HOST } from "../shared/definition.ts";
-import { retryAtFromHeader } from "@t3tools/source-control-core/server/SourceControlRateLimit";
-import * as SourceControlHost from "@t3tools/source-control-core/server/SourceControlHost";
-import type { SourceControlProviderContext } from "@t3tools/source-control-core/server/SourceControlProvider";
-import { repositoryPathFromRemoteUrl } from "@t3tools/source-control-core/server/SourceControlProvider";
 
 const DEFAULT_TIMEOUT_MS = 30_000;
 const MISSING_TOKEN_TTL_MS = 10_000;

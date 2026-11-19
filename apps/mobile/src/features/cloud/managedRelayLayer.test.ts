@@ -2,12 +2,12 @@
 
 import * as NodeCrypto from "node:crypto";
 
-import { vi } from "vite-plus/test";
 import { assert, describe, it } from "@effect/vitest";
 import { ManagedRelay } from "@t3tools/client-runtime/relay";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 import { FetchHttpClient } from "effect/http";
+import * as Layer from "effect/Layer";
+import { vi } from "vite-plus/test";
 
 import * as Dpop from "./dpop";
 import * as ManagedRelayLayer from "./managedRelayLayer";

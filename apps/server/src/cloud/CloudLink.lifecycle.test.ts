@@ -1,40 +1,37 @@
 import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { describe, expect, it } from "@effect/vitest";
+import { EnvironmentId } from "@t3tools/contracts";
+import {
+  RelayEnvironmentLinkProofPayload,
+  RelayManagedEndpointRecoveryRegistrationRequest,
+} from "@t3tools/contracts/relay";
+import { RELAY_LINK_PROOF_TYP, signRelayJwt, verifyRelayJwt } from "@t3tools/shared/relayJwt";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import { HttpClient, HttpClientResponse, HttpServer, type HttpClientRequest } from "effect/http";
 import * as Layer from "effect/Layer";
+import * as NetAddress from "effect/net/NetAddress";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as PlatformError from "effect/PlatformError";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import * as TestClock from "effect/testing/TestClock";
-import { HttpClient, HttpClientResponse, HttpServer, type HttpClientRequest } from "effect/http";
-import { RELAY_LINK_PROOF_TYP, signRelayJwt, verifyRelayJwt } from "@t3tools/shared/relayJwt";
-import * as NetAddress from "effect/net/NetAddress";
 
-import { EnvironmentId } from "@t3tools/contracts";
-import * as EnvironmentKeys from "./environmentKeys.ts";
 import * as EnvironmentAuth from "../auth/EnvironmentAuth.ts";
 import * as ServerSecretStore from "../auth/ServerSecretStore.ts";
 import * as ServerConfigModule from "../config.ts";
-import { writeServiceState } from "../serviceLauncher.ts";
-import {
-  SERVICE_LAUNCHER_PROTOCOL,
-  SERVICE_STATE_FILE,
-  SERVICE_STOP_MARKER_FILE,
-  type ServiceUpdateRecord,
-} from "./serviceProtocol.ts";
 import * as ServerEnvironment from "../environment/ServerEnvironment.ts";
+import * as ManagedPolicy from "../policy/ManagedPolicy.ts";
 import * as AgentAwarenessRelay from "../relay/AgentAwarenessRelay.ts";
+import * as ServerSettings from "../serverSettings.ts";
+import { writeServiceState } from "../serviceLauncher.ts";
 import { CLOUD_CLI_DESIRED_LINK_SECRET } from "./CliState.ts";
 import * as CliTokenManager from "./CliTokenManager.ts";
-import {
-  RelayEnvironmentLinkProofPayload,
-  RelayManagedEndpointRecoveryRegistrationRequest,
-} from "@t3tools/contracts/relay";
+import * as CloudLink from "./CloudLink.ts";
+import { consumeCloudReplayGuards } from "./CloudLink.ts";
 import {
   CLOUD_ENDPOINT_CONFIRMED_ORIGIN,
   CLOUD_ENDPOINT_RUNTIME_CONFIG,
@@ -45,14 +42,17 @@ import {
   RELAY_ISSUER_SECRET,
   RELAY_URL_SECRET,
 } from "./config.ts";
-import * as CloudLink from "./CloudLink.ts";
 import * as ConnectReachability from "./ConnectReachability.ts";
-import { consumeCloudReplayGuards } from "./CloudLink.ts";
-import { pendingServiceUpdateExists } from "./updateHandoff.ts";
-import { managedTunnelStartupAction } from "./managedTunnelStartup.ts";
+import * as EnvironmentKeys from "./environmentKeys.ts";
 import * as ManagedEndpointRuntime from "./ManagedEndpointRuntime.ts";
-import * as ManagedPolicy from "../policy/ManagedPolicy.ts";
-import * as ServerSettings from "../serverSettings.ts";
+import { managedTunnelStartupAction } from "./managedTunnelStartup.ts";
+import {
+  SERVICE_LAUNCHER_PROTOCOL,
+  SERVICE_STATE_FILE,
+  SERVICE_STOP_MARKER_FILE,
+  type ServiceUpdateRecord,
+} from "./serviceProtocol.ts";
+import { pendingServiceUpdateExists } from "./updateHandoff.ts";
 
 const storeFailure = (tag: "AlreadyExists" | "PermissionDenied") =>
   new ServerSecretStore.SecretStorePersistError({

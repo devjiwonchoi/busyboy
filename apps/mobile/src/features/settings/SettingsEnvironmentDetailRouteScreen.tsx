@@ -1,29 +1,30 @@
-import { errorDisplayMessage } from "@t3tools/client-runtime/errors";
-import { serverUpdateFailureText } from "@t3tools/client-runtime/state/server";
-import { T, useGT, useMessages, Var } from "gt-react-native";
-import * as Dialog from "../../components/ui/Dialog";
 import { useAtom, useAtomValue } from "@effect/atom-react";
 import { useNavigation, type StaticScreenProps } from "@react-navigation/native";
+import { managedUpdatesDenial } from "@t3tools/client-runtime/contract-labels";
+import { errorDisplayMessage } from "@t3tools/client-runtime/errors";
+import { settlePromise, squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
+import { serverUpdateFailureText } from "@t3tools/client-runtime/state/server";
 import {
   AuthProvidersManageScope,
   AuthOrchestrationReadScope,
   type EnvironmentId,
   type ServerProvider,
 } from "@t3tools/contracts";
-import { settlePromise, squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
-import { managedUpdatesDenial } from "@t3tools/client-runtime/contract-labels";
 import { sessionPermissionsUnavailableMessage } from "@t3tools/shared/authScopeOptions";
 import * as Cause from "effect/Cause";
 import * as Exit from "effect/Exit";
 import { AsyncResult } from "effect/reactivity";
+import { T, useGT, useMessages, Var } from "gt-react-native";
 import { useRef, useState } from "react";
 import { Linking, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { m } from "../../i18n/messages";
 
-import { AppText as Text } from "../../components/ui/AppText";
 import { ProviderIcon } from "../../components/ProviderIcon";
+import { AppText as Text } from "../../components/ui/AppText";
+import * as Dialog from "../../components/ui/Dialog";
+import { ListActionRow as SettingsActionRow } from "../../components/ui/ListActionRow";
 import { ScreenScrollView } from "../../components/ui/ScreenScrollView";
+import { m } from "../../i18n/messages";
 import { appAtomRegistry } from "../../state/atom-registry";
 import { environmentPresentations } from "../../state/presentation";
 import { serverEnvironment } from "../../state/server";
@@ -31,9 +32,6 @@ import { environmentSession, useEnvironmentScope, readEnvironmentScope } from ".
 import { useAtomCommand } from "../../state/use-atom-command";
 import { useRemoteConnections } from "../../state/use-remote-environment-registry";
 import { ConnectionEnvironmentRow } from "../connection/ConnectionEnvironmentRow";
-import { EnvironmentRoutesSection } from "./EnvironmentRoutesSection";
-import { OutdatedServerUpdateSection } from "./OutdatedServerUpdateSection";
-import { ListActionRow as SettingsActionRow } from "../../components/ui/ListActionRow";
 import { SettingsScreen } from "./components/SettingsScreen";
 import { SettingsSection } from "./components/SettingsSection";
 import {
@@ -41,7 +39,9 @@ import {
   canUpdateEnvironmentProvider,
   supportsEnvironmentUpdate,
 } from "./environment-maintenance";
+import { EnvironmentRoutesSection } from "./EnvironmentRoutesSection";
 import { environmentReleaseCheckAtom, releaseCheckValue } from "./environmentUpdateCheck";
+import { OutdatedServerUpdateSection } from "./OutdatedServerUpdateSection";
 
 export function SettingsEnvironmentDetailRouteScreen({
   route,

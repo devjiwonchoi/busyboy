@@ -1,7 +1,7 @@
+import { assert, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
-import { assert, it } from "@effect/vitest";
 import { vi } from "vite-plus/test";
 
 vi.mock("electron", () => ({}));

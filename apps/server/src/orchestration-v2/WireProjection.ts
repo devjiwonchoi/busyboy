@@ -11,11 +11,11 @@ import type {
   OrchestrationV2ThreadStreamItem,
   OrchestrationV2TurnItem,
 } from "@t3tools/contracts";
+import { MCP_APP_OUTPUT_KEY, readMcpAppReference } from "@t3tools/shared/mcpApp";
 import {
   dedupeSubagentBodies,
   dedupeTurnItemBodies,
 } from "@t3tools/shared/orchestrationV2DedupedBodies";
-import { MCP_APP_OUTPUT_KEY, readMcpAppReference } from "@t3tools/shared/mcpApp";
 import {
   commandIndicatesFailure,
   compactDynamicToolOutput,

@@ -1,5 +1,7 @@
 import { resolveQueuedEditExit } from "@t3tools/client-runtime/queued-run-edit";
 import type { ChatAttachment } from "@t3tools/contracts";
+import { msg } from "gt-react";
+
 import {
   composerDraftHasUserContent,
   useComposerDraftStore,
@@ -7,7 +9,6 @@ import {
   type ComposerImageAttachment,
   type ComposerThreadTarget,
 } from "../../composerDraftStore";
-import { msg } from "gt-react";
 import { m } from "../../i18n/messages";
 import { releaseDraftAttachments } from "../../lib/attachmentUploadQueue";
 

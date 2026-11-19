@@ -1,9 +1,9 @@
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import { HttpClient, HttpClientRequest } from "effect/http";
 import * as Option from "effect/Option";
 import * as Ref from "effect/Ref";
 import * as Schedule from "effect/Schedule";
-import { HttpClient, HttpClientRequest } from "effect/http";
 
 const DEFAULT_HTTP_READY_PROBE_TIMEOUT_MS = 1_000;
 

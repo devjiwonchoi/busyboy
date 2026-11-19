@@ -4,12 +4,13 @@ import type {
   PullRequestMergeMethod,
   PullRequestUpdateMethod,
 } from "@t3tools/contracts";
-import { CheckIcon, ChevronDownIcon, FolderGit2Icon, GitBranchIcon, PlayIcon } from "lucide-react";
 import { Branch, T, useGT } from "gt-react";
+import { CheckIcon, ChevronDownIcon, FolderGit2Icon, GitBranchIcon, PlayIcon } from "lucide-react";
 import type { ReactNode } from "react";
 
 import { AnimatedWidth } from "~/components/AnimatedWidth";
 import { cn } from "~/lib/utils";
+
 import { EnvironmentMachineIcon } from "../EnvironmentMachineIcon";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
@@ -23,13 +24,12 @@ import {
   MenuTrigger,
 } from "../ui/menu";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
+import type { ChangeRequestTermKind } from "./changeRequestTerm";
 import type { resolvePullRequestPrimaryControl } from "./pullRequestDetail.logic";
 import { PullRequestGlyph } from "./pullRequestIcons";
 import type { resolvePullRequestState } from "./pullRequestPresentation";
 import type { PickableEnvironment } from "./pullRequestProjectAssignment.logic";
 import { useInlineActionConfirm } from "./useInlineActionConfirm";
-
-import type { ChangeRequestTermKind } from "./changeRequestTerm";
 
 export type PerformPullRequestAction = (
   action: PullRequestAction,

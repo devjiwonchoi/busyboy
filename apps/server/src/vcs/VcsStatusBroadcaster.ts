@@ -1,3 +1,17 @@
+import type {
+  GitManagerServiceError,
+  VcsStatusInput,
+  VcsBranchStatus,
+  VcsStatusLocalResult,
+  VcsStatusRemoteResult,
+  VcsStatusResult,
+  VcsStatusStreamEvent,
+  VcsStatusSubscriptionInput,
+} from "@t3tools/contracts";
+import { DEFAULT_AUTOMATIC_GIT_FETCH_INTERVAL } from "@t3tools/contracts";
+import { mergeGitStatusParts } from "@t3tools/shared/git";
+import * as KeyedLock from "@t3tools/shared/KeyedLock";
+import { resolveProjectSettings } from "@t3tools/shared/projectSettings";
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
 import * as Deferred from "effect/Deferred";
@@ -14,20 +28,6 @@ import * as Schedule from "effect/Schedule";
 import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 import * as SynchronizedRef from "effect/SynchronizedRef";
-import type {
-  GitManagerServiceError,
-  VcsStatusInput,
-  VcsBranchStatus,
-  VcsStatusLocalResult,
-  VcsStatusRemoteResult,
-  VcsStatusResult,
-  VcsStatusStreamEvent,
-  VcsStatusSubscriptionInput,
-} from "@t3tools/contracts";
-import { DEFAULT_AUTOMATIC_GIT_FETCH_INTERVAL } from "@t3tools/contracts";
-import { mergeGitStatusParts } from "@t3tools/shared/git";
-import * as KeyedLock from "@t3tools/shared/KeyedLock";
-import { resolveProjectSettings } from "@t3tools/shared/projectSettings";
 
 import * as BackgroundPolicy from "../background/BackgroundPolicy.ts";
 import * as GitWorkflowService from "../git/GitWorkflowService.ts";

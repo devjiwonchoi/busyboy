@@ -1,3 +1,6 @@
+import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
+import * as NodeServices from "@effect/platform-node/NodeServices";
+import { it as effectIt } from "@effect/vitest";
 import {
   DEFAULT_SERVER_SETTINGS,
   ProjectId,
@@ -7,10 +10,7 @@ import {
   SecretProviderKind,
   type ServerSettings,
 } from "@t3tools/contracts";
-import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
-import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as ProviderHost from "@t3tools/provider-core/server/ProviderHost";
-import { it as effectIt } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Queue from "effect/Queue";
@@ -22,6 +22,7 @@ import * as BackgroundPolicy from "../background/BackgroundPolicy.ts";
 import * as ServerConfig from "../config.ts";
 import * as PortScanner from "../preview/PortScanner.ts";
 import { ServerSettingsService } from "../serverSettings.ts";
+import * as ProviderHostLive from "./ProviderHostLive.ts";
 import {
   DEV_REPLAY_INSTANCE_ID,
   deriveProviderInstanceConfigMap,
@@ -29,7 +30,6 @@ import {
   providerHostLayer,
   seedDevReplayInstance,
 } from "./ProviderInstanceRegistryHydration.ts";
-import * as ProviderHostLive from "./ProviderHostLive.ts";
 import { ProviderInstanceRegistryMutator } from "./ProviderInstanceRegistryMutator.ts";
 
 const projectId = ProjectId.make("project-a");

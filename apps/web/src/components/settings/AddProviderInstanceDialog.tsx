@@ -1,18 +1,10 @@
-import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
-import { m as resolveMessage } from "~/i18n/messages";
-import { ProviderInstanceIcon } from "../chat/ProviderInstanceIcon";
-
 import { Radio as RadioPrimitive } from "@base-ui/react/radio";
-import { CheckIcon, ChevronDownIcon } from "lucide-react";
-import { useState } from "react";
-import { msg, T, useGT, useMessages, Var } from "gt-react";
-import type { MessageResolver } from "../../i18n/messages";
+import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
 import {
   deriveAvailableInstanceId,
   deriveInstanceId,
 } from "@t3tools/client-runtime/provider-instance-ids";
 import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
-import type { ProviderClientDefinition } from "@t3tools/provider-core/client";
 import {
   type AcpRegistrySearchAgent,
   AuthProvidersManageScope,
@@ -23,30 +15,33 @@ import {
   type ProviderInstanceEnvironmentVariable,
   isManagedDriverAllowed,
 } from "@t3tools/contracts";
+import type { ProviderClientDefinition } from "@t3tools/provider-core/client";
+import { msg, T, useGT, useMessages, Var } from "gt-react";
+import { CheckIcon, ChevronDownIcon } from "lucide-react";
+import { useState } from "react";
+
+import { m as resolveMessage } from "~/i18n/messages";
 
 import {
   useEnvironmentSettings,
   usePersistEnvironmentProviderInstanceMutation,
 } from "../../hooks/useSettings";
-
+import type { MessageResolver } from "../../i18n/messages";
 import { cn } from "../../lib/utils";
 import { normalizeProviderAccentColor } from "../../providerInstances";
 import { managedInstanceLocks, useManagedPolicy } from "../../state/managedPolicy";
 import { readEnvironmentScope, useEnvironmentScope } from "../../state/session";
-import { Button } from "../ui/button";
-import { ChatGptConnectionButton } from "./ChatGptConnectionButton";
-import { Dialog } from "../ui/dialog";
+import { ProviderInstanceIcon } from "../chat/ProviderInstanceIcon";
 import { Badge } from "../ui/badge";
+import { Button } from "../ui/button";
 import { Collapsible, CollapsiblePanel, CollapsibleTrigger } from "../ui/collapsible";
+import { Dialog } from "../ui/dialog";
 import { Input } from "../ui/input";
 import { RadioGroup } from "../ui/radio-group";
 import { toastManager } from "../ui/toast";
-import { providerClients } from "./providerDriverMeta";
-import { ProviderAccentColorPicker } from "./ProviderAccentColorPicker";
-import { SettingsGroup } from "./SettingsGroup";
-import { SettingsRow } from "./settingsLayout";
-import { ProviderSettingsForm, deriveProviderSettingsFields } from "./ProviderSettingsForm";
 import { WizardPanel, WizardPopup, WizardHeader, WizardFooter } from "../ui/wizard";
+import { resolveOfficialAcpRegistryIconUrl } from "./AcpRegistryIcon";
+import { AcpRegistrySearchStep, useAcpRegistrySearch } from "./AcpRegistrySearchStep";
 import {
   ADD_PROVIDER_WIZARD_STEPS,
   ACP_REGISTRY_WIZARD_STEPS,
@@ -58,13 +53,17 @@ import {
   type WizardNavigation,
 } from "./AddProviderInstanceDialog.logic";
 import { AddProviderInstanceWizardSteps } from "./AddProviderInstanceWizardSteps";
-import { AcpRegistrySearchStep, useAcpRegistrySearch } from "./AcpRegistrySearchStep";
-import { ProviderWizardAuthenticationStep } from "./ProviderWizardAuthenticationStep";
-import { resolveOfficialAcpRegistryIconUrl } from "./AcpRegistryIcon";
+import { ChatGptConnectionButton } from "./ChatGptConnectionButton";
 import { AddManagedCodexAccountDialog } from "./CodexSetupSection";
 import { MultipleAccountsNote } from "./MultipleAccountsNote";
+import { ProviderAccentColorPicker } from "./ProviderAccentColorPicker";
+import { providerClients } from "./providerDriverMeta";
 import { ProviderEnvironmentSection } from "./ProviderInstanceCard";
+import { ProviderSettingsForm, deriveProviderSettingsFields } from "./ProviderSettingsForm";
+import { ProviderWizardAuthenticationStep } from "./ProviderWizardAuthenticationStep";
 import { useSecretSources } from "./SecretSourceInput";
+import { SettingsGroup } from "./SettingsGroup";
+import { SettingsRow } from "./settingsLayout";
 
 const INSTANCE_ID_PATTERN = /^[a-zA-Z][a-zA-Z0-9_-]*$/;
 const DEFAULT_DRIVER_KIND = ProviderDriverKind.make("codex");

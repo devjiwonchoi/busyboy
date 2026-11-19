@@ -1,21 +1,20 @@
-import { msg, T, useGT, useMessages } from "gt-react-native";
-
-import type { MessageResolver } from "../../i18n/messages";
-
-import { Button } from "../../components/ui/Button";
+import { worktreeSetupAgentStarted } from "@t3tools/client-runtime/worktree-setup";
 import {
   WORKTREE_SETUP_STAGE_ORDER,
   type WorktreeSetupSnapshot,
   type WorktreeSetupStage,
 } from "@t3tools/contracts";
-import { worktreeSetupAgentStarted } from "@t3tools/client-runtime/worktree-setup";
 import { formatDuration } from "@t3tools/shared/orchestrationTimingCopy";
+import { msg, T, useGT, useMessages } from "gt-react-native";
 import { Platform, Pressable, ScrollView, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+
 import { AppActivityIndicator } from "../../components/ui/AppActivityIndicator";
-import { AppText as Text } from "../../components/ui/AppText";
 import { SymbolView, type AppSymbolName } from "../../components/ui/AppSymbol";
+import { AppText as Text } from "../../components/ui/AppText";
+import { Button } from "../../components/ui/Button";
 import { Sheet } from "../../components/ui/Sheet";
+import type { MessageResolver } from "../../i18n/messages";
 import { ShimmeringWorkContent } from "./thread-work-log";
 import { useVisibleSecondClock } from "./use-visible-second-clock";
 

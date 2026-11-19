@@ -1,19 +1,20 @@
 // @effect-diagnostics-next-line nodeBuiltinImport:off - flushSync must write before the process exits.
 import * as NodeFS from "node:fs";
+
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import type * as Exit from "effect/Exit";
 import * as ExitRuntime from "effect/Exit";
+import { OtlpResource, OtlpTracer, OtlpSerialization } from "effect/observability";
 import * as Option from "effect/Option";
 import * as Queue from "effect/Queue";
 import * as Result from "effect/Result";
-import * as Semaphore from "effect/Semaphore";
 import * as Schema from "effect/Schema";
 import * as SchemaIssue from "effect/SchemaIssue";
 import * as SchemaTransformation from "effect/SchemaTransformation";
+import * as Semaphore from "effect/Semaphore";
 import * as Tracer from "effect/Tracer";
-import { OtlpResource, OtlpTracer, OtlpSerialization } from "effect/observability";
 
 import { makeAsyncRotatingFileSink } from "./logging.ts";
 

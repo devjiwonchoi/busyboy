@@ -8,7 +8,6 @@ import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 
 import { findEsmImportsOfExternalPackages } from "./cli-executable-imports.ts";
-
 import {
   isRuntimeExternalCliDependency,
   findInlinedExternalPackages,

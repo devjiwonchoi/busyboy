@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from "@effect/vitest";
 import type { SharePayload } from "expo-sharing";
 
-import type { IncomingShareDraft } from "./incoming-share-model";
 import { IncomingShareInbox, type IncomingShareInboxDependencies } from "./incoming-share-inbox";
+import type { IncomingShareDraft } from "./incoming-share-model";
 
 const PAYLOAD: SharePayload = {
   shareType: "text",

@@ -1,6 +1,6 @@
+import { describe, expect, it } from "@effect/vitest";
 import type { DeviceHostSummary } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
-import { describe, expect, it } from "@effect/vitest";
 
 import { agentDeviceQuickStart, pngDimensions, resolveHostId } from "./handlers.ts";
 

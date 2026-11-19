@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+
 import { ConnectionsSettings } from "../components/settings/ConnectionsSettings";
 
 function SettingsAccessRoute() {

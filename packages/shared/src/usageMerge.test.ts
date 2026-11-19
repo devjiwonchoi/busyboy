@@ -7,8 +7,8 @@ import {
   type UsageProviderKind,
   UsageSummary,
 } from "@t3tools/contracts";
-import { describe, expect, it } from "vite-plus/test";
 import * as Schema from "effect/Schema";
+import { describe, expect, it } from "vite-plus/test";
 
 import { isModelCostUnknown, mergeUsage, type EnvironmentUsage } from "./usageMerge.ts";
 

@@ -1,12 +1,13 @@
-import { mFallback, msg } from "gt-i18n";
-import type { MFunctionType } from "gt-i18n/types";
-import { formatConjunctionList } from "./listFormat.ts";
 import type {
   PullRequestComment,
   PullRequestDetail,
   PullRequestReaction,
   PullRequestReactionContent,
 } from "@t3tools/contracts";
+import { mFallback, msg } from "gt-i18n";
+import type { MFunctionType } from "gt-i18n/types";
+
+import { formatConjunctionList } from "./listFormat.ts";
 
 export function canReactPullRequestComment(
   detail: Pick<PullRequestDetail, "provider" | "capabilities">,

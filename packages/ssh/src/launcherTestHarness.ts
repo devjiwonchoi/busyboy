@@ -1,16 +1,19 @@
 // @effect-diagnostics nodeBuiltinImport:off - Executes the generated remote launcher in an isolated shell with fake commands and clock.
+
+import * as NodeChildProcess from "node:child_process";
 import * as NodeFS from "node:fs";
 import * as NodePath from "node:path";
-import * as NodeURL from "node:url";
-import * as NodeChildProcess from "node:child_process";
 import * as NodeSqlite from "node:sqlite";
+import * as NodeURL from "node:url";
+
 import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import { ChildProcessSpawner } from "effect/process";
 import * as Sink from "effect/Sink";
 import * as Stream from "effect/Stream";
-import { ChildProcessSpawner } from "effect/process";
+
 import { launchOrReuseRemoteServer, type RemoteT3RunnerOptions } from "./tunnel.ts";
 
 // Capture exactly the script sent over SSH, then run it with fake remote commands.

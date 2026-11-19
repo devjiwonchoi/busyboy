@@ -1,16 +1,16 @@
 import { resolveProviderProbeTimeoutMs } from "@t3tools/provider-core/server/snapshotProbe";
+import { parseGenericCliVersion } from "@t3tools/provider-core/server/snapshotProbe";
 import { parseSemver } from "@t3tools/shared/semver";
 import * as Cache from "effect/Cache";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
-import * as Option from "effect/Option";
-import * as Schema from "effect/Schema";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
 
 import * as OpenCodeRuntime from "./OpenCodeRuntime.ts";
-import { parseGenericCliVersion } from "@t3tools/provider-core/server/snapshotProbe";
 
 export interface ProbedOpenCode {
   readonly generation: "v1" | "v2";

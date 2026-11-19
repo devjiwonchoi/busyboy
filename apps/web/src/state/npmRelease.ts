@@ -2,12 +2,11 @@ import { type ServerConfig, ServerNpmReleaseError } from "@t3tools/contracts";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
-import * as Schema from "effect/Schema";
 import { Atom } from "effect/reactivity";
+import * as Schema from "effect/Schema";
 import { msg } from "gt-react";
 
 import { m, type MessageResolver } from "../i18n/messages";
-
 import { environmentSummaries } from "./presentation";
 import { primaryEnvironmentIdAtom } from "./primaryEnvironment";
 import { serverEnvironment } from "./server";

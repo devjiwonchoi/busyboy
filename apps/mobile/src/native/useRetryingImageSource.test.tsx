@@ -1,6 +1,7 @@
 import { act, useLayoutEffect } from "react";
 import { createRoot } from "react-dom/client";
 import { expect, it } from "vite-plus/test";
+
 import type { MarkdownImageSourceResolver } from "./SelectableMarkdownText.types";
 import { useRetryingImageSource } from "./useRetryingImageSource";
 

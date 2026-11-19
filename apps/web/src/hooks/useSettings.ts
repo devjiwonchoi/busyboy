@@ -1,7 +1,16 @@
-import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
-import { useRef, useSyncExternalStore, use } from "react";
-import { useSyncExternalStoreWithSelector } from "use-sync-external-store/with-selector";
 import { RegistryContext, useAtomValue } from "@effect/atom-react";
+import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
+import { safeErrorLogAttributes } from "@t3tools/client-runtime/errors";
+import {
+  isAtomCommandInterrupted,
+  runAtomCommand,
+  squashAtomCommandFailure,
+} from "@t3tools/client-runtime/state/runtime";
+import {
+  filterSharedServerPatch,
+  splitSharedServerPatch,
+  supportsSharedSettingsSync,
+} from "@t3tools/client-runtime/state/shared-settings";
 import {
   DEFAULT_SERVER_SETTINGS,
   AuthSettingsWriteScope,
@@ -20,19 +29,35 @@ import {
   type EnvironmentIdentificationMode,
   type UnifiedSettings,
 } from "@t3tools/contracts/settings";
-import { safeErrorLogAttributes } from "@t3tools/client-runtime/errors";
 import {
-  isAtomCommandInterrupted,
-  runAtomCommand,
-  squashAtomCommandFailure,
-} from "@t3tools/client-runtime/state/runtime";
-import {
-  filterSharedServerPatch,
-  splitSharedServerPatch,
-  supportsSharedSettingsSync,
-} from "@t3tools/client-runtime/state/shared-settings";
-import { ensureLocalApi } from "~/localApi";
+  modelPreferencesMigrationPatch,
+  resolveModelPreferences,
+} from "@t3tools/shared/serverSettings";
+import * as Equal from "effect/Equal";
+import * as Option from "effect/Option";
+import { AsyncResult, Atom } from "effect/reactivity";
+import * as Struct from "effect/Struct";
+import { msg } from "gt-react";
+import { useRef, useSyncExternalStore, use } from "react";
+import { useSyncExternalStoreWithSelector } from "use-sync-external-store/with-selector";
+
 import { subscribeBrowserClientSettingsWrites } from "~/clientPersistenceStorage";
+import { toastManager } from "~/components/ui/toast";
+import { environmentCatalog } from "~/connection/catalog";
+import { isHostedStaticApp } from "~/hostedPairing";
+import { m } from "~/i18n/messages";
+import { ensureLocalApi } from "~/localApi";
+import { appAtomRegistry } from "~/rpc/atomRegistry";
+import { environmentIdsKey } from "~/state/environmentAtomList";
+import { useEnvironments, usePrimaryEnvironment } from "~/state/environments";
+import { primaryServerSettingsAtom, serverEnvironment } from "~/state/server";
+import {
+  environmentSession,
+  environmentSessionStatesAtom,
+  readEnvironmentScope,
+  useEnvironmentScope,
+} from "~/state/session";
+import { useAtomCommand } from "~/state/use-atom-command";
 import {
   getThemeDefinition,
   getThemePreviewSidebarArtwork,
@@ -40,31 +65,8 @@ import {
   subscribeToThemePreview,
   themeAllowsSidebarArtwork,
 } from "~/themePalette";
-import {
-  modelPreferencesMigrationPatch,
-  resolveModelPreferences,
-} from "@t3tools/shared/serverSettings";
-import * as Equal from "effect/Equal";
-import * as Struct from "effect/Struct";
-import * as Option from "effect/Option";
-import { AsyncResult, Atom } from "effect/reactivity";
-import { toastManager } from "~/components/ui/toast";
-import { isHostedStaticApp } from "~/hostedPairing";
-import { environmentCatalog } from "~/connection/catalog";
-import { primaryServerSettingsAtom, serverEnvironment } from "~/state/server";
-import { useEnvironments, usePrimaryEnvironment } from "~/state/environments";
-import { useAtomCommand } from "~/state/use-atom-command";
+
 import { useTheme } from "./useTheme";
-import { msg } from "gt-react";
-import { m } from "~/i18n/messages";
-import {
-  environmentSession,
-  environmentSessionStatesAtom,
-  readEnvironmentScope,
-  useEnvironmentScope,
-} from "~/state/session";
-import { environmentIdsKey } from "~/state/environmentAtomList";
-import { appAtomRegistry } from "~/rpc/atomRegistry";
 
 const CLIENT_SETTINGS_PERSISTENCE_ERROR_SCOPE = "[CLIENT_SETTINGS]";
 

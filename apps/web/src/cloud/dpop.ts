@@ -1,5 +1,3 @@
-import { msg } from "gt-react";
-import { m } from "../i18n/messages";
 import { DpopProof } from "@t3tools/client-runtime/relay";
 import { computeDpopJwkThumbprint, DpopPublicJwk } from "@t3tools/shared/dpop";
 import * as Digest from "effect/crypto/Digest";
@@ -8,6 +6,9 @@ import * as Signature from "effect/crypto/Signature";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
+import { msg } from "gt-react";
+
+import { m } from "../i18n/messages";
 
 export interface BrowserDpopKey {
   readonly privateKey: CryptoKey;

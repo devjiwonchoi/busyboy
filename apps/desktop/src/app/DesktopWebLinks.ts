@@ -3,9 +3,9 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 
-import * as DesktopWindow from "../window/DesktopWindow.ts";
 import * as ElectronWindow from "../electron/ElectronWindow.ts";
 import { WEB_LINK_OPEN_CHANNEL } from "../ipc/channels.ts";
+import * as DesktopWindow from "../window/DesktopWindow.ts";
 
 export const isWebLink = (value: string) => {
   if (!URL.canParse(value)) return false;

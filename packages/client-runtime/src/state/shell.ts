@@ -1,5 +1,3 @@
-import { mFallback, msg } from "gt-i18n";
-import type { MFunctionType } from "gt-i18n/types";
 import {
   ORCHESTRATION_V2_WS_METHODS,
   type EnvironmentId,
@@ -18,23 +16,26 @@ import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
 import * as Option from "effect/Option";
 import * as Queue from "effect/Queue";
+import { AsyncResult, Atom } from "effect/reactivity";
 import * as Ref from "effect/Ref";
 import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
 import * as SubscriptionRef from "effect/SubscriptionRef";
 import * as SynchronizedRef from "effect/SynchronizedRef";
-import { AsyncResult, Atom } from "effect/reactivity";
+import { mFallback, msg } from "gt-i18n";
+import type { MFunctionType } from "gt-i18n/types";
 
-import * as EnvironmentRegistry from "../connection/registry.ts";
 import { connectionProjectionPhase, type PreparedConnection } from "../connection/model.ts";
+import * as EnvironmentRegistry from "../connection/registry.ts";
 import * as EnvironmentSupervisor from "../connection/supervisor.ts";
 import * as ConnectionWakeups from "../connection/wakeups.ts";
 import { safeErrorLogAttributes } from "../errors/safeLog.ts";
 import * as Persistence from "../platform/persistence.ts";
-import { runCachePersistence } from "./cachePersistence.ts";
 import { subscribeDynamicWithSession, subscriptionRetryDelay } from "../rpc/client.ts";
 import type { RpcSession } from "../rpc/session.ts";
-import * as ShellSnapshotLoader from "./shellSnapshotHttp.ts";
+import { runCachePersistence } from "./cachePersistence.ts";
+import { type EnvironmentCatalogState, enabledEnvironmentIds } from "./connections.ts";
+import { followStreamInEnvironment } from "./runtime.ts";
 import type { DeferredShellSnapshot } from "./shellPullRequests.ts";
 import {
   applyShellStreamEvents,
@@ -43,8 +44,7 @@ import {
   reuseUnchangedThreadShells,
   sameThreadPullRequests,
 } from "./shellReducer.ts";
-import { type EnvironmentCatalogState, enabledEnvironmentIds } from "./connections.ts";
-import { followStreamInEnvironment } from "./runtime.ts";
+import * as ShellSnapshotLoader from "./shellSnapshotHttp.ts";
 
 export type EnvironmentShellStatus = "empty" | "cached" | "synchronizing" | "live";
 

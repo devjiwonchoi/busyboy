@@ -6,8 +6,9 @@ import {
 } from "@t3tools/client-runtime/pull-request-editing";
 import { canReactPullRequestComment } from "@t3tools/client-runtime/pull-request-reactions";
 import type { PullRequestComment, PullRequestDetail } from "@t3tools/contracts";
-import { usePullRequestConnected } from "./usePullRequestConnected";
+
 import { composerPullRequests } from "../../state/pull-requests";
+import { usePullRequestConnected } from "./usePullRequestConnected";
 import { pullRequestTarget, type PullRequestParams } from "./usePullRequestDiff";
 
 export function usePullRequestPermissions(params: PullRequestParams, pr: PullRequestDetail | null) {

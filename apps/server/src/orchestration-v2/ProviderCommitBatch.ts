@@ -1,9 +1,9 @@
 import * as Cause from "effect/Cause";
 import * as Clock from "effect/Clock";
 import * as Config from "effect/Config";
-import * as Effect from "effect/Effect";
 import * as Context from "effect/Context";
 import * as Deferred from "effect/Deferred";
+import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Queue from "effect/Queue";
 import * as Schema from "effect/Schema";

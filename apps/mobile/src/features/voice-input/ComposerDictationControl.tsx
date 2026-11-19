@@ -14,12 +14,12 @@ import Animated, {
 } from "react-native-reanimated";
 
 import { AppActivityIndicator } from "../../components/ui/AppActivityIndicator";
-import { AppText as Text } from "../../components/ui/AppText";
 import { SymbolView, type AppSymbolName } from "../../components/ui/AppSymbol";
+import { AppText as Text } from "../../components/ui/AppText";
 import { useAndroidControlSizing } from "../../components/ui/useAndroidControlSizing";
 import { cn } from "../../lib/cn";
-import type { VoiceComposerPresentation } from "./voiceInputPresentation";
 import { VOICE_WAVEFORM_SAMPLE_COUNT } from "./voiceInputMetering";
+import type { VoiceComposerPresentation } from "./voiceInputPresentation";
 
 const DICTATION_TIMING = {
   duration: 220,

@@ -2,11 +2,11 @@ import { describe, it } from "@effect/vitest";
 import type { ProviderReplayEntry } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 
-import { OpenCodeOrchestratorReplayHarness } from "../Adapters/OpenCodeAdapterV2.testkit.ts";
 import {
   OPENCODE2_HTTP_PROTOCOL,
   OpenCode2OrchestratorReplayHarness,
 } from "../Adapters/OpenCode2AdapterV2.testkit.ts";
+import { OpenCodeOrchestratorReplayHarness } from "../Adapters/OpenCodeAdapterV2.testkit.ts";
 import {
   findReplayFixture,
   itRunsReplayFixtures,

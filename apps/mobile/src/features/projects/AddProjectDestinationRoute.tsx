@@ -1,4 +1,5 @@
 import type { StaticScreenProps } from "@react-navigation/native";
+
 import { AddProjectDestinationScreen } from "./AddProjectScreen";
 
 type AddProjectDestinationRouteParams = {

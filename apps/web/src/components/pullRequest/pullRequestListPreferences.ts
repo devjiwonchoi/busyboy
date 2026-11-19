@@ -1,5 +1,3 @@
-import * as Schema from "effect/Schema";
-
 import {
   EnvironmentId,
   ProjectId,
@@ -7,6 +5,7 @@ import {
   PullRequestListFilters,
   PullRequestListState,
 } from "@t3tools/contracts";
+import * as Schema from "effect/Schema";
 
 export const PullRequestListSort = Schema.Literals([
   "ready",

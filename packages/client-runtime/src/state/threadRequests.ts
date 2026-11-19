@@ -11,15 +11,16 @@ import type {
   ProviderRequestKind,
   RuntimeRequestId,
 } from "@t3tools/contracts";
-import { Atom } from "effect/reactivity";
-import { parseThreadKey, threadKey } from "./entities.ts";
-import { getProjectionArrayReplacementIndex } from "./orchestrationV2Projection.ts";
-import type { EnvironmentThreadShell } from "./models.ts";
 import * as DateTime from "effect/DateTime";
-import type { AtomCommandResult } from "./runtime.ts";
-import type { ThreadStructure, ThreadStructureVisibleTurnItem } from "./models.ts";
+import { Atom } from "effect/reactivity";
 import { mFallback, msg } from "gt-i18n";
 import type { MFunctionType } from "gt-i18n/types";
+
+import { parseThreadKey, threadKey } from "./entities.ts";
+import type { EnvironmentThreadShell } from "./models.ts";
+import type { ThreadStructure, ThreadStructureVisibleTurnItem } from "./models.ts";
+import { getProjectionArrayReplacementIndex } from "./orchestrationV2Projection.ts";
+import type { AtomCommandResult } from "./runtime.ts";
 
 export type ApprovalResponder = (
   requestId: RuntimeRequestId,

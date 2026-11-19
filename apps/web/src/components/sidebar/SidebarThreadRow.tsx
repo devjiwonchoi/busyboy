@@ -1,33 +1,27 @@
-import { useAtomMount } from "@effect/atom-react";
-import { asLaunchingThread } from "@t3tools/client-runtime/state/thread-inbox";
-import { ThreadHoverCard, ThreadHoverCardPopup } from "../ThreadHoverCard";
-import { ThreadTerminalStatusButton } from "../ThreadStatusIndicators";
-import { discardComposerDraft } from "../../lib/discardComposerDraft";
-import { contextMenuSourceOf } from "../../contextMenuSource";
-import { requestCustomSnooze } from "../CustomSnoozeDialog";
-import { useSupportsMultiplePullRequests } from "~/hooks/useSupportsMultiplePullRequests";
-import { useDeadlinePassed } from "~/hooks/useDeadline";
-import { resolveThreadCurrentPullRequestLink } from "@t3tools/client-runtime/thread-pull-requests";
 import { useDraggable } from "@dnd-kit/core";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import { useAtomMount } from "@effect/atom-react";
+import { toServerClock } from "@t3tools/client-runtime/clock";
+import { formatDiffCount } from "@t3tools/client-runtime/diff-count";
+import { scopeThreadRef, scopedThreadKey } from "@t3tools/client-runtime/environment";
+import {
+  formatWorkingDurationLabel,
+  resolveThreadProviderStack,
+} from "@t3tools/client-runtime/state/models";
+import type { EnvironmentProject } from "@t3tools/client-runtime/state/shell";
+import { asLaunchingThread } from "@t3tools/client-runtime/state/thread-inbox";
+import { type EnvironmentThreadSearchMatch } from "@t3tools/client-runtime/state/thread-search";
 import {
   canSnooze,
   hasQueuedTurnStart,
   QUEUED_TURN_START_GRACE_MS,
 } from "@t3tools/client-runtime/state/thread-settled";
-import { formatDiffCount } from "@t3tools/client-runtime/diff-count";
 import {
   resolveSettledThreadTimestamp,
   resolveThreadActivityTimestamp,
 } from "@t3tools/client-runtime/state/thread-sort";
-import { type EnvironmentThreadSearchMatch } from "@t3tools/client-runtime/state/thread-search";
-import {
-  formatWorkingDurationLabel,
-  resolveThreadProviderStack,
-} from "@t3tools/client-runtime/state/models";
-import { scopeThreadRef, scopedThreadKey } from "@t3tools/client-runtime/environment";
-import { toServerClock } from "@t3tools/client-runtime/clock";
+import { resolveThreadCurrentPullRequestLink } from "@t3tools/client-runtime/thread-pull-requests";
 import {
   AuthOrchestrationOperateScope,
   type ContextMenuSource,
@@ -35,8 +29,8 @@ import {
   type EnvironmentMachineKind,
   type ScopedThreadRef,
 } from "@t3tools/contracts";
-
 import type { TimestampFormat } from "@t3tools/contracts/settings";
+import { msg, T, useGT, useMessages, Var } from "gt-react";
 import {
   AlarmClockIcon,
   AlarmClockOffIcon,
@@ -67,26 +61,42 @@ import {
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
 } from "react";
-import { msg, T, useGT, useMessages, Var } from "gt-react";
 
-import type { MessageResolver } from "../../i18n/messages";
+import { useDeadlinePassed } from "~/hooks/useDeadline";
+import { useSupportsMultiplePullRequests } from "~/hooks/useSupportsMultiplePullRequests";
+import { cn } from "~/lib/utils";
+import { observeVisibleAnimation } from "~/lib/visibleAnimation";
+import { textDirection } from "~/textDirection";
 
-import { useRightPanelStore } from "../../rightPanelStore";
-import { useOpenPrLink } from "../../lib/openPullRequestLink";
-import { useUiStateStore } from "../../uiStateStore";
-import { useThreadSelectionStore } from "../../threadSelectionStore";
+import { useThreadHasUnsentDraft } from "../../composerDraftStore";
+import { contextMenuSourceOf } from "../../contextMenuSource";
 import { useNowMinute } from "../../hooks/useNowMinute";
 import { useNowSecond } from "../../hooks/useNowSecond";
-import { vcsEnvironment, vcsBranchRevalidation } from "../../state/vcs";
+import type { MessageResolver } from "../../i18n/messages";
+import { discardComposerDraft } from "../../lib/discardComposerDraft";
+import { useOpenPrLink } from "../../lib/openPullRequestLink";
+import { shouldShowInstanceBadge, type ProviderInstanceEntry } from "../../providerInstances";
+import { useRightPanelStore } from "../../rightPanelStore";
+import { useThreadShell } from "../../state/entities";
 import { useLinkedIssueDetail } from "../../state/issues";
 import { useEnvironmentQuery } from "../../state/query";
 import { readEnvironmentScope, useEnvironmentScope } from "../../state/session";
+import { useThreadRunningTerminalIds } from "../../state/terminalSessions";
+import { vcsEnvironment, vcsBranchRevalidation } from "../../state/vcs";
+import { useThreadSelectionStore } from "../../threadSelectionStore";
 import { formatRelativeTime, parseTimestampDate } from "../../timestampFormat";
 import type { SidebarThreadSummary } from "../../types";
-import type { EnvironmentProject } from "@t3tools/client-runtime/state/shell";
-import { cn } from "~/lib/utils";
-import { textDirection } from "~/textDirection";
+import { useUiStateStore } from "../../uiStateStore";
+import { resolveLocalCheckoutBranchMismatch } from "../BranchToolbar.logic";
+import { getTriggerDisplayModelName } from "../chat/providerIconUtils";
+import { ProviderInstanceIcon } from "../chat/ProviderInstanceIcon";
+import { ThreadDetailsIssueRows } from "../chat/ThreadDetailsIssueRows";
+import { ActivityShimmerOverlay } from "../chat/TimelineRowParts";
+import { makeWorkspaceFileDropHandlers } from "../chat/workspaceFileDrop";
+import { requestCustomSnooze } from "../CustomSnoozeDialog";
 import { EnvironmentMachineIcon } from "../EnvironmentMachineIcon";
+import { IssueGlyph, issueStatePresentation } from "../issue/issuePresentation";
+import { ProjectFavicon, type ProjectFaviconProject } from "../ProjectFavicon";
 import {
   animateSidebarLayoutChanges,
   hasUnseenCompletion,
@@ -101,7 +111,10 @@ import {
   useSidebarRowSubscriptionLease,
   setFileDragActive,
 } from "../Sidebar.logic";
-import { resolveLocalCheckoutBranchMismatch } from "../BranchToolbar.logic";
+import { pickSnoozePreset, resolveSnoozePresets, type SnoozePreset } from "../Sidebar.snooze";
+import { ThreadHoverCard, ThreadHoverCardPopup } from "../ThreadHoverCard";
+import { ThreadSearchMatchExcerpt } from "../ThreadSearchMatch";
+import { ThreadTerminalStatusButton } from "../ThreadStatusIndicators";
 import {
   ThreadPullRequestBadgeControl,
   ThreadPullRequestsMiniList,
@@ -113,25 +126,11 @@ import {
   useLinkedThreadPullRequest,
   ThreadSearchPullRequestNumber,
 } from "../ThreadStatusIndicators";
-import { pickSnoozePreset, resolveSnoozePresets, type SnoozePreset } from "../Sidebar.snooze";
-import { useThreadShell } from "../../state/entities";
-import { ProjectFavicon, type ProjectFaviconProject } from "../ProjectFavicon";
-import { ThreadSearchMatchExcerpt } from "../ThreadSearchMatch";
-import { makeWorkspaceFileDropHandlers } from "../chat/workspaceFileDrop";
-import { ProviderInstanceIcon } from "../chat/ProviderInstanceIcon";
-import { getTriggerDisplayModelName } from "../chat/providerIconUtils";
-import { shouldShowInstanceBadge, type ProviderInstanceEntry } from "../../providerInstances";
-import { useThreadRunningTerminalIds } from "../../state/terminalSessions";
 import { InlineButton } from "../ui/button";
 import { Kbd } from "../ui/kbd";
 import { Menu, MenuItem, MenuItemDetail, MenuPopup, MenuSeparator, MenuTrigger } from "../ui/menu";
-import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { MiddleTruncate } from "../ui/middle-truncate";
-import { ActivityShimmerOverlay } from "../chat/TimelineRowParts";
-import { observeVisibleAnimation } from "~/lib/visibleAnimation";
-import { useThreadHasUnsentDraft } from "../../composerDraftStore";
-import { ThreadDetailsIssueRows } from "../chat/ThreadDetailsIssueRows";
-import { IssueGlyph, issueStatePresentation } from "../issue/issuePresentation";
+import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 
 // The fields thread rows show. Provider status pushes refresh `checkedAt`,
 // status and auth on every provider; leaving those out keeps each

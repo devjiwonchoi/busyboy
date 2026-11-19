@@ -1,6 +1,7 @@
 // @effect-diagnostics-next-line nodeBuiltinImport:off -- FileSystem.copyFile cannot request an exclusive copy.
 import * as NodeFSP from "node:fs/promises";
 import * as NodeZlib from "node:zlib";
+
 import {
   DesktopPreviewAnnotationVoiceEventSchema,
   DesktopPreviewRecordingInputSchema,
@@ -29,6 +30,28 @@ import type {
 import * as HostProcess from "@t3tools/shared/HostProcess";
 import { matchesKeybindingShortcut } from "@t3tools/shared/keybindings";
 import { normalizePreviewUrl } from "@t3tools/shared/preview";
+import * as Cause from "effect/Cause";
+import * as Clock from "effect/Clock";
+import * as Context from "effect/Context";
+import * as SecureRandom from "effect/crypto/SecureRandom";
+import * as DateTime from "effect/DateTime";
+import * as Deferred from "effect/Deferred";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Fiber from "effect/Fiber";
+import * as FileSystem from "effect/FileSystem";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as Path from "effect/Path";
+import * as Predicate from "effect/Predicate";
+import * as Queue from "effect/Queue";
+import * as Ref from "effect/Ref";
+import * as Schedule from "effect/Schedule";
+import * as Schema from "effect/Schema";
+import * as Scope from "effect/Scope";
+import * as Semaphore from "effect/Semaphore";
+import * as Stream from "effect/Stream";
+import * as SynchronizedRef from "effect/SynchronizedRef";
 import {
   BrowserWindow,
   ClipboardItem,
@@ -39,41 +62,19 @@ import {
   shell,
   webContents,
 } from "electron";
-import * as Cause from "effect/Cause";
-import * as Clock from "effect/Clock";
-import * as Context from "effect/Context";
-import * as SecureRandom from "effect/crypto/SecureRandom";
-import * as DateTime from "effect/DateTime";
-import * as Deferred from "effect/Deferred";
-import * as Effect from "effect/Effect";
-import * as Exit from "effect/Exit";
-import * as FileSystem from "effect/FileSystem";
-import * as Fiber from "effect/Fiber";
-import * as Layer from "effect/Layer";
-import * as Option from "effect/Option";
-import * as Path from "effect/Path";
-import * as Predicate from "effect/Predicate";
-import * as Queue from "effect/Queue";
-import * as Ref from "effect/Ref";
-import * as Schema from "effect/Schema";
-import * as Semaphore from "effect/Semaphore";
-import * as Stream from "effect/Stream";
-import * as Schedule from "effect/Schedule";
-import * as Scope from "effect/Scope";
-import * as SynchronizedRef from "effect/SynchronizedRef";
 import { msg } from "gt-i18n";
 
 import * as DesktopEnvironment from "../app/DesktopEnvironment.ts";
 import { m } from "../i18n/messages.ts";
-import * as DesktopRendererHistory from "../telemetry/DesktopRendererHistory.ts";
 import {
   MENU_ACTION_CHANNEL,
   PREVIEW_ANNOTATION_VOICE_EVENT_CHANNEL,
   PREVIEW_PICTURE_IN_PICTURE_FRAME_CHANNEL,
 } from "../ipc/channels.ts";
-import * as DesktopBrowserHost from "./DesktopBrowserHost.ts";
-import * as PreviewPasskeys from "./Passkeys.ts";
+import * as DesktopRendererHistory from "../telemetry/DesktopRendererHistory.ts";
 import * as BrowserSession from "./BrowserSession.ts";
+import * as DesktopBrowserHost from "./DesktopBrowserHost.ts";
+import { captureFavicon, safeHttpOrigin, selectFaviconCandidates } from "./FaviconCapture.ts";
 import {
   ANNOTATION_CAPTURED_CHANNEL,
   ANNOTATION_SEND_ENABLED_CHANNEL,
@@ -91,8 +92,8 @@ import {
   START_PICK_CHANNEL,
   THUMB_PRESS_CHANNEL,
 } from "./GuestProtocol.ts";
+import * as PreviewPasskeys from "./Passkeys.ts";
 import { isPreviewAnnotationPayload } from "./PickedElementPayload.ts";
-import { captureFavicon, safeHttpOrigin, selectFaviconCandidates } from "./FaviconCapture.ts";
 import { DEFAULT_RECORDING_INPUT_OPTIONS, type RecordingInputOptions } from "./RecordingInput.ts";
 
 export type PreviewNavStatus =

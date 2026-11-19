@@ -19,8 +19,8 @@ import {
   PullRequestRowLines,
 } from "../pullRequest/PullRequestListRow";
 import { PullRequestActorLabel } from "../pullRequest/pullRequestPresentation";
-import { ThreadDetailsControl } from "./ThreadDetailsControl";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
+import { ThreadDetailsControl } from "./ThreadDetailsControl";
 
 function LinkedIssueRow({
   link,

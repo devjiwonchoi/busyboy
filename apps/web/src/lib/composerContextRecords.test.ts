@@ -7,13 +7,8 @@ import {
   TurnItemId,
   type PreviewAnnotationPayload,
 } from "@t3tools/contracts";
-import * as Schema from "effect/Schema";
 import { upgradeLegacyContextMessage } from "@t3tools/shared/composerContextLegacy";
-
-import {
-  formatInlineContextReference,
-  removeInlineContextReference,
-} from "./composerContextReferences";
+import * as Schema from "effect/Schema";
 import { describe, expect, it } from "vite-plus/test";
 
 import {
@@ -34,6 +29,10 @@ import {
   terminalContextDraftFromRecord,
   uploadedAttachmentContextRecord,
 } from "./composerContextRecords";
+import {
+  formatInlineContextReference,
+  removeInlineContextReference,
+} from "./composerContextReferences";
 
 const decodeMessageContext = Schema.decodeUnknownSync(OrchestrationMessageContext);
 

@@ -1,21 +1,22 @@
-import { DeviceHostUpdates } from "./DeviceHostUpdates";
-import type { DevicePlatform, DeviceServiceState, EnvironmentId } from "@t3tools/contracts";
-import { Check, CircleAlert } from "lucide-react";
-import { AuthSettingsWriteScope } from "@t3tools/contracts";
 import { useAtomMount } from "@effect/atom-react";
+import type { DevicePlatform, DeviceServiceState, EnvironmentId } from "@t3tools/contracts";
+import { AuthSettingsWriteScope } from "@t3tools/contracts";
 import { msg, T, useGT, useMessages, Var } from "gt-react";
+import { Check, CircleAlert } from "lucide-react";
 import { useState } from "react";
 
 import { Button } from "~/components/ui/button";
 import { DialogClose } from "~/components/ui/dialog";
-import { WizardHeader, WizardPanel, WizardSteps, WizardFooter } from "~/components/ui/wizard";
 import { Spinner } from "~/components/ui/spinner";
 import { Switch } from "~/components/ui/switch";
-import { deviceEnvironment, deviceHostProbeAtom, NO_DEVICE_PROBE_ATOM } from "~/state/device";
-import { useAtomCommand } from "~/state/use-atom-command";
-import { readEnvironmentScope, useEnvironmentScope } from "~/state/session";
-import { cn } from "~/lib/utils";
+import { WizardHeader, WizardPanel, WizardSteps, WizardFooter } from "~/components/ui/wizard";
 import { m, type MessageResolver } from "~/i18n/messages";
+import { cn } from "~/lib/utils";
+import { deviceEnvironment, deviceHostProbeAtom, NO_DEVICE_PROBE_ATOM } from "~/state/device";
+import { readEnvironmentScope, useEnvironmentScope } from "~/state/session";
+import { useAtomCommand } from "~/state/use-atom-command";
+
+import { DeviceHostUpdates } from "./DeviceHostUpdates";
 
 const platformName = (platform: DevicePlatform) => (platform === "ios" ? "iOS" : "Android");
 

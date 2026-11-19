@@ -27,20 +27,20 @@ import { causeErrorTag } from "@t3tools/shared/observability";
 import * as Clock from "effect/Clock";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
-import * as Option from "effect/Option";
-import * as Schema from "effect/Schema";
-import * as Layer from "effect/Layer";
-import * as Cookies from "effect/http/Cookies";
-import * as HttpEffect from "effect/http/HttpEffect";
 import { HttpServerRequest, HttpServerResponse } from "effect/http";
 import * as HttpApiBuilder from "effect/http-api/HttpApiBuilder";
+import * as Cookies from "effect/http/Cookies";
+import * as HttpEffect from "effect/http/HttpEffect";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
 
+import { traceAuthenticatedRelayRequest, traceRelayRequest } from "../cloud/traceRelayRequest.ts";
+import { requestUrl } from "../requestUrl.ts";
+import { checkRequestDpopProof } from "./dpop.ts";
 import * as EnvironmentAuth from "./EnvironmentAuth.ts";
 import * as SessionStore from "./SessionStore.ts";
-import { traceAuthenticatedRelayRequest, traceRelayRequest } from "../cloud/traceRelayRequest.ts";
 import { deriveAuthClientMetadata } from "./utils.ts";
-import { checkRequestDpopProof } from "./dpop.ts";
-import { requestUrl } from "../requestUrl.ts";
 
 const CREDENTIAL_RESPONSE_HEADERS = {
   "cache-control": "no-store",

@@ -11,6 +11,7 @@ import {
   type ThreadId,
   type TurnItemId,
 } from "@t3tools/contracts";
+import type * as ProviderAdapter from "@t3tools/provider-core/server/ProviderAdapter";
 import { mcpAppToolCallableByApp, type McpAppReference } from "@t3tools/shared/mcpApp";
 import { mcpAppFromToolItem } from "@t3tools/shared/toolOutput";
 import * as Context from "effect/Context";
@@ -21,7 +22,6 @@ import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
 
 import * as Orchestrator from "../orchestration-v2/Orchestrator.ts";
-import type * as ProviderAdapter from "@t3tools/provider-core/server/ProviderAdapter";
 import * as ProviderSessionManager from "../orchestration-v2/ProviderSessionManager.ts";
 import * as ThreadManagementService from "../orchestration-v2/ThreadManagementService.ts";
 import * as McpAppModelContext from "./McpAppModelContext.ts";

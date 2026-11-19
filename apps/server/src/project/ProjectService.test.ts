@@ -1,12 +1,11 @@
-import * as Arr from "effect/Array";
-import * as Context from "effect/Context";
-import * as Queue from "effect/Queue";
-import * as Tracer from "effect/Tracer";
-import { assert, it } from "@effect/vitest";
 import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import * as NodeServices from "@effect/platform-node/NodeServices";
+import { assert, it } from "@effect/vitest";
 import { CommandId, type Project, ProjectId, ProviderInstanceId } from "@t3tools/contracts";
+import * as IdAllocator from "@t3tools/provider-core/server/IdAllocator";
 import * as HostProcess from "@t3tools/shared/HostProcess";
+import * as Arr from "effect/Array";
+import * as Context from "effect/Context";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
@@ -15,9 +14,11 @@ import * as Layer from "effect/Layer";
 import * as Metric from "effect/Metric";
 import * as Option from "effect/Option";
 import * as PubSub from "effect/PubSub";
+import * as Queue from "effect/Queue";
 import * as Ref from "effect/Ref";
-import { TestClock } from "effect/testing";
 import * as SqlClient from "effect/sql/SqlClient";
+import { TestClock } from "effect/testing";
+import * as Tracer from "effect/Tracer";
 
 import * as ServerConfig from "../config.ts";
 import {
@@ -25,7 +26,6 @@ import {
   orchestrationCommandsTotal,
 } from "../observability/Metrics.ts";
 import * as EventSink from "../orchestration-v2/EventSink.ts";
-import * as IdAllocator from "@t3tools/provider-core/server/IdAllocator";
 import * as LegacyV1ThreadImporter from "../orchestration-v2/legacy/LegacyV1ThreadImporter.ts";
 import * as ProjectionStore from "../orchestration-v2/ProjectionStore.ts";
 import * as ProjectStore from "../orchestration-v2/ProjectStore.ts";

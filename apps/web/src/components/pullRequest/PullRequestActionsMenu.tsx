@@ -14,6 +14,7 @@ import type {
   PullRequestRef,
   ScopedThreadRef,
 } from "@t3tools/contracts";
+import { Branch, msg, T, useGT, useMessages } from "gt-react";
 import {
   ArrowUpRightIcon,
   BookOpenIcon,
@@ -26,16 +27,15 @@ import {
   ScrollTextIcon,
   Trash2Icon,
 } from "lucide-react";
-import { Branch, msg, T, useGT, useMessages } from "gt-react";
 import { useId, useState } from "react";
 
 import { m } from "~/i18n/messages";
-
 import { shortcutLabelForCommand } from "~/keybindings";
 import { readLocalApi } from "~/localApi";
 import { pullRequestEnvironment } from "~/state/pullRequests";
 import { primaryServerKeybindingsAtom } from "~/state/server";
 import { useAtomCommand } from "~/state/use-atom-command";
+
 import { Button } from "../ui/button";
 import {
   Menu,
@@ -51,18 +51,17 @@ import {
 import { RefreshIcon } from "../ui/refresh-icon";
 import { toastManager } from "../ui/toast";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
-import { ActOnEnvironmentPicker, type PerformPullRequestAction } from "./PullRequestDetailActions";
+import { changeRequestTermKind } from "./changeRequestTerm";
 import {
   PULL_REQUEST_MERGE_METHOD_LABELS,
   pullRequestActionMenuHasGroup,
   readableFailure,
 } from "./pullRequestDetail.logic";
+import { ActOnEnvironmentPicker, type PerformPullRequestAction } from "./PullRequestDetailActions";
 import { PullRequestGlyph } from "./pullRequestIcons";
 import type { PickableEnvironment } from "./pullRequestProjectAssignment.logic";
 import { PullRequestThreadLinks } from "./PullRequestThreadLinks";
 import { useInlineActionConfirm } from "./useInlineActionConfirm";
-
-import { changeRequestTermKind } from "./changeRequestTerm";
 
 /** Everything else the reader can do with the pull request, behind the header's overflow button. */
 export function PullRequestActionsMenu({

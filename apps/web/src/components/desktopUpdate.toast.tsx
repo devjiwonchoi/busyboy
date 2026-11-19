@@ -2,11 +2,11 @@ import type { DesktopBridge, DesktopUpdateState } from "@t3tools/contracts";
 import { msg, T } from "gt-react";
 import { ArrowRightIcon } from "lucide-react";
 
+import { m } from "../i18n/messages";
 import {
   getDesktopUpdateDownloadedVersion,
   getDesktopUpdateReleaseUrl,
 } from "./desktopUpdate.logic";
-import { m } from "../i18n/messages";
 import { toastManager } from "./ui/toast";
 
 type DesktopUpdateShell = Pick<DesktopBridge, "openExternal">;

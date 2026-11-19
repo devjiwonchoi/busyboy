@@ -1,15 +1,16 @@
+import IconCircleDot from "@tabler/icons-react-native/IconCircleDot";
+import IconFileDiff from "@tabler/icons-react-native/IconFileDiff";
 import IconGitBranch from "@tabler/icons-react-native/IconGitBranch";
-import IconGitMerge from "@tabler/icons-react-native/IconGitMerge";
 import IconGitCommit from "@tabler/icons-react-native/IconGitCommit";
+import IconGitMerge from "@tabler/icons-react-native/IconGitMerge";
+import IconGitPullRequest from "@tabler/icons-react-native/IconGitPullRequest";
 import IconGitPullRequestClosed from "@tabler/icons-react-native/IconGitPullRequestClosed";
 import IconGitPullRequestDraft from "@tabler/icons-react-native/IconGitPullRequestDraft";
-import type { SFSymbol } from "expo-symbols";
-import IconCircleDot from "@tabler/icons-react-native/IconCircleDot";
-import IconGitPullRequest from "@tabler/icons-react-native/IconGitPullRequest";
-import IconFileDiff from "@tabler/icons-react-native/IconFileDiff";
 import IconRobot from "@tabler/icons-react-native/IconRobot";
+import type { SFSymbol } from "expo-symbols";
 import { SymbolView as ExpoSymbolView } from "expo-symbols";
 import { withUniwind } from "uniwind";
+
 import type { AppSymbolViewProps } from "./AppSymbol.android";
 
 export type { SFSymbol } from "expo-symbols";

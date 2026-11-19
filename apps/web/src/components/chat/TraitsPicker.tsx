@@ -23,8 +23,15 @@ import {
   normalizeModelSlug,
 } from "@t3tools/shared/model";
 import { msg, T, useMessages } from "gt-react";
-import { memo } from "react";
 import { GaugeIcon } from "lucide-react";
+import { memo } from "react";
+
+import { m, type MessageResolver } from "~/i18n/messages";
+import { cn } from "~/lib/utils";
+
+import { useComposerDraftStore, DraftId } from "../../composerDraftStore";
+import { getProviderModelCapabilities, keepsUnavailableModelOptions } from "../../providerModels";
+import { Badge } from "../ui/badge";
 import {
   Menu,
   MenuGroup,
@@ -34,11 +41,6 @@ import {
   MenuSeparator as MenuDivider,
   MenuTrigger,
 } from "../ui/menu";
-import { useComposerDraftStore, DraftId } from "../../composerDraftStore";
-import { getProviderModelCapabilities, keepsUnavailableModelOptions } from "../../providerModels";
-import { m, type MessageResolver } from "~/i18n/messages";
-import { cn } from "~/lib/utils";
-import { Badge } from "../ui/badge";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { ComposerControl, ComposerControlIcon, type ComposerControlSize } from "./ComposerControl";
 import { useComposerMenuState } from "./useComposerMenuState";

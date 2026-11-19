@@ -1,15 +1,15 @@
-import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
-import { splitFilePathPosition } from "@t3tools/shared/fileLinks";
-import { isMacPlatform, isWindowsPlatform } from "./lib/utils";
 import { useAtomValue } from "@effect/atom-react";
+import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
 import { AuthOrchestrationOperateScope, type EnvironmentId } from "@t3tools/contracts";
+import { splitFilePathPosition } from "@t3tools/shared/fileLinks";
 import { msg } from "gt-react";
 import type { DragEvent } from "react";
 
-import { hostEnvironmentIdAtom } from "./state/primaryEnvironment";
-import { useEnvironmentScope } from "./state/session";
 import { toastManager } from "./components/ui/toast";
 import { m } from "./i18n/messages";
+import { isMacPlatform, isWindowsPlatform } from "./lib/utils";
+import { hostEnvironmentIdAtom } from "./state/primaryEnvironment";
+import { useEnvironmentScope } from "./state/session";
 
 export function useNativeFileDrag(
   environmentId: EnvironmentId | null | undefined,

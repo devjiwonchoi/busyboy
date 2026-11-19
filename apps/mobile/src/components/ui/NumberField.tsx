@@ -18,8 +18,8 @@ import { useGT } from "gt-react-native";
 import { useState } from "react";
 
 import { NativeThemeHost } from "./NativeThemeHost";
-import { useControlTheme } from "./useControlTheme";
 import type { NumberFieldProps } from "./NumberField.types";
+import { useControlTheme } from "./useControlTheme";
 
 export function NumberField(props: NumberFieldProps) {
   const gt = useGT();

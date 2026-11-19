@@ -1,16 +1,18 @@
-import { HOSTED_APP_CHANNEL } from "~/branding";
-import { isElectron, isSecretsFeatureEnabled } from "~/env";
-import { isMacPlatform, isWindowsPlatform, normalizeSearchText } from "~/lib/utils";
-import { STATIC_KEYBINDING_COMMANDS, type KeybindingCommand } from "@t3tools/contracts";
-import type { EnvironmentId } from "@t3tools/contracts";
 import type { EnvironmentConnectionPhase } from "@t3tools/client-runtime/connection";
 import {
   sourceControlClients,
   type SourceControlDefinition,
 } from "@t3tools/client-runtime/source-control-clients";
+import { STATIC_KEYBINDING_COMMANDS, type KeybindingCommand } from "@t3tools/contracts";
+import type { EnvironmentId } from "@t3tools/contracts";
 import { DEFAULT_KEYBINDINGS } from "@t3tools/shared/keybindings";
 import * as Schema from "effect/Schema";
 import { decodeMsg, msg, useMessages } from "gt-react";
+
+import { HOSTED_APP_CHANNEL } from "~/branding";
+import { isElectron, isSecretsFeatureEnabled } from "~/env";
+import { isMacPlatform, isWindowsPlatform, normalizeSearchText } from "~/lib/utils";
+
 import { TYPOGRAPHY_ADVANCED_STORAGE_KEY } from "../../appearanceFonts";
 import { writeLocalStorageValue } from "../../hooks/useLocalStorage";
 import type { MessageResolver } from "../../i18n/messages";

@@ -1,6 +1,7 @@
-import { downloadAttachmentForPreview } from "./attachmentDownload";
 import { msg } from "gt-react-native";
+
 import { m } from "../i18n/messages";
+import { downloadAttachmentForPreview } from "./attachmentDownload";
 
 export function isPdfPreviewUri(uri: string): boolean {
   try {

@@ -1,3 +1,5 @@
+import { VcsDriverKind, type VcsDriverKind as VcsDriverKindType } from "@t3tools/contracts";
+import { fromLenientJson } from "@t3tools/shared/schemaJson";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -5,9 +7,6 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
-
-import { VcsDriverKind, type VcsDriverKind as VcsDriverKindType } from "@t3tools/contracts";
-import { fromLenientJson } from "@t3tools/shared/schemaJson";
 
 const ProjectVcsConfig = Schema.Struct({
   vcs: Schema.optional(

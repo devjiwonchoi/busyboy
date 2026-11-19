@@ -1,5 +1,7 @@
 import { type DeviceToolVersions, WS_METHODS } from "@t3tools/contracts";
 import { Atom } from "effect/reactivity";
+import { mFallback, msg } from "gt-i18n";
+import type { MFunctionType } from "gt-i18n/types";
 
 import type { EnvironmentRegistry } from "../connection/registry.ts";
 import {
@@ -7,8 +9,6 @@ import {
   createEnvironmentRpcCommand,
   createEnvironmentRpcSubscriptionAtomFamily,
 } from "./runtime.ts";
-import { mFallback, msg } from "gt-i18n";
-import type { MFunctionType } from "gt-i18n/types";
 
 export function createDeviceEnvironmentAtoms<R, E>(
   runtime: Atom.AtomRuntime<EnvironmentRegistry | R, E>,

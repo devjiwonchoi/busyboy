@@ -1,15 +1,5 @@
-import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
-import { ChevronRightIcon, ExternalLinkIcon, SearchIcon } from "lucide-react";
 import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
-import * as Cause from "effect/Cause";
-import * as Schema from "effect/Schema";
-import * as Effect from "effect/Effect";
-import * as Option from "effect/Option";
-import { FetchHttpClient, HttpClient } from "effect/http";
-import { Atom } from "effect/reactivity";
-import { msg, T, useGT, useMessages } from "gt-react";
-import { useState } from "react";
-
+import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
 import {
   decodeThirdPartyLicenseManifest,
   filterThirdPartyLicenseEntries,
@@ -17,6 +7,15 @@ import {
   thirdPartyLicenseEntryKey,
   type ThirdPartyLicenseEntry,
 } from "@t3tools/shared/thirdPartyLicenses";
+import * as Cause from "effect/Cause";
+import * as Effect from "effect/Effect";
+import { FetchHttpClient, HttpClient } from "effect/http";
+import * as Option from "effect/Option";
+import { Atom } from "effect/reactivity";
+import * as Schema from "effect/Schema";
+import { msg, T, useGT, useMessages } from "gt-react";
+import { ChevronRightIcon, ExternalLinkIcon, SearchIcon } from "lucide-react";
+import { useState } from "react";
 
 import { m } from "../../i18n/messages";
 import { Button } from "../ui/button";

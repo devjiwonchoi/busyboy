@@ -1,5 +1,11 @@
 import { useAuth } from "@clerk/react";
 import { useAtomValue } from "@effect/atom-react";
+import { scopeProjectRef, scopeThreadRef } from "@t3tools/client-runtime/environment";
+import { resolveProviderInstanceDisplayName as agentName } from "@t3tools/client-runtime/state/provider-instance-display";
+import {
+  isAtomCommandInterrupted,
+  squashAtomCommandFailure,
+} from "@t3tools/client-runtime/state/runtime";
 import type {
   AgentSessionProjectCandidate,
   EnvironmentId,
@@ -9,12 +15,6 @@ import type {
   ServerConfig,
   ServerProvider,
 } from "@t3tools/contracts";
-import { scopeProjectRef, scopeThreadRef } from "@t3tools/client-runtime/environment";
-import { resolveProviderInstanceDisplayName as agentName } from "@t3tools/client-runtime/state/provider-instance-display";
-import {
-  isAtomCommandInterrupted,
-  squashAtomCommandFailure,
-} from "@t3tools/client-runtime/state/runtime";
 import {
   AgentSessionSource,
   AuthProvidersManageScope,
@@ -29,6 +29,7 @@ import {
 } from "@t3tools/contracts";
 import { Link, useBlocker } from "@tanstack/react-router";
 import * as Schema from "effect/Schema";
+import { msg, T, useGT, useLocale, useMessages, Var } from "gt-react";
 import {
   CheckIcon,
   ChevronDownIcon,
@@ -37,20 +38,19 @@ import {
   SmartphoneIcon,
   TerminalIcon,
 } from "lucide-react";
-import { msg, T, useGT, useLocale, useMessages, Var } from "gt-react";
 import { useEffect, useEffectEvent, useRef, useState, type ReactNode } from "react";
 
 import { TYPOGRAPHY_ADVANCED_STORAGE_KEY } from "../../appearanceFonts";
 import { MOBILE_APP_URL } from "../../branding";
+import { useCloudLinkState } from "../../cloud/cloudLinkState";
+import { hasCloudPublicConfig } from "../../cloud/publicConfig";
 import { isElectron } from "../../env";
 import { useLocalStorage } from "../../hooks/useLocalStorage";
 import { usePersistEnvironmentProviderInstanceMutation } from "../../hooks/useSettings";
-import { useCloudLinkState } from "../../cloud/cloudLinkState";
-import { hasCloudPublicConfig } from "../../cloud/publicConfig";
 import { PRIVACY_POLICY_URL } from "../../legalLinks";
+import { newProjectId, randomUUID } from "../../lib/utils";
+import { cn } from "../../lib/utils";
 import { workspaceAreaProps } from "../../lib/workspaceFocus";
-import { retryClerkLoad, useClerkLoadFailed } from "../clerk/clerkLoadFailure";
-import { useT3ConnectAuthPrompt } from "../clerk/useT3ConnectAuthPrompt";
 import { completeOnboarding } from "../../onboarding/firstRun";
 import {
   groupOnboardingProjects,
@@ -66,6 +66,7 @@ import {
   resolveOnboardingProviderInstallCommand,
   resolveOnboardingProviderLoginCommand,
 } from "../../onboarding/providerReadiness.logic";
+import { useProjectScans } from "../../onboarding/useProjectScans";
 import {
   cliTerminalStep,
   codexCardProvider,
@@ -81,12 +82,10 @@ import {
   type WelcomeImportSelection,
   welcomeImportSelectionKey,
 } from "../../onboarding/welcomeState";
-import { newProjectId, randomUUID } from "../../lib/utils";
 import { agentSessionImport } from "../../state/agentSessions";
 import { readProjects, useProjects, waitForProject } from "../../state/entities";
 import { useEnvironments, usePrimaryEnvironmentId } from "../../state/environments";
 import { managedTelemetryOffMessage, useManagedPolicy } from "../../state/managedPolicy";
-import { useProjectScans } from "../../onboarding/useProjectScans";
 import { projectEnvironment } from "../../state/projects";
 import { serverEnvironment } from "../../state/server";
 import {
@@ -97,25 +96,26 @@ import {
 import { terminalEnvironment } from "../../state/terminal";
 import { useThreadRunningTerminalIds } from "../../state/terminalSessions";
 import { useAtomCommand } from "../../state/use-atom-command";
-import { getProviderSummary } from "../settings/providerStatus";
+import { formatRelativeTime } from "../../timestampFormat";
+import { ProviderInstanceIcon } from "../chat/ProviderInstanceIcon";
+import { retryClerkLoad, useClerkLoadFailed } from "../clerk/clerkLoadFailure";
+import { useT3ConnectAuthPrompt } from "../clerk/useT3ConnectAuthPrompt";
+import { ACPRegistryIcon } from "../Icons";
 import { AddProviderInstanceDialog } from "../settings/AddProviderInstanceDialog";
 import { useDesktopCliCommand } from "../settings/CliCommandSettingsRow";
 import { CodexSetupSection } from "../settings/CodexSetupSection";
 import { readCodexSetupMode } from "../settings/CodexSetupSection.logic";
+import { getProviderSummary } from "../settings/providerStatus";
 import { TerminalViewport } from "../ThreadTerminalDrawer";
-import { ProviderInstanceIcon } from "../chat/ProviderInstanceIcon";
-import { ACPRegistryIcon } from "../Icons";
 import { Button } from "../ui/button";
 import { Checkbox } from "../ui/checkbox";
 import { Collapsible, CollapsiblePanel, CollapsibleTrigger } from "../ui/collapsible";
 import { QRCodeSvg } from "../ui/qr-code";
-import { Tooltip, TooltipTrigger, TooltipPopup } from "../ui/tooltip";
 import { ScrollArea } from "../ui/scroll-area";
 import { SidebarInset } from "../ui/sidebar";
 import { toastManager } from "../ui/toast";
+import { Tooltip, TooltipTrigger, TooltipPopup } from "../ui/tooltip";
 import { WorkspacePageHeader } from "../WorkspacePageHeader";
-import { cn } from "../../lib/utils";
-import { formatRelativeTime } from "../../timestampFormat";
 
 const AGENT_ONBOARDING_THREAD_ID = ThreadId.make("onboarding-agent-setup");
 const SCAN_LIMIT_MESSAGE = msg(

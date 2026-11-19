@@ -4,16 +4,15 @@ import {
   AuthSessionId,
   AuthStandardClientScopes,
 } from "@t3tools/contracts";
+import { Argument, Command, Flag, GlobalFlag } from "effect/cli";
 import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as References from "effect/References";
 import * as Schema from "effect/Schema";
-import { Argument, Command, Flag, GlobalFlag } from "effect/cli";
 
 import * as EnvironmentAuth from "../auth/EnvironmentAuth.ts";
-
 import {
   formatConnectDeviceList,
   formatIssuedPairingCredential,

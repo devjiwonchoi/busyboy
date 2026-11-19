@@ -1,37 +1,22 @@
-import * as HttpServer from "effect/http/HttpServer";
 import {
   RelayClientAuth,
   RelayClientPrincipal,
   type RelayClientDeviceRecord,
 } from "@t3tools/contracts/relay";
-import * as EnvironmentLinker from "../environments/EnvironmentLinker.ts";
-import * as RelayTokens from "../auth/RelayTokens.ts";
+import * as HttpServer from "effect/http/HttpServer";
+
 import * as Devices from "../agentActivity/Devices.ts";
+import * as RelayTokens from "../auth/RelayTokens.ts";
+import * as EnvironmentLinker from "../environments/EnvironmentLinker.ts";
 // @effect-diagnostics-next-line nodeBuiltinImport:off -- Effect's Crypto has no generateKeyPairSync.
 import * as NodeCrypto from "node:crypto";
+
 import { createClerkClient, verifyToken } from "@clerk/backend";
+import * as NodeCryptoLayer from "@effect/platform-node/NodeCrypto";
 import * as NodeHttpPlatform from "@effect/platform-node/NodeHttpPlatform";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { describe, expect, it } from "@effect/vitest";
-import { vi } from "vite-plus/test";
-import * as Context from "effect/Context";
-import * as NodeCryptoLayer from "@effect/platform-node/NodeCrypto";
-import * as DateTime from "effect/DateTime";
-import * as Deferred from "effect/Deferred";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import * as Option from "effect/Option";
-import * as Predicate from "effect/Predicate";
-import * as Redacted from "effect/Redacted";
-import * as Schema from "effect/Schema";
-import * as Tracer from "effect/Tracer";
-import * as Etag from "effect/http/Etag";
-import * as HttpEffect from "effect/http/HttpEffect";
-import * as HttpRouter from "effect/http/HttpRouter";
-import * as HttpServerRequest from "effect/http/HttpServerRequest";
-import * as HttpServerResponse from "effect/http/HttpServerResponse";
-import * as HttpApi from "effect/http-api/HttpApi";
-import * as HttpApiBuilder from "effect/http-api/HttpApiBuilder";
+import { relayProtectedErrorMessage } from "@t3tools/client-runtime/relay";
 import { EnvironmentId } from "@t3tools/contracts";
 import {
   RelayEnvironmentAuth,
@@ -40,9 +25,38 @@ import {
   RelayEnvironmentLinkUnavailableError,
   RelayEnvironmentLinkRequest,
 } from "@t3tools/contracts/relay";
-import { relayProtectedErrorMessage } from "@t3tools/client-runtime/relay";
 import { RELAY_MANAGED_TUNNEL_RECOVERY_TYP, signRelayJwt } from "@t3tools/shared/relayJwt";
+import * as Context from "effect/Context";
+import * as DateTime from "effect/DateTime";
+import * as Deferred from "effect/Deferred";
+import * as Effect from "effect/Effect";
+import * as HttpApi from "effect/http-api/HttpApi";
+import * as HttpApiBuilder from "effect/http-api/HttpApiBuilder";
+import * as Etag from "effect/http/Etag";
+import * as HttpEffect from "effect/http/HttpEffect";
+import * as HttpRouter from "effect/http/HttpRouter";
+import * as HttpServerRequest from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as Predicate from "effect/Predicate";
+import * as Redacted from "effect/Redacted";
+import * as Schema from "effect/Schema";
+import * as Tracer from "effect/Tracer";
+import { vi } from "vite-plus/test";
 
+import * as AgentActivityPublisher from "../agentActivity/AgentActivityPublisher.ts";
+import * as RelayConfiguration from "../Config.ts";
+import * as RelayDb from "../db.ts";
+import * as EnvironmentCredentials from "../environments/EnvironmentCredentials.ts";
+import * as EnvironmentLinks from "../environments/EnvironmentLinks.ts";
+import * as EnvironmentPublishSignatures from "../environments/EnvironmentPublishSignatures.ts";
+import * as ManagedEndpointAllocations from "../environments/ManagedEndpointAllocations.ts";
+import * as ManagedEndpointProvider from "../environments/ManagedEndpointProvider.ts";
+import * as ManagedTunnelLimits from "../environments/ManagedTunnelLimits.ts";
+import * as HeldHooks from "../hooks/HeldHooks.ts";
+import * as HookInbox from "../hooks/HookInbox.ts";
+import * as T3ChatAccounts from "../t3chat/T3ChatAccounts.ts";
 import {
   RELAY_HTTP_ROUTER_CONFIG,
   recoverEnvironmentTunnelRecord,
@@ -55,18 +69,6 @@ import {
   withoutCapturedParentSpan,
 } from "./Api.ts";
 import * as RelayHttpApi from "./Api.ts";
-import * as RelayConfiguration from "../Config.ts";
-import * as RelayDb from "../db.ts";
-import * as EnvironmentCredentials from "../environments/EnvironmentCredentials.ts";
-import * as HeldHooks from "../hooks/HeldHooks.ts";
-import * as HookInbox from "../hooks/HookInbox.ts";
-import * as EnvironmentLinks from "../environments/EnvironmentLinks.ts";
-import * as ManagedEndpointAllocations from "../environments/ManagedEndpointAllocations.ts";
-import * as ManagedEndpointProvider from "../environments/ManagedEndpointProvider.ts";
-import * as ManagedTunnelLimits from "../environments/ManagedTunnelLimits.ts";
-import * as AgentActivityPublisher from "../agentActivity/AgentActivityPublisher.ts";
-import * as EnvironmentPublishSignatures from "../environments/EnvironmentPublishSignatures.ts";
-import * as T3ChatAccounts from "../t3chat/T3ChatAccounts.ts";
 
 vi.mock("@clerk/backend", () => ({
   createClerkClient: vi.fn(),

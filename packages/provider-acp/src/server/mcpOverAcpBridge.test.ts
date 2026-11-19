@@ -1,7 +1,7 @@
 import { describe, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
-import * as Fiber from "effect/Fiber";
 import * as Exit from "effect/Exit";
+import * as Fiber from "effect/Fiber";
 import * as Scope from "effect/Scope";
 import * as TestClock from "effect/testing/TestClock";
 

@@ -1,4 +1,3 @@
-import { createMemoryHistory } from "@tanstack/react-router";
 import { scopeProjectRef, scopeThreadRef } from "@t3tools/client-runtime/environment";
 import {
   EnvironmentId,
@@ -16,6 +15,7 @@ import {
   compileResolvedKeybindingsConfig,
   mergeWithDefaultKeybindings,
 } from "@t3tools/shared/keybindings";
+import { createMemoryHistory } from "@tanstack/react-router";
 import type * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import { expect, it, vi } from "vite-plus/test";
@@ -28,7 +28,6 @@ import "~/components/ChatView";
 import { DraftId, useComposerDraftStore } from "~/composerDraftStore";
 import { selectThreadDiffPanelSelection, useDiffPanelStore } from "~/diffPanelStore";
 import { __setClientSettingsForTests } from "~/hooks/useSettings";
-import stylesheet from "~/index.css?inline";
 import { environmentContextRecord } from "~/lib/composerContextRecords";
 import { startWorkspaceFocus } from "~/lib/workspaceFocus";
 import { usePromptStashStore } from "~/promptStashStore";
@@ -36,6 +35,7 @@ import { useRightPanelStore } from "~/rightPanelStore";
 import { getRouter } from "~/router";
 import { appAtomRegistry } from "~/rpc/atomRegistry";
 import { environmentThreadDetails } from "~/state/threads";
+
 import {
   ENVIRONMENT_ID,
   PROJECT_ID,
@@ -52,6 +52,8 @@ import {
   type FakeDriver,
 } from "../../test/fakeEnvironment";
 import { act, fakeTimers, render } from "../../test/render";
+
+import stylesheet from "~/index.css?inline";
 
 const PNG = Uint8Array.from(
   atob(

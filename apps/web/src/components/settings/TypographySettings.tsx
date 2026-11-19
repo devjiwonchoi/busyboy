@@ -1,5 +1,3 @@
-import type { ReactNode } from "react";
-import { useEffect, useEffectEvent, useRef, useState } from "react";
 import {
   DEFAULT_UNIFIED_SETTINGS,
   MAX_CODE_FONT_SIZE,
@@ -13,10 +11,9 @@ import {
 } from "@t3tools/contracts/settings";
 import * as Schema from "effect/Schema";
 import { useGT } from "gt-react";
-import { useLocalStorage } from "../../hooks/useLocalStorage";
-import { useScopedSettings, useUpdateScopedSettings } from "./useScopedSettings";
-import { isMacPlatform } from "../../lib/utils";
-import { Input } from "../ui/input";
+import type { ReactNode } from "react";
+import { useEffect, useEffectEvent, useRef, useState } from "react";
+
 import {
   DEFAULT_CODE_FONT_STACK,
   DEFAULT_SANS_FONT_STACK,
@@ -27,11 +24,14 @@ import {
   resolveTerminalFontSizePreference,
   TYPOGRAPHY_ADVANCED_STORAGE_KEY,
 } from "../../appearanceFonts";
-import { AdvancedSettings } from "./AdvancedSettings";
-import { CodeFontPreview, PromptFontPreview, TerminalFontPreview } from "./SettingsFontPreviews";
-import { discoverInstalledFonts, FontFamilyPicker, useFontEnumeration } from "./FontFamilyPicker";
+import { useLocalStorage } from "../../hooks/useLocalStorage";
+import { isMacPlatform } from "../../lib/utils";
+import { Input } from "../ui/input";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
 import { Switch } from "../ui/switch";
+import { AdvancedSettings } from "./AdvancedSettings";
+import { discoverInstalledFonts, FontFamilyPicker, useFontEnumeration } from "./FontFamilyPicker";
+import { CodeFontPreview, PromptFontPreview, TerminalFontPreview } from "./SettingsFontPreviews";
 import {
   SettingResetButton,
   SettingsRow,
@@ -43,6 +43,7 @@ import {
   revealSettingsSearchTarget,
   useSearchableSetting,
 } from "./settingsSearch";
+import { useScopedSettings, useUpdateScopedSettings } from "./useScopedSettings";
 
 let fontDefaultFamilies: { readonly sans: string | null; readonly code: string | null } | undefined;
 

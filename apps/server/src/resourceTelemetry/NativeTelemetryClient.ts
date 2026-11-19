@@ -21,23 +21,23 @@ import * as DateTime from "effect/DateTime";
 import * as Deferred from "effect/Deferred";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as Ndjson from "effect/encoding/Ndjson";
 import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import * as PubSub from "effect/PubSub";
 import * as Queue from "effect/Queue";
 import * as Ref from "effect/Ref";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
-import * as Semaphore from "effect/Semaphore";
 import * as Scope from "effect/Scope";
+import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
-import * as Ndjson from "effect/encoding/Ndjson";
-import { ChildProcess, ChildProcessSpawner } from "effect/process";
 
-import * as ResourceMonitorBinary from "./ResourceMonitorBinary.ts";
 import * as ServerConfig from "../config.ts";
 import { subscribeBeforeSnapshotWithoutMutex } from "../utils/subscribeBeforeSnapshot.ts";
+import * as ResourceMonitorBinary from "./ResourceMonitorBinary.ts";
 
 const SAMPLE_INTERVAL_MS = 1_000;
 // The sidecar treats 0 as "sample only on request".

@@ -15,6 +15,7 @@ import * as Context from "effect/Context";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import { FetchHttpClient, HttpClient } from "effect/http";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as PlatformError from "effect/PlatformError";
@@ -22,7 +23,6 @@ import * as Ref from "effect/Ref";
 import * as Schedule from "effect/Schedule";
 import * as Scope from "effect/Scope";
 import * as Semaphore from "effect/Semaphore";
-import { FetchHttpClient, HttpClient } from "effect/http";
 
 import * as BackgroundPolicy from "../background/BackgroundPolicy.ts";
 import * as WindowsTcpListeners from "../process/windowsTcpListeners.ts";

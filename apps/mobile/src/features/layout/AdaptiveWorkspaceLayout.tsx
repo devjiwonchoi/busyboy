@@ -1,22 +1,8 @@
-import { useGT } from "gt-react-native";
-import {
-  WorkspaceColumnsRendererContext,
-  WorkspacePresentationHostContext,
-} from "./workspace-presentation-context";
-import { useAndroidFloatingTabs } from "../settings/appearance/AppearancePreferencesProvider";
-import { SafeAreaInsetsContext, useSafeAreaInsets } from "react-native-safe-area-context";
-import {
-  AdaptiveWorkspaceContext,
-  WorkspacePaneStateContext,
-  useAdaptiveWorkspaceLayout,
-  useWorkspacePaneState,
-  type AdaptiveWorkspaceActions,
-} from "./adaptive-workspace-context";
-import { threadSelectionDeferral } from "./deferred-navigation";
-import { uuidv4 } from "../../lib/uuid";
-import { EnvironmentId, ThreadId, type SidebarProjectGroupingMode } from "@t3tools/contracts";
 import { useAtomValue } from "@effect/atom-react";
 import { NavigationContext, NavigationRouteContext, useNavigation } from "@react-navigation/native";
+import { EnvironmentId, ThreadId, type SidebarProjectGroupingMode } from "@t3tools/contracts";
+import { AsyncResult } from "effect/reactivity";
+import { useGT } from "gt-react-native";
 import {
   use,
   useEffect,
@@ -42,8 +28,11 @@ import Animated, {
   useSharedValue,
   withTiming,
 } from "react-native-reanimated";
-import { AsyncResult } from "effect/reactivity";
+import { SafeAreaInsetsContext, useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { RenderErrorBoundary, RenderFailureView } from "../../components/RenderErrorBoundary";
+import { PaneContext } from "../../components/ui/Pane";
+import { useAndroidControlSizing } from "../../components/ui/useAndroidControlSizing";
 import {
   deriveFileInspectorPaneLayout,
   alignListPaneToHinge,
@@ -54,60 +43,71 @@ import {
   isWorkspaceListPath,
   nativeInspectorColumnWidth,
 } from "../../lib/layout";
+import { dispatchRootStackReset, rootStackState } from "../../lib/root-stack-reset";
+import { uuidv4 } from "../../lib/uuid";
+import { AndroidHingeObserver } from "../../native/AndroidHingeObserver";
+import { useNativeLayoutMetrics } from "../../native/native-layout-metrics";
+import {
+  NativeWorkspaceModeContext,
+  NativeWorkspaceInspectorContext,
+} from "../../native/v5-workspace-context";
+import { WindowHingeContext } from "../../native/window-hinge-context";
 import type { ThreadListFilters } from "../../persistence/mobile-preferences";
 import { appAtomRegistry } from "../../state/atom-registry";
 import { useProjects } from "../../state/entities";
-import { environmentThreadShells } from "../../state/threads";
-import { withKnownPullRequestSummary } from "../../state/use-thread-pr";
 import { mobilePreferencesAtom } from "../../state/preferences";
-import { savedConnectionsByIdAtom } from "../../state/use-remote-environment-registry";
-import { workspaceConnections } from "../../state/workspace";
 import {
   DEFAULT_MOBILE_PROJECT_GROUPING_SETTINGS,
   resolveMobileProjectGroupingSettings,
 } from "../../state/project-grouping";
+import { environmentThreadShells } from "../../state/threads";
+import { savedConnectionsByIdAtom } from "../../state/use-remote-environment-registry";
+import { withKnownPullRequestSummary } from "../../state/use-thread-pr";
+import { workspaceConnections } from "../../state/workspace";
+import { HomeListOptionsProvider } from "../home/home-list-options";
+import { buildHomeProjectScopes, resolveHomeProjectFilterScope } from "../home/homeThreadList";
 import {
   parseActiveThreadPath,
   useHardwareKeyboardCommand,
 } from "../keyboard/hardwareKeyboardCommands";
-import { useAndroidControlSizing } from "../../components/ui/useAndroidControlSizing";
-import { useEnabledNavigationTabs } from "./workspace/navigation-tabs";
-import { FLOATING_TABS, floatingTabsMetrics } from "./workspace/floating-workspace-tabs";
-import {
-  AndroidWorkspaceNavigation,
-  FloatingWorkspaceTabs,
-  ANDROID_WORKSPACE_RAIL_WIDTH,
-} from "./workspace/AndroidWorkspaceNavigation";
-import {
-  selectWorkspaceDetail,
-  type WorkspaceDetail,
-  type WorkspaceDetailSheet,
-} from "./workspace/workspace-detail-selection";
-import { startOpeningDetail } from "./workspace/useSelectWorkspaceDetail";
-import { useWorkspaceTabs } from "./workspace/WorkspaceTabsContext";
-import { HomeListOptionsProvider } from "../home/home-list-options";
-import { buildHomeProjectScopes, resolveHomeProjectFilterScope } from "../home/homeThreadList";
+import { useAndroidFloatingTabs } from "../settings/appearance/AppearancePreferencesProvider";
+import { SettingsWorkspaceLayout } from "../settings/SettingsWorkspaceLayout";
 import { newTaskDestination, newTaskFilteredProject } from "../threads/new-task-project-selection";
-import { RenderErrorBoundary, RenderFailureView } from "../../components/RenderErrorBoundary";
-import { PaneContext } from "../../components/ui/Pane";
-import { WORKSPACE_PANE_TIMING } from "./workspace-pane-animation";
-import { WorkspaceInspectorPane } from "./workspace-inspector-pane";
-import { WorkspaceInspectorSheet } from "./workspace-inspector-sheet";
+import {
+  AdaptiveWorkspaceContext,
+  WorkspacePaneStateContext,
+  useAdaptiveWorkspaceLayout,
+  useWorkspacePaneState,
+  type AdaptiveWorkspaceActions,
+} from "./adaptive-workspace-context";
+import { threadSelectionDeferral } from "./deferred-navigation";
 import type { InspectorContent } from "./inspector-panes";
 import {
   WorkspaceContentWidthContext,
   WorkspaceSettledContentWidthContext,
 } from "./workspace-content-width";
+import { WorkspaceInspectorPane } from "./workspace-inspector-pane";
+import { WorkspaceInspectorSheet } from "./workspace-inspector-sheet";
+import { workspaceRoutesOf } from "./workspace-overlay-routes";
+import { WORKSPACE_PANE_TIMING } from "./workspace-pane-animation";
 import {
-  NativeWorkspaceModeContext,
-  NativeWorkspaceInspectorContext,
-} from "../../native/v5-workspace-context";
-
-import { useNativeLayoutMetrics } from "../../native/native-layout-metrics";
-import { AndroidHingeObserver } from "../../native/AndroidHingeObserver";
-import { WindowHingeContext } from "../../native/window-hinge-context";
+  WorkspaceColumnsRendererContext,
+  WorkspacePresentationHostContext,
+} from "./workspace-presentation-context";
+import {
+  AndroidWorkspaceNavigation,
+  FloatingWorkspaceTabs,
+  ANDROID_WORKSPACE_RAIL_WIDTH,
+} from "./workspace/AndroidWorkspaceNavigation";
 import { useAndroidWorkspaceRoot } from "./workspace/AndroidWorkspaceTabsProvider";
-import { dispatchRootStackReset, rootStackState } from "../../lib/root-stack-reset";
+import { FLOATING_TABS, floatingTabsMetrics } from "./workspace/floating-workspace-tabs";
+import { useEnabledNavigationTabs } from "./workspace/navigation-tabs";
+import { startOpeningDetail } from "./workspace/useSelectWorkspaceDetail";
+import {
+  selectWorkspaceDetail,
+  type WorkspaceDetail,
+  type WorkspaceDetailSheet,
+} from "./workspace/workspace-detail-selection";
 import {
   currentWorkspaceSelections,
   workspaceSelectionCheck,
@@ -117,8 +117,7 @@ import {
   workspaceTabNavigationState,
 } from "./workspace/workspace-tab-navigation";
 import { workspaceTabOf, type WorkspaceTab } from "./workspace/workspace-tabs-state";
-import { workspaceRoutesOf } from "./workspace-overlay-routes";
-import { SettingsWorkspaceLayout } from "../settings/SettingsWorkspaceLayout";
+import { useWorkspaceTabs } from "./workspace/WorkspaceTabsContext";
 import { WorkspaceThreadSidebar } from "./workspace/WorkspaceThreadSidebar";
 
 export { useAdaptiveWorkspaceLayout, useWorkspacePaneState };

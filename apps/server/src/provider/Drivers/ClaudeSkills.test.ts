@@ -1,12 +1,12 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, it } from "@effect/vitest";
+import * as HostProcess from "@t3tools/shared/HostProcess";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
-import * as HostProcess from "@t3tools/shared/HostProcess";
 
-import { discoverClaudeSkills as discoverSkills } from "./ClaudeSkills.ts";
 import { planClaudeSkillDispatch } from "./ClaudeSkillDispatch.ts";
+import { discoverClaudeSkills as discoverSkills } from "./ClaudeSkills.ts";
 
 // Windows makes the managed directory fixture-controlled without reading host policy or skills.
 const discoverClaudeSkills = (

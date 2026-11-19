@@ -1,5 +1,6 @@
-import { expect, it } from "vite-plus/test";
 import { Quaternion, Vector3 } from "three";
+import { expect, it } from "vite-plus/test";
+
 import { duoViewSnaps, nearestDuoView } from "./duoSnap.ts";
 
 const frames = [

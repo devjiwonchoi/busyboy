@@ -1,17 +1,17 @@
 import { DEFAULT_CLIENT_SETTINGS, EnvironmentId, ProjectId } from "@t3tools/contracts";
 import type { AnyRouter } from "@tanstack/react-router";
+import { Atom } from "effect/reactivity";
 import { describe, expect, it, vi } from "vite-plus/test";
 
 import * as commandPalette from "../commandPaletteBus";
-import { DraftId, useComposerDraftStore } from "../composerDraftStore";
 import * as previewActions from "../components/preview/previewActionBus";
-import * as settings from "../hooks/useSettings";
+import { DraftId, useComposerDraftStore } from "../composerDraftStore";
 import * as storage from "../hooks/useLocalStorage";
+import * as settings from "../hooks/useSettings";
 import * as threadActions from "../lib/chatThreadActions";
 import * as entities from "../state/entities";
 import * as projectsState from "../state/projects";
 import * as session from "../state/session";
-import { Atom } from "effect/reactivity";
 import type { Project } from "../types";
 import { installChatRouteCommands } from "./chatRouteCommands";
 import * as dispatcher from "./dispatcher";

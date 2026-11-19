@@ -1,3 +1,5 @@
+import { useAtomValue } from "@effect/atom-react";
+import { normalizeProviderAccentColor } from "@t3tools/client-runtime/state/provider-instance-display";
 import {
   AuthProvidersManageScope,
   type EnvironmentId,
@@ -8,8 +10,6 @@ import {
   ServerProviderUsageWindow,
   UsageProviderKind,
 } from "@t3tools/contracts";
-import { useAtomValue } from "@effect/atom-react";
-import { normalizeProviderAccentColor } from "@t3tools/client-runtime/state/provider-instance-display";
 import {
   type LimitPace,
   paceOf,
@@ -17,15 +17,16 @@ import {
   remainingPercent,
   type ResetCreditChoice,
 } from "@t3tools/shared/usageLimits";
-import { GaugeIcon, TrendingDownIcon, TrendingUpIcon } from "lucide-react";
+import { formatResetsIn, resetCreditChoices } from "@t3tools/shared/usageLimitsCopy";
 import { msg, T, useGT, useMessages } from "gt-react";
+import { GaugeIcon, TrendingDownIcon, TrendingUpIcon } from "lucide-react";
 import { Fragment, useLayoutEffect, useState } from "react";
 
 import { usePrimarySettings } from "../../hooks/useSettings";
 import { observeResize } from "../../lib/observeResize";
 import { environmentPresentations } from "../../state/presentation";
-import { useEnvironmentScope, readEnvironmentScope } from "../../state/session";
 import { serverEnvironment } from "../../state/server";
+import { useEnvironmentScope, readEnvironmentScope } from "../../state/session";
 import { useAtomCommand } from "../../state/use-atom-command";
 import { formatUpcomingTimestamp } from "../../timestampFormat";
 import {
@@ -40,7 +41,6 @@ import {
 import { Button } from "../ui/button";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { UsageLimitsPooled } from "./UsageLimitsPooled";
-import { formatResetsIn, resetCreditChoices } from "@t3tools/shared/usageLimitsCopy";
 import { PROVIDER_PRESENTATION } from "./usageProviders";
 
 const PACE: Record<LimitPace, { readonly label: string; readonly icon: typeof GaugeIcon }> = {

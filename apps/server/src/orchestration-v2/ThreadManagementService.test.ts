@@ -16,33 +16,32 @@ import {
   RunId,
   ThreadId,
 } from "@t3tools/contracts";
-import * as Deferred from "effect/Deferred";
+import * as ProviderAdapter from "@t3tools/provider-core/server/ProviderAdapter";
+import { AgentScope } from "@t3tools/shared/AgentScope";
 import * as DateTime from "effect/DateTime";
+import * as Deferred from "effect/Deferred";
 import * as Duration from "effect/Duration";
-import * as Option from "effect/Option";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as Queue from "effect/Queue";
 import * as Stream from "effect/Stream";
 import * as TestClock from "effect/testing/TestClock";
 
-import { AgentScope } from "@t3tools/shared/AgentScope";
-
 import * as ServerEnvironment from "../environment/ServerEnvironment.ts";
-import * as ServerSettings from "../serverSettings.ts";
 import * as SqlitePersistence from "../persistence/Sqlite.ts";
-import * as CommandReceiptStore from "./CommandReceiptStore.ts";
-import * as Orchestrator from "./Orchestrator.ts";
-import * as ProviderSessionManager from "./ProviderSessionManager.ts";
-import * as ProviderAdapter from "@t3tools/provider-core/server/ProviderAdapter";
-import * as ThreadManagementService from "./ThreadManagementService.ts";
-import * as ThreadCommandExecutor from "./ThreadCommandExecutor.ts";
-import * as LegacyV1ThreadImporter from "./legacy/LegacyV1ThreadImporter.ts";
+import * as ServerSettings from "../serverSettings.ts";
 import {
   ThreadWorktreeRestore,
   WorktreeRecreateError,
 } from "../workspace/restoreMissingWorktree.ts";
+import * as CommandReceiptStore from "./CommandReceiptStore.ts";
+import * as LegacyV1ThreadImporter from "./legacy/LegacyV1ThreadImporter.ts";
+import * as Orchestrator from "./Orchestrator.ts";
+import * as ProviderSessionManager from "./ProviderSessionManager.ts";
+import * as ThreadCommandExecutor from "./ThreadCommandExecutor.ts";
+import * as ThreadManagementService from "./ThreadManagementService.ts";
 
 it("stamps authoritative provenance on commands that create threads or messages", () => {
   const command: OrchestrationV2Command = {

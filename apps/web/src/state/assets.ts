@@ -6,10 +6,10 @@ import {
 } from "@t3tools/client-runtime/state/assets";
 import { Atom } from "effect/reactivity";
 
-import { connectionAtomRuntime } from "../connection/runtime";
-import { appAtomRegistry } from "../rpc/atomRegistry";
 import { projectFaviconCache } from "../assets/projectFaviconCache";
+import { connectionAtomRuntime } from "../connection/runtime";
 import { isElectron } from "../env";
+import { appAtomRegistry } from "../rpc/atomRegistry";
 import { primaryEnvironmentIdAtom } from "./primaryEnvironment";
 import { environmentProjectClonesAtom } from "./projectClones";
 import { environmentSession } from "./session";

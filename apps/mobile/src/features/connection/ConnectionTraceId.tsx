@@ -1,4 +1,5 @@
 import { useGT } from "gt-react-native";
+
 import { AppText as Text } from "../../components/ui/AppText";
 import { cn } from "../../lib/cn";
 import { copyTextWithHaptic } from "../../lib/copyTextWithHaptic";

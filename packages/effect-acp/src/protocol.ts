@@ -1,29 +1,29 @@
-import type * as AcpCompat from "./compat.ts";
 import * as Cause from "effect/Cause";
 import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
-import * as Effect from "effect/Effect";
 import * as Deferred from "effect/Deferred";
+import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Option from "effect/Option";
+import type * as PlatformError from "effect/PlatformError";
 import * as Queue from "effect/Queue";
 import * as Ref from "effect/Ref";
-import type * as PlatformError from "effect/PlatformError";
-import * as Schema from "effect/Schema";
-import * as Scope from "effect/Scope";
-import * as Stream from "effect/Stream";
-import * as Stdio from "effect/Stdio";
 import * as RpcClient from "effect/rpc/RpcClient";
 import * as RpcClientError from "effect/rpc/RpcClientError";
 import * as RpcMessage from "effect/rpc/RpcMessage";
 import * as RpcSerialization from "effect/rpc/RpcSerialization";
 import * as RpcServer from "effect/rpc/RpcServer";
+import * as Schema from "effect/Schema";
+import * as Scope from "effect/Scope";
+import * as Stdio from "effect/Stdio";
+import * as Stream from "effect/Stream";
 
-import * as AcpSchema from "./schema.ts";
-import * as AcpSchemaV1 from "./_generated/schema-v1.gen.ts";
 import { CLIENT_METHODS } from "./_generated/meta.gen.ts";
-import * as AcpError from "./errors.ts";
+import * as AcpSchemaV1 from "./_generated/schema-v1.gen.ts";
 import { isolateNotificationHandler } from "./_internal/shared.ts";
+import type * as AcpCompat from "./compat.ts";
+import * as AcpError from "./errors.ts";
+import * as AcpSchema from "./schema.ts";
 const isAcpError = Schema.is(AcpError.AcpError);
 
 export interface AcpProtocolLogEvent {

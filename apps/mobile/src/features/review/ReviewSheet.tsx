@@ -1,62 +1,62 @@
-import { settlePromise, squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
-import { AsyncResult } from "effect/reactivity";
-import type { EnvironmentId, ThreadId } from "@t3tools/contracts";
-import { formatDiffCount } from "@t3tools/client-runtime/diff-count";
 import { LegendList } from "@legendapp/list/react-native";
 import { useNavigation, type StaticScreenProps } from "@react-navigation/native";
-import { AppBar } from "../../components/ui/AppBar";
-import type { AppBarMenuItem } from "../../components/ui/AppBar.types";
-import type { ReviewSectionItem } from "./reviewModel";
-import { useReviewHeaderPresentation } from "./useReviewHeaderPresentation";
+import { formatDiffCount } from "@t3tools/client-runtime/diff-count";
+import { settlePromise, squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
+import type { EnvironmentId, ThreadId } from "@t3tools/contracts";
+import { AsyncResult } from "effect/reactivity";
 import { T, useGT } from "gt-react-native";
 import { type Ref, type ReactElement, useImperativeHandle, useRef, useState } from "react";
 import { Pressable, ScrollView, type NativeSyntheticEvent, StyleSheet, View } from "react-native";
-import { RefreshControl } from "../../components/ui/RefreshControl";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useReduceMotionEnabled } from "../../lib/appState";
-import { useContentTopInset, useSheetContentBottomInset } from "../../components/ui/useBarInset";
-import { NativeScrollView } from "../../native/NativeScrollViewMarker";
 
-import { AppText as Text } from "../../components/ui/AppText";
+import { AppBar } from "../../components/ui/AppBar";
+import type { AppBarMenuItem } from "../../components/ui/AppBar.types";
 import { SymbolView } from "../../components/ui/AppSymbol";
+import { AppText as Text } from "../../components/ui/AppText";
 import {
   ContentBand,
   ContentStatus,
   contentStatusContainerStyle,
 } from "../../components/ui/ContentBand";
 import { PaneListItem } from "../../components/ui/PaneListItem";
+import { RefreshControl } from "../../components/ui/RefreshControl";
 import { ScreenContent } from "../../components/ui/ScreenContent";
 import { SheetPane } from "../../components/ui/SheetPane";
+import { useContentTopInset, useSheetContentBottomInset } from "../../components/ui/useBarInset";
+import { useReduceMotionEnabled } from "../../lib/appState";
+import { NativeScrollView } from "../../native/NativeScrollViewMarker";
 import { useEnvironmentPresentation } from "../../state/presentation";
+import { useSelectedThreadWorktree } from "../../state/use-selected-thread-worktree";
 import { useThreadDraftForThread } from "../../state/use-thread-composer-state";
 import { EnvironmentConnectionNotice } from "../connection/EnvironmentConnectionNotice";
 import { useRetryEnvironment } from "../connection/useRetryEnvironment";
-import { useAppearancePreferences } from "../settings/appearance/AppearancePreferencesProvider";
-import {
-  Inspector,
-  useAdaptiveWorkspaceLayout,
-  useWorkspacePaneState,
-} from "../layout/AdaptiveWorkspaceLayout";
-import { useSelectedThreadWorktree } from "../../state/use-selected-thread-worktree";
-import { useReviewCacheForThread } from "./reviewState";
 import {
   isNativeReviewDiffDrawEvent,
   type NativeReviewDiffViewHandle,
   resolveNativeReviewDiffView,
 } from "../diffs/nativeReviewDiffSurface";
-import { NATIVE_REVIEW_DIFF_CONTENT_WIDTH } from "./nativeReviewDiffAdapter";
+import {
+  Inspector,
+  useAdaptiveWorkspaceLayout,
+  useWorkspacePaneState,
+} from "../layout/AdaptiveWorkspaceLayout";
+import { useSelectWorkspaceDetail } from "../layout/workspace/useSelectWorkspaceDetail";
+import { useAppearancePreferences } from "../settings/appearance/AppearancePreferencesProvider";
 import { useAppearanceCodeSurface } from "../settings/appearance/useAppearanceCodeSurface";
-import { useReviewDiffData } from "./useReviewDiffData";
-import { useReviewDiffPrewarming } from "./useReviewDiffPrewarming";
+import { reportShowcaseSceneRendered } from "../showcase/showcaseRenderSignal";
+import { NATIVE_REVIEW_DIFF_CONTENT_WIDTH } from "./nativeReviewDiffAdapter";
+import { buildReviewSectionMenu } from "./review-section-menu";
+import { resolveReviewAvailability } from "./reviewAvailability";
 import { useReviewFileVisibility } from "./reviewFileVisibility";
-import { useReviewSections } from "./useReviewSections";
+import type { ReviewSectionItem } from "./reviewModel";
+import { resolveSelectedReviewFileId } from "./reviewPaneSelection";
+import { useReviewCacheForThread } from "./reviewState";
 import { useNativeReviewDiffBridge } from "./useNativeReviewDiffBridge";
 import { useReviewCommentSelectionController } from "./useReviewCommentSelectionController";
-import { resolveReviewAvailability } from "./reviewAvailability";
-import { resolveSelectedReviewFileId } from "./reviewPaneSelection";
-import { buildReviewSectionMenu } from "./review-section-menu";
-import { reportShowcaseSceneRendered } from "../showcase/showcaseRenderSignal";
-import { useSelectWorkspaceDetail } from "../layout/workspace/useSelectWorkspaceDetail";
+import { useReviewDiffData } from "./useReviewDiffData";
+import { useReviewDiffPrewarming } from "./useReviewDiffPrewarming";
+import { useReviewHeaderPresentation } from "./useReviewHeaderPresentation";
+import { useReviewSections } from "./useReviewSections";
 
 function ReviewHeader(
   props: Parameters<typeof useReviewHeaderPresentation>[0] & {

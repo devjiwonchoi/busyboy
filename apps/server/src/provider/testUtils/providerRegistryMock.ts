@@ -1,9 +1,10 @@
-import * as ProviderRegistry from "../ProviderRegistry.ts";
 import type { ServerProvider } from "@t3tools/contracts";
+import { makeManualOnlyProviderMaintenanceCapabilities } from "@t3tools/provider-core/server/maintenanceResolver";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
-import { makeManualOnlyProviderMaintenanceCapabilities } from "@t3tools/provider-core/server/maintenanceResolver";
+
+import * as ProviderRegistry from "../ProviderRegistry.ts";
 
 const makeProviderRegistryMock = (
   providers: ReadonlyArray<ServerProvider> = [],

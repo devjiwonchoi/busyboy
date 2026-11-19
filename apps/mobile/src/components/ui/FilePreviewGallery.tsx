@@ -1,6 +1,7 @@
 import { createContext, useContext } from "react";
-import type { FilePreviewItem, FilePreviewSource } from "./FilePreviewModal.types";
+
 import { filePreviewGallery } from "../../lib/filePreviewGallery";
+import type { FilePreviewItem, FilePreviewSource } from "./FilePreviewModal.types";
 
 export const FilePreviewGallery = createContext<readonly FilePreviewItem[]>([]);
 

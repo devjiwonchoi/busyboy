@@ -2,6 +2,7 @@ import { describe, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientResponse from "effect/http/HttpClientResponse";
+
 import { cursorUsageResponseToLimits, readCursorUsageLimits } from "./usageLimits.ts";
 
 describe("Cursor usage limits", () => {

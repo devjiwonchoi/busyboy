@@ -2,13 +2,13 @@ import type {
   RelayClientDeviceRecord,
   RelayDeviceRegistrationRequest,
 } from "@t3tools/contracts/relay";
+import { and, eq } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 import * as Context from "effect/Context";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
-import { and, eq } from "drizzle-orm";
-import { sql } from "drizzle-orm";
 
 import * as RelayDb from "../db.ts";
 import { relayLiveActivities, relayMobileDevices } from "../persistence/schema.ts";

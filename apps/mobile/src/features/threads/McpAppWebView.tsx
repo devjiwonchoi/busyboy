@@ -1,7 +1,5 @@
-import { Button } from "../../components/ui/Button";
-import { AppActivityIndicator } from "../../components/ui/AppActivityIndicator";
-import * as Dialog from "../../components/ui/Dialog";
-import type { EnvironmentId, ThreadId, TurnItemId } from "@t3tools/contracts";
+import { useNavigation } from "@react-navigation/native";
+import { scopeThreadRef } from "@t3tools/client-runtime/environment";
 import {
   makeMcpAppHost,
   McpAppHostRefusal,
@@ -11,8 +9,8 @@ import {
   type McpAppHost,
   type McpAppHostContext,
 } from "@t3tools/client-runtime/mcp-apps";
-import { scopeThreadRef } from "@t3tools/client-runtime/environment";
 import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
+import type { EnvironmentId, ThreadId, TurnItemId } from "@t3tools/contracts";
 import { CommandId, MessageId } from "@t3tools/contracts";
 import {
   mcpAppAllowAttribute,
@@ -24,13 +22,15 @@ import * as Predicate from "effect/Predicate";
 import { AsyncResult } from "effect/reactivity";
 import Constants from "expo-constants";
 import { msg, T, useGT, Var } from "gt-react-native";
-import { useNavigation } from "@react-navigation/native";
 import { useEffect, useEffectEvent, useRef, useState } from "react";
 import { Platform, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { WebView, type WebViewMessageEvent } from "react-native-webview";
 
+import { AppActivityIndicator } from "../../components/ui/AppActivityIndicator";
 import { AppText as Text } from "../../components/ui/AppText";
+import { Button } from "../../components/ui/Button";
+import * as Dialog from "../../components/ui/Dialog";
 import { m } from "../../i18n/messages";
 import { shareGeneratedAttachment } from "../../lib/attachmentDownload";
 import { mobileHtmlRenderTheme } from "../../lib/htmlRenderTheme";

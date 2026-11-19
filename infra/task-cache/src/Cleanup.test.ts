@@ -1,8 +1,10 @@
 // @effect-diagnostics nodeBuiltinImport:off - real SQLite exercises concurrent D1 claims and accounting.
 import * as NodeFS from "node:fs";
 import * as NodeSqlite from "node:sqlite";
-import * as Effect from "effect/Effect";
+
 import { expect, it } from "@effect/vitest";
+import * as Effect from "effect/Effect";
+
 import { cleanup } from "../vendor/vite-plus-remote-cache-cloudflare/src/database.ts";
 import * as Cache from "./Cache.ts";
 import * as Cleanup from "./Cleanup.ts";

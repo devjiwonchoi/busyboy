@@ -1,16 +1,12 @@
-import { msg } from "gt-react";
 import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
-import { m } from "~/i18n/messages";
+import {
+  isAtomCommandInterrupted,
+  squashAtomCommandFailure,
+} from "@t3tools/client-runtime/state/runtime";
 import type {
   EnvironmentProject,
   EnvironmentThreadShell,
 } from "@t3tools/client-runtime/state/shell";
-import type { Dispatch } from "react";
-import type { ComposerHandleRef } from "../../composerHandleContext";
-import type { selectThreadTerminalUiState } from "../../terminalUiStateStore";
-import { useStableCallback } from "../../hooks/useStableCallback";
-import { useThreadTerminalActions } from "../terminal/useThreadTerminalActions";
-import { getTerminalLabel } from "@t3tools/shared/terminalLabelsCopy";
 import {
   AuthTerminalReadScope,
   AuthTerminalOperateScope,
@@ -20,40 +16,46 @@ import {
   type ThreadId,
 } from "@t3tools/contracts";
 import { projectScriptTerminalInput } from "@t3tools/shared/projectScripts";
+import { getTerminalLabel } from "@t3tools/shared/terminalLabelsCopy";
+import { msg } from "gt-react";
+import type { Dispatch } from "react";
 import { type SetStateAction } from "react";
-import {
-  isAtomCommandInterrupted,
-  squashAtomCommandFailure,
-} from "@t3tools/client-runtime/state/runtime";
-import { MAX_TERMINALS_PER_GROUP } from "../../types";
-import {
-  selectThreadRightPanelState,
-  type RightPanelSurface,
-  useRightPanelStore,
-} from "../../rightPanelStore";
+
+import { useLocalStorage } from "~/hooks/useLocalStorage";
+import { m } from "~/i18n/messages";
+
+import { resolveDiscoveredServerUrl } from "../../browser/browserTargetResolver";
 import { openUrlInPreview } from "../../browser/openFileInPreview";
 import { isPreviewAvailableFor } from "../../browser/previewRuntime";
-import { resolveDiscoveredServerUrl } from "../../browser/browserTargetResolver";
-import { stackedThreadToast, toastManager } from "../ui/toast";
-import { confirmTerminalClose } from "../../lib/terminalCloseConfirm";
+import type { ComposerHandleRef } from "../../composerHandleContext";
+import { useStableCallback } from "../../hooks/useStableCallback";
 import { findReusableProjectScriptTerminal } from "../../lib/projectScriptTerminal";
-import { closingTerminalIds } from "../terminal/closingTerminals";
+import { confirmTerminalClose } from "../../lib/terminalCloseConfirm";
 import { type TerminalContextSelection } from "../../lib/terminalContext";
 import {
   focusActiveDrawerTerminal,
   focusActivePanelTerminal,
   focusTerminal,
 } from "../../lib/terminalFocus";
+import {
+  selectThreadRightPanelState,
+  type RightPanelSurface,
+  useRightPanelStore,
+} from "../../rightPanelStore";
+import { previewEnvironment } from "../../state/preview";
+import { readEnvironmentScope } from "../../state/session";
+import { useAtomCommand } from "../../state/use-atom-command";
+import type { selectThreadTerminalUiState } from "../../terminalUiStateStore";
 import { useTerminalUiStateStore } from "../../terminalUiStateStore";
+import { MAX_TERMINALS_PER_GROUP } from "../../types";
 import {
   LAST_INVOKED_SCRIPT_BY_PROJECT_KEY,
   LastInvokedScriptByProjectSchema,
   makeThreadErrorSetter,
 } from "../ChatView.logic";
-import { useLocalStorage } from "~/hooks/useLocalStorage";
-import { previewEnvironment } from "../../state/preview";
-import { readEnvironmentScope } from "../../state/session";
-import { useAtomCommand } from "../../state/use-atom-command";
+import { closingTerminalIds } from "../terminal/closingTerminals";
+import { useThreadTerminalActions } from "../terminal/useThreadTerminalActions";
+import { stackedThreadToast, toastManager } from "../ui/toast";
 import type { ChatShortcutCommands } from "./useChatShortcuts";
 const SCRIPT_TERMINAL_COLS = 120;
 const SCRIPT_TERMINAL_ROWS = 30;

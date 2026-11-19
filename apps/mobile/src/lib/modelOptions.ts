@@ -1,11 +1,10 @@
+import { resolveModelShortName } from "@t3tools/client-runtime/provider-clients";
+import { resolveProvidersForCwd } from "@t3tools/client-runtime/providerSkills";
 import {
   normalizeProviderAccentColor,
   resolveProviderInstanceDisplayName,
   shouldShowInstanceBadge,
 } from "@t3tools/client-runtime/state/provider-instance-display";
-import { msg } from "gt-react-native";
-import { m } from "../i18n/messages";
-
 import type {
   ModelCapabilities,
   ModelSelection,
@@ -22,8 +21,9 @@ import {
   buildExplicitProviderOptionSelectionsFromDescriptors,
   getProviderOptionDescriptors,
 } from "@t3tools/shared/model";
-import { resolveModelShortName } from "@t3tools/client-runtime/provider-clients";
-import { resolveProvidersForCwd } from "@t3tools/client-runtime/providerSkills";
+import { msg } from "gt-react-native";
+
+import { m } from "../i18n/messages";
 
 /** The contracts `disallowedProviderMessage` English, as translatable sentences. */
 function disallowedProviderText(organization: string | undefined, label: string): string {

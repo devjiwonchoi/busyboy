@@ -2,14 +2,14 @@ import { type AuthEnvironmentScope, EnvironmentHttpApi } from "@t3tools/contract
 import * as Cause from "effect/Cause";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
-import * as Option from "effect/Option";
-import * as Predicate from "effect/Predicate";
-import * as Schema from "effect/Schema";
+import * as HttpApiClient from "effect/http-api/HttpApiClient";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientError from "effect/http/HttpClientError";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
-import * as HttpApiClient from "effect/http-api/HttpApiClient";
+import * as Option from "effect/Option";
+import * as Predicate from "effect/Predicate";
+import * as Schema from "effect/Schema";
 
 import * as EnvironmentAuth from "../auth/EnvironmentAuth.ts";
 import * as ServerConfig from "../config.ts";

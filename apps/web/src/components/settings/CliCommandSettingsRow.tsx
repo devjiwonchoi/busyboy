@@ -8,8 +8,9 @@ import {
   refreshDesktopCliCommandState,
 } from "~/state/desktopCliCommand";
 import { useEnvironmentQuery } from "~/state/query";
-import { Button } from "../ui/button";
+
 import { m } from "../../i18n/messages";
+import { Button } from "../ui/button";
 import { stackedThreadToast, toastManager } from "../ui/toast";
 import { SettingsRow } from "./settingsLayout";
 import { useSearchableSetting } from "./settingsSearch";

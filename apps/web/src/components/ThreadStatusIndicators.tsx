@@ -1,29 +1,12 @@
-import { pipe } from "effect/Function";
-import { changeRequestTermKind, type ChangeRequestTermKind } from "./pullRequest/changeRequestTerm";
+import { useRender } from "@base-ui/react/use-render";
 import {
   scopeProjectRef,
   scopedThreadKey,
   scopeThreadRef,
 } from "@t3tools/client-runtime/environment";
-import { useSupportsMultiplePullRequests } from "~/hooks/useSupportsMultiplePullRequests";
-import { useStableCallback } from "~/hooks/useStableCallback";
-
+import { sourceControlClients } from "@t3tools/client-runtime/source-control-clients";
 import { pullRequestDetailToVcsStatus } from "@t3tools/client-runtime/state/pull-requests";
 import type { EnvironmentThreadShell } from "@t3tools/client-runtime/state/shell";
-import {
-  resolveEnvironmentMachineKind,
-  type EnvironmentId,
-  type ScopedThreadRef,
-  type ThreadLinkedPullRequest,
-  type ThreadPullRequestLink,
-  type VcsStatusResult,
-} from "@t3tools/contracts";
-import { msg, T, useGT, useMessages } from "gt-react";
-import { FolderGit2Icon, TerminalIcon } from "lucide-react";
-import { m, type MessageResolver } from "../i18n/messages";
-import { useEnvironment, usePrimaryEnvironmentId } from "../state/environments";
-import { EnvironmentMachineIcon } from "./EnvironmentMachineIcon";
-import { useProject } from "../state/entities";
 import {
   pullRequestListLines,
   resolveThreadCurrentPullRequestLink,
@@ -32,17 +15,42 @@ import {
   type ThreadPullRequestBadge,
   visibleThreadPullRequests,
 } from "@t3tools/client-runtime/thread-pull-requests";
-import { useRender } from "@base-ui/react/use-render";
+import {
+  resolveEnvironmentMachineKind,
+  type EnvironmentId,
+  type ScopedThreadRef,
+  type ThreadLinkedPullRequest,
+  type ThreadPullRequestLink,
+  type VcsStatusResult,
+} from "@t3tools/contracts";
+import { pipe } from "effect/Function";
+import { msg, T, useGT, useMessages } from "gt-react";
+import { FolderGit2Icon, TerminalIcon } from "lucide-react";
 import { type ReactNode, type AnimationEvent, type MouseEvent, type ReactElement } from "react";
-import { cn } from "../lib/utils";
-import { revealThreadTerminal } from "../lib/revealThreadTerminal";
 
-import { useEnvironmentQuery } from "../state/query";
+import { useStableCallback } from "~/hooks/useStableCallback";
+import { useSupportsMultiplePullRequests } from "~/hooks/useSupportsMultiplePullRequests";
+
+import { m, type MessageResolver } from "../i18n/messages";
+import { revealThreadTerminal } from "../lib/revealThreadTerminal";
+import { cn } from "../lib/utils";
+import { useProject } from "../state/entities";
+import { useEnvironment, usePrimaryEnvironmentId } from "../state/environments";
 import { linkedPullRequestDetailAtom, useSharedPullRequestSummary } from "../state/pullRequests";
+import { useEnvironmentQuery } from "../state/query";
 import { useThreadRunningTerminalIds } from "../state/terminalSessions";
 import { vcsEnvironment } from "../state/vcs";
+import type { SidebarThreadSummary } from "../types";
 import { useUiStateStore } from "../uiStateStore";
-import { sourceControlClients } from "@t3tools/client-runtime/source-control-clients";
+import { formatWorktreePathForDisplay } from "../worktreeCleanup";
+import { EnvironmentMachineIcon } from "./EnvironmentMachineIcon";
+import { changeRequestTermKind, type ChangeRequestTermKind } from "./pullRequest/changeRequestTerm";
+import {
+  PULL_REQUEST_STATE_PRESENTATION,
+  PullRequestGlyph,
+  type PullRequestGlyphIcon,
+} from "./pullRequest/pullRequestIcons";
+import { resolvePullRequestState } from "./pullRequest/pullRequestPresentation";
 import {
   pullRequestMatchesSearchQuery,
   resolveThreadLastVisitedAt,
@@ -51,16 +59,7 @@ import {
   useRetainedValue,
   useSidebarRowSubscriptionLease,
 } from "./Sidebar.logic";
-
-import type { SidebarThreadSummary } from "../types";
-import { formatWorktreePathForDisplay } from "../worktreeCleanup";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "./ui/tooltip";
-import {
-  PULL_REQUEST_STATE_PRESENTATION,
-  PullRequestGlyph,
-  type PullRequestGlyphIcon,
-} from "./pullRequest/pullRequestIcons";
-import { resolvePullRequestState } from "./pullRequest/pullRequestPresentation";
 
 export interface PrStatusIndicator {
   label: string;

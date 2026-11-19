@@ -1,7 +1,5 @@
 import * as Schema from "effect/Schema";
 
-import { SnapShotSource } from "./chatAttachment.ts";
-
 import { AssistantCitation } from "./assistantCitations.ts";
 import {
   EnvironmentId,
@@ -14,6 +12,7 @@ import {
   TrimmedNonEmptyString,
   TurnItemId,
 } from "./baseSchemas.ts";
+import { SnapShotSource } from "./chatAttachment.ts";
 import { GUEST_MESSAGE_MAX_LENGTH, GUEST_NAME_MAX_LENGTH } from "./guestShare.ts";
 
 /** Image and file records reference `ChatAttachment` ids, never bytes. */

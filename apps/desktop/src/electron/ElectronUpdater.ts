@@ -3,7 +3,6 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
-
 import { AppImageUpdater, autoUpdater } from "electron-updater";
 
 type AutoUpdater = typeof autoUpdater;

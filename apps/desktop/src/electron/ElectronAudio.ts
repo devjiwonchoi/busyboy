@@ -1,9 +1,10 @@
 // @effect-diagnostics globalTimers:off -- The shared native restart deadline must outlive individual IPC callers.
 // @effect-diagnostics nodeBuiltinImport:off -- Only Electron's main process can restart its Chromium audio utility.
 import * as NodeProcess from "node:process";
+
+import * as HostProcess from "@t3tools/shared/HostProcess";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
-import * as HostProcess from "@t3tools/shared/HostProcess";
 import { app, type Details, type Event } from "electron";
 
 class AudioServiceRestartError extends Schema.TaggedError<AudioServiceRestartError>()(

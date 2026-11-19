@@ -1,7 +1,6 @@
 import * as Schema from "effect/Schema";
 import * as SchemaTransformation from "effect/SchemaTransformation";
-import { RepositoryIdentity, ThreadEnvMode } from "./environment.ts";
-import { ModelSelection } from "./modelSelection.ts";
+
 import {
   CommandId,
   ForwardCompatibleUnion,
@@ -15,6 +14,8 @@ import {
   TrimmedString,
   type UnknownUnionMember,
 } from "./baseSchemas.ts";
+import { RepositoryIdentity, ThreadEnvMode } from "./environment.ts";
+import { ModelSelection } from "./modelSelection.ts";
 
 const PROJECT_SEARCH_ENTRIES_MAX_LIMIT = 200;
 const PROJECT_SEARCH_CONTENTS_MAX_LIMIT = 500;

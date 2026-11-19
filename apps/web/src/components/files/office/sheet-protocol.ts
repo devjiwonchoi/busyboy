@@ -1,6 +1,7 @@
 // Adapted from opencode (MIT). Copyright (c) 2025 opencode. See LICENSE.opencode.
 import type { SheetInfo } from "@betteroffice/xlsx";
 import type { CellAddr, CellRange, GridMeta, HyperlinkRegion } from "@betteroffice/xlsx/headless";
+
 import type { WorkbookView } from "../officePreviewProtocol";
 import type { Span } from "./sheet-cells";
 import type { Method } from "./worker-rpc";

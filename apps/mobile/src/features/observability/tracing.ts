@@ -1,6 +1,6 @@
-import Constants from "expo-constants";
-import { type ReleaseChannel, releaseResourceAttributes } from "@t3tools/shared/releaseResource";
 import * as RelayTracing from "@t3tools/shared/relayTracing";
+import { type ReleaseChannel, releaseResourceAttributes } from "@t3tools/shared/releaseResource";
+import Constants from "expo-constants";
 
 import { hasTracingPublicConfig, resolveCloudPublicConfig } from "../cloud/publicConfig";
 

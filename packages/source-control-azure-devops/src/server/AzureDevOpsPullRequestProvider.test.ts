@@ -1,17 +1,10 @@
 import { describe, expect, it } from "@effect/vitest";
+import type { PullRequestCheck, PullRequestCheckStatus } from "@t3tools/contracts";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
-import type { PullRequestCheck, PullRequestCheckStatus } from "@t3tools/contracts";
 
-import * as AzureDevOpsPullRequestCli from "./AzureDevOpsPullRequestCli.ts";
-import {
-  BLOB_BATCH_FILES,
-  LOCATION_CACHE_CAPACITY,
-  make,
-  MAX_DIFF_SPAWNS,
-} from "./AzureDevOpsPullRequestProvider.ts";
 import {
   byteLength,
   MAX_DIFF_SLICE_BYTES,
@@ -19,7 +12,14 @@ import {
   MAX_FILE_DIFF_EDITS,
   parseAzureDevOpsDiffCursor,
 } from "./azureDevOpsDiff.ts";
+import * as AzureDevOpsPullRequestCli from "./AzureDevOpsPullRequestCli.ts";
 import type { AzureDevOpsChangeEntry } from "./azureDevOpsPullRequestJson.ts";
+import {
+  BLOB_BATCH_FILES,
+  LOCATION_CACHE_CAPACITY,
+  make,
+  MAX_DIFF_SPAWNS,
+} from "./AzureDevOpsPullRequestProvider.ts";
 
 const ITERATION = { id: 3, headCommit: "head", mergeBaseCommit: "base" };
 

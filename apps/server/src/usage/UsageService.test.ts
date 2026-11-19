@@ -7,13 +7,9 @@ import * as NodePath from "node:path";
 import * as NodeSqlite from "node:sqlite";
 import * as NodeZlib from "node:zlib";
 
-import { assert, describe, it } from "@effect/vitest";
-import { vi } from "vite-plus/test";
 import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import * as HostProcess from "@t3tools/shared/HostProcess";
-import { SpawnExecutableResolution } from "@t3tools/shared/shell";
-import { mergeUsage } from "@t3tools/shared/usageMerge";
+import { assert, describe, it } from "@effect/vitest";
 import {
   EnvironmentId,
   ProviderDriverKind,
@@ -23,39 +19,43 @@ import {
   type UsageSummary,
   type UsageSummaryInput,
 } from "@t3tools/contracts";
-import * as Duration from "effect/Duration";
+import { totalTokens, type UsageRecord } from "@t3tools/provider-core/server/usage";
+import * as CursorAccountReader from "@t3tools/provider-cursor/server/CursorAccountReader";
+import * as CursorUsageAccounts from "@t3tools/provider-cursor/server/CursorUsageAccounts";
+import { MuseUsageHome } from "@t3tools/provider-muse/server";
+import * as HostProcess from "@t3tools/shared/HostProcess";
+import { SpawnExecutableResolution } from "@t3tools/shared/shell";
+import { mergeUsage } from "@t3tools/shared/usageMerge";
 import * as Clock from "effect/Clock";
+import * as Context from "effect/Context";
 import * as DateTime from "effect/DateTime";
 import * as Deferred from "effect/Deferred";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
 import * as FileSystem from "effect/FileSystem";
-import * as Context from "effect/Context";
+import { HttpClient, HttpClientError, HttpClientRequest, HttpClientResponse } from "effect/http";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Scheduler from "effect/Scheduler";
 import * as Schema from "effect/Schema";
-import * as TestClock from "effect/testing/TestClock";
 import * as SqlClient from "effect/sql/SqlClient";
-import { HttpClient, HttpClientError, HttpClientRequest, HttpClientResponse } from "effect/http";
+import * as TestClock from "effect/testing/TestClock";
+import { vi } from "vite-plus/test";
 
-import * as ServerConfig from "../config.ts";
-import * as ServerSettings from "../serverSettings.ts";
-import * as Sqlite from "../persistence/Sqlite.ts";
-import * as CodexUsageHistory from "./CodexUsageHistory.ts";
-import * as CursorAccountReader from "@t3tools/provider-cursor/server/CursorAccountReader";
-import * as CursorUsageAccounts from "@t3tools/provider-cursor/server/CursorUsageAccounts";
+import * as MuseSdk from "../../../../packages/provider-muse/src/server/sdk.ts";
 import * as ServerSecretStore from "../auth/ServerSecretStore.ts";
 import * as BackgroundPolicy from "../background/BackgroundPolicy.ts";
+import * as ServerConfig from "../config.ts";
+import * as Sqlite from "../persistence/Sqlite.ts";
 import * as AntigravityUsage from "../provider/Drivers/AntigravityUsage.ts";
 import * as ProviderHostLive from "../provider/ProviderHostLive.ts";
-import { totalTokens, type UsageRecord } from "@t3tools/provider-core/server/usage";
+import * as ServerSettings from "../serverSettings.ts";
+import * as CodexUsageHistory from "./CodexUsageHistory.ts";
+import { makeScanCacheWriter, SCAN_CACHE_FILE_NAME } from "./usageScanCache.ts";
 import * as UsageService from "./UsageService.ts";
 import { DESKTOP_HOST_SCOPE_ENV, physicalSourceIdOf } from "./usageTranscriptReader.ts";
-import * as MuseSdk from "../../../../packages/provider-muse/src/server/sdk.ts";
-import { MuseUsageHome } from "@t3tools/provider-muse/server";
-import { makeScanCacheWriter, SCAN_CACHE_FILE_NAME } from "./usageScanCache.ts";
 
 vi.mock("node:fs/promises", { spy: true });
 vi.mock("../../../../packages/provider-muse/src/server/sdk.ts", async (importOriginal) => {

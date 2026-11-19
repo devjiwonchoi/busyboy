@@ -27,8 +27,8 @@ import {
   type CursorAccountCache,
   type CursorCredentialSource,
 } from "./accountCache.ts";
-import * as CursorAccountReader from "./CursorAccountReader.ts";
 import { readStoredCursorApiKey } from "./credentialStore.ts";
+import * as CursorAccountReader from "./CursorAccountReader.ts";
 
 const CURSOR_ACCOUNT_READ_ERROR = "Cursor account usage could not be read.";
 

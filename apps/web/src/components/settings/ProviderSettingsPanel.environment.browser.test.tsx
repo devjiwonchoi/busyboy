@@ -171,6 +171,7 @@ vi.mock(import("../ProviderUpdatesAction"), async (original) => ({
 }));
 
 import { appAtomRegistry } from "~/rpc/atomRegistry";
+
 import { EnvironmentProviderSettings } from "./ProviderSettingsPanel";
 
 const environmentId = EnvironmentId.make("remote-device");

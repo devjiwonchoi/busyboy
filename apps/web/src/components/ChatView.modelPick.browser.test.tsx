@@ -1,6 +1,6 @@
-import { createMemoryHistory } from "@tanstack/react-router";
 import { ProviderInstanceId } from "@t3tools/contracts";
 import { DEFAULT_CLIENT_SETTINGS } from "@t3tools/contracts/settings";
+import { createMemoryHistory } from "@tanstack/react-router";
 import type * as Context from "effect/Context";
 import { expect, it, vi } from "vite-plus/test";
 import { page, userEvent } from "vite-plus/test/browser";
@@ -11,6 +11,7 @@ import { AppRoot } from "~/AppRoot";
 import "~/components/ChatView";
 import { __setClientSettingsForTests } from "~/hooks/useSettings";
 import { getRouter } from "~/router";
+
 import {
   ENVIRONMENT_ID,
   dispatchedCommands,

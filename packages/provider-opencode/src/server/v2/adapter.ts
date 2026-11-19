@@ -1,5 +1,3 @@
-import * as Path from "effect/Path";
-import * as Option from "effect/Option";
 import * as NodeURL from "node:url";
 
 import {
@@ -15,8 +13,8 @@ import {
   Skill,
   type OpenCodeEvent,
 } from "@opencode/client/effect";
-import * as Shell from "@opencode/schema/shell";
 import { Mcp } from "@opencode/schema/mcp";
+import * as Shell from "@opencode/schema/shell";
 import {
   PROVIDER_SEND_TURN_MAX_IMAGE_BYTES,
   isOrchestrationV2WorkActive,
@@ -44,66 +42,67 @@ import {
   type RunId,
   type RuntimeRequestId,
 } from "@t3tools/contracts";
-import type * as Cause from "effect/Cause";
-import * as DateTime from "effect/DateTime";
-import * as Deferred from "effect/Deferred";
-import * as Digest from "effect/crypto/Digest";
-import * as Duration from "effect/Duration";
-import * as Effect from "effect/Effect";
-import * as Hex from "effect/encoding/Hex";
-import * as Exit from "effect/Exit";
-import * as P from "effect/Predicate";
-import * as FileSystem from "effect/FileSystem";
-import * as Queue from "effect/Queue";
-import * as Schedule from "effect/Schedule";
-import * as Scope from "effect/Scope";
-import * as Schema from "effect/Schema";
-import * as Semaphore from "effect/Semaphore";
-import * as Stream from "effect/Stream";
-
-import * as ProviderHost from "@t3tools/provider-core/server/ProviderHost";
-import * as OpenCode2Client from "./OpenCode2Client.ts";
-import * as OpenCode2Server from "./OpenCode2Server.ts";
-import * as OpenCodeRuntime from "../OpenCodeRuntime.ts";
-import { readableProviderErrorMessage } from "../providerErrorMessage.ts";
-import * as McpProviderSessions from "@t3tools/provider-core/server/McpProviderSessions";
-import { buildRuntimeInstructions } from "@t3tools/provider-core/server/runtimeInstructions";
-import { t3OrchestrationSystemPrompt } from "@t3tools/provider-core/server/orchestrationInstructions";
-import { SKILL_MENTION_PATTERN } from "@t3tools/shared/composerInlineTokens";
-import { HTML_RENDER_TOOL_NAME } from "@t3tools/shared/htmlRender";
-import { htmlRenderFromToolItem } from "@t3tools/shared/toolOutput";
-import { compareSemverVersions } from "@t3tools/shared/semver";
-import * as KeyedLock from "@t3tools/shared/KeyedLock";
-import { getModelSelectionStringOptionValue, modelSelectionsEqual } from "@t3tools/shared/model";
-import { causeErrorTag } from "@t3tools/shared/observability";
-
 import {
   isProviderNativeImageAttachment,
   providerMessageTextWithAttachmentPaths,
 } from "@t3tools/provider-core/server/attachmentPrompt";
-import * as IdAllocator from "@t3tools/provider-core/server/IdAllocator";
-import {
-  backgroundWorkNotification,
-  type BackgroundWorkReport,
-} from "@t3tools/provider-core/server/notification";
-import * as ProviderContinuationRequests from "@t3tools/provider-core/server/ProviderContinuationRequests";
 import {
   makeProviderFailure,
   makeProviderRetryTurnItem,
 } from "@t3tools/provider-core/server/failure";
+import * as IdAllocator from "@t3tools/provider-core/server/IdAllocator";
+import * as McpProviderSessions from "@t3tools/provider-core/server/McpProviderSessions";
+import {
+  backgroundWorkNotification,
+  type BackgroundWorkReport,
+} from "@t3tools/provider-core/server/notification";
+import { t3OrchestrationSystemPrompt } from "@t3tools/provider-core/server/orchestrationInstructions";
+import * as ProviderAdapter from "@t3tools/provider-core/server/ProviderAdapter";
+import * as ProviderContinuationRequests from "@t3tools/provider-core/server/ProviderContinuationRequests";
+import * as ProviderHost from "@t3tools/provider-core/server/ProviderHost";
+import { buildRuntimeInstructions } from "@t3tools/provider-core/server/runtimeInstructions";
+import { turnScopedSelectionTransition } from "@t3tools/provider-core/server/selectionTransition";
 import {
   makeSubagentChildThread,
   makeSubagentConversationArtifacts,
   subagentThreadTitle,
 } from "@t3tools/provider-core/server/subagentProjection";
-import * as ProviderAdapter from "@t3tools/provider-core/server/ProviderAdapter";
-import { turnScopedSelectionTransition } from "@t3tools/provider-core/server/selectionTransition";
+import { SKILL_MENTION_PATTERN } from "@t3tools/shared/composerInlineTokens";
+import { HTML_RENDER_TOOL_NAME } from "@t3tools/shared/htmlRender";
+import * as KeyedLock from "@t3tools/shared/KeyedLock";
+import { getModelSelectionStringOptionValue, modelSelectionsEqual } from "@t3tools/shared/model";
+import { causeErrorTag } from "@t3tools/shared/observability";
+import { compareSemverVersions } from "@t3tools/shared/semver";
+import { htmlRenderFromToolItem } from "@t3tools/shared/toolOutput";
+import type * as Cause from "effect/Cause";
+import * as Digest from "effect/crypto/Digest";
+import * as DateTime from "effect/DateTime";
+import * as Deferred from "effect/Deferred";
+import * as Duration from "effect/Duration";
+import * as Effect from "effect/Effect";
+import * as Hex from "effect/encoding/Hex";
+import * as Exit from "effect/Exit";
+import * as FileSystem from "effect/FileSystem";
+import * as Option from "effect/Option";
+import * as Path from "effect/Path";
+import * as P from "effect/Predicate";
+import * as Queue from "effect/Queue";
+import * as Schedule from "effect/Schedule";
+import * as Schema from "effect/Schema";
+import * as Scope from "effect/Scope";
+import * as Semaphore from "effect/Semaphore";
+import * as Stream from "effect/Stream";
+
 import { OPENCODE_PROVIDER, openCodePermissionRequestKind } from "../adapter.ts";
+import * as OpenCodeRuntime from "../OpenCodeRuntime.ts";
+import { readableProviderErrorMessage } from "../providerErrorMessage.ts";
 import {
   openCodeCodeModeHtmlRenders,
   openCodeCommandFailed,
   openCodeToolTurnItem,
 } from "../toolItems.ts";
+import * as OpenCode2Client from "./OpenCode2Client.ts";
+import * as OpenCode2Server from "./OpenCode2Server.ts";
 
 const NativeGoal = Schema.NullOr(
   Schema.Struct({

@@ -1,10 +1,22 @@
+import { useAtomValue } from "@effect/atom-react";
 import {
   scopedProjectKey,
   scopeProjectRef,
   scopeThreadRef,
 } from "@t3tools/client-runtime/environment";
+import {
+  deriveLogicalProjectKeyFromSettings,
+  getProjectOrderKey,
+  selectProjectGroupingSettings,
+} from "@t3tools/client-runtime/state/project-grouping";
+import type { EnvironmentProject } from "@t3tools/client-runtime/state/shell";
 import { DEFAULT_SERVER_SETTINGS, type ScopedProjectRef, type ThreadId } from "@t3tools/contracts";
+import { resolveNewThreadEnvMode, resolveProjectSettings } from "@t3tools/shared/projectSettings";
+import { resolveNewThreadModelSelection } from "@t3tools/shared/usageLimits";
 import { type AnyRouter, useRouter } from "@tanstack/react-router";
+import * as Schema from "effect/Schema";
+
+import { orderItemsByPreferredIds } from "../components/Sidebar.logic";
 import {
   composerDraftHasUserContent,
   markPromotedDraftThreadByRef,
@@ -13,14 +25,17 @@ import {
   type DraftThreadState,
   useComposerDraftStore,
 } from "../composerDraftStore";
-import { newDraftId, newThreadId } from "../lib/utils";
-import { orderItemsByPreferredIds } from "../components/Sidebar.logic";
 import {
-  deriveLogicalProjectKeyFromSettings,
-  getProjectOrderKey,
-  selectProjectGroupingSettings,
-} from "@t3tools/client-runtime/state/project-grouping";
-import { resolveNewThreadEnvMode, resolveProjectSettings } from "@t3tools/shared/projectSettings";
+  draftModelSelectionApplies,
+  hasExplicitComposerModelSelection,
+  resolveNewDraftStartFromOrigin,
+  resolveNewThreadModelSelectionOverride,
+  threadHasStarted,
+} from "../lib/chatThreadActions";
+import { readT3ProjectFile } from "../lib/t3ProjectFileDefaults";
+import { newDraftId, newThreadId } from "../lib/utils";
+import { resolveProjectDefaultProviderModelSelection } from "../providerInstances";
+import { appAtomRegistry } from "../rpc/atomRegistry";
 import {
   readProject,
   readProjects,
@@ -29,29 +44,15 @@ import {
   useProjects,
   useQuietThreadShell,
 } from "../state/entities";
-import {
-  draftModelSelectionApplies,
-  hasExplicitComposerModelSelection,
-  resolveNewDraftStartFromOrigin,
-  resolveNewThreadModelSelectionOverride,
-  threadHasStarted,
-} from "../lib/chatThreadActions";
-import type { EnvironmentProject } from "@t3tools/client-runtime/state/shell";
-import { readT3ProjectFile } from "../lib/t3ProjectFileDefaults";
-import { appAtomRegistry } from "../rpc/atomRegistry";
+import { readUnloadedThreadCount } from "../state/olderSettledShelf";
 import { environmentSummaries } from "../state/presentation";
+import { defaultProjectFallbackReadyAtom } from "../state/projects";
 import { environmentServerConfigsAtom } from "../state/server";
 import { resolveThreadRouteTarget } from "../threadRoutes";
 import { legacyProjectCwdPreferenceKey, useUiStateStore } from "../uiStateStore";
-import { getClientSettings } from "./useSettings";
 import { getLocalStorageItem, useLocalStorage } from "./useLocalStorage";
-import * as Schema from "effect/Schema";
-import { useAtomValue } from "@effect/atom-react";
-import { defaultProjectFallbackReadyAtom } from "../state/projects";
+import { getClientSettings } from "./useSettings";
 import { useThreadRouteTarget } from "./useThreadRouteTarget";
-import { readUnloadedThreadCount } from "../state/olderSettledShelf";
-import { resolveProjectDefaultProviderModelSelection } from "../providerInstances";
-import { resolveNewThreadModelSelection } from "@t3tools/shared/usageLimits";
 
 export const LAST_USED_PROJECT_STORAGE_KEY = "t3code:last-used-project:v1";
 export const lastUsedProjectKeySchema = Schema.NullOr(Schema.String);

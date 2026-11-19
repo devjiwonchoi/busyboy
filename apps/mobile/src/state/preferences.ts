@@ -1,8 +1,8 @@
 import * as Effect from "effect/Effect";
 import { AsyncResult, Atom } from "effect/reactivity";
 
-import * as MobilePreferences from "../persistence/mobile-preferences";
 import * as Runtime from "../lib/runtime";
+import * as MobilePreferences from "../persistence/mobile-preferences";
 
 interface OptimisticPreferences {
   readonly values: Partial<MobilePreferences.Preferences>;

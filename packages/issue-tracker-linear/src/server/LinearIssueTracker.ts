@@ -1,10 +1,3 @@
-/**
- * Linear as an issue tracker. A scope is a team key (`ENG`) and an issue key its identifier
- * (`ENG-123`). A workflow state is closed when its type is `completed` or `canceled`, so closing
- * picks the team's first state of that type, as Linear's own "Done" and "Canceled" do.
- */
-import * as Effect from "effect/Effect";
-import * as Schema from "effect/Schema";
 import {
   type IssueActor,
   type IssueCapabilities,
@@ -25,6 +18,13 @@ import {
   type StandaloneIssueTrackerApi,
   type TrackerIssueSummary,
 } from "@t3tools/source-control-core/server/IssueTracker";
+/**
+ * Linear as an issue tracker. A scope is a team key (`ENG`) and an issue key its identifier
+ * (`ENG-123`). A workflow state is closed when its type is `completed` or `canceled`, so closing
+ * picks the team's first state of that type, as Linear's own "Done" and "Canceled" do.
+ */
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
 
 import { LINEAR_HOST, parseLinearIssueUrl } from "../shared/issueUrl.ts";
 import * as LinearApi from "./LinearApi.ts";

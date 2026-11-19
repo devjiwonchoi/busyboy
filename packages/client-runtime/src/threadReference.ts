@@ -5,10 +5,10 @@ import type {
 } from "@t3tools/contracts";
 import { threadContextRecord } from "@t3tools/shared/composerContextReferences";
 import { hostedThreadLink } from "@t3tools/shared/threadLinks";
-
-import { resolveThreadCurrentPullRequestLink } from "./threadPullRequests.ts";
 import { mFallback, msg } from "gt-i18n";
 import type { MFunctionType } from "gt-i18n/types";
+
+import { resolveThreadCurrentPullRequestLink } from "./threadPullRequests.ts";
 
 export interface ThreadReferenceCopyTarget {
   readonly kind: "pull-request" | "thread";

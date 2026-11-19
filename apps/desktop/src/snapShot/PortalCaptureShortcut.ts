@@ -1,6 +1,8 @@
 // @effect-diagnostics nodeBuiltinImport:off -- Stable shortcut IDs and unique portal request tokens.
 // @effect-diagnostics globalTimers:off -- Bounded D-Bus calls and user-consent requests at the native boundary.
 import * as NodeCrypto from "node:crypto";
+
+import type { SnapShotKeyChord } from "@t3tools/contracts";
 import {
   DBusError,
   Message,
@@ -12,7 +14,7 @@ import {
   type MessageLike,
 } from "dbus-next";
 import * as Schema from "effect/Schema";
-import type { SnapShotKeyChord } from "@t3tools/contracts";
+
 import { HYPRLAND_CAPTURE_ACTION, portalShortcutTrigger } from "./linuxCaptureSession.ts";
 export { portalShortcutTrigger } from "./linuxCaptureSession.ts";
 

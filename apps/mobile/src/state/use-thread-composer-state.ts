@@ -1,19 +1,21 @@
-import { useComposerAttachmentActions } from "./use-composer-attachment-actions";
-import { errorDisplayMessage } from "@t3tools/client-runtime/errors";
-import * as Effect from "effect/Effect";
-import * as Dialog from "../components/ui/Dialog";
-import { AuthOrchestrationOperateScope } from "@t3tools/contracts";
-import { readEnvironmentScope } from "./session";
 import { useAtomValue } from "@effect/atom-react";
-import { compactBeforeSendTokens } from "@t3tools/client-runtime/state/context-window";
-import { threadRuntimeIsActive } from "@t3tools/client-runtime/state/shell";
-import type { ThreadCheckpointSummary } from "@t3tools/client-runtime/state/thread-checkpoints";
-import { threadSteersDuringCompaction } from "@t3tools/client-runtime/state/thread-workflows";
+import { errorDisplayMessage } from "@t3tools/client-runtime/errors";
 import { resolvePendingHandoff } from "@t3tools/client-runtime/handoff";
+import { deriveThreadTitleSeed } from "@t3tools/client-runtime/operations";
+import {
+  compactionBlocksSteering,
+  resolveComposerDispatchMode,
+  type ActiveTurnComposerAction,
+} from "@t3tools/client-runtime/state/composer-dispatch";
+import { compactBeforeSendTokens } from "@t3tools/client-runtime/state/context-window";
+import { resolveThreadWorkingStartedAt } from "@t3tools/client-runtime/state/models";
+import { settlePromise, squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
+import { threadRuntimeIsActive } from "@t3tools/client-runtime/state/shell";
 import {
   announcedRun,
   isDetailBehindShell,
 } from "@t3tools/client-runtime/state/thread-activity-announcement";
+import type { ThreadCheckpointSummary } from "@t3tools/client-runtime/state/thread-checkpoints";
 import {
   canResumeThread,
   deriveProviderSubagentStatus,
@@ -25,8 +27,13 @@ import {
   deriveThreadRuntime,
   threadRuntimeHasInterruptibleRun,
 } from "@t3tools/client-runtime/state/thread-execution";
-import { useEffect, useRef, useState } from "react";
-
+import { threadSteersDuringCompaction } from "@t3tools/client-runtime/state/thread-workflows";
+import {
+  parseCodexFeedbackCommand,
+  submitCodexFeedback,
+  type CodexFeedbackSubmission,
+} from "@t3tools/client-runtime/state/threads";
+import { AuthOrchestrationOperateScope } from "@t3tools/contracts";
 import {
   CommandId,
   DEFAULT_PROVIDER_INTERACTION_MODE,
@@ -38,55 +45,74 @@ import {
   type ScopedThreadRef,
   type ThreadId,
 } from "@t3tools/contracts";
-
-import {
-  parseCodexFeedbackCommand,
-  submitCodexFeedback,
-  type CodexFeedbackSubmission,
-} from "@t3tools/client-runtime/state/threads";
-import { resolveThreadWorkingStartedAt } from "@t3tools/client-runtime/state/models";
-import { deriveThreadTitleSeed } from "@t3tools/client-runtime/operations";
 import { upgradeLegacyContextMessage } from "@t3tools/shared/composerContextLegacy";
 import { restoreAttachmentOnlyBootstrapPrompt } from "@t3tools/shared/composerContextReferences";
+import { isClearComposerCommand, parseSideChatCommand } from "@t3tools/shared/composerTrigger";
+import { orchestrationV2WorktreePending } from "@t3tools/shared/orchestrationV2ThreadError";
+import * as Effect from "effect/Effect";
+import { Atom } from "effect/reactivity";
+import { AsyncResult } from "effect/reactivity";
+import { msg, useLocale, useMessages } from "gt-react-native";
+import { useEffect, useRef, useState } from "react";
+
+import * as Dialog from "../components/ui/Dialog";
+import {
+  appendAcceptedThreadMessages,
+  selectPendingAcknowledgedMessages,
+} from "../features/threads/pending-thread-feed";
+import type { SideChatMessage } from "../features/threads/useStartSideChat";
+import { m } from "../i18n/messages";
+import { prepareTurnAttachments } from "../lib/attachmentUpload";
+import { useNowMinuteMs } from "../lib/clock";
+import { makeQueuedMessageMetadata } from "../lib/commandMetadata";
+import { retainComposerAttachmentFileForPreview } from "../lib/composerAttachmentPreviewRetention";
 import {
   composerContextSendBlockReason,
   reidentifyComposerContext,
   serializeComposerMessageForServer,
   uploadedComposerContext,
 } from "../lib/composerContext";
-import { uuidv4 } from "../lib/uuid";
-import { useNowMinuteMs } from "../lib/clock";
-
-import { makeQueuedMessageMetadata } from "../lib/commandMetadata";
-import {
-  describeUnavailableModelSelection,
-  isModelSelectionUnavailable,
-} from "../lib/modelOptions";
-
 import {
   type DraftComposerImageAttachment,
   isFileBackedComposerAttachment,
 } from "../lib/composerImages";
-import { retainComposerAttachmentFileForPreview } from "../lib/composerAttachmentPreviewRetention";
+import { DEFAULT_FOLLOW_UP_BEHAVIOR } from "../lib/followUpBehavior";
+import {
+  describeUnavailableModelSelection,
+  isModelSelectionUnavailable,
+} from "../lib/modelOptions";
 import { scopedThreadKey } from "../lib/scopedEntities";
 import { buildThreadFeed, createThreadFeedCache } from "../lib/threadActivity";
+import { uuidv4 } from "../lib/uuid";
 import {
   acknowledgedThreadMessagesAtom,
   pruneCaughtUpAcknowledgedThreadMessages,
 } from "./acknowledged-thread-messages";
-import {
-  appendAcceptedThreadMessages,
-  selectPendingAcknowledgedMessages,
-} from "../features/threads/pending-thread-feed";
-import { threadAllowsProviderSwitch } from "./thread-provider-switching";
 import { appAtomRegistry } from "./atom-registry";
-import { pendingThreadCreationMessage } from "./pending-thread-creation";
-import type { SideChatMessage } from "../features/threads/useStartSideChat";
 import {
   composerAttachmentUploadBlockReason,
   composerAttachmentUploadsAtom,
   uploadComposerAttachmentShared,
 } from "./composer-attachment-uploads";
+import { pendingThreadCreationMessage } from "./pending-thread-creation";
+import { mobilePreferencesAtom } from "./preferences";
+import {
+  endQueuedRunEdit,
+  getQueuedRunEdit,
+  queuedEditDraftKey,
+  removeQueuedRunEditAttachment,
+  resolveQueuedEditPayload,
+  startQueuedRunEditSave,
+  useQueuedRunEdit,
+} from "./queued-run-edit";
+import { readEnvironmentScope } from "./session";
+import { clearThreadComposerError, setThreadComposerError } from "./thread-composer-error";
+import { enqueueThreadOutboxMessage } from "./thread-outbox";
+import { threadAllowsProviderSwitch } from "./thread-provider-switching";
+import { environmentThreadDetails } from "./threads";
+import { threadEnvironment } from "./threads";
+import { useAtomCommand } from "./use-atom-command";
+import { useComposerAttachmentActions } from "./use-composer-attachment-actions";
 import {
   appendComposerDraftAttachments,
   insertComposerDraftContext,
@@ -103,42 +129,13 @@ import {
   useComposerDraft,
   useComposerDraftSettings,
 } from "./use-composer-drafts";
-import { isClearComposerCommand, parseSideChatCommand } from "@t3tools/shared/composerTrigger";
-import { orchestrationV2WorktreePending } from "@t3tools/shared/orchestrationV2ThreadError";
-import {
-  compactionBlocksSteering,
-  resolveComposerDispatchMode,
-  type ActiveTurnComposerAction,
-} from "@t3tools/client-runtime/state/composer-dispatch";
-import { Atom } from "effect/reactivity";
-import { AsyncResult } from "effect/reactivity";
-import { settlePromise, squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
-import { prepareTurnAttachments } from "../lib/attachmentUpload";
-import { DEFAULT_FOLLOW_UP_BEHAVIOR } from "../lib/followUpBehavior";
-import { mobilePreferencesAtom } from "./preferences";
-import { environmentThreadDetails } from "./threads";
-import {
-  endQueuedRunEdit,
-  getQueuedRunEdit,
-  queuedEditDraftKey,
-  removeQueuedRunEditAttachment,
-  resolveQueuedEditPayload,
-  startQueuedRunEditSave,
-  useQueuedRunEdit,
-} from "./queued-run-edit";
-import { msg, useLocale, useMessages } from "gt-react-native";
-import { m } from "../i18n/messages";
 import { setPendingConnectionError } from "./use-remote-environment-registry";
-import { clearThreadComposerError, setThreadComposerError } from "./thread-composer-error";
 import {
   useSelectedThreadProjection,
   useSelectedThreadVisibleTurnItems,
 } from "./use-thread-detail";
-import { useThreadSelection } from "./use-thread-selection";
-import { enqueueThreadOutboxMessage } from "./thread-outbox";
 import { dispatchingQueuedMessageIdsAtom, useThreadOutboxMessages } from "./use-thread-outbox";
-import { threadEnvironment } from "./threads";
-import { useAtomCommand } from "./use-atom-command";
+import { useThreadSelection } from "./use-thread-selection";
 
 const EMPTY_QUEUE_WORKFLOW_ATOM = Atom.make<null>(null).pipe(
   Atom.withLabel("mobile-thread-queue-workflow:empty"),

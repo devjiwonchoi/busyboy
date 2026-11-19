@@ -5,7 +5,6 @@ import { ExternalLinkIcon } from "lucide-react";
 import { cn } from "~/lib/utils";
 import { formatRelativeTimeLabel } from "~/timestampFormat";
 
-import { Button } from "../ui/button";
 import { PullRequestDetailTitleRow } from "../pullRequest/PullRequestDetailLayout";
 import { GhostBar } from "../pullRequest/PullRequestGhosts";
 import {
@@ -13,6 +12,7 @@ import {
   PullRequestLabelChip,
   PullRequestMetaLine,
 } from "../pullRequest/pullRequestPresentation";
+import { Button } from "../ui/button";
 import { IssueStateGlyph, issueTrackerPresentation } from "./issuePresentation";
 
 /** The issue panel while its detail loads, showing what the list row already knows. */

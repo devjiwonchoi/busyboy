@@ -1,15 +1,15 @@
 import "~/index.css";
-
 import { EnvironmentId } from "@t3tools/contracts";
 import { describe, expect, it, vi } from "vite-plus/test";
 import { userEvent } from "vite-plus/test/browser";
 
 import { InputGroup, InputGroupAddon, InputGroupInput } from "~/components/ui/input-group";
 import type { RightPanelSurface } from "~/rightPanelStore";
+
 import { render, stubGlobal } from "../../test/render";
 import { HistorySwipeNavigation } from "./HistorySwipeNavigation";
-import { RightPanelTabs, type RightPanelTabsProps } from "./RightPanelTabs";
 import { subscribePreviewAction } from "./preview/previewActionBus";
+import { RightPanelTabs, type RightPanelTabsProps } from "./RightPanelTabs";
 
 const navigateHistory = vi.hoisted(() => vi.fn());
 vi.mock("../navigationHistory", () => ({ canNavigateHistory: () => true, navigateHistory }));

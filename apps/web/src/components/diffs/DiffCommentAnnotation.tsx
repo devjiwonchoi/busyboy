@@ -1,14 +1,14 @@
 import type { EnvironmentId, ProjectId } from "@t3tools/contracts";
 import { T, useGT, useMessages } from "gt-react";
-import { reviewCommentRangeText } from "~/lib/composerContextRecords";
 import { MessageCircle, Trash2 } from "lucide-react";
 import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
 
-import { Button } from "~/components/ui/button";
 import {
   PullRequestMarkdownTextarea,
   type PullRequestCompletionScope,
 } from "~/components/pullRequest/PullRequestMarkdownTextarea";
+import { Button } from "~/components/ui/button";
+import { reviewCommentRangeText } from "~/lib/composerContextRecords";
 import {
   SpeechTextField,
   TextFieldSpeechControls,

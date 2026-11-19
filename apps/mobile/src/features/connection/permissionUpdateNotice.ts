@@ -1,9 +1,9 @@
-import * as Dialog from "../../components/ui/Dialog";
 import { sessionHasLegacyPermissions } from "@t3tools/contracts";
 import { Atom } from "effect/reactivity";
 import * as SecureStore from "expo-secure-store";
 import { msg } from "gt-react-native";
 
+import * as Dialog from "../../components/ui/Dialog";
 import { m } from "../../i18n/messages";
 import { whenProtectedDataAvailable } from "../../lib/protectedData";
 import { appAtomRegistry } from "../../state/atom-registry";

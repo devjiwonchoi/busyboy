@@ -1,14 +1,15 @@
+import type {
+  PreviewMiniPlayerPosition,
+  PreviewMiniPlayerSize,
+  PreviewMiniPlayerState,
+} from "~/previewMiniPlayerStore";
+
 import {
   clampPreviewMiniPlayerPosition,
   resolvePreviewMiniPlayerFrame,
   type PreviewMiniPlayerFrame,
   type PreviewMiniPlayerObstacles,
 } from "../preview/previewMiniPlayerLayout";
-import type {
-  PreviewMiniPlayerPosition,
-  PreviewMiniPlayerSize,
-  PreviewMiniPlayerState,
-} from "~/previewMiniPlayerStore";
 
 export interface ChatCanvasPreview {
   readonly key: string;

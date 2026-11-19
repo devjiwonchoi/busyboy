@@ -1,7 +1,7 @@
 import { expect, it } from "vite-plus/test";
 
-import { floatingTabsMetrics } from "./floating-workspace-tabs";
 import { resolveAndroidNavigationStyle } from "../../../lib/androidNavigationStyle";
+import { floatingTabsMetrics } from "./floating-workspace-tabs";
 
 it.each([
   [undefined, "Samsung", false, "one-ui"],

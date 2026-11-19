@@ -1,8 +1,7 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import { sourceControlClients } from "./sourceControlClients.ts";
-
 import { parsePullRequestReference, resolveLinkPullRequestInput } from "./pullRequestLinkInput.ts";
+import { sourceControlClients } from "./sourceControlClients.ts";
 
 const changeRequestWebUrl = (kind: string, host: string, repository: string, number: number) =>
   sourceControlClients.get(kind).changeRequestUrl({ host, repository, number });

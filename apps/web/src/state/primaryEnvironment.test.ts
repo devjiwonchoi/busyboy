@@ -1,4 +1,3 @@
-import { isClientHostEnvironment } from "./clientHostEnvironment";
 import {
   PrimaryConnectionTarget,
   SshConnectionTarget,
@@ -8,6 +7,7 @@ import { EnvironmentId } from "@t3tools/contracts";
 import { Atom, AtomRegistry } from "effect/reactivity";
 import { describe, expect, it } from "vite-plus/test";
 
+import { isClientHostEnvironment } from "./clientHostEnvironment";
 import { createLocalEnvironmentIdAtom } from "./primaryEnvironment";
 
 const PRIMARY = EnvironmentId.make("primary");

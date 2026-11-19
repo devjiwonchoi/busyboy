@@ -1,14 +1,14 @@
-import * as Console from "effect/Console";
 import type { ManagedPolicyDocument } from "@t3tools/contracts";
+import { Argument, Command, Flag, GlobalFlag } from "effect/cli";
+import * as CliError from "effect/cli/CliError";
+import * as Console from "effect/Console";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as References from "effect/References";
-import { Argument, Command, Flag, GlobalFlag } from "effect/cli";
-import * as CliError from "effect/cli/CliError";
-import * as SecureRandom from "effect/crypto/SecureRandom";
 
 import * as ManagedPolicy from "../policy/ManagedPolicy.ts";
 import { macosProfile, windowsAdml, windowsAdmx } from "../policy/policyTemplates.ts";

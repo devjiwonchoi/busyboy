@@ -1,6 +1,5 @@
-import type { EnvironmentThreadShell } from "@t3tools/client-runtime/state/shell";
 import { sourceControlClients } from "@t3tools/client-runtime/source-control-clients";
-import { changeRequestTermKind } from "../../lib/changeRequestTerm";
+import type { EnvironmentThreadShell } from "@t3tools/client-runtime/state/shell";
 import {
   pullRequestListLines,
   resolveThreadPullRequestChains,
@@ -11,16 +10,15 @@ import { useGT, useMessages } from "gt-react-native";
 import { memo, useMemo } from "react";
 import { Pressable, useWindowDimensions, View } from "react-native";
 
+import { RelativeTime } from "../../components/RelativeTime";
 import { SymbolView } from "../../components/ui/AppSymbol";
 import { AppText as Text } from "../../components/ui/AppText";
 import * as Dialog from "../../components/ui/Dialog";
 import { Menu } from "../../components/ui/Menu";
+import { changeRequestTermKind } from "../../lib/changeRequestTerm";
 import { cn } from "../../lib/cn";
-import { RelativeTime } from "../../components/RelativeTime";
 import type { EnvironmentRuntimeState } from "../../state/remote-runtime-types";
-import { useScaledTextRole } from "../settings/appearance/useScaledTextRole";
 import { PullRequestGlyph } from "../pull-requests/pullRequestGlyphs";
-import type { LinkedPullRequestActions } from "./useLinkedPullRequestActions";
 import { pullRequestListReviewStatus } from "../pull-requests/pullRequestList";
 import {
   PullRequestAvatar,
@@ -32,6 +30,8 @@ import {
   pullRequestConflict,
   pullRequestStatus,
 } from "../pull-requests/pullRequestStatus";
+import { useScaledTextRole } from "../settings/appearance/useScaledTextRole";
+import type { LinkedPullRequestActions } from "./useLinkedPullRequestActions";
 
 export function useLinkedPullRequestLines(
   thread: EnvironmentThreadShell | null,

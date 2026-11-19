@@ -1,19 +1,21 @@
 // @effect-diagnostics nodeBuiltinImport:off -- The synchronous shell probe runs real commands with isolated config files.
-import * as NodeServices from "@effect/platform-node/NodeServices";
-import { it as effectIt } from "@effect/vitest";
-import * as HostProcess from "@t3tools/shared/HostProcess";
-import { DesktopHostTelemetryMessage } from "@t3tools/contracts";
-import * as Schema from "effect/Schema";
-import * as Effect from "effect/Effect";
-import * as Fiber from "effect/Fiber";
-import * as FileSystem from "effect/FileSystem";
-import * as Path from "effect/Path";
-import * as Option from "effect/Option";
-import * as TestClock from "effect/testing/TestClock";
+
 import * as NodeChildProcess from "node:child_process";
 import * as NodeFS from "node:fs";
 import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
+
+import * as NodeServices from "@effect/platform-node/NodeServices";
+import { it as effectIt } from "@effect/vitest";
+import { DesktopHostTelemetryMessage } from "@t3tools/contracts";
+import * as HostProcess from "@t3tools/shared/HostProcess";
+import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
+import * as FileSystem from "effect/FileSystem";
+import * as Option from "effect/Option";
+import * as Path from "effect/Path";
+import * as Schema from "effect/Schema";
+import * as TestClock from "effect/testing/TestClock";
 import { describe, expect, it, vi } from "vite-plus/test";
 
 import {

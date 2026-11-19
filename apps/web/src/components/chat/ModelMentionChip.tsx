@@ -1,15 +1,16 @@
-import { useGT } from "gt-react";
 import { useAtomValue } from "@effect/atom-react";
 import type { EnvironmentId, ProviderDriverKind } from "@t3tools/contracts";
 import * as Option from "effect/Option";
 import { Atom } from "effect/reactivity";
+import { useGT } from "gt-react";
 
 import { brandProviderInstanceEntries, deriveProviderInstanceEntries } from "~/providerInstances";
 import { serverEnvironment } from "~/state/server";
 import { contextChipAccentWithHueOf } from "~/themePalette";
+
 import { ContextChipPopover } from "../contextChipParts";
-import { ProviderInstanceIcon, providerLogoColor } from "./ProviderInstanceIcon";
 import { getDisplayModelName } from "./providerIconUtils";
+import { ProviderInstanceIcon, providerLogoColor } from "./ProviderInstanceIcon";
 
 interface ModelMentionPresentation {
   readonly label: string;

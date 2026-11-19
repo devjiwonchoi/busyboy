@@ -3,6 +3,7 @@ import * as NodeCrypto from "node:crypto";
 import * as NodeModule from "node:module";
 import * as NodePath from "node:path";
 import * as NodeVM from "node:vm";
+
 import { PI_T3_MCP_EXTENSION_SOURCE } from "./mcpExtensionSource.ts";
 
 interface RegisteredTool {

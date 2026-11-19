@@ -1,16 +1,17 @@
 // Carries a remote desktop's preview traffic to this machine's loopback ports, one TCP
 // connection per WebSocket. Raw bytes, so pages keep their own origin, HMR sockets and TLS.
+import type * as NodeNet from "node:net";
+
 import * as NodeHttpServerRequest from "@effect/platform-node/NodeHttpServerRequest";
 import * as NodeSocket from "@effect/platform-node/NodeSocket";
 import { AuthTerminalOperateScope } from "@t3tools/contracts";
-import type * as NodeNet from "node:net";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
+import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import type * as Scope from "effect/Scope";
-import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
 import type * as Socket from "effect/socket/Socket";
 
 import { authenticateMediaRequest } from "../auth/http.ts";

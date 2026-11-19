@@ -1,6 +1,8 @@
 import "vite-plus/test/config";
-import { defineConfig } from "vite-plus";
 import * as NodeURL from "node:url";
+
+import { defineConfig } from "vite-plus";
+
 import { remoteCacheUrl } from "./infra/task-cache/src/remoteCache.ts";
 import { cachedTestTasks } from "./scripts/lib/cached-tests.ts";
 
@@ -203,6 +205,8 @@ export default defineConfig({
       "*.icon/**",
     ],
     sortPackageJson: {},
+    // Comments mark sort boundaries, so file-level directives and import notes stay put.
+    sortImports: { partitionByComment: true },
     overrides: [
       {
         files: [".devcontainer/devcontainer.json"],

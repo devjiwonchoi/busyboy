@@ -1,33 +1,36 @@
 #!/usr/bin/env node
 // @effect-diagnostics nodeBuiltinImport:off
-import * as NodeUtil from "node:util";
+
 import * as NodeCrypto from "node:crypto";
-import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import * as NodeUtil from "node:util";
+
 import * as NodePlatformCrypto from "@effect/platform-node/NodeCrypto";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { CodexSettings, ProviderInstanceId } from "@t3tools/contracts";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import * as Duration from "effect/Duration";
-import * as FileSystem from "effect/FileSystem";
-import * as Path from "effect/Path";
-import * as Schema from "effect/Schema";
-import * as CodexTextGeneration from "../../apps/server/src/textGeneration/CodexTextGeneration.ts";
-import { threadTitleEvaluationCases } from "./cases.ts";
 import {
   formatThreadTitleContext,
   type ThreadTitleMessage,
 } from "@t3tools/provider-core/server/threadTitleContext";
-import * as ThreadTitleLinks from "../../apps/server/src/textGeneration/ThreadTitleLinks.ts";
-import * as SourceControlProviderRegistry from "../../apps/server/src/sourceControl/SourceControlProviderRegistry.ts";
-import * as SourceControlBuiltInDrivers from "../../apps/server/src/sourceControl/builtInDrivers.ts";
-import * as ServerSettings from "../../apps/server/src/serverSettings.ts";
-import * as VcsProcess from "../../apps/server/src/vcs/VcsProcess.ts";
-import * as VcsDriverRegistry from "../../apps/server/src/vcs/VcsDriverRegistry.ts";
-import * as VcsProjectConfig from "../../apps/server/src/vcs/VcsProjectConfig.ts";
-import * as GitVcsDriver from "../../apps/server/src/vcs/GitVcsDriver.ts";
-import * as ProcessRunner from "../../apps/server/src/processRunner.ts";
+import * as Duration from "effect/Duration";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import * as Layer from "effect/Layer";
+import * as Path from "effect/Path";
+import * as Schema from "effect/Schema";
+
 import * as ServerConfig from "../../apps/server/src/config.ts";
+import * as ProcessRunner from "../../apps/server/src/processRunner.ts";
+import * as ServerSettings from "../../apps/server/src/serverSettings.ts";
+import * as SourceControlBuiltInDrivers from "../../apps/server/src/sourceControl/builtInDrivers.ts";
+import * as SourceControlProviderRegistry from "../../apps/server/src/sourceControl/SourceControlProviderRegistry.ts";
+import * as CodexTextGeneration from "../../apps/server/src/textGeneration/CodexTextGeneration.ts";
+import * as ThreadTitleLinks from "../../apps/server/src/textGeneration/ThreadTitleLinks.ts";
+import * as GitVcsDriver from "../../apps/server/src/vcs/GitVcsDriver.ts";
+import * as VcsDriverRegistry from "../../apps/server/src/vcs/VcsDriverRegistry.ts";
+import * as VcsProcess from "../../apps/server/src/vcs/VcsProcess.ts";
+import * as VcsProjectConfig from "../../apps/server/src/vcs/VcsProjectConfig.ts";
+import { threadTitleEvaluationCases } from "./cases.ts";
 
 const { values } = NodeUtil.parseArgs({
   options: {

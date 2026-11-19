@@ -13,8 +13,8 @@ import {
 import type { AnyProviderDriver, ProviderInstance } from "@t3tools/provider-core/server/driver";
 import { makeManualOnlyProviderMaintenanceCapabilities } from "@t3tools/provider-core/server/maintenanceResolver";
 import * as ProviderLatestVersions from "@t3tools/provider-core/server/ProviderLatestVersions";
-import * as SecretResolver from "@t3tools/secret-provider-core/server/SecretResolver";
 import { defineSecretProviderDriver } from "@t3tools/secret-provider-core/server/driver";
+import * as SecretResolver from "@t3tools/secret-provider-core/server/SecretResolver";
 import { defineSecretProvider } from "@t3tools/secret-provider-core/shared/definition";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";

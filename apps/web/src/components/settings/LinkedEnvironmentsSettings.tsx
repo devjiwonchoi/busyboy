@@ -1,29 +1,33 @@
 import { useAtomValue } from "@effect/atom-react";
 import { ANOTHER_ADDRESS, linkRequestFailureMessage } from "@t3tools/client-runtime/link-request";
+import { peerLinkHealth } from "@t3tools/client-runtime/state/peerLinks";
+import {
+  isAtomCommandInterrupted,
+  squashAtomCommandFailure,
+} from "@t3tools/client-runtime/state/runtime";
 import {
   AuthAccessWriteScope,
   type AuthMcpClientAccess,
   type EnvironmentId,
   type PeerLinkSummary,
 } from "@t3tools/contracts";
-import {
-  isAtomCommandInterrupted,
-  squashAtomCommandFailure,
-} from "@t3tools/client-runtime/state/runtime";
-import { peerLinkHealth } from "@t3tools/client-runtime/state/peerLinks";
 import * as DateTime from "effect/DateTime";
 import * as Option from "effect/Option";
 import * as Result from "effect/Result";
-import { PlusIcon } from "lucide-react";
 import { T, useGT, useMessages, Var } from "gt-react";
+import { PlusIcon } from "lucide-react";
 import { useId, useRef, useState } from "react";
 
 import { requestConfirmDialog } from "~/confirmDialog";
-import { mintPairingCodeOn } from "~/state/peerPairingCode";
 import { peerLinkEnvironment, useLinkableMachines } from "~/state/peerLinks";
+import { mintPairingCodeOn } from "~/state/peerPairingCode";
 import { useEnvironmentQuery } from "~/state/query";
 import { useEnvironmentScope, usePreparedConnection } from "~/state/session";
 import { useAtomCommand } from "~/state/use-atom-command";
+
+import { useLiveRefresh } from "../../hooks/useLiveRefresh";
+import { useNowMinute } from "../../hooks/useNowMinute";
+import { m as resolveMessage } from "../../i18n/messages";
 import { accessConfig } from "../auth/ConnectAgentSurface";
 import { ConnectionStatusDot } from "../ConnectionStatusDot";
 import { Button } from "../ui/button";
@@ -44,9 +48,6 @@ import { ITEM_ROW_CLASSNAME, ITEM_ROW_INNER_CLASSNAME } from "./itemRows";
 import { LinkAccessPicker } from "./LinkAccessPicker";
 import { LinkAddressWarning, LinkMachineSelect } from "./LinkMachineSelect";
 import { SettingsRow, SettingsSection } from "./settingsLayout";
-import { useLiveRefresh } from "../../hooks/useLiveRefresh";
-import { m as resolveMessage } from "../../i18n/messages";
-import { useNowMinute } from "../../hooks/useNowMinute";
 import { useSearchableSetting } from "./settingsSearch";
 
 // Console log labels for the atom commands.

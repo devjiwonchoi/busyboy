@@ -5,7 +5,6 @@ import {
 import { msg } from "gt-react-native";
 
 import { m, type MessageResolver } from "../../i18n/messages";
-
 import type { FollowUpBehavior } from "../../lib/followUpBehavior";
 
 export interface ComposerSendPresentation {

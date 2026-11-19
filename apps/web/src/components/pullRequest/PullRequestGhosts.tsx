@@ -1,4 +1,9 @@
+import {
+  sourceControlClients,
+  type ChangeRequestTerminology,
+} from "@t3tools/client-runtime/source-control-clients";
 import type { PullRequestListEntry, PullRequestSummary } from "@t3tools/contracts";
+import { msg, T, useGT, useMessages, Var } from "gt-react";
 import {
   ArrowLeftIcon,
   ChevronRightIcon,
@@ -9,19 +14,15 @@ import {
   UserPlusIcon,
   UsersIcon,
 } from "lucide-react";
-import { msg, T, useGT, useMessages, Var } from "gt-react";
 import type { ReactNode } from "react";
-import {
-  sourceControlClients,
-  type ChangeRequestTerminology,
-} from "@t3tools/client-runtime/source-control-clients";
 
-import { readLocalApi } from "~/localApi";
-import { cn } from "~/lib/utils";
 import { RelativeTime } from "~/components/RelativeTime";
+import { cn } from "~/lib/utils";
+import { readLocalApi } from "~/localApi";
 
 import { Button, InlineButton } from "../ui/button";
 import { MiddleTruncate } from "../ui/middle-truncate";
+import { changeRequestTermKind } from "./changeRequestTerm";
 import { PullRequestCopyableCode } from "./PullRequestCopyableCode";
 import {
   PullRequestChecksStatusLine,
@@ -29,6 +30,7 @@ import {
   PullRequestDetailTabBar,
   PullRequestDetailTitleRow,
 } from "./PullRequestDetailLayout";
+import { resolveFilterOptions } from "./pullRequestListOptions";
 import {
   PullRequestActorLabel,
   PullRequestDiffStat,
@@ -36,9 +38,6 @@ import {
   pullRequestChecksStatePresentation,
   resolvePullRequestState,
 } from "./pullRequestPresentation";
-import { resolveFilterOptions } from "./pullRequestListOptions";
-
-import { changeRequestTermKind } from "./changeRequestTerm";
 
 export function GhostBar({ className }: { className?: string | undefined }) {
   return <span aria-hidden className={cn("block h-3 rounded bg-muted-foreground/15", className)} />;

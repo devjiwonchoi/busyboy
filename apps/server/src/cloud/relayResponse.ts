@@ -1,10 +1,10 @@
 import { RelayProtectedError } from "@t3tools/contracts/relay";
 import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
+import { isHttpClientError } from "effect/http/HttpClientError";
+import * as HttpClientResponse from "effect/http/HttpClientResponse";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
-import * as HttpClientResponse from "effect/http/HttpClientResponse";
-import { isHttpClientError } from "effect/http/HttpClientError";
 
 /** Only unavailable is retryable. Descriptions expose relay explanations and trace IDs, never request details. */
 export class RelayRequestError extends Schema.TaggedError<RelayRequestError>()(

@@ -1,16 +1,16 @@
-import { describe, expect, it } from "@effect/vitest";
 import * as NodeServices from "@effect/platform-node/NodeServices";
+import { describe, expect, it } from "@effect/vitest";
+import { PGlite } from "@electric-sql/pglite";
+import { DEFAULT_MANAGED_TUNNEL_LIMIT, type RelayT3ChatPlan } from "@t3tools/contracts/relay";
+import { ne } from "drizzle-orm";
+import { PgDialect } from "drizzle-orm/pg-core";
+import { drizzle } from "drizzle-orm/pglite";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as Semaphore from "effect/Semaphore";
-import { PGlite } from "@electric-sql/pglite";
-import { drizzle } from "drizzle-orm/pglite";
-import { ne } from "drizzle-orm";
-import { PgDialect } from "drizzle-orm/pg-core";
-import { DEFAULT_MANAGED_TUNNEL_LIMIT, type RelayT3ChatPlan } from "@t3tools/contracts/relay";
 
 import * as RelayDb from "../db.ts";
 import { relayManagedEndpointAllocations } from "../persistence/schema.ts";

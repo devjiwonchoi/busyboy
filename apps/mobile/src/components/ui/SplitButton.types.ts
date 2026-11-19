@@ -1,4 +1,5 @@
 import type { MenuAction } from "@react-native-menu/menu";
+
 import type { AppSymbolName } from "./AppSymbol";
 
 export interface SplitButtonProps {

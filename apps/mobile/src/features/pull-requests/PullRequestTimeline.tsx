@@ -1,32 +1,33 @@
-import {
-  parsePullRequestAnchor,
-  pullRequestAnchorMatchesUrl,
-} from "@t3tools/shared/pullRequestAnchor";
-import { PullRequestEntryRow } from "./PullRequestEntryRow";
-import Svg, { Defs, LinearGradient, Rect, Stop } from "react-native-svg";
-import { useAppearancePreferences } from "../settings/appearance/AppearancePreferencesProvider";
-import IconGitCommit from "@tabler/icons-react-native/IconGitCommit";
+import { StackActions, type NavigationProp } from "@react-navigation/native";
 import {
   pullRequestConversationThreads,
   type PullRequestActivity,
   type PullRequestComment,
 } from "@t3tools/contracts";
-import { StackActions, type NavigationProp } from "@react-navigation/native";
+import {
+  parsePullRequestAnchor,
+  pullRequestAnchorMatchesUrl,
+} from "@t3tools/shared/pullRequestAnchor";
+import IconGitCommit from "@tabler/icons-react-native/IconGitCommit";
 import { msg, T, useGT, useMessages, Var } from "gt-react-native";
 import { useMemo, useState, type ComponentProps, type ReactNode } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
-import { parseMarkdownDocument } from "../../lib/markdownDocument";
-import { AppText as Text } from "../../components/ui/AppText";
+import Svg, { Defs, LinearGradient, Rect, Stop } from "react-native-svg";
+
 import { SymbolView, type AppSymbolName } from "../../components/ui/AppSymbol";
+import { AppText as Text } from "../../components/ui/AppText";
+import type { MessageResolver } from "../../i18n/messages";
+import { parseMarkdownDocument } from "../../lib/markdownDocument";
 import { byTimestamp, relativeTime } from "../../lib/time";
-import { PullRequestAvatar } from "./PullRequestPresentation";
-import { PullRequestMarkdown } from "./PullRequestMarkdown";
-import { PullRequestCommentFooter } from "./PullRequestReactions";
+import { useAppearancePreferences } from "../settings/appearance/AppearancePreferencesProvider";
 import { pullRequestDescriptionContent } from "./pullRequestDescriptionContent";
 import { discussionCommentCountLabel } from "./pullRequestDiffComments";
+import { PullRequestEntryRow } from "./PullRequestEntryRow";
+import { PullRequestMarkdown } from "./PullRequestMarkdown";
+import { PullRequestAvatar } from "./PullRequestPresentation";
+import { PullRequestCommentFooter } from "./PullRequestReactions";
 import { normalizedReviewState } from "./pullRequestStatus";
 import type { PullRequestParams } from "./usePullRequestDiff";
-import type { MessageResolver } from "../../i18n/messages";
 
 function TimelineEvent(props: {
   icon: AppSymbolName | "commit";

@@ -1,5 +1,3 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
-
 import { scopeProjectRef } from "@t3tools/client-runtime/environment";
 import {
   type BrowserProfileId,
@@ -9,6 +7,7 @@ import {
   ProjectId,
   ThreadId,
 } from "@t3tools/contracts";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 const { readPreparedConnection, entities, settingsHydration } = vi.hoisted(() => ({
   readPreparedConnection: vi.fn<() => { httpBaseUrl: string } | null>(() => null),
@@ -48,7 +47,6 @@ vi.mock("~/state/environments", () => ({
   usePrimaryEnvironmentId: () => null,
 }));
 
-import { DraftId, useComposerDraftStore } from "./composerDraftStore";
 import {
   BROWSER_HISTORY_MAX_PROJECTS,
   type BrowserHistoryEntry,
@@ -61,6 +59,7 @@ import {
   upsertHistoryEntry,
   useBrowserHistoryStore,
 } from "./browserHistoryStore";
+import { DraftId, useComposerDraftStore } from "./composerDraftStore";
 import { applyPreviewServerSnapshot, resetPreviewStateForTests } from "./previewStateStore";
 
 function entry(overrides: Partial<BrowserHistoryEntry> = {}): BrowserHistoryEntry {

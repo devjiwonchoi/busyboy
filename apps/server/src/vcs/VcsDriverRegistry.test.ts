@@ -1,16 +1,16 @@
-import { assert, it, describe } from "@effect/vitest";
 import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import * as NodeServices from "@effect/platform-node/NodeServices";
+import { assert, it, describe } from "@effect/vitest";
+import { VcsProcessExitError } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import { ChildProcessSpawner } from "effect/process";
-import { VcsProcessExitError } from "@t3tools/contracts";
 
+import * as VcsDriverRegistry from "./VcsDriverRegistry.ts";
 import * as VcsProcess from "./VcsProcess.ts";
 import * as VcsProjectConfig from "./VcsProjectConfig.ts";
-import * as VcsDriverRegistry from "./VcsDriverRegistry.ts";
 
 const processOutput = (stdout: string): VcsProcess.VcsProcessOutput => ({
   exitCode: ChildProcessSpawner.ExitCode(0),

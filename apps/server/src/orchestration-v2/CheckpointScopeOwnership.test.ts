@@ -1,8 +1,5 @@
 import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import { assert, it } from "@effect/vitest";
-import * as DateTime from "effect/DateTime";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 import {
   CheckpointId,
   EventId,
@@ -14,13 +11,17 @@ import {
   RunId,
   ThreadId,
 } from "@t3tools/contracts";
+import * as IdAllocator from "@t3tools/provider-core/server/IdAllocator";
+import * as DateTime from "effect/DateTime";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+
 import * as CheckpointDiffQuery from "../checkpointing/CheckpointDiffQuery.ts";
 import * as CheckpointStore from "../checkpointing/CheckpointStore.ts";
-import * as IdAllocator from "@t3tools/provider-core/server/IdAllocator";
+import * as SqlitePersistence from "../persistence/Sqlite.ts";
 import { checkpointRefForScopeOrdinal } from "./CheckpointService.ts";
 import * as ProjectionStore from "./ProjectionStore.ts";
 import * as ThreadManagement from "./ThreadManagementService.ts";
-import * as SqlitePersistence from "../persistence/Sqlite.ts";
 const layerProjection = Layer.mergeAll(
   ProjectionStore.layer.pipe(Layer.provideMerge(SqlitePersistence.layerMemory)),
   SqlitePersistence.layerMemory,

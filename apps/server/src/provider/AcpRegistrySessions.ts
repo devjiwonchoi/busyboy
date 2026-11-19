@@ -10,8 +10,8 @@ import {
   type ProviderInstanceId,
 } from "@t3tools/contracts";
 import * as AcpRegistryRuntimeCoordinator from "@t3tools/provider-acp-registry/server/AcpRegistryRuntimeCoordinator";
-import * as IdAllocator from "@t3tools/provider-core/server/IdAllocator";
 import type { ProviderInstance } from "@t3tools/provider-core/server/driver";
+import * as IdAllocator from "@t3tools/provider-core/server/IdAllocator";
 import * as Context from "effect/Context";
 import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";

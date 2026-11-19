@@ -1,9 +1,10 @@
-import { describe, expect, it, vi } from "vite-plus/test";
 import { EnvironmentId, ThreadId } from "@t3tools/contracts";
+import { describe, expect, it, vi } from "vite-plus/test";
+
 import type { FilePreviewItem } from "../components/ui/FilePreviewModal.types";
-import type { DraftComposerAttachment } from "./composerImages";
-import { composerImageGallery } from "./composerImageGallery";
 import { messageImageGallery } from "../features/threads/messageImageGallery";
+import { composerImageGallery } from "./composerImageGallery";
+import type { DraftComposerAttachment } from "./composerImages";
 import { filePreviewGallery, filePreviewKey } from "./filePreviewGallery";
 
 vi.mock("./uuid", () => ({}));

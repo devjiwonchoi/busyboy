@@ -1,6 +1,9 @@
-import type * as DateTime from "effect/DateTime";
-import { msg } from "gt-react";
 import { useAtomValue } from "@effect/atom-react";
+import {
+  arrayElementsEqual,
+  parseThreadKey,
+  threadKey,
+} from "@t3tools/client-runtime/state/entities";
 import type {
   EnvironmentProject,
   EnvironmentThread,
@@ -9,16 +12,12 @@ import type {
   ThreadStructure,
   ThreadStructureVisibleTurnItem,
 } from "@t3tools/client-runtime/state/shell";
+import type { ThreadCheckpointSummary } from "@t3tools/client-runtime/state/thread-checkpoints";
 import {
   EMPTY_THREAD_HISTORY_META,
   type EnvironmentThreadStatus,
   type ThreadHistoryMeta,
 } from "@t3tools/client-runtime/state/threads";
-import {
-  arrayElementsEqual,
-  parseThreadKey,
-  threadKey,
-} from "@t3tools/client-runtime/state/entities";
 import type { ScopedProjectRef, ScopedThreadRef } from "@t3tools/contracts";
 import type {
   EnvironmentId,
@@ -29,11 +28,14 @@ import type {
   ThreadId,
   TurnItemId,
 } from "@t3tools/contracts";
-import type { ThreadCheckpointSummary } from "@t3tools/client-runtime/state/thread-checkpoints";
+import type * as DateTime from "effect/DateTime";
 import { Atom } from "effect/reactivity";
+import { msg } from "gt-react";
+
+import { m } from "../i18n/messages";
 import { appAtomRegistry } from "../rpc/atomRegistry";
-import { environmentProjects } from "./projects";
 import { environmentPresentations } from "./presentation";
+import { environmentProjects } from "./projects";
 import { environmentServerConfigsAtom } from "./server";
 import {
   allEnvironmentProjectSnapshotsReadyAtom,
@@ -41,7 +43,6 @@ import {
 } from "./shell";
 import { environmentThreadDetails, environmentThreadShells } from "./threads";
 import { waitForAtomValue } from "./waitForAtomValue";
-import { m } from "../i18n/messages";
 
 const EMPTY_THREAD_REFS: ReadonlyArray<ScopedThreadRef> = Object.freeze([]);
 const EMPTY_VISIBLE_TURN_ITEMS: ReadonlyArray<OrchestrationV2ProjectedTurnItem> = Object.freeze([]);

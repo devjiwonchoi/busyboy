@@ -1,3 +1,4 @@
+import { describe, expect, it } from "@effect/vitest";
 import {
   CheckpointId,
   CheckpointRef,
@@ -19,7 +20,6 @@ import {
   type OrchestrationV2ThreadProjection,
   type ProjectMutation,
 } from "@t3tools/contracts";
-import { describe, expect, it } from "@effect/vitest";
 import * as Cause from "effect/Cause";
 import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Deferred from "effect/Deferred";
@@ -28,9 +28,9 @@ import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import { RpcClientError } from "effect/rpc";
 import * as SubscriptionRef from "effect/SubscriptionRef";
 import * as TestClock from "effect/testing/TestClock";
-import { RpcClientError } from "effect/rpc";
 
 import {
   AVAILABLE_CONNECTION_STATE,
@@ -39,8 +39,8 @@ import {
   type SupervisorConnectionState,
 } from "../connection/model.ts";
 import * as EnvironmentSupervisor from "../connection/supervisor.ts";
-import * as RpcSession from "../rpc/session.ts";
 import type { WsRpcProtocolClient } from "../rpc/protocol.ts";
+import * as RpcSession from "../rpc/session.ts";
 import { v2Now, v2Projection, v2ThreadId } from "../state/orchestrationV2TestFixtures.ts";
 import {
   archiveThread,

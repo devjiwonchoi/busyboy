@@ -2,17 +2,11 @@
 
 import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
 import * as NodeServices from "@effect/platform-node/NodeServices";
+import { Argument, Command, Flag } from "effect/cli";
 import * as Config from "effect/Config";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
-import * as Layer from "effect/Layer";
-import * as Logger from "effect/Logger";
-import * as Option from "effect/Option";
-import * as Redacted from "effect/Redacted";
-import * as Schedule from "effect/Schedule";
-import * as Schema from "effect/Schema";
-import { Argument, Command, Flag } from "effect/cli";
 import {
   FetchHttpClient,
   HttpClient,
@@ -20,6 +14,12 @@ import {
   HttpClientRequest,
   HttpClientResponse,
 } from "effect/http";
+import * as Layer from "effect/Layer";
+import * as Logger from "effect/Logger";
+import * as Option from "effect/Option";
+import * as Redacted from "effect/Redacted";
+import * as Schedule from "effect/Schedule";
+import * as Schema from "effect/Schema";
 
 export type DiscordReleaseTarget = "prerelease" | "latest";
 

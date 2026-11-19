@@ -1,19 +1,18 @@
+import { useAtomValue } from "@effect/atom-react";
 import {
   DESKTOP_PREVIEW_RECORDING_CAPTURE_TRIGGER,
   PreviewCaptureFailure,
 } from "@t3tools/contracts";
 import type { DesktopPreviewRecordingArtifact, ScopedThreadRef } from "@t3tools/contracts";
-import { useAtomValue } from "@effect/atom-react";
-import * as Schema from "effect/Schema";
 import { Atom } from "effect/reactivity";
+import * as Schema from "effect/Schema";
 
 import { previewBridge } from "~/components/preview/previewBridge";
 import { ensureClientSettingsHydrated, getClientSettings } from "~/hooks/useSettings";
 import { appAtomRegistry } from "~/rpc/atomRegistry";
 
-import { createRecordingCompositor } from "./recordingCompositor";
-
 import { acquireBrowserSurfaceActivity } from "./browserSurfaceStore";
+import { createRecordingCompositor } from "./recordingCompositor";
 
 const isPreviewCaptureFailure = Schema.is(PreviewCaptureFailure);
 

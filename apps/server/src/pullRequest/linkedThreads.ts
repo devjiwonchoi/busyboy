@@ -1,10 +1,4 @@
 import {
-  normalizeThreadPullRequestKey,
-  threadPullRequestKeyOf,
-  threadPullRequestKeysEqual,
-  visibleThreadPullRequests,
-} from "../sourceControl/threadPullRequests.ts";
-import {
   PullRequestLinkedThreadsResult,
   PullRequestOperationError,
   threadIssueKeyOf,
@@ -13,11 +7,18 @@ import {
   type ThreadId,
   type ThreadPullRequestKey,
 } from "@t3tools/contracts";
+import * as NodeSqliteClient from "@t3tools/shared/nodeSqliteClient";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
-import * as NodeSqliteClient from "@t3tools/shared/nodeSqliteClient";
 import * as Schema from "effect/Schema";
 import * as SqlClient from "effect/sql/SqlClient";
+
+import {
+  normalizeThreadPullRequestKey,
+  threadPullRequestKeyOf,
+  threadPullRequestKeysEqual,
+  visibleThreadPullRequests,
+} from "../sourceControl/threadPullRequests.ts";
 
 const decodeLinkedThreads = Schema.decodeUnknownEffect(PullRequestLinkedThreadsResult);
 

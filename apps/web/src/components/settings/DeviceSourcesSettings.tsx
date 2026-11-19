@@ -1,11 +1,5 @@
-import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
 import { useAtomValue } from "@effect/atom-react";
-import { Fragment, useState, type ReactNode } from "react";
-import { msg, T, useGT, useMessages } from "gt-react";
-import { m as resolveNow, type MessageResolver } from "../../i18n/messages";
-import * as Cause from "effect/Cause";
-import * as Option from "effect/Option";
-import { AsyncResult } from "effect/reactivity";
+import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
 import {
   AuthSettingsWriteScope,
   type DevicePlatform,
@@ -17,21 +11,27 @@ import {
   type SimlockDeviceHostConfig,
   type SshDeviceHostConfig,
 } from "@t3tools/contracts";
+import * as Cause from "effect/Cause";
+import * as Option from "effect/Option";
+import { AsyncResult } from "effect/reactivity";
+import { msg, T, useGT, useMessages } from "gt-react";
 import { ChevronDownIcon, MoreVertical, PlusIcon } from "lucide-react";
+import { Fragment, useState, type ReactNode } from "react";
 
+import { m as resolveNow, type MessageResolver } from "../../i18n/messages";
 import { cn, randomUUID } from "../../lib/utils";
 import { deviceEnvironment } from "../../state/device";
 import { environmentAtomList, environmentIdsKey } from "../../state/environmentAtomList";
 import { serverEnvironment } from "../../state/server";
 import { readEnvironmentScope } from "../../state/session";
 import { useAtomCommand } from "../../state/use-atom-command";
+import { incompleteListings } from "../device/DeviceSetup";
 import { AndroidIcon, AppleIcon } from "../Icons";
 import { Button, InlineButton } from "../ui/button";
 import { Menu, MenuItem, MenuPopup, MenuTrigger } from "../ui/menu";
 import { Popover, PopoverPopup, PopoverTrigger } from "../ui/popover";
 import { Spinner } from "../ui/spinner";
 import { toastManager } from "../ui/toast";
-import { incompleteListings } from "../device/DeviceSetup";
 import { DeviceHostEditor } from "./DeviceHostEditor";
 import { updateDeviceHosts, groupDeviceHosts } from "./deviceHostsSettings.logic";
 import { EasDeviceHostEditor } from "./EasDeviceHostEditor";
@@ -40,9 +40,9 @@ import {
   newEasDeviceHost,
   updateEasDeviceHosts,
 } from "./easDeviceHostsSettings.logic";
-import { useSettingsScope } from "./SettingsScopeContext";
 import { SettingsSection } from "./settingsLayout";
 import { settingsScopeEnvironmentLabel } from "./settingsScopeAxis";
+import { useSettingsScope } from "./SettingsScopeContext";
 import { SimlockDeviceHostEditor } from "./SimlockDeviceHostEditor";
 import {
   newSimlockDeviceHost,

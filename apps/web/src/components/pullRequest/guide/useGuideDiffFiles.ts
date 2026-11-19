@@ -1,8 +1,8 @@
-import { useMessages } from "gt-react";
+import { RegistryContext } from "@effect/atom-react";
 import type { FileDiffMetadata } from "@pierre/diffs";
 import type { EnvironmentId, PullRequestRef } from "@t3tools/contracts";
-import { RegistryContext } from "@effect/atom-react";
 import { AsyncResult } from "effect/reactivity";
+import { useMessages } from "gt-react";
 import { useContext, useState } from "react";
 
 import { getRenderablePatch, resolveFileDiffPath } from "~/lib/diffRendering";

@@ -1,4 +1,3 @@
-import { afterEach, describe, expect, it } from "vite-plus/test";
 import {
   AuthOrchestrationReadScope,
   AuthOrchestrationOperateScope,
@@ -7,13 +6,15 @@ import {
   type AuthEnvironmentScope,
 } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 import { HttpClient, HttpClientResponse, HttpRouter } from "effect/http";
+import * as Layer from "effect/Layer";
+import { afterEach, describe, expect, it } from "vite-plus/test";
+
 import * as EnvironmentAuth from "../auth/EnvironmentAuth.ts";
 import * as SessionStore from "../auth/SessionStore.ts";
 import type * as DeviceHost from "./DeviceHost.ts";
-import * as DeviceService from "./DeviceService.ts";
 import * as DeviceHubProxy from "./DeviceHubProxy.ts";
+import * as DeviceService from "./DeviceService.ts";
 
 const disposers: Array<() => Promise<void>> = [];
 afterEach(async () => {

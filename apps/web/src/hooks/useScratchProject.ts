@@ -1,6 +1,6 @@
-import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
 import { RegistryContext } from "@effect/atom-react";
 import { scopeProjectRef } from "@t3tools/client-runtime/environment";
+import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
 import { availableScratchWorkspaceRoot } from "@t3tools/client-runtime/operations/projects";
 import {
   isAtomCommandInterrupted,
@@ -21,6 +21,7 @@ import {
   usePrimaryEnvironmentId,
 } from "~/state/environments";
 import { projectEnvironment } from "~/state/projects";
+
 import { type NewThreadHandler, useNewThreadHandler } from "./useHandleNewThread";
 
 function reportScratchFailure(title: string, error: unknown) {

@@ -25,8 +25,8 @@ import {
   isLearned,
   pendingRouteOrder,
 } from "@t3tools/client-runtime/connection";
-import { GripVerticalIcon, PlusIcon, XIcon } from "lucide-react";
 import { T, useGT, useMessages } from "gt-react";
+import { GripVerticalIcon, PlusIcon, XIcon } from "lucide-react";
 import { useState } from "react";
 
 import { requestConfirmDialog } from "~/confirmDialog";
@@ -35,6 +35,7 @@ import { cn } from "~/lib/utils";
 import type { EnvironmentPresentation } from "~/state/environments";
 import { usePreparedConnection } from "~/state/session";
 import { useAtomCommand } from "~/state/use-atom-command";
+
 import { Button } from "../ui/button";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 

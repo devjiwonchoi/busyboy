@@ -1,10 +1,10 @@
 import type { OtlpSignal } from "@t3tools/contracts";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import * as Metric from "effect/Metric";
 import { HttpClient } from "effect/http";
 import type { HttpBody } from "effect/http";
+import * as Layer from "effect/Layer";
+import * as Metric from "effect/Metric";
 import { OtlpSerialization } from "effect/observability";
 
 import { otlpExportAttemptFailuresTotal } from "./Metrics.ts";

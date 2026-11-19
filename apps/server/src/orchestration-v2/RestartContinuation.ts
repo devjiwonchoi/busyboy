@@ -1,5 +1,3 @@
-import { runRanAfter } from "@t3tools/shared/orchestrationV2ThreadError";
-import { resolveProjectSettings } from "@t3tools/shared/projectSettings";
 import {
   CommandId,
   isOrchestrationV2WorkActive,
@@ -9,18 +7,19 @@ import {
   type RunId,
   type ThreadId,
 } from "@t3tools/contracts";
+import { runRanAfter } from "@t3tools/shared/orchestrationV2ThreadError";
+import { resolveProjectSettings } from "@t3tools/shared/projectSettings";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
+
+import * as ServerSettings from "../serverSettings.ts";
+import { isNativeMaintenanceCommand } from "./CommandPolicy.ts";
 import type {
   ProjectionRecordField,
   ProjectionRecordFilter,
   ProjectionRecords,
   ProjectionRuntimeRecoveryState,
 } from "./ProjectionStore.ts";
-
-import * as ServerSettings from "../serverSettings.ts";
-import { isNativeMaintenanceCommand } from "./CommandPolicy.ts";
-import * as ThreadManagementService from "./ThreadManagementService.ts";
 import {
   awaitingProviderThreadId,
   cancelledRosterTaskWork,
@@ -34,6 +33,7 @@ import {
   restartCancelledBackgroundWorkNote,
   restartContinuationNote,
 } from "./RestartBackgroundNote.ts";
+import * as ThreadManagementService from "./ThreadManagementService.ts";
 
 const CONTINUE_PROMPT =
   "Continue where you left off. Your last turn was cut short, so a command or other action it started may have finished or may still be running. Before you repeat one that changes state, confirm it did not take effect and is not still running; if you cannot tell, say so instead of repeating it.";

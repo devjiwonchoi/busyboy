@@ -1,7 +1,9 @@
-import { measureRestingComposerControls } from "./restingComposerControlsMeasurement";
-import { observeResize } from "~/lib/observeResize";
-import { resolveRestingComposerControlsLayout } from "../composerFooterLayout";
 import { useLayoutEffect, useRef, useState } from "react";
+
+import { observeResize } from "~/lib/observeResize";
+
+import { resolveRestingComposerControlsLayout } from "../composerFooterLayout";
+import { measureRestingComposerControls } from "./restingComposerControlsMeasurement";
 
 export function useRestingComposerControlsLayout(
   host: HTMLDivElement | null,

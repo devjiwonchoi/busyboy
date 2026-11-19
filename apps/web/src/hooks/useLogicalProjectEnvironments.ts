@@ -1,4 +1,8 @@
 import { availableScratchWorkspaceRoot } from "@t3tools/client-runtime/operations/projects";
+import {
+  deriveLogicalProjectKeyFromSettings,
+  selectProjectGroupingSettings,
+} from "@t3tools/client-runtime/state/project-grouping";
 import { isScratchProject } from "@t3tools/client-runtime/state/projects";
 import type { EnvironmentProject } from "@t3tools/client-runtime/state/shell";
 import {
@@ -8,10 +12,6 @@ import {
 } from "@t3tools/contracts";
 
 import type { EnvironmentOption } from "../components/BranchToolbar.logic";
-import {
-  deriveLogicalProjectKeyFromSettings,
-  selectProjectGroupingSettings,
-} from "@t3tools/client-runtime/state/project-grouping";
 import { useProjects } from "../state/entities";
 import { useEnvironments, usePrimaryEnvironmentId } from "../state/environments";
 import { useClientSettings } from "./useSettings";

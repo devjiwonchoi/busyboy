@@ -1,10 +1,10 @@
-import { beforeEach, vi } from "vite-plus/test";
 import { describe, expect, it } from "@effect/vitest";
+import { ManagedRelay } from "@t3tools/client-runtime/relay";
+import type { EnvironmentId } from "@t3tools/contracts";
+import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Option from "effect/Option";
-import * as Effect from "effect/Effect";
-import type { EnvironmentId } from "@t3tools/contracts";
-import { ManagedRelay } from "@t3tools/client-runtime/relay";
+import { beforeEach, vi } from "vite-plus/test";
 
 import type { SavedRemoteConnection } from "../../lib/connection";
 import { CloudEnvironmentLinkError } from "../cloud/linkEnvironment";

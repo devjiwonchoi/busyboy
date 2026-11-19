@@ -1,3 +1,5 @@
+import * as NodeServices from "@effect/platform-node/NodeServices";
+import { assert, it } from "@effect/vitest";
 import {
   SourceControlProviderKind,
   type VcsError,
@@ -5,14 +7,8 @@ import {
   VcsProcessSpawnError,
   VcsProcessTimeoutError,
 } from "@t3tools/contracts";
-import { assert, it } from "@effect/vitest";
-import * as NodeServices from "@effect/platform-node/NodeServices";
-import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
-import * as Layer from "effect/Layer";
-import * as Option from "effect/Option";
-import * as Path from "effect/Path";
-import * as PlatformError from "effect/PlatformError";
+import * as HostProcess from "@t3tools/shared/HostProcess";
+import { SpawnExecutableResolution } from "@t3tools/shared/shell";
 import {
   providerAuth,
   type SourceControlProviderDiscoverySpec,
@@ -22,9 +18,13 @@ import {
   fakeDiscovery,
   fakeSourceControlProvider,
 } from "@t3tools/source-control-testing/fakeSourceControlDriver";
-import * as HostProcess from "@t3tools/shared/HostProcess";
-import { SpawnExecutableResolution } from "@t3tools/shared/shell";
 import * as TestSourceControlHost from "@t3tools/source-control-testing/TestSourceControlHost";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as Path from "effect/Path";
+import * as PlatformError from "effect/PlatformError";
 
 import * as ServerConfig from "../config.ts";
 import * as ServerSettings from "../serverSettings.ts";

@@ -1,37 +1,37 @@
 import { useAtomValue } from "@effect/atom-react";
+import {
+  voiceInputBlocksSubmission,
+  type VoiceTranscriber,
+} from "@t3tools/client-runtime/voice-input";
+import { Atom, AsyncResult } from "effect/reactivity";
 import { AudioModule, RecordingPresets, type RecordingStatus } from "expo-audio";
 import { File } from "expo-file-system";
 import { activateKeepAwakeAsync, deactivateKeepAwake } from "expo-keep-awake";
 import { useSyncExternalStore } from "react";
 import { Platform } from "react-native";
-import { Atom, AsyncResult } from "effect/reactivity";
 import { makeMutable } from "react-native-reanimated";
 
+import {
+  acquireAudioSession,
+  activateAudioSession,
+  releaseAudioSession,
+} from "../../lib/audioSession";
 import {
   type MicrophoneEntry,
   microphoneOrder,
   preferredMicrophoneInput,
   rememberMicrophones,
 } from "../../lib/microphonePriority";
-import { getLocalVoiceTranscriber } from "../../native/voiceTranscription";
+import { makePermissionStatusAtom } from "../../lib/permissionStatusAtom";
 import { createVoiceRecorder } from "../../native/voiceRecorder";
+import { getLocalVoiceTranscriber } from "../../native/voiceTranscription";
 import { mobilePreferencesAtom, updateMobilePreferencesAtom } from "../../state/preferences";
 import { getNativeShowcaseScene } from "../showcase/nativeShowcaseScene";
-import {
-  voiceInputBlocksSubmission,
-  type VoiceTranscriber,
-} from "@t3tools/client-runtime/voice-input";
 import { createLazyVoiceRecorder } from "./lazyVoiceRecorder";
+import { voiceRouteAtom } from "./voiceDestination";
 import { VOICE_WAVEFORM_SAMPLE_COUNT } from "./voiceInputMetering";
 import { VoiceInputSession } from "./voiceInputSession";
 import { createVoiceRecordingPermission } from "./voiceRecordingPermission";
-import { voiceRouteAtom } from "./voiceDestination";
-import { makePermissionStatusAtom } from "../../lib/permissionStatusAtom";
-import {
-  acquireAudioSession,
-  activateAudioSession,
-  releaseAudioSession,
-} from "../../lib/audioSession";
 
 // The native constructor expects platform-flattened options, as built by useAudioRecorder.
 const { ios: IOS_RECORDING_OPTIONS, android: ANDROID_RECORDING_OPTIONS } =

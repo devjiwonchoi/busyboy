@@ -1,5 +1,6 @@
 import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import * as NodeServices from "@effect/platform-node/NodeServices";
+import { expect, it } from "@effect/vitest";
 import {
   AuthMcpClientAccess,
   AuthStandardClientScopes,
@@ -9,32 +10,31 @@ import {
   MCP_PEER_LINK_SOFTWARE_ID,
   mcpClientScopes,
 } from "@t3tools/contracts";
-import { expect, it } from "@effect/vitest";
 import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
 import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
+import * as HttpApi from "effect/http-api/HttpApi";
+import * as HttpApiBuilder from "effect/http-api/HttpApiBuilder";
 import * as Etag from "effect/http/Etag";
 import * as HttpPlatform from "effect/http/HttpPlatform";
 import * as HttpRouter from "effect/http/HttpRouter";
 import * as HttpServerRequest from "effect/http/HttpServerRequest";
-import * as HttpApi from "effect/http-api/HttpApi";
-import * as HttpApiBuilder from "effect/http-api/HttpApiBuilder";
+import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
 
 import * as CloudLink from "../cloud/CloudLink.ts";
 import * as ServerConfig from "../config.ts";
-import { makeDpopKey } from "./dpop.testkit.ts";
 import * as ServerEnvironment from "../environment/ServerEnvironment.ts";
-import * as ServerSettings from "../serverSettings.ts";
 import * as Sqlite from "../persistence/Sqlite.ts";
+import * as ManagedPolicy from "../policy/ManagedPolicy.ts";
+import * as ServerSettings from "../serverSettings.ts";
+import { makeDpopKey } from "./dpop.testkit.ts";
 import * as EnvironmentAuth from "./EnvironmentAuth.ts";
+import * as AuthHttp from "./http.ts";
 import * as McpOAuth from "./McpOAuth.ts";
 import * as McpOAuthHttp from "./mcpOAuthHttp.ts";
 import * as ServerSecretStore from "./ServerSecretStore.ts";
-import * as AuthHttp from "./http.ts";
-import * as ManagedPolicy from "../policy/ManagedPolicy.ts";
 
 class AuthTestApi extends HttpApi.make("environment")
   .add(EnvironmentHttpApi.groups.auth)

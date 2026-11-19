@@ -1,4 +1,5 @@
 import * as Schema from "effect/Schema";
+
 import { PositiveInt, TrimmedNonEmptyString } from "./baseSchemas.ts";
 
 export const EditorLaunchStyle = Schema.Literals(["direct-path", "goto", "line-column"]);

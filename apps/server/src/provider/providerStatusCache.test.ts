@@ -1,4 +1,5 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
+import { assert, it } from "@effect/vitest";
 import {
   defaultInstanceIdForDriver,
   ProviderDriverKind,
@@ -6,7 +7,6 @@ import {
   type ServerProvider,
 } from "@t3tools/contracts";
 import { createModelCapabilities } from "@t3tools/shared/model";
-import { assert, it } from "@effect/vitest";
 
 import { hydrateCachedProvider, isCachedProviderCorrelated } from "./providerStatusCache.ts";
 

@@ -22,14 +22,24 @@ import {
   type SecretReference,
   withIdleCompaction,
 } from "@t3tools/contracts";
+import { writeFileStringAtomically } from "@t3tools/shared/atomicWrite";
+import * as NodeSqliteClient from "@t3tools/shared/nodeSqliteClient";
+import { fromJsonStringPretty, fromLenientJson } from "@t3tools/shared/schemaJson";
+import {
+  applyServerSettingsPatch,
+  deriveLegacyProjectOverrides,
+  fallbackTextGenerationModelSelection,
+  isModelSelectionProviderEnabled,
+} from "@t3tools/shared/serverSettings";
+import { type DeepPartial, deepMerge } from "@t3tools/shared/Struct";
+import { resolveSymlinkTarget } from "@t3tools/shared/symlink";
 import * as Cache from "effect/Cache";
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
 import * as Deferred from "effect/Deferred";
 import * as Duration from "effect/Duration";
-import * as Equal from "effect/Equal";
 import * as Effect from "effect/Effect";
-import * as NodeSqliteClient from "@t3tools/shared/nodeSqliteClient";
+import * as Equal from "effect/Equal";
 import * as Exit from "effect/Exit";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
@@ -39,29 +49,15 @@ import * as PubSub from "effect/PubSub";
 import * as Ref from "effect/Ref";
 import * as Schema from "effect/Schema";
 import * as SchemaTransformation from "effect/SchemaTransformation";
-import * as Semaphore from "effect/Semaphore";
 import * as Scope from "effect/Scope";
-import * as Stream from "effect/Stream";
+import * as Semaphore from "effect/Semaphore";
 import * as SqlClient from "effect/sql/SqlClient";
-import { writeFileStringAtomically } from "@t3tools/shared/atomicWrite";
-import { resolveSymlinkTarget } from "@t3tools/shared/symlink";
-import * as ServerConfig from "./config.ts";
-import { type DeepPartial, deepMerge } from "@t3tools/shared/Struct";
-import { fromJsonStringPretty, fromLenientJson } from "@t3tools/shared/schemaJson";
-import {
-  applyServerSettingsPatch,
-  deriveLegacyProjectOverrides,
-  fallbackTextGenerationModelSelection,
-  isModelSelectionProviderEnabled,
-} from "@t3tools/shared/serverSettings";
+import * as Stream from "effect/Stream";
+
 import * as ServerSecretStore from "./auth/ServerSecretStore.ts";
+import * as ServerConfig from "./config.ts";
 import * as ManagedPolicy from "./policy/ManagedPolicy.ts";
 import { secretProviderDefinitions } from "./secrets/secretProviderDefinitions.ts";
-import {
-  readSecretFieldValues,
-  sourceControlHostSecretName,
-} from "./sourceControl/sourceControlHostSecrets.ts";
-
 import {
   mapSettingsSecrets,
   mapSettingsSecretValues,
@@ -70,6 +66,10 @@ import {
   SECRET_REDACTED,
   type SettingsSecret,
 } from "./settingsSecrets.ts";
+import {
+  readSecretFieldValues,
+  sourceControlHostSecretName,
+} from "./sourceControl/sourceControlHostSecrets.ts";
 
 export {
   resolveReviewGuideModelSelection,

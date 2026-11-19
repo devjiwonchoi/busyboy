@@ -1,5 +1,5 @@
-import * as Scope from "effect/Scope";
 import * as Effect from "effect/Effect";
+import * as Scope from "effect/Scope";
 import * as TxQueue from "effect/TxQueue";
 import * as TxRef from "effect/TxRef";
 

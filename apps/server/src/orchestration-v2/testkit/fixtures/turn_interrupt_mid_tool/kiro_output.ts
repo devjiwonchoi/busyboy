@@ -2,6 +2,7 @@ import { assert } from "@effect/vitest";
 import type { ProviderReplayTranscript } from "@t3tools/contracts";
 
 import type { OrchestratorV2ScenarioResult } from "../../OrchestratorScenario.ts";
+import { kiroFailedAfterCancel } from "../kiro_subagent_interrupt/output.ts";
 import {
   assertBaseProjection,
   assertSemanticProjectionIntegrity,
@@ -10,7 +11,6 @@ import {
   projectionFor,
   TURN_INTERRUPT_MID_TOOL_PROMPT,
 } from "../shared.ts";
-import { kiroFailedAfterCancel } from "../kiro_subagent_interrupt/output.ts";
 
 /** Tool call ids Kiro reported `in_progress` before T3's `session/cancel`. */
 function kiroRunningBeforeCancel(transcript: ProviderReplayTranscript): Set<string> {

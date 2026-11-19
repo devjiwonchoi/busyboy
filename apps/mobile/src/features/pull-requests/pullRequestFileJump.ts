@@ -1,5 +1,5 @@
-import type { PullRequestDiffParams } from "./usePullRequestDiff";
 import { pullRequestReviewKey } from "./pullRequestReviewDrafts";
+import type { PullRequestDiffParams } from "./usePullRequestDiff";
 
 // The changed-files sheet hands its pick to the diff screen beneath it. Picking the file the
 // screen already shows still jumps back to it, which a route param that did not change could not

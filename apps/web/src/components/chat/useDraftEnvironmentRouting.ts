@@ -1,10 +1,17 @@
-import { msg, useGT } from "gt-react";
+import {
+  scopedThreadKey,
+  scopeProjectRef,
+  scopeThreadRef,
+} from "@t3tools/client-runtime/environment";
 import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
-import { m } from "~/i18n/messages";
-import { useLoadBalancedEnvironment } from "../../hooks/useLoadBalancedEnvironment";
-import { useLogicalProjectEnvironments } from "../../hooks/useLogicalProjectEnvironments";
-import { useScratchProject } from "../../hooks/useScratchProject";
-import { useStableCallback } from "../../hooks/useStableCallback";
+import {
+  deriveLogicalProjectKeyFromSettings,
+  selectProjectGroupingSettings,
+} from "@t3tools/client-runtime/state/project-grouping";
+import {
+  isAtomCommandInterrupted,
+  squashAtomCommandFailure,
+} from "@t3tools/client-runtime/state/runtime";
 import {
   type EnvironmentId,
   type ProviderDriverKind,
@@ -12,34 +19,29 @@ import {
   resolveProjectProviderInstanceEnabled,
   type ThreadContextRecord,
 } from "@t3tools/contracts";
-import {
-  scopedThreadKey,
-  scopeProjectRef,
-  scopeThreadRef,
-} from "@t3tools/client-runtime/environment";
-import {
-  isAtomCommandInterrupted,
-  squashAtomCommandFailure,
-} from "@t3tools/client-runtime/state/runtime";
 import { isTriagePrompt, replaceTriagePlaybookLink } from "@t3tools/shared/triagePrompt";
+import { msg, useGT } from "gt-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
-import { stackedThreadToast, toastManager } from "../ui/toast";
-import {
-  deriveLogicalProjectKeyFromSettings,
-  selectProjectGroupingSettings,
-} from "@t3tools/client-runtime/state/project-grouping";
+
+import { m } from "~/i18n/messages";
+
 import { useComposerDraftStore, DraftId } from "../../composerDraftStore";
-import { type EnvironmentPresentation, useEnvironmentProviders } from "../../state/environments";
+import type { DraftSessionState } from "../../composerDraftStore";
 import { currentClientMetadata } from "../../connection/platform";
+import { useLoadBalancedEnvironment } from "../../hooks/useLoadBalancedEnvironment";
+import { useLogicalProjectEnvironments } from "../../hooks/useLogicalProjectEnvironments";
+import { useScratchProject } from "../../hooks/useScratchProject";
+import { useStableCallback } from "../../hooks/useStableCallback";
+import { seedDraftModelSelection } from "../../lib/seedDraftModelSelection";
+import { appAtomRegistry } from "../../rpc/atomRegistry";
 import { useProjects } from "../../state/entities";
+import { type EnvironmentPresentation, useEnvironmentProviders } from "../../state/environments";
 import { serverEnvironment } from "../../state/server";
 import { useAtomCommand } from "../../state/use-atom-command";
-import type { DraftSessionState } from "../../composerDraftStore";
-import { loadBalancingSendWarning } from "./composerSend.logic";
-import { appAtomRegistry } from "../../rpc/atomRegistry";
-import { seedDraftModelSelection } from "../../lib/seedDraftModelSelection";
+import { stackedThreadToast, toastManager } from "../ui/toast";
 import { draftFanoutSelectionsAtom } from "./chatViewSend";
+import { loadBalancingSendWarning } from "./composerSend.logic";
 
 interface DraftEnvironmentRoutingInput {
   readonly draftId: DraftId | null;

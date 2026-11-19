@@ -8,9 +8,12 @@ import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as FiberHandle from "effect/FiberHandle";
+import * as FileSystem from "effect/FileSystem";
+import { HttpClient } from "effect/http";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
+import { ChildProcessSpawner } from "effect/process";
 import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
@@ -18,24 +21,20 @@ import * as SubscriptionRef from "effect/SubscriptionRef";
 import * as SynchronizedRef from "effect/SynchronizedRef";
 import { msg } from "gt-i18n";
 
-import * as FileSystem from "effect/FileSystem";
-import { HttpClient } from "effect/http";
-import { ChildProcessSpawner } from "effect/process";
-
-import * as DesktopBackendConfiguration from "./DesktopBackendConfiguration.ts";
-import * as DesktopBackendManager from "./DesktopBackendManager.ts";
-import * as DesktopHomeOwner from "./DesktopHomeOwner.ts";
 import * as DesktopEnvironment from "../app/DesktopEnvironment.ts";
 import * as DesktopObservability from "../app/DesktopObservability.ts";
 import * as DesktopState from "../app/DesktopState.ts";
+import * as ElectronApp from "../electron/ElectronApp.ts";
+import * as ElectronDialog from "../electron/ElectronDialog.ts";
+import { m } from "../i18n/messages.ts";
+import * as DesktopBrowserHost from "../preview/DesktopBrowserHost.ts";
 import * as DesktopAppSettings from "../settings/DesktopAppSettings.ts";
 import * as DesktopTelemetryPublisher from "../telemetry/DesktopTelemetryPublisher.ts";
-import * as DesktopBrowserHost from "../preview/DesktopBrowserHost.ts";
 import * as DesktopWindow from "../window/DesktopWindow.ts";
 import * as DesktopWslEnvironment from "../wsl/DesktopWslEnvironment.ts";
-import * as ElectronDialog from "../electron/ElectronDialog.ts";
-import * as ElectronApp from "../electron/ElectronApp.ts";
-import { m } from "../i18n/messages.ts";
+import * as DesktopBackendConfiguration from "./DesktopBackendConfiguration.ts";
+import * as DesktopBackendManager from "./DesktopBackendManager.ts";
+import * as DesktopHomeOwner from "./DesktopHomeOwner.ts";
 
 const { logWarning: logBackendPoolWarning } =
   DesktopObservability.makeComponentLogger("desktop-backend-pool");

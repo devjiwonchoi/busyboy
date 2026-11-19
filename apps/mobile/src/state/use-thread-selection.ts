@@ -1,14 +1,5 @@
 import { useAtomValue } from "@effect/atom-react";
 import { useRoute, type RouteProp } from "@react-navigation/native";
-import { useState } from "react";
-import {
-  EnvironmentId,
-  ThreadId,
-  type OrchestrationV2ThreadProjection,
-  type OrchestrationV2ThreadShell,
-  type ScopedProjectRef,
-  type ScopedThreadRef,
-} from "@t3tools/contracts";
 import {
   presentThreadShell,
   type EnvironmentThreadShell,
@@ -17,11 +8,19 @@ import {
   deriveLatestThreadRun,
   deriveThreadRuntime,
 } from "@t3tools/client-runtime/state/thread-execution";
+import {
+  EnvironmentId,
+  ThreadId,
+  type OrchestrationV2ThreadProjection,
+  type OrchestrationV2ThreadShell,
+  type ScopedProjectRef,
+  type ScopedThreadRef,
+} from "@t3tools/contracts";
 import * as Option from "effect/Option";
+import { useState } from "react";
 
 import { scopedThreadKey } from "../lib/scopedEntities";
 import { useProject, useQuietThreadShell } from "./entities";
-import { useEnvironmentThread } from "./threads";
 import {
   resolvePendingThreadCreation,
   pendingThreadCreationOutcomesAtom,
@@ -29,6 +28,7 @@ import {
   selectThreadCreationDetail,
   type PendingThreadCreation,
 } from "./pending-thread-creation";
+import { useEnvironmentThread } from "./threads";
 import {
   useRemoteEnvironmentRuntime,
   useSavedRemoteConnection,

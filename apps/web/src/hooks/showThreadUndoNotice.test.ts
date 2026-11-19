@@ -1,3 +1,4 @@
+import * as ThreadUndo from "@t3tools/client-runtime/state/thread-undo";
 import { Cause } from "effect";
 import { AsyncResult } from "effect/reactivity";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
@@ -10,7 +11,6 @@ import {
   threadUndoClaimsShortcut,
   useThreadUndoNotice,
 } from "./showThreadUndoNotice";
-import * as ThreadUndo from "@t3tools/client-runtime/state/thread-undo";
 
 vi.mock("../lib/announce", () => ({ announce: vi.fn(), cancelAnnouncement: vi.fn() }));
 

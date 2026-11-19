@@ -1,10 +1,10 @@
-import JSZip from "jszip";
-import { openRtf, openNotebook, openDocument, openEpub } from "./extendedDocumentPreview";
 import type { ScopedThreadRef } from "@t3tools/contracts";
 import { ProjectReadFileError } from "@t3tools/contracts";
 import * as Schema from "effect/Schema";
+import JSZip from "jszip";
 import { describe, expect, it, vi } from "vite-plus/test";
 
+import { openRtf, openNotebook, openDocument, openEpub } from "./extendedDocumentPreview";
 import { promptFileCommentEntries, remapFileCommentAnnotations } from "./fileCommentAnnotations";
 import {
   filePreviewReadErrorMessage,

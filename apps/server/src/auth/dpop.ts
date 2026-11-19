@@ -1,15 +1,16 @@
+import type { DpopFailureReason } from "@t3tools/contracts";
 import {
   type DpopVerificationFailureCode as DpopVerificationFailureCodeType,
   verifyDpopProof,
 } from "@t3tools/shared/dpop";
-import type { DpopFailureReason } from "@t3tools/contracts";
 import * as Digest from "effect/crypto/Digest";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Base64Url from "effect/encoding/Base64Url";
-import * as Option from "effect/Option";
 import * as HttpServerRequest from "effect/http/HttpServerRequest";
+import * as Option from "effect/Option";
 
+import { requestUrl } from "../requestUrl.ts";
 import {
   ServerAuthDpopReplayKeyCalculationError,
   ServerAuthDpopReplayStateRecordError,
@@ -17,7 +18,6 @@ import {
   type ServerAuthInternalError,
 } from "./EnvironmentAuth.ts";
 import * as ServerSecretStore from "./ServerSecretStore.ts";
-import { requestUrl } from "../requestUrl.ts";
 
 export const DPOP_REPLAY_MARKER_PREFIX = "dpop-proof-";
 

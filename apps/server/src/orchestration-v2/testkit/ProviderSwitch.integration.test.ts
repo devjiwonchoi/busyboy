@@ -1,5 +1,3 @@
-import { vi } from "vite-plus/test";
-import { historyResponseItems } from "@t3tools/provider-core/server/handoffBudget";
 import { assert, describe, it } from "@effect/vitest";
 import {
   CommandId,
@@ -24,6 +22,11 @@ import {
   TurnItemId,
   ProviderDriverKind,
 } from "@t3tools/contracts";
+import { AcpProviderCapabilitiesV2 } from "@t3tools/provider-acp/server/adapter";
+import { makeProviderFailure } from "@t3tools/provider-core/server/failure";
+import { historyResponseItems } from "@t3tools/provider-core/server/handoffBudget";
+import * as ProviderAdapter from "@t3tools/provider-core/server/ProviderAdapter";
+import { checkpointWorkspace } from "@t3tools/provider-testing/replayWorkspace";
 import { derivePendingBackgroundWork } from "@t3tools/shared/orchestrationV2PendingBackgroundWork";
 import * as DateTime from "effect/DateTime";
 import * as Deferred from "effect/Deferred";
@@ -32,12 +35,12 @@ import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
 import * as PubSub from "effect/PubSub";
 import * as Ref from "effect/Ref";
-import * as Stream from "effect/Stream";
 import * as Schema from "effect/Schema";
 import * as SqlClient from "effect/sql/SqlClient";
+import * as Stream from "effect/Stream";
+import { vi } from "vite-plus/test";
 
 import * as SqlitePersistence from "../../persistence/Sqlite.ts";
-import { CommandPolicyCapabilityUnsupportedError } from "../CommandPolicy.ts";
 import {
   ClaudeAgentSdkQueryRunnerError,
   ClaudeAppendSystemPromptFileError,
@@ -48,26 +51,23 @@ import {
   CodexProviderCapabilitiesV2,
   canReuseCodexContextUsage,
 } from "../Adapters/CodexAdapterV2.ts";
-import { AcpProviderCapabilitiesV2 } from "@t3tools/provider-acp/server/adapter";
+import { CommandPolicyCapabilityUnsupportedError } from "../CommandPolicy.ts";
+import * as EffectOutbox from "../EffectOutbox.ts";
+import * as EffectWorker from "../EffectWorker.ts";
 import * as EventSink from "../EventSink.ts";
 import * as EventStore from "../EventStore.ts";
 import * as LegacyV1ThreadImporter from "../legacy/LegacyV1ThreadImporter.ts";
 import * as Orchestrator from "../Orchestrator.ts";
-import * as EffectWorker from "../EffectWorker.ts";
-import * as EffectOutbox from "../EffectOutbox.ts";
-import * as ProjectionReplay from "./ProjectionReplay.ts";
 import * as ProjectionStore from "../ProjectionStore.ts";
 import * as ProviderAdapterRegistry from "../ProviderAdapterRegistry.ts";
 import * as ProviderSessionManager from "../ProviderSessionManager.ts";
-import { makeProviderFailure } from "@t3tools/provider-core/server/failure";
 import {
   CLAUDE_MODEL_SELECTION,
   CODEX_MODEL_SELECTION,
   GROK_MODEL_SELECTION,
 } from "./fixtures/shared.ts";
+import * as ProjectionReplay from "./ProjectionReplay.ts";
 import * as ProviderReplayHarness from "./ProviderReplayHarness.ts";
-import { checkpointWorkspace } from "@t3tools/provider-testing/replayWorkspace";
-import * as ProviderAdapter from "@t3tools/provider-core/server/ProviderAdapter";
 
 const encodeJson = Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown));
 

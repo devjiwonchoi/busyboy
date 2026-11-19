@@ -1,13 +1,15 @@
-import { Button } from "../../components/ui/Button";
-import { QuestionAttachments } from "./QuestionAttachments";
-import type { EnvironmentId, RuntimeRequestId, ThreadId } from "@t3tools/contracts";
+import { useNavigation } from "@react-navigation/native";
+import {
+  isPendingUserInputOptionSelected,
+  type PendingUserInputDraftAnswer,
+} from "@t3tools/client-runtime/state/pending-user-input";
 import type { ThreadUserInputQuestion } from "@t3tools/client-runtime/state/thread-requests";
+import type { EnvironmentId, RuntimeRequestId, ThreadId } from "@t3tools/contracts";
 import {
   markdownProseDirection,
   textDirection,
   type TextDirection,
 } from "@t3tools/shared/textDirection";
-import { useNavigation } from "@react-navigation/native";
 import { Plural, T, useGT, Var } from "gt-react-native";
 import { useRef } from "react";
 import { Platform, Pressable, ScrollView, View, type LayoutChangeEvent } from "react-native";
@@ -20,23 +22,21 @@ import Animated, {
 
 import { SymbolView } from "../../components/ui/AppSymbol";
 import { AppText as Text } from "../../components/ui/AppText";
+import { Button } from "../../components/ui/Button";
 import { ControlPill } from "../../components/ui/ControlPill";
 import { cn } from "../../lib/cn";
 import { resolveMarkdownLinkPresentation } from "../../lib/markdownLinks";
+import type { PendingUserInput } from "../../lib/threadActivity";
 import { SelectableMarkdownText } from "../../native/SelectableMarkdownText";
 import { useOpenPullRequest } from "../../native/useOpenPullRequest";
+import { useLiveThreadLinkLabels } from "../../state/entities";
 import { useMarkdownPreviewStyles } from "../files/FileMarkdownPreview";
 import {
   fileRoutePathSegments,
   resolveFileLinkPath,
   resolveWorkspaceRelativeFilePath,
 } from "../files/filePath";
-import { useLiveThreadLinkLabels } from "../../state/entities";
-import {
-  isPendingUserInputOptionSelected,
-  type PendingUserInputDraftAnswer,
-} from "@t3tools/client-runtime/state/pending-user-input";
-import type { PendingUserInput } from "../../lib/threadActivity";
+import { QuestionAttachments } from "./QuestionAttachments";
 
 export interface PendingUserInputCardProps {
   readonly environmentId: EnvironmentId;

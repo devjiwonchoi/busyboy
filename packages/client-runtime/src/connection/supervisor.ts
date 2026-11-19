@@ -1,5 +1,3 @@
-import { msg } from "gt-i18n";
-import { translatableDetail } from "../errors/translatable.ts";
 import { withRelayClientTracing } from "@t3tools/shared/relayTracing";
 import * as Cause from "effect/Cause";
 import * as Clock from "effect/Clock";
@@ -16,7 +14,12 @@ import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 import * as SubscriptionRef from "effect/SubscriptionRef";
 import * as Tracer from "effect/Tracer";
+import { msg } from "gt-i18n";
 
+import { NETWORK_BLOCKING_HINT } from "../errors/network.ts";
+import { safeErrorLogAttributes } from "../errors/safeLog.ts";
+import { translatableDetail } from "../errors/translatable.ts";
+import * as RpcSession from "../rpc/session.ts";
 import type { ConnectionCatalogEntry, ConnectionRoute } from "./catalog.ts";
 import * as Connectivity from "./connectivity.ts";
 import * as ConnectionDriver from "./driver.ts";
@@ -29,10 +32,6 @@ import {
   type PreparedConnection,
   type SupervisorConnectionState,
 } from "./model.ts";
-import * as RpcSession from "../rpc/session.ts";
-import { safeErrorLogAttributes } from "../errors/safeLog.ts";
-import { NETWORK_BLOCKING_HINT } from "../errors/network.ts";
-import * as ConnectionWakeups from "./wakeups.ts";
 import {
   connectionRouteId,
   connectionRouteKind,
@@ -42,6 +41,7 @@ import {
   insertRoute,
   type ReportedEndpoint,
 } from "./routes.ts";
+import * as ConnectionWakeups from "./wakeups.ts";
 
 const RETRY_BASE_DELAY_MS = 1_000;
 const RETRY_MAX_DELAY_MS = 300_000;

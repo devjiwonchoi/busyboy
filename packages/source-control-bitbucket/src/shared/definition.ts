@@ -4,8 +4,7 @@ import {
   SourceControlProviderKind,
   TrimmedString,
 } from "@t3tools/contracts";
-import * as Effect from "effect/Effect";
-import * as Schema from "effect/Schema";
+import { parseUrl } from "@t3tools/shared/url";
 import {
   buildCommitUrl,
   changeRequestUrlBelow,
@@ -17,7 +16,9 @@ import {
   repositoryUrlFromPagePath,
   projectChangeRequestHost,
 } from "@t3tools/source-control-core/shared/definition";
-import { parseUrl } from "@t3tools/shared/url";
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
+
 import { icon } from "./icon.ts";
 
 const safeShellArgument = /^[A-Za-z0-9._/@+=,-]+$/;

@@ -1,5 +1,3 @@
-import { msg } from "gt-i18n";
-import { translatableMessage } from "../errors/translatable.ts";
 import {
   ORCHESTRATION_V2_WS_METHODS,
   type EnvironmentId,
@@ -10,11 +8,13 @@ import {
 } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
-import * as SubscriptionRef from "effect/SubscriptionRef";
 import { AsyncResult, Atom, type AtomRegistry } from "effect/reactivity";
+import * as SubscriptionRef from "effect/SubscriptionRef";
+import { msg } from "gt-i18n";
 
-import * as EnvironmentSupervisor from "../connection/supervisor.ts";
 import type * as EnvironmentRegistry from "../connection/registry.ts";
+import * as EnvironmentSupervisor from "../connection/supervisor.ts";
+import { translatableMessage } from "../errors/translatable.ts";
 import { EnvironmentRpcUnavailableError, request } from "../rpc/client.ts";
 import { arrayElementsEqual } from "./entities.ts";
 import { createEnvironmentQueryAtomFamily, selectEnvironmentQueryData } from "./runtime.ts";

@@ -8,14 +8,15 @@ import {
   type TextGeneratorModel,
 } from "@t3tools/contracts";
 import { pickModelSelection } from "@t3tools/shared/model";
-import { AsyncResult } from "effect/reactivity";
 import * as Option from "effect/Option";
+import { AsyncResult } from "effect/reactivity";
 import * as Schema from "effect/Schema";
+import { msg, T, useGT, useMessages, Var } from "gt-react";
 import { CheckIcon, MoreVertical, PlusIcon, ServerIcon } from "lucide-react";
 import { useState } from "react";
-import { msg, T, useGT, useMessages, Var } from "gt-react";
 
 import { useEnvironmentSettings, useUpdateEnvironmentSettings } from "../../hooks/useSettings";
+import { getTextGenerationModelOptionsByInstance } from "../../modelSelection";
 import {
   checkTextGeneratorConfig,
   rereadTextGeneratorModels,
@@ -29,7 +30,6 @@ import {
   textGeneratorBrand,
   textGeneratorDisplayName,
 } from "../../textGenerators";
-import { getTextGenerationModelOptionsByInstance } from "../../modelSelection";
 import { ProviderInstanceIcon } from "../chat/ProviderInstanceIcon";
 import { ProviderModelPicker } from "../chat/ProviderModelPicker";
 import {
@@ -42,8 +42,6 @@ import {
   AlertDialogTitle,
 } from "../ui/alert-dialog";
 import { Button } from "../ui/button";
-import { RefreshIcon } from "../ui/refresh-icon";
-import { toastManager } from "../ui/toast";
 import {
   Dialog,
   DialogDescription,
@@ -54,14 +52,16 @@ import {
   DialogTitle,
 } from "../ui/dialog";
 import { Input } from "../ui/input";
-import { Menu, MenuItem, MenuPopup, MenuTrigger } from "../ui/menu";
 import { Label } from "../ui/label";
+import { Menu, MenuItem, MenuPopup, MenuTrigger } from "../ui/menu";
+import { RefreshIcon } from "../ui/refresh-icon";
 import { Spinner } from "../ui/spinner";
 import { Switch } from "../ui/switch";
+import { toastManager } from "../ui/toast";
 import { WizardFooter, WizardHeader, WizardPanel, WizardPopup, WizardSteps } from "../ui/wizard";
 import { SecretSourceInput, useSecretSources } from "./SecretSourceInput";
-import { useSearchableSetting } from "./settingsSearch";
 import { SETTINGS_PICKER_TRIGGER_CLASSNAME, SettingsRow, SettingsSection } from "./settingsLayout";
+import { useSearchableSetting } from "./settingsSearch";
 
 const decodeTextGenerator = Schema.decodeUnknownOption(TextGeneratorConfig);
 

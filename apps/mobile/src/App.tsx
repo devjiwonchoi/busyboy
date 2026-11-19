@@ -1,15 +1,4 @@
-import { installPermissionUpdateNotice } from "./features/connection/permissionUpdateNotice";
-import { installComposerAttachmentUploads } from "./state/composer-attachment-uploads";
-import { installThreadOutboxDelivery } from "./state/threadOutboxDelivery";
-import * as Linking from "expo-linking";
-import * as SplashScreen from "expo-splash-screen";
-import { requireNativeModule } from "expo";
-import { useLocale } from "gt-react-native";
-import { useEffect, useRef, useState } from "react";
-import { Platform, StatusBar } from "react-native";
-import { GestureHandlerRootView } from "react-native-gesture-handler";
-import { KeyboardProvider } from "react-native-keyboard-controller";
-import { SafeAreaProvider } from "react-native-safe-area-context";
+import { RegistryContext, useAtomValue } from "@effect/atom-react";
 import {
   CommonActions,
   createPathConfigForStaticNavigation,
@@ -19,51 +8,46 @@ import {
   type NavigationAction,
   type NavigationState,
 } from "@react-navigation/native";
-import { pipe } from "effect/Function";
 import { DEFAULT_HOSTED_APP_URL } from "@t3tools/shared/connectAuth";
+import { pipe } from "effect/Function";
+import { requireNativeModule } from "expo";
+import * as Linking from "expo-linking";
+import * as SplashScreen from "expo-splash-screen";
+import { useLocale } from "gt-react-native";
+import { useEffect, useRef, useState } from "react";
+import { Platform, StatusBar } from "react-native";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
+import { KeyboardProvider } from "react-native-keyboard-controller";
+import { SafeAreaProvider } from "react-native-safe-area-context";
 
-import { RegistryContext, useAtomValue } from "@effect/atom-react";
-import { ProjectChipIconRasterizer } from "./native/ProjectChipIconImages";
-import { ThreadArrangementHost } from "./features/threads/ThreadArrangementSheet";
 import * as Dialog from "./components/ui/Dialog";
-import { CloudAuthProvider } from "./features/cloud/CloudAuthProvider";
-import { prepareNativeShowcaseCapture } from "./features/showcase/nativeShowcaseScene";
-import { installShowcaseCapture } from "./features/showcase/ShowcaseCaptureCoordinator";
-import {
-  presentPendingIncomingShare,
-  pruneIncomingShareImports,
-  startIncomingShareInbox,
-} from "./features/sharing/IncomingShareProvider";
+import { OverlayPortalHost } from "./components/ui/OverlayPortal";
 import {
   installAgentNotificationNavigation,
   setAgentNotificationPathname,
 } from "./features/agent-awareness/notificationNavigation";
-import {
-  installAppShortcuts,
-  republishAppShortcuts,
-  recordAppShortcutNavigationState,
-} from "./features/shortcuts/appShortcutsRuntime";
-import {
-  AppearancePreferencesProvider,
-  installAppearanceRuntime,
-  useAppearancePreferences,
-} from "./features/settings/appearance/AppearancePreferencesProvider";
-import { RootStack, rootPathnameFromState, workspaceLocationFromState } from "./Stack";
-import { I18nProvider } from "./i18n/I18nProvider";
-import { DEFAULT_LOCALE } from "./i18n/locales";
-import { appAtomRegistry } from "./state/atom-registry";
-import { subscribeComposerDraftModelReconciliation } from "./state/use-composer-drafts";
-import { environmentThreadShells, threadEnvironment } from "./state/threads";
-import { environmentShell, shellCachesReadAtom } from "./state/shell";
-import { OverlayPortalHost } from "./components/ui/OverlayPortal";
-import { shouldHandleAppLink, restoreDraftLinkState } from "./lib/appLinking";
+import { CloudAuthProvider } from "./features/cloud/CloudAuthProvider";
 import { hasCloudPublicConfig } from "./features/cloud/publicConfig";
-import { takeScheduledTaskNewLink } from "./features/settings/scheduled-task-editor-state";
+import { ConnectDeviceApprovalCoordinator } from "./features/connection/ConnectDeviceApprovalCoordinator";
 import {
   pairingFormLinkAction,
   startDevAutoConnect,
   withoutPairingTarget,
 } from "./features/connection/devAutoConnect";
+import { installPermissionUpdateNotice } from "./features/connection/permissionUpdateNotice";
+import {
+  launchSplashHomeRowsPending,
+  settleLaunchSplashHomeRows,
+  splashCanHide,
+  useLaunchSplashHomeRowsPending,
+} from "./features/home/home-launch-splash";
+import { workspaceDetailLinkAction } from "./features/layout/workspace/workspace-detail-selection";
+import {
+  hydrateWorkspaceSelections,
+  launchWorkspaceURL,
+  recordWorkspaceSelections,
+  settingsLinkPage,
+} from "./features/layout/workspace/workspace-selection-store";
 import {
   resolvePendingNewTaskPromptLink,
   takeNewTaskPromptLink,
@@ -73,42 +57,58 @@ import {
   takeThreadPromptLink,
 } from "./features/prompt-links/threadPromptLink";
 import {
-  disposeOnFoundationReplace,
-  type FoundationHotModule,
-} from "./lib/foundation-fast-refresh";
-import { useMobileNavigationTheme } from "./lib/useMobileNavigationTheme";
-import { installUiRuntimeMemoryWarningGc } from "./lib/useUiRuntimeMemoryWarningGc";
-import { SubscriptionUsageCoordinator } from "./widgets/SubscriptionUsageCoordinator";
-import { ConnectDeviceApprovalCoordinator } from "./features/connection/ConnectDeviceApprovalCoordinator";
-import { installSubscriptionUsageRefresh } from "./widgets/useSubscriptionUsage";
-import { GlobalVoiceInputControl } from "./features/voice-input/GlobalVoiceInputControl";
-import {
-  launchSplashHomeRowsPending,
-  settleLaunchSplashHomeRows,
-  splashCanHide,
-  useLaunchSplashHomeRowsPending,
-} from "./features/home/home-launch-splash";
+  AppearancePreferencesProvider,
+  installAppearanceRuntime,
+  useAppearancePreferences,
+} from "./features/settings/appearance/AppearancePreferencesProvider";
+import { takeScheduledTaskNewLink } from "./features/settings/scheduled-task-editor-state";
 import {
   restoreSettingsLinkState,
   settingsLinkAction,
 } from "./features/settings/settings-navigation";
 import {
-  hydrateWorkspaceSelections,
-  launchWorkspaceURL,
-  recordWorkspaceSelections,
-  settingsLinkPage,
-} from "./features/layout/workspace/workspace-selection-store";
-import { workspaceDetailLinkAction } from "./features/layout/workspace/workspace-detail-selection";
-import { NativeLayoutMetricsProvider } from "./native/native-layout-metrics";
+  presentPendingIncomingShare,
+  pruneIncomingShareImports,
+  startIncomingShareInbox,
+} from "./features/sharing/IncomingShareProvider";
+import {
+  installAppShortcuts,
+  republishAppShortcuts,
+  recordAppShortcutNavigationState,
+} from "./features/shortcuts/appShortcutsRuntime";
+import { prepareNativeShowcaseCapture } from "./features/showcase/nativeShowcaseScene";
+import { installShowcaseCapture } from "./features/showcase/ShowcaseCaptureCoordinator";
+import { pruneNewTaskFlowStates } from "./features/threads/new-task-flow-state";
+import { pruneNewTaskBranchCheckouts } from "./features/threads/NewTaskDraftRouteScreen";
+import { ThreadArrangementHost } from "./features/threads/ThreadArrangementSheet";
+import { installAppUpdateChecks } from "./features/updates/app-updates";
+import { GlobalVoiceInputControl } from "./features/voice-input/GlobalVoiceInputControl";
+import { I18nProvider } from "./i18n/I18nProvider";
+import { DEFAULT_LOCALE } from "./i18n/locales";
+import { shouldHandleAppLink, restoreDraftLinkState } from "./lib/appLinking";
+import {
+  disposeOnFoundationReplace,
+  type FoundationHotModule,
+} from "./lib/foundation-fast-refresh";
 import {
   attachRootNavigation,
   flushRootNavigationQueue,
   linkToRootPath,
   rootNavigationRef,
 } from "./lib/rootNavigation";
-import { pruneNewTaskFlowStates } from "./features/threads/new-task-flow-state";
-import { pruneNewTaskBranchCheckouts } from "./features/threads/NewTaskDraftRouteScreen";
-import { installAppUpdateChecks } from "./features/updates/app-updates";
+import { useMobileNavigationTheme } from "./lib/useMobileNavigationTheme";
+import { installUiRuntimeMemoryWarningGc } from "./lib/useUiRuntimeMemoryWarningGc";
+import { NativeLayoutMetricsProvider } from "./native/native-layout-metrics";
+import { ProjectChipIconRasterizer } from "./native/ProjectChipIconImages";
+import { RootStack, rootPathnameFromState, workspaceLocationFromState } from "./Stack";
+import { appAtomRegistry } from "./state/atom-registry";
+import { installComposerAttachmentUploads } from "./state/composer-attachment-uploads";
+import { environmentShell, shellCachesReadAtom } from "./state/shell";
+import { installThreadOutboxDelivery } from "./state/threadOutboxDelivery";
+import { environmentThreadShells, threadEnvironment } from "./state/threads";
+import { subscribeComposerDraftModelReconciliation } from "./state/use-composer-drafts";
+import { SubscriptionUsageCoordinator } from "./widgets/SubscriptionUsageCoordinator";
+import { installSubscriptionUsageRefresh } from "./widgets/useSubscriptionUsage";
 
 import "../global.css";
 

@@ -4,34 +4,10 @@ import * as NodeFS from "node:fs";
 import * as NodeNet from "node:net";
 import * as NodePath from "node:path";
 import * as NodeURL from "node:url";
+
 import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import * as HostProcess from "@t3tools/shared/HostProcess";
 import { assert, it, describe } from "@effect/vitest";
-import { afterAll, vi } from "vite-plus/test";
-import * as Cause from "effect/Cause";
-import * as Clock from "effect/Clock";
-import * as Deferred from "effect/Deferred";
-import * as Duration from "effect/Duration";
-import * as Effect from "effect/Effect";
-import * as Exit from "effect/Exit";
-import * as FileSystem from "effect/FileSystem";
-import * as Fiber from "effect/Fiber";
-import * as Layer from "effect/Layer";
-import * as Option from "effect/Option";
-import * as Path from "effect/Path";
-import * as Queue from "effect/Queue";
-import * as PlatformError from "effect/PlatformError";
-import * as Ref from "effect/Ref";
-import * as Result from "effect/Result";
-import * as Scope from "effect/Scope";
-import * as Schema from "effect/Schema";
-import * as Sink from "effect/Sink";
-import * as Stream from "effect/Stream";
-import * as TestClock from "effect/testing/TestClock";
-import * as Tracer from "effect/Tracer";
-import { ChildProcess, ChildProcessSpawner, CommandLine } from "effect/process";
-
 import {
   GitCommandError,
   ReviewDiffPreviewInput,
@@ -41,8 +17,34 @@ import {
   type ReviewDiffPreviewResult,
   type WorktreeSubmodules,
 } from "@t3tools/contracts";
+import * as HostProcess from "@t3tools/shared/HostProcess";
 import { symlinksSupported } from "@t3tools/shared/testing/symlinks";
+import * as Cause from "effect/Cause";
+import * as Clock from "effect/Clock";
+import * as Deferred from "effect/Deferred";
+import * as Duration from "effect/Duration";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Fiber from "effect/Fiber";
+import * as FileSystem from "effect/FileSystem";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as Path from "effect/Path";
+import * as PlatformError from "effect/PlatformError";
+import { ChildProcess, ChildProcessSpawner, CommandLine } from "effect/process";
+import * as Queue from "effect/Queue";
+import * as Ref from "effect/Ref";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
+import * as Scope from "effect/Scope";
+import * as Sink from "effect/Sink";
+import * as Stream from "effect/Stream";
+import * as TestClock from "effect/testing/TestClock";
+import * as Tracer from "effect/Tracer";
+import { afterAll, vi } from "vite-plus/test";
+
 import * as ServerConfig from "../config.ts";
+import * as GitVcsDriver from "./GitVcsDriver.ts";
 import {
   isNonRepositoryGitStderr,
   makeGitVcsDriverCore,
@@ -50,7 +52,6 @@ import {
   splitNullSeparatedGitStdoutPaths,
   windowsLongPathConfigEnv,
 } from "./GitVcsDriverCore.ts";
-import * as GitVcsDriver from "./GitVcsDriver.ts";
 import { VcsAutomaticFetchInterval } from "./VcsAutomaticFetchInterval.ts";
 import { gitConfigEnv } from "./VcsProcess.ts";
 

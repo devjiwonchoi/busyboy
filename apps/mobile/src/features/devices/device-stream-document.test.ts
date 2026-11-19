@@ -1,4 +1,5 @@
 import * as NodeVM from "node:vm";
+
 import { describe, expect, it, vi } from "vite-plus/test";
 
 import { deviceStreamDocument, deviceStreamMessage } from "./device-stream-document";

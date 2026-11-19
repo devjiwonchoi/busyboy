@@ -1,18 +1,20 @@
-import { T, useGT, useMessages, Var } from "gt-react";
-import { RefreshIcon } from "~/components/ui/refresh-icon";
 import { useAtomValue } from "@effect/atom-react";
 import type { FileDiffContentsLoader, FileDiffMetadata } from "@pierre/diffs";
+import { projectCommitUrl } from "@t3tools/client-runtime/change-request-links";
+import { safeErrorLogAttributes } from "@t3tools/client-runtime/errors";
 import {
   isAtomCommandInterrupted,
   squashAtomCommandFailure,
 } from "@t3tools/client-runtime/state/runtime";
-import { safeErrorLogAttributes } from "@t3tools/client-runtime/errors";
 import {
   CHECKPOINT_DIFF_TRUNCATED_MARKER,
   type ReviewBranchCommitsResult,
   type ScopedThreadRef,
   type RunId,
 } from "@t3tools/contracts";
+import { isTestChangedFile } from "@t3tools/shared/changedFileKind";
+import * as Schema from "effect/Schema";
+import { T, useGT, useMessages, Var } from "gt-react";
 import {
   ArrowRightIcon,
   CheckIcon,
@@ -27,19 +29,18 @@ import {
   ChevronsDownUpIcon,
   ChevronsUpDownIcon,
 } from "lucide-react";
-import * as Schema from "effect/Schema";
 import { type MouseEvent, useEffect, useRef, useState } from "react";
-import { useCodeViewFileReveal } from "./diffs/useCodeViewFileReveal";
-import { useCodeViewScrollRestore } from "./diffs/useCodeViewScrollRestore";
+
+import { RefreshIcon } from "~/components/ui/refresh-icon";
+import { observeIntersection } from "~/lib/observeIntersection";
+import { cn } from "~/lib/utils";
 import { useFilesystemReadAccess } from "~/state/filesystem";
-import { useOpenInPreferredEditor } from "../editorPreferences";
-import { useFileContextMenuHandler } from "../fileContextMenu";
-import { type DraftId } from "../composerDraftStore";
-import { openDiffFilePrimaryAction } from "../diffFileActions";
-import { toolCallDiff } from "../lib/toolCallDiff";
 import { useCheckpointDiff, useTurnItemDetail } from "~/state/queries";
 import { revisionedQuery } from "~/state/revisionedQuery";
-import { cn } from "~/lib/utils";
+
+import { useOpenLink } from "../browser/useOpenLink";
+import { type DraftId } from "../composerDraftStore";
+import { openDiffFilePrimaryAction } from "../diffFileActions";
 import {
   resolveToolCallDiffTarget,
   selectThreadBranchBaseRef,
@@ -47,11 +48,17 @@ import {
   useDiffPanelSessionStore,
   useDiffPanelStore,
 } from "../diffPanelStore";
+import { useOpenInPreferredEditor } from "../editorPreferences";
+import { useFileContextMenuHandler } from "../fileContextMenu";
+import { LIVE_REFRESH_MIN_INTERVAL_MS, useLiveRefresh } from "../hooks/useLiveRefresh";
 import { useLocalStorage } from "../hooks/useLocalStorage";
-import { isTestChangedFile } from "@t3tools/shared/changedFileKind";
-import { useHideTestFiles } from "./diffs/useHideTestFiles";
-import { useRenderedAppearance } from "../hooks/useTheme";
+import { useClientSettings, updateClientSettings } from "../hooks/useSettings";
 import { useStableCallback } from "../hooks/useStableCallback";
+import { useRenderedAppearance } from "../hooks/useTheme";
+import { useThreadRouteRef } from "../hooks/useThreadRouteTarget";
+import { buildBaseRefChoices, filterBaseRefChoices } from "../lib/baseRefChoices";
+import { areAllDiffFilesCollapsed, toggleAllDiffFiles } from "../lib/diffCollapse";
+import { createGitDiffFileContentsLoader } from "../lib/diffFileContents";
 import {
   buildFileDiffEntries,
   getDiffLineStat,
@@ -60,27 +67,34 @@ import {
   resolveFileDiffPath,
 } from "../lib/diffRendering";
 import { PREFERRED_HIGHLIGHTER } from "../lib/syntaxHighlighting";
-import { areAllDiffFilesCollapsed, toggleAllDiffFiles } from "../lib/diffCollapse";
-import { LIVE_REFRESH_MIN_INTERVAL_MS, useLiveRefresh } from "../hooks/useLiveRefresh";
+import { toolCallDiff } from "../lib/toolCallDiff";
 import {
   useProject,
   useThreadCheckpointSummaries,
   useQuietThreadShell,
   useQuietThreadVisibleTurnItems,
 } from "../state/entities";
-import { useClientSettings, updateClientSettings } from "../hooks/useSettings";
+import { useEnvironmentQuery } from "../state/query";
+import { reviewEnvironment } from "../state/review";
+import { serverEnvironment } from "../state/server";
+import { useAtomCommand } from "../state/use-atom-command";
+import { vcsEnvironment } from "../state/vcs";
 import { formatRelativeTimeLabel, formatShortTimestamp } from "../timestampFormat";
+import { DiffStatLabel } from "./chat/DiffStatLabel";
 import { DiffFilePathCopyButton } from "./DiffFilePathCopyButton";
 import { DiffPanelLoadingState, DiffPanelShell, type DiffPanelMode } from "./DiffPanelShell";
-import { DiffStatLabel } from "./chat/DiffStatLabel";
 import { AnnotatableCodeView, type AnnotatableCodeViewHandle } from "./diffs/AnnotatableCodeView";
+import { DiffFileLoadingBoundary } from "./diffs/DiffFileLoadingBoundary";
+import { DiffFileStatus } from "./diffs/DiffFileStatus";
 import { DiffFileTree } from "./diffs/DiffFileTree";
-import { FileExplorerPane } from "./files/FileExplorerPane";
 import { diffFileTreeEntries } from "./diffs/diffFileTree.logic";
 import { getDiffHeaderClickAction } from "./diffs/diffHeaderClick";
+import { useCodeViewFileReveal } from "./diffs/useCodeViewFileReveal";
+import { useCodeViewScrollRestore } from "./diffs/useCodeViewScrollRestore";
+import { useHideTestFiles } from "./diffs/useHideTestFiles";
+import { useReviewFilePatches } from "./diffs/useReviewFilePatches";
+import { FileExplorerPane } from "./files/FileExplorerPane";
 import { Button } from "./ui/button";
-import { ToggleGroup, Toggle } from "./ui/toggle-group";
-import { Switch } from "./ui/switch";
 import {
   Combobox,
   ComboboxEmpty,
@@ -101,22 +115,9 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "./ui/menu";
+import { Switch } from "./ui/switch";
+import { ToggleGroup, Toggle } from "./ui/toggle-group";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "./ui/tooltip";
-import { useEnvironmentQuery } from "../state/query";
-import { useAtomCommand } from "../state/use-atom-command";
-import { serverEnvironment } from "../state/server";
-import { reviewEnvironment } from "../state/review";
-import { vcsEnvironment } from "../state/vcs";
-import { buildBaseRefChoices, filterBaseRefChoices } from "../lib/baseRefChoices";
-import { createGitDiffFileContentsLoader } from "../lib/diffFileContents";
-
-import { observeIntersection } from "~/lib/observeIntersection";
-import { useReviewFilePatches } from "./diffs/useReviewFilePatches";
-import { DiffFileLoadingBoundary } from "./diffs/DiffFileLoadingBoundary";
-import { DiffFileStatus } from "./diffs/DiffFileStatus";
-import { useThreadRouteRef } from "../hooks/useThreadRouteTarget";
-import { projectCommitUrl } from "@t3tools/client-runtime/change-request-links";
-import { useOpenLink } from "../browser/useOpenLink";
 
 type DiffThemeType = "light" | "dark";
 const AUTOMATIC_BASE_REF = "__automatic_base_ref__";

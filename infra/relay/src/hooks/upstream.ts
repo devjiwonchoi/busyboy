@@ -1,13 +1,13 @@
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
+import type * as HttpClientResponse from "effect/http/HttpClientResponse";
+import * as HttpMethod from "effect/http/HttpMethod";
+import * as HttpTraceContext from "effect/http/HttpTraceContext";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
-import * as HttpClient from "effect/http/HttpClient";
-import * as HttpClientRequest from "effect/http/HttpClientRequest";
-import * as HttpMethod from "effect/http/HttpMethod";
-import * as HttpTraceContext from "effect/http/HttpTraceContext";
-import type * as HttpClientResponse from "effect/http/HttpClientResponse";
 
 import { withoutRedirects } from "../environments/EnvironmentConnector.ts";
 

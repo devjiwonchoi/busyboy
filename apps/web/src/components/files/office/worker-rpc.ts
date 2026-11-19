@@ -4,6 +4,7 @@
 // (as the markdown worker's queue does), transferable payloads, and a worker that fails every pending call when it dies.
 
 import * as Schema from "effect/Schema";
+
 import { isPreviewError, PreviewError, type PreviewFailure } from "../previewFailure";
 
 /** What one method takes and returns. */

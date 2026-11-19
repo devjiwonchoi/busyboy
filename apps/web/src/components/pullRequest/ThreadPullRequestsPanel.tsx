@@ -1,15 +1,18 @@
-import type { ProjectId, ScopedThreadRef, ThreadPullRequestLink } from "@t3tools/contracts";
+import { LegendList } from "@legendapp/list/react";
+import { findProjectForChangeRequest } from "@t3tools/client-runtime/change-request-links";
 import {
   sourceControlClients,
   UNKNOWN_SOURCE_CONTROL_CLIENT,
 } from "@t3tools/client-runtime/source-control-clients";
+import { canStartThreadPullRequestWatch } from "@t3tools/client-runtime/thread-pull-request-compatibility";
 import {
   type PullRequestListLine,
   pullRequestListLines,
   resolveThreadPullRequestChains,
   visibleThreadPullRequests,
 } from "@t3tools/client-runtime/thread-pull-requests";
-import { canStartThreadPullRequestWatch } from "@t3tools/client-runtime/thread-pull-request-compatibility";
+import type { ProjectId, ScopedThreadRef, ThreadPullRequestLink } from "@t3tools/contracts";
+import { msg, T, useGT, useMessages, Var } from "gt-react";
 import {
   ArrowUpRightIcon,
   EyeIcon,
@@ -18,34 +21,33 @@ import {
   MoreHorizontalIcon,
   PlusIcon,
 } from "lucide-react";
-import { LegendList } from "@legendapp/list/react";
-import { msg, T, useGT, useMessages, Var } from "gt-react";
 import { memo, useState } from "react";
 
 import {
   COMPOSER_PULL_REQUEST_DRAG_TYPE,
   encodePullRequestDragPayload,
 } from "~/components/chat/composerMentionDrag";
+import { RelativeTime } from "~/components/RelativeTime";
 import { writeTextToClipboard } from "~/hooks/useCopyToClipboard";
-import { findProjectForChangeRequest } from "@t3tools/client-runtime/change-request-links";
-import { pullRequestLinkPanelTarget, useOpenPrLink } from "~/lib/openPullRequestLink";
 import { useClientSettings } from "~/hooks/useSettings";
-import { usePrimaryEnvironmentId } from "~/state/environments";
-import { usePullRequestIntentPrefetch } from "./usePullRequestIntentPrefetch";
+import { pullRequestLinkPanelTarget, useOpenPrLink } from "~/lib/openPullRequestLink";
 import { cn } from "~/lib/utils";
 import { useShortcutModifierState } from "~/shortcutModifierState";
 import { useProjects, useServerConfigs, useThreadShell } from "~/state/entities";
-import { PullRequestChangeBreakdownStat } from "./PullRequestChangeBreakdownStat";
-import { PullRequestsUnavailableState } from "./PullRequestsUnavailableState";
+import { usePrimaryEnvironmentId } from "~/state/environments";
 import { threadEnvironment } from "~/state/threads";
 import { useAtomCommand } from "~/state/use-atom-command";
-import { RelativeTime } from "~/components/RelativeTime";
+
 import { ThreadDetailsIssueRows } from "../chat/ThreadDetailsIssueRows";
 import { Button } from "../ui/button";
 import { Menu, MenuItem, MenuPopup, MenuTrigger } from "../ui/menu";
 import { MiddleTruncate } from "../ui/middle-truncate";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
+import { changeRequestTermKind } from "./changeRequestTerm";
 import { openLinkPullRequestDialog } from "./LinkPullRequestDialog";
+import { PullRequestChangeBreakdownStat } from "./PullRequestChangeBreakdownStat";
+import { PullRequestGlyph } from "./pullRequestIcons";
+import { pullRequestQuickActions } from "./pullRequestList.logic";
 import {
   PULL_REQUEST_ROW_CLASS,
   PULL_REQUEST_ROW_NUMBER_CLASS,
@@ -59,11 +61,9 @@ import {
   PullRequestReviewDecisionGlyph,
   pullRequestChecksStatePresentation,
 } from "./pullRequestPresentation";
-import { PullRequestGlyph } from "./pullRequestIcons";
-import { pullRequestQuickActions } from "./pullRequestList.logic";
 import { PullRequestSpeedActions, PullRequestSpeedModeContext } from "./PullRequestSpeedActions";
-
-import { changeRequestTermKind } from "./changeRequestTerm";
+import { PullRequestsUnavailableState } from "./PullRequestsUnavailableState";
+import { usePullRequestIntentPrefetch } from "./usePullRequestIntentPrefetch";
 
 const SOURCE_LABELS: Record<ThreadPullRequestLink["source"], string> = {
   manual: msg("Linked by you"),

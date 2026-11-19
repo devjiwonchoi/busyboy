@@ -1,15 +1,15 @@
 import { resolveProviderProbeTimeoutMs } from "@t3tools/provider-core/server/snapshotProbe";
 // The CLI catalog honors ignored/disabled skills and nested plugin skills that flat scans miss.
 import type { ServerProviderSkill } from "@t3tools/contracts";
-import type { GrokSettings } from "../settings.ts";
-import * as Effect from "effect/Effect";
-import * as Option from "effect/Option";
-import * as Schema from "effect/Schema";
-import * as ChildProcess from "effect/process/ChildProcess";
+import { spawnAndCollect } from "@t3tools/provider-core/server/snapshotProbe";
 import { SKILL_MENTION_PATTERN } from "@t3tools/shared/composerInlineTokens";
 import { resolveSpawnCommand } from "@t3tools/shared/shell";
+import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
+import * as ChildProcess from "effect/process/ChildProcess";
+import * as Schema from "effect/Schema";
 
-import { spawnAndCollect } from "@t3tools/provider-core/server/snapshotProbe";
+import type { GrokSettings } from "../settings.ts";
 import { grokProbeEnvironment } from "./probeEnvironment.ts";
 
 const GROK_SKILLS_PROBE_TIMEOUT_MS = 4_000;

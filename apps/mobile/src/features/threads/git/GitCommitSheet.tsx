@@ -1,20 +1,20 @@
-import { FitSheet } from "../../../components/ui/FitSheet";
-import { SheetHeader } from "../../../components/ui/SheetHeader";
-import { Button } from "../../../components/ui/Button";
 import { useNavigation, type StaticScreenProps } from "@react-navigation/native";
+import { formatDiffCount } from "@t3tools/client-runtime/diff-count";
 import { T, useGT, Var } from "gt-react-native";
 import { useState } from "react";
 import { Pressable, View } from "react-native";
-import { formatDiffCount } from "@t3tools/client-runtime/diff-count";
 
 import { SymbolView } from "../../../components/ui/AppSymbol";
 import { AppText as Text, AppTextInput as TextInput } from "../../../components/ui/AppText";
+import { Button } from "../../../components/ui/Button";
+import { FitSheet } from "../../../components/ui/FitSheet";
+import { SheetHeader } from "../../../components/ui/SheetHeader";
 import { cn } from "../../../lib/cn";
 import { useEnvironmentQuery } from "../../../state/query";
-import { useThreadSelection } from "../../../state/use-thread-selection";
 import { useSelectedThreadGitActions } from "../../../state/use-selected-thread-git-actions";
 import { useSelectedThreadGitState } from "../../../state/use-selected-thread-git-state";
 import { useSelectedThreadWorktree } from "../../../state/use-selected-thread-worktree";
+import { useThreadSelection } from "../../../state/use-thread-selection";
 import { vcsEnvironment } from "../../../state/vcs";
 
 type GitCommitSheetProps = StaticScreenProps<{

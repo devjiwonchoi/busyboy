@@ -1,5 +1,5 @@
-import type { NativeStackHeaderItem } from "@react-navigation/native-stack";
 import { NavigationContext } from "@react-navigation/native";
+import type { NativeStackHeaderItem } from "@react-navigation/native-stack";
 import { act, createContext, startTransition, Suspense, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, it, vi } from "vite-plus/test";

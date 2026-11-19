@@ -1,11 +1,11 @@
 import { useAtomValue } from "@effect/atom-react";
 import { Atom } from "effect/reactivity";
 
-import { environmentShell, environmentShellSummaryAtom } from "./shell";
-import { isEnvironmentShellPending, projectWorkspaceState } from "./workspaceModel";
 import { environmentCatalog } from "../connection/catalog";
 import { environmentPresentations } from "./presentation";
+import { environmentShell, environmentShellSummaryAtom } from "./shell";
 import { createWorkspaceConnectionAtoms } from "./workspace-connection-atoms";
+import { isEnvironmentShellPending, projectWorkspaceState } from "./workspaceModel";
 
 export const workspaceConnections = createWorkspaceConnectionAtoms({
   catalogValueAtom: environmentCatalog.catalogValueAtom,

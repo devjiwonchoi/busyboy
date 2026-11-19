@@ -1,5 +1,10 @@
 import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
 import {
+  isAtomCommandInterrupted,
+  squashAtomCommandFailure,
+  type AtomCommandResult,
+} from "@t3tools/client-runtime/state/runtime";
+import {
   AuthOrchestrationOperateScope,
   AuthSettingsWriteScope,
   type EnvironmentId,
@@ -7,11 +12,7 @@ import {
   type ProjectScriptIcon,
   type ResolvedKeybindingsConfig,
 } from "@t3tools/contracts";
-import {
-  isAtomCommandInterrupted,
-  squashAtomCommandFailure,
-  type AtomCommandResult,
-} from "@t3tools/client-runtime/state/runtime";
+import { msg, T, useGT, useMessages, Var } from "gt-react";
 import {
   BugIcon,
   FlaskConicalIcon,
@@ -20,16 +21,16 @@ import {
   PlayIcon,
   WrenchIcon,
 } from "lucide-react";
-import { msg, T, useGT, useMessages, Var } from "gt-react";
 import React, { type FormEvent, type KeyboardEvent, useEffect, useRef, useState } from "react";
 
+import { keybindingFromKeyboardEvent } from "~/components/settings/KeybindingsSettings.logic";
 import {
   keybindingValueForCommand,
   decodeProjectScriptKeybindingRule,
 } from "~/lib/projectScriptKeybindings";
-import { keybindingFromKeyboardEvent } from "~/components/settings/KeybindingsSettings.logic";
 import { commandForProjectScript, nextProjectScriptId } from "~/projectScripts";
 import { readEnvironmentScope, useEnvironmentScope } from "~/state/session";
+
 import { useComposerMenuState } from "./chat/useComposerMenuState";
 import {
   AlertDialog,

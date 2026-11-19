@@ -1,8 +1,3 @@
-import * as Effect from "effect/Effect";
-import * as Option from "effect/Option";
-import * as Path from "effect/Path";
-import * as Schema from "effect/Schema";
-
 import { expandHomePath } from "@t3tools/provider-core/server/pathExpansion";
 import {
   parseTimestampMs,
@@ -13,6 +8,11 @@ import {
   type UsageRecord,
 } from "@t3tools/provider-core/server/usage";
 import * as HostProcess from "@t3tools/shared/HostProcess";
+import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
+import * as Path from "effect/Path";
+import * as Schema from "effect/Schema";
+
 import type { PiSettings } from "../settings.ts";
 import { PI_ARGUMENTS_WITH_VALUES, resolvePiLaunchArgs } from "./mcpInjection.ts";
 

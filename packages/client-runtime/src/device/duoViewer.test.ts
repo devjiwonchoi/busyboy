@@ -1,5 +1,5 @@
-import { afterEach, expect, it, vi } from "vite-plus/test";
 import type { Scene, PerspectiveCamera, Box3, Quaternion } from "three";
+import { afterEach, expect, it, vi } from "vite-plus/test";
 
 const gpu = vi.hoisted(() => ({
   instances: [] as {
@@ -72,6 +72,7 @@ vi.mock("./modelScene.ts", () => ({
   },
 }));
 import { Group, Mesh, MeshBasicMaterial, PlaneGeometry } from "three";
+
 import { createDuoViewer } from "./duoViewer.ts";
 
 afterEach(() => {

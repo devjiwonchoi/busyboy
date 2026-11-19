@@ -1,24 +1,21 @@
 import { sourceControlClients } from "@t3tools/client-runtime/source-control-clients";
-import { changeRequestTermKind } from "../../lib/changeRequestTerm";
 import { useGT, useMessages } from "gt-react-native";
 import { memo } from "react";
 import { Pressable, View } from "react-native";
-import { AppText as Text } from "../../components/ui/AppText";
+
+import { RelativeTime } from "../../components/RelativeTime";
 import { SymbolView } from "../../components/ui/AppSymbol";
+import { AppText as Text } from "../../components/ui/AppText";
 import { Menu } from "../../components/ui/Menu";
 import type { MenuProps } from "../../components/ui/Menu.types";
+import { changeRequestTermKind } from "../../lib/changeRequestTerm";
 import { cn } from "../../lib/cn";
-import { RelativeTime } from "../../components/RelativeTime";
 import {
   selectedThreadRowColors,
   THREAD_LIST_V2_SIDEBAR_ROW_STYLE,
   THREAD_LIST_V2_SIDEBAR_ROW_CONTAINER_STYLE,
 } from "../threads/thread-list-v2-row-appearance";
-import {
-  PullRequestAvatar,
-  PullRequestConflictBadge,
-  PullRequestDiffStats,
-} from "./PullRequestPresentation";
+import { PullRequestGlyph } from "./pullRequestGlyphs";
 import {
   pullRequestLabelColor,
   pullRequestListReviewStatus,
@@ -26,11 +23,15 @@ import {
   type EnvironmentPullRequestListEntry,
 } from "./pullRequestList";
 import {
+  PullRequestAvatar,
+  PullRequestConflictBadge,
+  PullRequestDiffStats,
+} from "./PullRequestPresentation";
+import {
   pullRequestChecksStatus,
   pullRequestConflict,
   pullRequestStatus,
 } from "./pullRequestStatus";
-import { PullRequestGlyph } from "./pullRequestGlyphs";
 
 /** A label as list rows show it: small, tinted by its color, truncating. */
 export function ListRowLabel(props: {

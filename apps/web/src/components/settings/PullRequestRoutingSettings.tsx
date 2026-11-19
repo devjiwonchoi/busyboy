@@ -1,10 +1,10 @@
 import { useAtomValue } from "@effect/atom-react";
-import { resolveEnvironmentMachineKind } from "@t3tools/contracts";
 import {
   pullRequestRoutingConnectionKey,
   pullRequestRoutingPermissionFor,
   type PullRequestRoutingPermission,
 } from "@t3tools/client-runtime/connection";
+import { resolveEnvironmentMachineKind } from "@t3tools/contracts";
 import { msg, T, useGT, useMessages } from "gt-react";
 import { useState } from "react";
 
@@ -12,6 +12,7 @@ import { environmentCatalog } from "~/connection/catalog";
 import type { MessageResolver } from "~/i18n/messages";
 import type { EnvironmentPresentation } from "~/state/environments";
 import { useAtomCommand } from "~/state/use-atom-command";
+
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
 import { toastManager } from "../ui/toast";
 import { EnvironmentRow, EnvironmentTransportLabel } from "./EnvironmentRow";

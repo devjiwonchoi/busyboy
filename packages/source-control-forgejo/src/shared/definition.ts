@@ -15,6 +15,7 @@ import {
   projectChangeRequestHost,
   remoteWebOrigin,
 } from "@t3tools/source-control-core/shared/definition";
+
 import { icon } from "./icon.ts";
 
 const CHECKOUT_COMMAND = /^tea\s+(?:pr|pulls?)\s+(?:checkout|co)\s+(.+)$/i;

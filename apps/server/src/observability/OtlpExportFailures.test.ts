@@ -1,7 +1,5 @@
 import { assert, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import * as Metric from "effect/Metric";
 import {
   HttpBody,
   HttpClient,
@@ -9,6 +7,8 @@ import {
   HttpClientRequest,
   HttpClientResponse,
 } from "effect/http";
+import * as Layer from "effect/Layer";
+import * as Metric from "effect/Metric";
 import { OtlpSerialization } from "effect/observability";
 import { describe } from "vite-plus/test";
 

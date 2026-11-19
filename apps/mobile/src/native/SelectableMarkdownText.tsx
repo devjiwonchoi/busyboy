@@ -1,15 +1,15 @@
-import { Platform } from "react-native";
-import { useState } from "react";
-import { useGT } from "gt-react-native";
 import type { AssistantCitation } from "@t3tools/contracts";
 import { parseAssistantCitationHref } from "@t3tools/shared/assistantCitations";
+import { useGT } from "gt-react-native";
+import { useState } from "react";
+import { Platform } from "react-native";
+
 import { AssistantCitationSheet } from "../components/AssistantCitationSheet";
 import { copyTextWithHaptic } from "../lib/copyTextWithHaptic";
-import type { SelectableMarkdownTextProps } from "./SelectableMarkdownText.types";
-
-import { MobileEnrichedMarkdownText } from "./EnrichedMarkdownText";
 import { themeColorWithAlpha } from "../lib/mobileTheme";
 import { useUniwindTheme } from "../lib/useUniwindTheme";
+import { MobileEnrichedMarkdownText } from "./EnrichedMarkdownText";
+import type { SelectableMarkdownTextProps } from "./SelectableMarkdownText.types";
 
 export type {
   MarkdownFileContextMenu,

@@ -1,11 +1,11 @@
-import { type StaticScreenProps, useNavigation } from "@react-navigation/native";
-import { errorDisplayMessage } from "@t3tools/client-runtime/errors";
 import { useAtomValue } from "@effect/atom-react";
+import { type StaticScreenProps, useNavigation } from "@react-navigation/native";
+import { scopeThreadRef } from "@t3tools/client-runtime/environment";
+import { errorDisplayMessage } from "@t3tools/client-runtime/errors";
 import {
   makeQueuedRunsAtom,
   queuedRunEditBlockedReason,
 } from "@t3tools/client-runtime/queued-run-edit";
-import { scopeThreadRef } from "@t3tools/client-runtime/environment";
 import {
   isAtomCommandInterrupted,
   squashAtomCommandFailure,
@@ -13,8 +13,8 @@ import {
 import { resolveUserMessagePresentation } from "@t3tools/client-runtime/user-message";
 import type { ChatAttachment, EnvironmentId, RunId, ThreadId } from "@t3tools/contracts";
 import { Atom } from "effect/reactivity";
-import { Image } from "expo-image";
 import * as Haptics from "expo-haptics";
+import { Image } from "expo-image";
 import { msg, T, useGT, useMessages } from "gt-react-native";
 import { useEffect, useRef, useState } from "react";
 import { Pressable, ScrollView, View } from "react-native";
@@ -22,24 +22,24 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import ReanimatedSwipeable, {
   type SwipeableMethods,
 } from "react-native-gesture-handler/ReanimatedSwipeable";
-import { useUniwindTheme } from "../../lib/useUniwindTheme";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { SymbolView } from "../../components/ui/AppSymbol";
+import { AppText as Text } from "../../components/ui/AppText";
 import { Button } from "../../components/ui/Button";
 import * as Dialog from "../../components/ui/Dialog";
 import { FilePreviewModal, type FilePreviewSource } from "../../components/ui/FilePreviewModal";
-import { SheetHeader } from "../../components/ui/SheetHeader";
-import { AppText as Text } from "../../components/ui/AppText";
-import { SymbolView } from "../../components/ui/AppSymbol";
 import { Menu } from "../../components/ui/Menu";
 import { ScreenContent } from "../../components/ui/ScreenContent";
+import { SheetHeader } from "../../components/ui/SheetHeader";
+import { assetImageSource } from "../../lib/assetImageSource";
 import { scopedThreadKey } from "../../lib/scopedEntities";
+import { useUniwindTheme } from "../../lib/useUniwindTheme";
 import { useAssetUrl } from "../../state/assets";
 import { useQuietThreadShell } from "../../state/entities";
 import { useEnvironmentQuery } from "../../state/query";
-import { serverEnvironment } from "../../state/server";
-import { assetImageSource } from "../../lib/assetImageSource";
 import { beginQueuedRunEdit, useQueuedRunEdit } from "../../state/queued-run-edit";
+import { serverEnvironment } from "../../state/server";
 import { environmentThreadDetails, threadEnvironment } from "../../state/threads";
 import { useAtomCommand } from "../../state/use-atom-command";
 import {

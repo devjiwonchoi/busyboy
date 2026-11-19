@@ -5,9 +5,10 @@ import {
   getProviderOptionCurrentValue,
   isClaudeUltrathinkPrompt,
 } from "@t3tools/shared/model";
-import { REASONING_EFFORT_OPTION_IDS } from "./state/threadExecution.ts";
 import { mFallback, msg } from "gt-i18n";
 import type { MFunctionType } from "gt-i18n/types";
+
+import { REASONING_EFFORT_OPTION_IDS } from "./state/threadExecution.ts";
 
 const REASONING_DESCRIPTOR_IDS: ReadonlySet<string> = new Set([
   ...REASONING_EFFORT_OPTION_IDS,

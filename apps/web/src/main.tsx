@@ -1,13 +1,13 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
-
 import "@fontsource-variable/inter";
+
 import "./index.css";
 
-import { hasCloudPublicConfig } from "./cloud/publicConfig";
-import { isElectron } from "./env";
 import { startAppServices } from "./appInit";
 import { AppRoot } from "./AppRoot";
+import { hasCloudPublicConfig } from "./cloud/publicConfig";
+import { isElectron } from "./env";
 import { whenLocaleReady } from "./i18n/runtime";
 import { reloadOnceForChunkLoadError } from "./lib/chunkReloadGuard";
 

@@ -1,4 +1,5 @@
 import type { ComponentProps } from "react";
+
 import type { SymbolView } from "./AppSymbol";
 
 type SymbolName = ComponentProps<typeof SymbolView>["name"];

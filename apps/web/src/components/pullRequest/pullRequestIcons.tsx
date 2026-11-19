@@ -1,3 +1,5 @@
+import type { PullRequestState } from "@t3tools/contracts";
+import { msg } from "gt-react";
 import {
   GitMergeIcon,
   GitPullRequestArrowIcon,
@@ -8,8 +10,6 @@ import {
   Unlink2Icon,
   TriangleAlertIcon,
 } from "lucide-react";
-import type { PullRequestState } from "@t3tools/contracts";
-import { msg } from "gt-react";
 
 export const PullRequestGlyph = {
   pullRequest: GitPullRequestArrowIcon,

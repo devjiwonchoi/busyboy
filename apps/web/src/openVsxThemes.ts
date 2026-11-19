@@ -1,7 +1,7 @@
 import { sha256 } from "@noble/hashes/sha2";
-import JSZip from "jszip";
-import { parse, type ParseError } from "jsonc-parser";
 import { msg } from "gt-react";
+import { parse, type ParseError } from "jsonc-parser";
+import JSZip from "jszip";
 
 import { m } from "./i18n/messages";
 import type { ThemeDefinition } from "./themePalette";

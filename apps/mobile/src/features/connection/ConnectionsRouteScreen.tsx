@@ -1,17 +1,16 @@
-import { useGT } from "gt-react-native";
-import { ScreenScrollView as ScrollView } from "../../components/ui/ScreenScrollView";
-
 import { useNavigation } from "@react-navigation/native";
 import type { EnvironmentId } from "@t3tools/contracts";
+import { useGT } from "gt-react-native";
 import { useState } from "react";
 import { View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AppBar } from "../../components/ui/AppBar";
+import { ScreenScrollView as ScrollView } from "../../components/ui/ScreenScrollView";
 import { useRemoteConnections } from "../../state/use-remote-environment-registry";
+import { LinkedEnvironmentsSection } from "./LinkedEnvironmentsSection";
 import { LocalEnvironmentList } from "./LocalEnvironmentList";
 import { PullRequestRoutingSettings } from "./PullRequestRoutingSettings";
-import { LinkedEnvironmentsSection } from "./LinkedEnvironmentsSection";
 
 export function ConnectionsRouteScreen() {
   const gt = useGT();

@@ -1,13 +1,13 @@
-import type { OrchestrationV2ProjectedTurnItem, OrchestrationV2Subagent } from "@t3tools/contracts";
 import { describe, expect, it } from "@effect/vitest";
+import type { OrchestrationV2ProjectedTurnItem, OrchestrationV2Subagent } from "@t3tools/contracts";
 import * as DateTime from "effect/DateTime";
 
+import { applyOrchestrationV2ProjectionEvent } from "./orchestrationV2Projection.ts";
 import { v2Projection, v2ThreadId } from "./orchestrationV2TestFixtures.ts";
 import {
   mergeOlderHistoryIntoProjection,
   mergeOlderSubagentsIntoProjection,
 } from "./threadHistoryMerge.ts";
-import { applyOrchestrationV2ProjectionEvent } from "./orchestrationV2Projection.ts";
 import { derivePendingThreadRequests } from "./threadRequests.ts";
 
 const NOW = DateTime.makeUnsafe("2026-06-20T00:00:00.000Z");

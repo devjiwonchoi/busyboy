@@ -1,5 +1,6 @@
-import { assert, describe, it } from "@effect/vitest";
 import type * as NodeOS from "node:os";
+
+import { assert, describe, it } from "@effect/vitest";
 import * as HostProcess from "@t3tools/shared/HostProcess";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";

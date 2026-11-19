@@ -1,9 +1,6 @@
 import { errorDisplayMessage } from "@t3tools/client-runtime/errors";
 import * as Updates from "expo-updates";
 // Metro namespace imports evaluate unrelated React Native getters, including unavailable native modules.
-import { AppState } from "react-native";
-import { msg } from "gt-react-native";
-
 import {
   type AtomCommandResult,
   isAtomCommandInterrupted,
@@ -11,6 +8,8 @@ import {
   settlePromise,
   squashAtomCommandFailure,
 } from "@t3tools/client-runtime/state/runtime";
+import { msg } from "gt-react-native";
+import { AppState } from "react-native";
 
 import { m } from "../../i18n/messages";
 

@@ -1,16 +1,15 @@
 import type { SourceControlMediaRequest } from "@t3tools/source-control-core/server/driver";
 import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
-import * as Redacted from "effect/Redacted";
 import {
   FetchHttpClient,
   HttpClient,
   HttpClientRequest,
   type HttpClientResponse,
 } from "effect/http";
+import * as Redacted from "effect/Redacted";
 
 import { GITHUB_CREDENTIALED_MEDIA_HOSTS, gitHubLfsMediaUrl } from "../shared/gitHubMedia.ts";
-
 import * as GitHubCredentials from "./GitHubCredentials.ts";
 import * as GitHubRest from "./GitHubRest.ts";
 

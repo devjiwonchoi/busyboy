@@ -1,13 +1,14 @@
 // Relay JSON-RPC verbatim; schema decoding would reject foreign payloads.
 // @effect-diagnostics globalJsonInEffect:off
+
+import { discardResponseBody, responsePayloads } from "@t3tools/shared/mcpResponsePayloads";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
-import * as Option from "effect/Option";
 import * as Fiber from "effect/Fiber";
+import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
-import { discardResponseBody, responsePayloads } from "@t3tools/shared/mcpResponsePayloads";
 
 /** ACP mandates stdio MCP support; HTTP/SSE support varies. */
 

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
+
 import { deriveDeviceType, isDuoDevice } from "./device-type";
 import type { NativeLayoutMetrics } from "./reserved-regions";
 

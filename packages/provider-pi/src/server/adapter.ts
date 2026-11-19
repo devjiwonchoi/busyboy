@@ -1,10 +1,5 @@
-import * as HostProcess from "@t3tools/shared/HostProcess";
 import * as NodeUtil from "node:util";
-import { AgentScope } from "@t3tools/shared/AgentScope";
-import { getModelSelectionStringOptionValue } from "@t3tools/shared/model";
-import { readToolOutputImage } from "@t3tools/shared/toolOutput";
-import { isWorkspaceImagePreviewPath } from "@t3tools/shared/filePreview";
-import * as Predicate from "effect/Predicate";
+
 import {
   ProviderDriverKind,
   type ChatAttachment,
@@ -26,43 +21,56 @@ import {
   type MessageId,
   type OrchestrationV2ProviderTurnTokenUsage,
 } from "@t3tools/contracts";
-import { PiSettings } from "../settings.ts";
-import * as Cause from "effect/Cause";
-import * as DateTime from "effect/DateTime";
-import * as Deferred from "effect/Deferred";
-import * as Option from "effect/Option";
-import * as Path from "effect/Path";
-import * as Duration from "effect/Duration";
-import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
-import * as Exit from "effect/Exit";
-import * as Scope from "effect/Scope";
-import * as Fiber from "effect/Fiber";
-import * as Queue from "effect/Queue";
-import * as Schema from "effect/Schema";
-import * as Semaphore from "effect/Semaphore";
-import * as Stream from "effect/Stream";
-import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
-
-import * as ProviderHost from "@t3tools/provider-core/server/ProviderHost";
-import { providerMessageTextWithAttachmentPaths } from "@t3tools/provider-core/server/attachmentPrompt";
-import { mcpToolPresentation } from "@t3tools/provider-core/server/mcpToolPresentation";
-import * as McpProviderSessions from "@t3tools/provider-core/server/McpProviderSessions";
-import { parsePiCompactCommand, type PiCompactCommand } from "./commands.ts";
-import { mergeProviderInstanceEnvironment } from "@t3tools/provider-core/server/instanceEnvironment";
-import * as IdAllocator from "@t3tools/provider-core/server/IdAllocator";
-import * as ProviderAdapter from "@t3tools/provider-core/server/ProviderAdapter";
-import * as ProviderContinuationRequests from "@t3tools/provider-core/server/ProviderContinuationRequests";
 import {
   ProviderAdapterDriverCreateError,
   type ProviderAdapterDriver,
   type ProviderAdapterDriverCreateInput,
 } from "@t3tools/provider-core/server/adapterDriver";
+import { providerMessageTextWithAttachmentPaths } from "@t3tools/provider-core/server/attachmentPrompt";
 import {
   makeProviderFailure,
   makeProviderRetryTurnItem,
 } from "@t3tools/provider-core/server/failure";
+import * as IdAllocator from "@t3tools/provider-core/server/IdAllocator";
+import { mergeProviderInstanceEnvironment } from "@t3tools/provider-core/server/instanceEnvironment";
+import * as McpProviderSessions from "@t3tools/provider-core/server/McpProviderSessions";
+import { mcpToolPresentation } from "@t3tools/provider-core/server/mcpToolPresentation";
+import * as ProviderAdapter from "@t3tools/provider-core/server/ProviderAdapter";
+import * as ProviderContinuationRequests from "@t3tools/provider-core/server/ProviderContinuationRequests";
+import * as ProviderHost from "@t3tools/provider-core/server/ProviderHost";
 import { turnScopedSelectionTransition } from "@t3tools/provider-core/server/selectionTransition";
+import { AgentScope } from "@t3tools/shared/AgentScope";
+import { isWorkspaceImagePreviewPath } from "@t3tools/shared/filePreview";
+import * as HostProcess from "@t3tools/shared/HostProcess";
+import { getModelSelectionStringOptionValue } from "@t3tools/shared/model";
+import { readToolOutputImage } from "@t3tools/shared/toolOutput";
+import * as Cause from "effect/Cause";
+import * as DateTime from "effect/DateTime";
+import * as Deferred from "effect/Deferred";
+import * as Duration from "effect/Duration";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Fiber from "effect/Fiber";
+import * as FileSystem from "effect/FileSystem";
+import * as Option from "effect/Option";
+import * as Path from "effect/Path";
+import * as Predicate from "effect/Predicate";
+import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
+import * as Queue from "effect/Queue";
+import * as Schema from "effect/Schema";
+import * as Scope from "effect/Scope";
+import * as Semaphore from "effect/Semaphore";
+import * as Stream from "effect/Stream";
+
+import { PiSettings } from "../settings.ts";
+import { parsePiCompactCommand, type PiCompactCommand } from "./commands.ts";
+import { PI_FILE_CHANGE_TOOLS, PI_T3_SERVICE_TIER_COMMAND } from "./mcpExtensionSource.ts";
+import {
+  buildPiRpcLaunch,
+  materializePiT3McpExtension,
+  resolvePiLaunchArgs,
+} from "./mcpInjection.ts";
+import { PI_STANDARD_SERVICE_TIER } from "./modelCapabilities.ts";
 import {
   findReportedPiModel,
   makePiRpcConnection,
@@ -74,13 +82,6 @@ import {
   type PiRpcError,
   type PiRpcRecord,
 } from "./rpc.ts";
-import {
-  buildPiRpcLaunch,
-  materializePiT3McpExtension,
-  resolvePiLaunchArgs,
-} from "./mcpInjection.ts";
-import { PI_FILE_CHANGE_TOOLS, PI_T3_SERVICE_TIER_COMMAND } from "./mcpExtensionSource.ts";
-import { PI_STANDARD_SERVICE_TIER } from "./modelCapabilities.ts";
 
 export const PI_PROVIDER = ProviderDriverKind.make("pi");
 const PI_DRIVER_KIND = PI_PROVIDER;

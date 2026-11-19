@@ -1,5 +1,3 @@
-import * as Result from "effect/Result";
-import * as Schema from "effect/Schema";
 import { TrimmedNonEmptyString } from "@t3tools/contracts";
 import type {
   IssueActor,
@@ -15,9 +13,11 @@ import type {
 } from "@t3tools/contracts";
 import { decodeJsonResult } from "@t3tools/shared/schemaJson";
 import type { TrackerIssueSummary } from "@t3tools/source-control-core/server/IssueTracker";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
 
-import type * as Issues from "./issues.graphql.ts";
 import { toReactions } from "./gitHubPullRequestJson.ts";
+import type * as Issues from "./issues.graphql.ts";
 
 type DetailIssue = NonNullable<NonNullable<Issues.IssueDetail.Result["repository"]>["issue"]>;
 type Actor = {

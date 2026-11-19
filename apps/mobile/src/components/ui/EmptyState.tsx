@@ -1,5 +1,5 @@
-import { View } from "react-native";
 import type { ReactNode } from "react";
+import { View } from "react-native";
 
 import { AppText as Text } from "./AppText";
 import { Button } from "./Button";

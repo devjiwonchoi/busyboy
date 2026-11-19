@@ -1,10 +1,10 @@
+import { scopedProjectKey } from "@t3tools/client-runtime/environment";
 import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
 import {
   executeAtomQuery,
   runAtomCommand,
   squashAtomCommandFailure,
 } from "@t3tools/client-runtime/state/runtime";
-import { scopedProjectKey } from "@t3tools/client-runtime/environment";
 import type {
   EnvironmentId,
   ProjectCloneSnapshot,
@@ -14,9 +14,9 @@ import type {
 import { msg } from "gt-react";
 import { create } from "zustand";
 
+import { suggestAppAccessForRemote } from "../components/sourceControlAppAccessToast";
 import { m } from "../i18n/messages";
 import { appAtomRegistry } from "../rpc/atomRegistry";
-import { suggestAppAccessForRemote } from "../components/sourceControlAppAccessToast";
 import { environmentProjectClonesAtom, silenceProjectCloneToasts } from "../state/projectClones";
 import { projectEnvironment } from "../state/projects";
 import { sourceControlEnvironment } from "../state/sourceControl";

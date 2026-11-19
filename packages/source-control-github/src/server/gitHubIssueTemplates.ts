@@ -1,12 +1,12 @@
+import { IssueTrackerKind, TrimmedNonEmptyString, type IssueTemplate } from "@t3tools/contracts";
+import { IssueTrackerError } from "@t3tools/source-control-core/server/IssueTracker";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import { parse as parseYaml } from "yaml";
-import { IssueTrackerKind, TrimmedNonEmptyString, type IssueTemplate } from "@t3tools/contracts";
-import { IssueTrackerError } from "@t3tools/source-control-core/server/IssueTracker";
 
-import type * as Issues from "./issues.graphql.ts";
 import { toIssueTemplates } from "./gitHubIssueJson.ts";
+import type * as Issues from "./issues.graphql.ts";
 
 const Names = Schema.Union([Schema.String, Schema.Array(Schema.String)]);
 const FormOption = Schema.Union([

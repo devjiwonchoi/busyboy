@@ -1,20 +1,21 @@
-import { uuidv4 } from "../../lib/uuid";
-import * as Dialog from "../../components/ui/Dialog";
 import { useNavigation } from "@react-navigation/native";
-import { vcsActionLabelText } from "@t3tools/client-runtime/state/vcs";
-import { useGT, useMessages } from "gt-react-native";
-import { AsyncResult } from "effect/reactivity";
-import * as Cause from "effect/Cause";
-import { AuthFilesystemReadScope, AuthSourceControlWriteScope } from "@t3tools/contracts";
 import type {
   EnvironmentProject,
   EnvironmentThreadShell,
 } from "@t3tools/client-runtime/state/shell";
+import { vcsActionLabelText } from "@t3tools/client-runtime/state/vcs";
+import { AuthFilesystemReadScope, AuthSourceControlWriteScope } from "@t3tools/contracts";
+import * as Cause from "effect/Cause";
+import { AsyncResult } from "effect/reactivity";
+import { useGT, useMessages } from "gt-react-native";
+
+import * as Dialog from "../../components/ui/Dialog";
+import { uuidv4 } from "../../lib/uuid";
 import { useEnvironmentQuery } from "../../state/query";
 import { useEnvironmentScope } from "../../state/session";
 import { useAtomCommand } from "../../state/use-atom-command";
-import { vcsActionManager, vcsEnvironment } from "../../state/vcs";
 import { useVcsActionState } from "../../state/use-vcs-action-state";
+import { vcsActionManager, vcsEnvironment } from "../../state/vcs";
 import { ThreadHeader } from "./ThreadHeader";
 
 export function DraftThreadHeader(props: {

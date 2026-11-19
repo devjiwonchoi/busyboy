@@ -1,9 +1,4 @@
-import { ProviderInstanceIcon } from "../chat/ProviderInstanceIcon";
 import type { UsageProviderKind } from "@t3tools/contracts";
-import { T, useGT, useLocale, useMessages } from "gt-react";
-import { useLayoutEffect, useRef, useState } from "react";
-
-import type { DailyTotals, HourlyTotals } from "@t3tools/shared/usageMerge";
 import {
   formatDayShort,
   formatHourShort,
@@ -11,9 +6,15 @@ import {
   formatUsd,
 } from "@t3tools/shared/usageFormat";
 import { formatRelativeHourShort } from "@t3tools/shared/usageFormatCopy";
-import { cn } from "~/lib/utils";
-import { PROVIDER_ORDER, PROVIDER_PRESENTATION } from "./usageProviders";
+import type { DailyTotals, HourlyTotals } from "@t3tools/shared/usageMerge";
+import { T, useGT, useLocale, useMessages } from "gt-react";
+import { useLayoutEffect, useRef, useState } from "react";
+
 import { observeResize } from "~/lib/observeResize";
+import { cn } from "~/lib/utils";
+
+import { ProviderInstanceIcon } from "../chat/ProviderInstanceIcon";
+import { PROVIDER_ORDER, PROVIDER_PRESENTATION } from "./usageProviders";
 
 const VIEW_WIDTH = 960;
 const VIEW_HEIGHT = 260;

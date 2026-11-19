@@ -1,8 +1,8 @@
 import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
+import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
-import { ChildProcess, ChildProcessSpawner } from "effect/process";
 
 export class ScenarioError extends Schema.TaggedError<ScenarioError>()("ScenarioError", {
   message: Schema.String,

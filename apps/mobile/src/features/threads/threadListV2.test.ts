@@ -1,20 +1,10 @@
-import { threadSearchMatchKey } from "@t3tools/client-runtime/state/thread-search";
-import { createInboxReturnTracker } from "@t3tools/client-runtime/state/thread-inbox";
+import type { MenuAction } from "@react-native-menu/menu";
 import { presentThreadShell } from "@t3tools/client-runtime/state/models";
-import * as DateTime from "effect/DateTime";
-import * as Schema from "effect/Schema";
-import { planPinnedReorder } from "@t3tools/client-runtime/state/thread-sort";
-import {
-  createPendingThreadOrder,
-  createThreadMovePlanner,
-  threadOrderAfterMove,
-  threadDropLifecycle,
-  reconcilePendingThreadOrder,
-  type PendingThreadOrder,
-  type ThreadMoveAvailability,
-} from "./threadOrder";
 import type { EnvironmentThreadShell } from "@t3tools/client-runtime/state/shell";
+import { createInboxReturnTracker } from "@t3tools/client-runtime/state/thread-inbox";
+import { threadSearchMatchKey } from "@t3tools/client-runtime/state/thread-search";
 import { canSnooze, resolveSnoozePresets } from "@t3tools/client-runtime/state/thread-settled";
+import { planPinnedReorder } from "@t3tools/client-runtime/state/thread-sort";
 import {
   CommandId,
   EnvironmentId,
@@ -26,7 +16,8 @@ import {
   RuntimeRequestId,
   ThreadId,
 } from "@t3tools/contracts";
-import type { MenuAction } from "@react-native-menu/menu";
+import * as DateTime from "effect/DateTime";
+import * as Schema from "effect/Schema";
 import { describe, expect, it, vi } from "vite-plus/test";
 
 import type { PendingNewTask } from "../../state/use-pending-new-tasks";
@@ -48,6 +39,15 @@ import {
   threadHasUnseenCompletion,
   type ThreadListV2ListItem,
 } from "./threadListV2";
+import {
+  createPendingThreadOrder,
+  createThreadMovePlanner,
+  threadOrderAfterMove,
+  threadDropLifecycle,
+  reconcilePendingThreadOrder,
+  type PendingThreadOrder,
+  type ThreadMoveAvailability,
+} from "./threadOrder";
 
 const environmentId = EnvironmentId.make("environment-1");
 const decodeThreadShell = Schema.decodeUnknownSync(OrchestrationV2ThreadShell);

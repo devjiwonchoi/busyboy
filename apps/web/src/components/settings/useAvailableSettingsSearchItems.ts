@@ -1,5 +1,5 @@
-import { useMessages } from "gt-react";
 import { AuthEnvironmentMaintainScope } from "@t3tools/contracts";
+import { useMessages } from "gt-react";
 
 import { usePrimaryCloudLinkState } from "~/cloud/cloudLinkState";
 import { hasCloudPublicConfig } from "~/cloud/publicConfig";
@@ -10,6 +10,7 @@ import { useEnvironments, usePrimaryEnvironmentId } from "~/state/environments";
 import { usePeerLinkHosts } from "~/state/peerLinks";
 import { useEnvironmentQuery } from "~/state/query";
 import { useEnvironmentScope } from "~/state/session";
+
 import { isWslSettingsRowVisible } from "./ConnectionsSettings.logic";
 import { isProviderSettingsEnvironmentAvailable } from "./ProviderSettingsPanel.logic";
 import {

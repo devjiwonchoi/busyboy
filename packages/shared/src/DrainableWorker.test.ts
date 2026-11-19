@@ -1,5 +1,4 @@
 import { it } from "@effect/vitest";
-import { describe, expect } from "vite-plus/test";
 import * as Cause from "effect/Cause";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
@@ -7,6 +6,7 @@ import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
 import * as Logger from "effect/Logger";
 import * as Scope from "effect/Scope";
+import { describe, expect } from "vite-plus/test";
 
 import { makeDrainableWorker } from "./DrainableWorker.ts";
 

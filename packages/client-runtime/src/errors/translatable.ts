@@ -1,6 +1,6 @@
+import * as Schema from "effect/Schema";
 import { decodeMsg, decodeOptions, mFallback } from "gt-i18n";
 import type { MFunctionType } from "gt-i18n/types";
-import * as Schema from "effect/Schema";
 
 /**
  * One or more `msg()` sentences shown together, joined by a space. Errors carry it beside

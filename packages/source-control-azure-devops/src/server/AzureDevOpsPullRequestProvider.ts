@@ -1,12 +1,22 @@
 import { resolvePullRequestAuthorFilter, SourceControlProviderKind } from "@t3tools/contracts";
+import type { PullRequestCapabilities, PullRequestViewerPermissions } from "@t3tools/contracts";
+import { rollupCheckStatuses } from "@t3tools/source-control-core/server/pullRequestChecks";
+import {
+  PullRequestProviderError,
+  type PullRequestProviderFailure,
+  type ProviderChangeRequest,
+  type ProviderChangeRequestActivity,
+  type ProviderChangeRequestDetail,
+  type ProviderChangeRequestSummary,
+  type ProviderDiffSlice,
+  type PullRequestProviderApi,
+} from "@t3tools/source-control-core/server/PullRequestProvider";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Semaphore from "effect/Semaphore";
-import { rollupCheckStatuses } from "@t3tools/source-control-core/server/pullRequestChecks";
-import type { PullRequestCapabilities, PullRequestViewerPermissions } from "@t3tools/contracts";
 
-import * as AzureDevOpsPullRequestCli from "./AzureDevOpsPullRequestCli.ts";
+import { definition } from "../shared/definition.ts";
 import {
   azureDevOpsFilePatch,
   azureDevOpsUnreadableFilePatch,
@@ -19,16 +29,7 @@ import {
   MAX_FILE_DIFF_EDITS,
   type AzureDevOpsFileTexts,
 } from "./azureDevOpsDiff.ts";
-import {
-  PullRequestProviderError,
-  type PullRequestProviderFailure,
-  type ProviderChangeRequest,
-  type ProviderChangeRequestActivity,
-  type ProviderChangeRequestDetail,
-  type ProviderChangeRequestSummary,
-  type ProviderDiffSlice,
-  type PullRequestProviderApi,
-} from "@t3tools/source-control-core/server/PullRequestProvider";
+import * as AzureDevOpsPullRequestCli from "./AzureDevOpsPullRequestCli.ts";
 import type {
   AzureDevOpsChangeEntry,
   AzureDevOpsItemContent,
@@ -36,7 +37,6 @@ import type {
   AzureDevOpsPullRequest,
   AzureDevOpsRepositoryLocation,
 } from "./azureDevOpsPullRequestJson.ts";
-import { definition } from "../shared/definition.ts";
 
 /** A file the blob batch missed pays for two Python startups. */
 const DIFF_FILE_CONCURRENCY = 4;

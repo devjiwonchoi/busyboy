@@ -1,6 +1,6 @@
+import * as Drizzle from "@alchemy.run/drizzle/Postgres";
 import * as NodeCryptoLayer from "@effect/platform-node/NodeCrypto";
 import { describe, expect, it } from "@effect/vitest";
-import * as Drizzle from "@alchemy.run/drizzle/Postgres";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";

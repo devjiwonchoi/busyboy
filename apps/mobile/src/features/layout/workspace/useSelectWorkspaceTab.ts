@@ -1,8 +1,8 @@
 import { Keyboard } from "react-native";
 
 import { useAdaptiveWorkspaceLayout } from "../adaptive-workspace-context";
-import { useWorkspaceTabs } from "./WorkspaceTabsContext";
 import type { WorkspaceTab } from "./workspace-tabs-state";
+import { useWorkspaceTabs } from "./WorkspaceTabsContext";
 
 /** Opens a workspace tab, Settings included, from a tab bar, rail, toolbar or command. */
 export function useSelectWorkspaceTab() {

@@ -3,13 +3,13 @@
 import * as NodeChildProcess from "node:child_process";
 
 import * as HostProcess from "@t3tools/shared/HostProcess";
+import { Command, Flag, GlobalFlag, Prompt } from "effect/cli";
 import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
-import { Command, Flag, GlobalFlag, Prompt } from "effect/cli";
 
 import * as BootService from "../cloud/bootService.ts";
 import {
@@ -20,9 +20,9 @@ import {
   readPosixLauncherTarget,
   resolveLauncherPath,
 } from "../cloud/pinnedRuntime.ts";
+import { awaitDetachedSpawn } from "../process/windowsVerbatimSpawn.ts";
 import { projectLocationFlags, resolveCliAuthConfig } from "./config.ts";
 import * as CliService from "./service.ts";
-import { awaitDetachedSpawn } from "../process/windowsVerbatimSpawn.ts";
 import { findWindowsShim } from "./update.ts";
 
 export class CliUninstallError extends Schema.TaggedError<CliUninstallError>()(

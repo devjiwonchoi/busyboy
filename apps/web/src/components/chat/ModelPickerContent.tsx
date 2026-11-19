@@ -1,5 +1,8 @@
-import { T, useGT, useLocale, useMessages } from "gt-react";
-import { useLegendListRef } from "~/hooks/useLegendListRef";
+import { useAtomValue } from "@effect/atom-react";
+import { LegendList, type LegendListRef } from "@legendapp/list/react";
+import { rankModelPickerSearch } from "@t3tools/client-runtime/model-search";
+import { groupModelsBySubProvider } from "@t3tools/client-runtime/providerSubProviders";
+import { formatProviderUpdateRequiredNotice } from "@t3tools/client-runtime/providerUpdateRequiredModels";
 import {
   ANTIGRAVITY_DEFAULT_MODEL,
   type ProviderInstanceId,
@@ -9,11 +12,9 @@ import {
   MODEL_PICKER_JUMP_KEYBINDING_COMMANDS,
 } from "@t3tools/contracts";
 import { resolveSelectableModel } from "@t3tools/shared/model";
-import { useAtomValue } from "@effect/atom-react";
-import { formatProviderUpdateRequiredNotice } from "@t3tools/client-runtime/providerUpdateRequiredModels";
-import { groupModelsBySubProvider } from "@t3tools/client-runtime/providerSubProviders";
 import { useNavigate } from "@tanstack/react-router";
-import { LegendList, type LegendListRef } from "@legendapp/list/react";
+import { T, useGT, useLocale, useMessages } from "gt-react";
+import { ChevronRightIcon } from "lucide-react";
 import {
   memo,
   useState,
@@ -24,19 +25,34 @@ import {
   type ReactNode,
   type RefObject,
 } from "react";
-import { ChevronRightIcon } from "lucide-react";
-import { ModelListRow } from "./ModelListRow";
-import { ModelPickerSidebar } from "./ModelPickerSidebar";
-import { useProviderWorkspaceSnapshotRefresh } from "./useProviderWorkspaceSnapshotRefresh";
-import { getProviderStatusMessage, hasProviderSetup } from "./ProviderStatusBanner";
+
+import { useLegendListRef } from "~/hooks/useLegendListRef";
 import {
-  modelPickerLegacySectionKey,
-  modelPickerModelKey,
-  modelPickerSubProviderSectionKey,
-  parseModelPickerLegacySectionKey,
-  parseModelPickerModelKey,
-} from "./modelPickerKeys";
-import { rankModelPickerSearch } from "@t3tools/client-runtime/model-search";
+  useEnvironmentModelPreferences,
+  useToggleEnvironmentModelFavorite,
+} from "~/hooks/useSettings";
+import { announce } from "~/lib/announce";
+import { cn } from "~/lib/utils";
+
+import { isCommandPaletteOpen } from "../../commandPaletteBus";
+import {
+  modelPickerJumpCommandForIndex,
+  modelPickerJumpIndexFromCommand,
+  resolveShortcutCommand,
+  shortcutLabelForCommand,
+} from "../../keybindings";
+import { providerModelKey, sortProviderModelItems } from "../../modelOrdering";
+import { registerModelPickerContent } from "../../modelPickerVisibility";
+import {
+  isProviderInstancePickerReady,
+  isProviderInstancePickerVisible,
+  shouldShowInstanceBadge,
+  type ProviderInstanceEntry,
+} from "../../providerInstances";
+import { hasRuntimeModelCatalog } from "../../providerModels";
+import { primaryServerKeybindingsAtom } from "../../state/server";
+import { Badge } from "../ui/badge";
+import { InlineButton } from "../ui/button";
 import {
   Combobox,
   ComboboxEmpty,
@@ -44,34 +60,20 @@ import {
   ComboboxItem,
   ComboboxListVirtualized,
 } from "../ui/combobox";
-import { ModelEsque } from "./providerIconUtils";
-import { isCommandPaletteOpen } from "../../commandPaletteBus";
-import { registerModelPickerContent } from "../../modelPickerVisibility";
-import { primaryServerKeybindingsAtom } from "../../state/server";
-import {
-  modelPickerJumpCommandForIndex,
-  modelPickerJumpIndexFromCommand,
-  resolveShortcutCommand,
-  shortcutLabelForCommand,
-} from "../../keybindings";
-import {
-  useEnvironmentModelPreferences,
-  useToggleEnvironmentModelFavorite,
-} from "~/hooks/useSettings";
-import { announce } from "~/lib/announce";
-import { cn } from "~/lib/utils";
 import { getVirtualizedScrollFadeClassName } from "../ui/scroll-area";
 import { TooltipProvider } from "../ui/tooltip";
-import { InlineButton } from "../ui/button";
-import { Badge } from "../ui/badge";
+import { ModelListRow } from "./ModelListRow";
 import {
-  isProviderInstancePickerReady,
-  isProviderInstancePickerVisible,
-  shouldShowInstanceBadge,
-  type ProviderInstanceEntry,
-} from "../../providerInstances";
-import { providerModelKey, sortProviderModelItems } from "../../modelOrdering";
-import { hasRuntimeModelCatalog } from "../../providerModels";
+  modelPickerLegacySectionKey,
+  modelPickerModelKey,
+  modelPickerSubProviderSectionKey,
+  parseModelPickerLegacySectionKey,
+  parseModelPickerModelKey,
+} from "./modelPickerKeys";
+import { ModelPickerSidebar } from "./ModelPickerSidebar";
+import { ModelEsque } from "./providerIconUtils";
+import { getProviderStatusMessage, hasProviderSetup } from "./ProviderStatusBanner";
+import { useProviderWorkspaceSnapshotRefresh } from "./useProviderWorkspaceSnapshotRefresh";
 
 type ModelPickerItem = {
   slug: string;

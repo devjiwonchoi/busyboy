@@ -13,6 +13,9 @@ import {
   type EasDeviceHostConfig,
   type SettingsSecretValue,
 } from "@t3tools/contracts";
+import * as SecretResolver from "@t3tools/secret-provider-core/server/SecretResolver";
+import { writeFileStringAtomically } from "@t3tools/shared/atomicWrite";
+import * as HostProcess from "@t3tools/shared/HostProcess";
 import * as Cause from "effect/Cause";
 import * as Clock from "effect/Clock";
 import * as Duration from "effect/Duration";
@@ -21,6 +24,7 @@ import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
 import * as FiberSet from "effect/FiberSet";
 import * as FileSystem from "effect/FileSystem";
+import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Random from "effect/Random";
@@ -28,12 +32,8 @@ import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
 import * as Semaphore from "effect/Semaphore";
-import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http";
-import { writeFileStringAtomically } from "@t3tools/shared/atomicWrite";
-import * as HostProcess from "@t3tools/shared/HostProcess";
 
 import * as ServerConfig from "../config.ts";
-import * as SecretResolver from "@t3tools/secret-provider-core/server/SecretResolver";
 import { requireSettingsSecret } from "../secrets/settingsSecretValue.ts";
 import { releaseAgentDeviceSession } from "./AgentDeviceTarget.ts";
 import * as DeviceHost from "./DeviceHost.ts";

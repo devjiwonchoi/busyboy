@@ -1,29 +1,29 @@
-import { sourceControlClients } from "@t3tools/client-runtime/source-control-clients";
-import { changeRequestTermKind } from "../../lib/changeRequestTerm";
-import Animated from "react-native-reanimated";
-import { PR_ROW_LAYOUT } from "./pullRequestAnimations";
-import { useNavigation } from "@react-navigation/native";
-import type { PullRequestDetail } from "@t3tools/contracts";
 import type { MenuAction } from "@react-native-menu/menu";
+import { useNavigation } from "@react-navigation/native";
+import { sourceControlClients } from "@t3tools/client-runtime/source-control-clients";
+import type { PullRequestDetail } from "@t3tools/contracts";
 import { useGT } from "gt-react-native";
 import type { ReactNode } from "react";
 import { Platform, Pressable, View } from "react-native";
+import Animated from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { AppText as Text } from "../../components/ui/AppText";
+
+import type { AppBarMenu, AppBarMenuItem } from "../../components/ui/AppBar.types";
 import { SymbolView, type AppSymbolName } from "../../components/ui/AppSymbol";
+import { AppText as Text } from "../../components/ui/AppText";
 import { Button } from "../../components/ui/Button";
 import { IconButton } from "../../components/ui/IconButton";
-import { Toolbar } from "../../components/ui/Toolbar";
 import { Menu } from "../../components/ui/Menu";
-import type { AppBarMenu, AppBarMenuItem } from "../../components/ui/AppBar.types";
 import { createNativeHeaderMenu } from "../../components/ui/nativeHeaderMenu.ios";
-
+import { Toolbar } from "../../components/ui/Toolbar";
+import { changeRequestTermKind } from "../../lib/changeRequestTerm";
 import { useNativeLayoutMetrics } from "../../native/native-layout-metrics";
+import { useAppearancePreferences } from "../settings/appearance/AppearancePreferencesProvider";
+import { PR_ROW_LAYOUT } from "./pullRequestAnimations";
+import { usePullRequestAgentActions } from "./usePullRequestAgentActions";
 import { type PullRequestParams } from "./usePullRequestDiff";
 import { usePullRequestPermissions } from "./usePullRequestPermissions";
-import { useAppearancePreferences } from "../settings/appearance/AppearancePreferencesProvider";
 import { usePullRequestReviewDraft } from "./usePullRequestReviewDraft";
-import { usePullRequestAgentActions } from "./usePullRequestAgentActions";
 
 export function PullRequestCardGroup(props: { readonly children: ReactNode }) {
   return (

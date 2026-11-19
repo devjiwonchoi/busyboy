@@ -1,12 +1,15 @@
-import { errorDisplayMessage, type MarkedText } from "@t3tools/client-runtime/errors";
+import {
+  StackActions,
+  useNavigation,
+  type NavigationState,
+  type ParamListBase,
+} from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import { useSelectWorkspaceDetail } from "../layout/workspace/useSelectWorkspaceDetail";
-import * as Dialog from "../../components/ui/Dialog";
-import { AppActivityIndicator } from "../../components/ui/AppActivityIndicator";
-import { NavigationRow } from "../../components/ui/NavigationRow";
-import { SettingsScreen } from "../settings/components/SettingsScreen";
-import { ScreenScrollView as ScrollView } from "../../components/ui/ScreenScrollView";
-import { Button } from "../../components/ui/Button";
+import {
+  connectionStatusText,
+  type EnvironmentConnectionPhase,
+} from "@t3tools/client-runtime/connection";
+import { errorDisplayMessage, type MarkedText } from "@t3tools/client-runtime/errors";
 import {
   addProjectRemoteSourceLabel,
   addProjectRemoteSourcePathHint,
@@ -34,10 +37,7 @@ import {
   type OfferedSourceControlProviders,
   type AddProjectRemoteSource,
 } from "@t3tools/client-runtime/operations/projects";
-import {
-  connectionStatusText,
-  type EnvironmentConnectionPhase,
-} from "@t3tools/client-runtime/connection";
+import { sourceControlClients } from "@t3tools/client-runtime/source-control-clients";
 import {
   canPreloadBrowsePath,
   createBrowseNavigationCoordinator,
@@ -50,7 +50,6 @@ import {
   inferProjectTitleFromPath,
   isWindowsPlatform,
 } from "@t3tools/client-runtime/state/projects";
-import { resolvePastedPath } from "@t3tools/shared/path";
 import {
   AuthOrchestrationOperateScope,
   AuthSourceControlWriteScope,
@@ -62,54 +61,56 @@ import {
   resolveEnvironmentMachineKind,
   SourceControlProviderKind,
 } from "@t3tools/contracts";
-import {
-  StackActions,
-  useNavigation,
-  type NavigationState,
-  type ParamListBase,
-} from "@react-navigation/native";
-import { SymbolView } from "../../components/ui/AppSymbol";
-import { msg, useGT, useMessages } from "gt-react-native";
-import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Platform, Pressable, View } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { resolvePastedPath } from "@t3tools/shared/path";
 import * as Arr from "effect/Array";
 import * as Cause from "effect/Cause";
 import * as Order from "effect/Order";
 import { AsyncResult } from "effect/reactivity";
-import { cn } from "../../lib/cn";
+import { msg, useGT, useMessages } from "gt-react-native";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { Platform, Pressable, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+
+import { EnvironmentMachineSymbol } from "../../components/EnvironmentMachineSymbol";
+import { AppActivityIndicator } from "../../components/ui/AppActivityIndicator";
+import { SymbolView } from "../../components/ui/AppSymbol";
+import { AppText as Text, AppTextInput as TextInput } from "../../components/ui/AppText";
+import { Button } from "../../components/ui/Button";
+import * as Dialog from "../../components/ui/Dialog";
+import { ErrorBanner } from "../../components/ui/ErrorBanner";
+import { NavigationRow } from "../../components/ui/NavigationRow";
+import { ScreenScrollView as ScrollView } from "../../components/ui/ScreenScrollView";
+import { ThemedSwitch } from "../../components/ui/ThemedSwitch";
 import { m } from "../../i18n/messages";
+import { cn } from "../../lib/cn";
+import { uuidv4 } from "../../lib/uuid";
 import { useProjects, useServerConfigs, waitForProject } from "../../state/entities";
 import { filesystemEnvironment } from "../../state/filesystem";
+import { useEnvironmentPresentation } from "../../state/presentation";
 import { projectEnvironment } from "../../state/projects";
 import { useEnvironmentQuery } from "../../state/query";
 import { environmentSession, useEnvironmentScope, readEnvironmentScope } from "../../state/session";
-import { useEnvironmentPresentation } from "../../state/presentation";
 import { sourceControlEnvironment } from "../../state/sourceControl";
-import { AppText as Text, AppTextInput as TextInput } from "../../components/ui/AppText";
-import { EnvironmentMachineSymbol } from "../../components/EnvironmentMachineSymbol";
-import { ErrorBanner } from "../../components/ui/ErrorBanner";
-import { SourceControlIcon } from "./SourceControlIcon";
-import { sourceControlClients } from "@t3tools/client-runtime/source-control-clients";
-import { ThemedSwitch } from "../../components/ui/ThemedSwitch";
-import { uuidv4 } from "../../lib/uuid";
 import { useAtomCommand } from "../../state/use-atom-command";
-import { suggestAppAccessForRemote } from "./suggestAppAccess";
 import { useAtomQueryRunner } from "../../state/use-atom-query-runner";
-import {
-  useRemoteConnectionStatus,
-  useRemoteEnvironmentRuntime,
-  useSavedRemoteConnections,
-} from "../../state/use-remote-environment-registry";
-import {
-  isMissingCloneParentBrowseFailure,
-  resolveAddProjectEnvironment,
-} from "./AddProjectScreen.logic";
 import {
   createNewTaskDraft,
   setComposerDraftText,
   waitForComposerDraftsLoaded,
 } from "../../state/use-composer-drafts";
+import {
+  useRemoteConnectionStatus,
+  useRemoteEnvironmentRuntime,
+  useSavedRemoteConnections,
+} from "../../state/use-remote-environment-registry";
+import { useSelectWorkspaceDetail } from "../layout/workspace/useSelectWorkspaceDetail";
+import { SettingsScreen } from "../settings/components/SettingsScreen";
+import {
+  isMissingCloneParentBrowseFailure,
+  resolveAddProjectEnvironment,
+} from "./AddProjectScreen.logic";
+import { SourceControlIcon } from "./SourceControlIcon";
+import { suggestAppAccessForRemote } from "./suggestAppAccess";
 
 interface EnvironmentOption {
   readonly environmentId: EnvironmentId;

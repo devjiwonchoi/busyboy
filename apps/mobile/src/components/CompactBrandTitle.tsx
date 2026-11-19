@@ -1,13 +1,13 @@
-import { NATIVE_WORKSPACE_COLUMNS_SUPPORTED } from "../native/NativeWorkspaceColumns";
 import Constants from "expo-constants";
 import { useGT } from "gt-react-native";
 import { useState } from "react";
 import { Platform, View } from "react-native";
 
-import { AppText as Text } from "./ui/AppText";
-import { T3Wordmark } from "./T3Wordmark";
 import { IPAD_HOME_TITLE_OFFSET } from "../lib/layoutMetrics";
 import { resolveMobileStageLabel } from "../lib/mobileBranding";
+import { NATIVE_WORKSPACE_COLUMNS_SUPPORTED } from "../native/NativeWorkspaceColumns";
+import { T3Wordmark } from "./T3Wordmark";
+import { AppText as Text } from "./ui/AppText";
 import { useAndroidControlSizing } from "./ui/useAndroidControlSizing";
 
 const BRAND_MAX_FONT_SCALE = 1.4;

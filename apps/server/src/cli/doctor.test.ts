@@ -1,7 +1,7 @@
 import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import * as HostProcess from "@t3tools/shared/HostProcess";
 import { assert, it } from "@effect/vitest";
+import * as HostProcess from "@t3tools/shared/HostProcess";
 import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -10,11 +10,11 @@ import * as Path from "effect/Path";
 import * as TestClock from "effect/testing/TestClock";
 
 import * as BootService from "../cloud/bootService.ts";
-import { runDoctor } from "./doctor.ts";
 import { DatabaseMaintenance } from "../persistence/DatabaseMaintenance.ts";
 import * as ProcessRunner from "../processRunner.ts";
 import { acquireServerOwnership } from "../serverOwnership.ts";
 import { makePersistedServerRuntimeState } from "../serverRuntimeState.ts";
+import { runDoctor } from "./doctor.ts";
 
 // An empty home, so no boot service unit installed on this machine is read.
 const layerHost = Layer.mergeAll(

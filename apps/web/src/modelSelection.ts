@@ -1,3 +1,4 @@
+import { resolveModelShortName } from "@t3tools/client-runtime/provider-clients";
 import {
   DEFAULT_TEXT_GENERATION_MODEL,
   DEFAULT_TEXT_GENERATION_MODEL_BY_PROVIDER,
@@ -9,6 +10,7 @@ import {
   type ServerProvider,
   type ServerSettings,
 } from "@t3tools/contracts";
+import { type ClientSettings, UnifiedSettings } from "@t3tools/contracts/settings";
 import {
   type CustomModelDefinition,
   createModelSelection,
@@ -16,20 +18,14 @@ import {
   readCustomModelEntries,
   resolveSelectableModel,
 } from "@t3tools/shared/model";
-import { getComposerProviderState } from "./components/chat/composerProviderState";
-import { type ClientSettings, UnifiedSettings } from "@t3tools/contracts/settings";
 import { resolveModelPreferences } from "@t3tools/shared/serverSettings";
 import * as Arr from "effect/Array";
 import * as Equal from "effect/Equal";
 import * as Result from "effect/Result";
-import {
-  getDefaultServerModel,
-  getProviderModels,
-  hasRuntimeModelCatalog,
-  isRuntimeModelDefaultAlias,
-  resolveSelectableProvider,
-} from "./providerModels";
+
+import { getComposerProviderState } from "./components/chat/composerProviderState";
 import { ModelEsque } from "./components/chat/providerIconUtils";
+import { sortModelsForProviderInstance } from "./modelOrdering";
 import {
   type ProviderInstanceEntry,
   deriveProviderInstanceEntries,
@@ -37,8 +33,13 @@ import {
   resolveDefaultProviderModelSelection,
   resolveProjectDefaultProviderModelSelection,
 } from "./providerInstances";
-import { sortModelsForProviderInstance } from "./modelOrdering";
-import { resolveModelShortName } from "@t3tools/client-runtime/provider-clients";
+import {
+  getDefaultServerModel,
+  getProviderModels,
+  hasRuntimeModelCatalog,
+  isRuntimeModelDefaultAlias,
+  resolveSelectableProvider,
+} from "./providerModels";
 
 export const MAX_CUSTOM_MODEL_LENGTH = 256;
 const DEFAULT_TEXT_GENERATION_INSTANCE_ID = ProviderInstanceId.make("codex");

@@ -23,8 +23,8 @@ import {
   previewThreadRefsAtom,
   type ThreadPreviewState,
 } from "../../previewStateStore";
-import { useRightPanelStore } from "../../rightPanelStore";
 import { RIGHT_PANEL_INLINE_LAYOUT_MEDIA_QUERY } from "../../rightPanelLayout";
+import { useRightPanelStore } from "../../rightPanelStore";
 import { appAtomRegistry } from "../../rpc/atomRegistry";
 import { deviceEnvironment } from "../../state/device";
 import { readEnvironmentSupportsServerBrowser } from "../../state/entities";

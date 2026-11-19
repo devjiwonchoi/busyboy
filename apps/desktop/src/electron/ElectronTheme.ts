@@ -5,7 +5,6 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
-
 import * as Electron from "electron";
 
 import { watchLinuxColorScheme, type LinuxColorScheme } from "./LinuxColorScheme.ts";

@@ -1,7 +1,4 @@
 import type { ClaudeSettings } from "@t3tools/contracts";
-import * as Effect from "effect/Effect";
-import * as Path from "effect/Path";
-
 import { expandHomePath } from "@t3tools/provider-core/server/pathExpansion";
 import {
   parseTimestampMs,
@@ -11,6 +8,8 @@ import {
   type UsageRecord,
 } from "@t3tools/provider-core/server/usage";
 import * as HostProcess from "@t3tools/shared/HostProcess";
+import * as Effect from "effect/Effect";
+import * as Path from "effect/Path";
 
 // Claude Code uses this model for local placeholders that never reached the API.
 export const CLAUDE_SYNTHETIC_MODEL = "<synthetic>";

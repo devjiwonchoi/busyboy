@@ -1,12 +1,14 @@
 // @effect-diagnostics nodeBuiltinImport:off - Stands in for an Electron webContents.
-import { assert, describe, it } from "@effect/vitest";
+
 import * as NodeEvents from "node:events";
+
+import { assert, describe, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 
-import * as DesktopWindow from "../window/DesktopWindow.ts";
 import * as ElectronWindow from "../electron/ElectronWindow.ts";
 import { WEB_LINK_OPEN_CHANNEL } from "../ipc/channels.ts";
+import * as DesktopWindow from "../window/DesktopWindow.ts";
 import * as DesktopWebLinks from "./DesktopWebLinks.ts";
 
 const makeWindow = () => {

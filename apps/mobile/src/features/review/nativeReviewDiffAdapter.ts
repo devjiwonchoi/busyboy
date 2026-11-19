@@ -1,22 +1,23 @@
 import { cutLineNoteStart } from "@t3tools/shared/diffCutLines";
-import type { NativeReviewDiffRow, NativeReviewDiffTheme } from "../diffs/nativeReviewDiffSurface";
-import type { NativeReviewDiffFile } from "../diffs/nativeReviewDiffTypes";
 import * as Arr from "effect/Array";
 import { pipe } from "effect/Function";
+import { msg } from "gt-react-native";
+
+import { m } from "../../i18n/messages";
 import type { ResolvedMobileCodeSurface } from "../../lib/appearancePreferences";
 import { resolveHighlightLanguage } from "../../lib/highlightLanguage";
 import { type MobileThemeId, type MobileThemeVariables } from "../../lib/mobileTheme";
+import type { NativeReviewDiffRow, NativeReviewDiffTheme } from "../diffs/nativeReviewDiffSurface";
+import type { NativeReviewDiffFile } from "../diffs/nativeReviewDiffTypes";
 import { getMobileTerminalTheme, type TerminalAppearanceScheme } from "../terminal/terminalTheme";
-import { computeWordAltDiffRanges } from "./reviewWordDiffs";
+import type { ReviewInlineComment } from "./reviewCommentSelection";
 import {
   getReviewFilePreviewState,
   type ReviewParsedDiff,
   type ReviewRenderableFile,
   type ReviewRenderableLineRow,
 } from "./reviewModel";
-import type { ReviewInlineComment } from "./reviewCommentSelection";
-import { msg } from "gt-react-native";
-import { m } from "../../i18n/messages";
+import { computeWordAltDiffRanges } from "./reviewWordDiffs";
 
 const NATIVE_REVIEW_MAX_WORD_DIFF_RANGE_COUNT = 4;
 const NATIVE_REVIEW_MAX_WORD_DIFF_COVERAGE = 0.45;

@@ -1,3 +1,5 @@
+import { Radio as RadioPrimitive } from "@base-ui/react/radio";
+import { managedRuntimeModeCeilingMessage } from "@t3tools/client-runtime/contract-labels";
 import {
   type AuthMcpApprovalDecision,
   type AuthMcpApprovalDetails,
@@ -7,26 +9,19 @@ import {
   isRuntimeModeAbove,
   parseMcpApprovalCode,
 } from "@t3tools/contracts";
-import { managedRuntimeModeCeilingMessage } from "@t3tools/client-runtime/contract-labels";
-import { Radio as RadioPrimitive } from "@base-ui/react/radio";
 import { isLoopbackHost } from "@t3tools/shared/preview";
-import { EyeIcon, type LucideIcon } from "lucide-react";
 import type * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import { msg, T, useGT, useMessages, Var } from "gt-react";
+import { EyeIcon, type LucideIcon } from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
-
-import { m, type MessageResolver } from "../../i18n/messages";
 
 import { PrimaryEnvironmentHttpClient } from "~/environments/primary/httpClient";
 import { runPrimaryHttp } from "~/lib/runtime";
 import { cn } from "~/lib/utils";
-import {
-  agentRedirectUrl,
-  resolveApprovalDecision,
-  resolveMcpAccess,
-} from "./ConnectAgentSurface.logic";
+
+import { m, type MessageResolver } from "../../i18n/messages";
 import { runtimeModeConfig } from "../chat/runtimeModeConfig";
 import { Alert, AlertDescription } from "../ui/alert";
 import { Button } from "../ui/button";
@@ -34,6 +29,11 @@ import { Input } from "../ui/input";
 import { RadioGroup } from "../ui/radio-group";
 import { Spinner } from "../ui/spinner";
 import { StandalonePage, StandalonePageHeader } from "../ui/standalone-page";
+import {
+  agentRedirectUrl,
+  resolveApprovalDecision,
+  resolveMcpAccess,
+} from "./ConnectAgentSurface.logic";
 
 export const accessConfig: Record<
   AuthMcpClientAccess,

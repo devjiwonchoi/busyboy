@@ -1,18 +1,18 @@
-import { makeAggregateState } from "./agentActivityAggregate.ts";
 import type {
   RelayAgentActivitySnapshotResponse,
   RelayDeviceRegistrationRequest,
   RelayLiveActivityRegistrationRequest,
 } from "@t3tools/contracts/relay";
-import * as DateTime from "effect/DateTime";
 import * as Context from "effect/Context";
+import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 
+import { makeAggregateState } from "./agentActivityAggregate.ts";
+import * as AgentActivityPublisher from "./AgentActivityPublisher.ts";
 import * as AgentActivityRows from "./AgentActivityRows.ts";
 import * as Devices from "./Devices.ts";
 import * as LiveActivities from "./LiveActivities.ts";
-import * as AgentActivityPublisher from "./AgentActivityPublisher.ts";
 
 export type MobileRegistrationError =
   | Devices.DeviceRegistrationPersistenceError

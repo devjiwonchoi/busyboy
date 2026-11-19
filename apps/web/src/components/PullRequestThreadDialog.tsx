@@ -1,30 +1,31 @@
+import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
+import { parsePullRequestReference } from "@t3tools/client-runtime/pull-request-link-input";
+import {
+  isAtomCommandInterrupted,
+  squashAtomCommandFailure,
+} from "@t3tools/client-runtime/state/runtime";
 import {
   AuthOrchestrationOperateScope,
   type EnvironmentId,
   type ThreadId,
 } from "@t3tools/contracts";
-import {
-  isAtomCommandInterrupted,
-  squashAtomCommandFailure,
-} from "@t3tools/client-runtime/state/runtime";
-import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
-import { m } from "../i18n/messages";
 import { useDebouncedValue } from "@tanstack/react-pacer";
-import { useRef, useState } from "react";
 import { T, useGT, useMessages, Var } from "gt-react";
-import { changeRequestTermKind } from "./pullRequest/changeRequestTerm";
+import { useRef, useState } from "react";
 
+import { cn } from "~/lib/utils";
+import { getSourceControlPresentation } from "~/sourceControlPresentation";
+import { useEnvironmentQuery } from "~/state/query";
+import { readEnvironmentScope, useEnvironmentScope } from "~/state/session";
 import {
   readCachedPullRequestResolution,
   usePreparePullRequestThreadAction,
   usePullRequestResolutionState,
 } from "~/state/sourceControlActions";
-import { cn } from "~/lib/utils";
-import { parsePullRequestReference } from "@t3tools/client-runtime/pull-request-link-input";
-import { getSourceControlPresentation } from "~/sourceControlPresentation";
-import { useEnvironmentQuery } from "~/state/query";
-import { readEnvironmentScope, useEnvironmentScope } from "~/state/session";
 import { vcsEnvironment } from "~/state/vcs";
+
+import { m } from "../i18n/messages";
+import { changeRequestTermKind } from "./pullRequest/changeRequestTerm";
 import { offHeadPullRequestCheckoutToast } from "./pullRequest/pullRequestCheckoutToast";
 import { Button } from "./ui/button";
 import {

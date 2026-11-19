@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, expect, it, vi } from "vite-plus/test";
+
 import { MacPermissionHelper } from "./MacPermissionHelper.ts";
 import type { SettingsWindow } from "./MacSettingsWindow.ts";
 

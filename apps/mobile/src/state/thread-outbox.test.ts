@@ -75,6 +75,7 @@ vi.mock("expo-file-system", () => {
   };
 });
 
+import { createThreadOutboxManager, ThreadOutboxManagerError } from "./thread-outbox-manager";
 import {
   decodeQueuedThreadMessage,
   encodeQueuedThreadMessage,
@@ -86,7 +87,6 @@ import {
   shouldRetryThreadOutboxDelivery,
   type QueuedThreadMessage,
 } from "./thread-outbox-model";
-import { createThreadOutboxManager, ThreadOutboxManagerError } from "./thread-outbox-manager";
 import {
   expoThreadOutboxStorage,
   ThreadOutboxStorageError,

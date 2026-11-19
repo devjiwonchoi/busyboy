@@ -1,5 +1,6 @@
 // @effect-diagnostics nodeBuiltinImport:off -- Fake Electron net request and response emitters.
 import * as NodeEvents from "node:events";
+
 import { ElectronHttpExecutor } from "electron-updater/out/electronHttpExecutor.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 

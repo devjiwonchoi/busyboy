@@ -1,5 +1,3 @@
-import { msg } from "gt-i18n";
-import { translatableDetail } from "../errors/translatable.ts";
 import { EnvironmentId } from "@t3tools/contracts";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -13,8 +11,11 @@ import * as Scope from "effect/Scope";
 import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
 import * as SubscriptionRef from "effect/SubscriptionRef";
+import { msg } from "gt-i18n";
 
+import { translatableDetail } from "../errors/translatable.ts";
 import * as ClientCapabilities from "../platform/capabilities.ts";
+import * as Persistence from "../platform/persistence.ts";
 import {
   type ConnectionCatalogEntry,
   type ConnectionCredential,
@@ -25,9 +26,9 @@ import {
   SshConnectionProfile,
   connectionRegistrationCatalogEntry,
 } from "./catalog.ts";
-import * as ConnectionCredentialStore from "./credentialStore.ts";
-import * as ConnectionProfileStore from "./profileStore.ts";
 import * as Connectivity from "./connectivity.ts";
+import * as ConnectionCredentialStore from "./credentialStore.ts";
+import * as ConnectionDriver from "./driver.ts";
 import type {
   ConnectionAttemptError,
   ConnectionTarget,
@@ -36,10 +37,7 @@ import type {
   SupervisorConnectionState,
 } from "./model.ts";
 import { ConnectionBlockedError } from "./model.ts";
-import * as Persistence from "../platform/persistence.ts";
-import * as EnvironmentSupervisor from "./supervisor.ts";
-import * as ConnectionDriver from "./driver.ts";
-import * as ConnectionWakeups from "./wakeups.ts";
+import * as ConnectionProfileStore from "./profileStore.ts";
 import {
   PullRequestRoutingPermissions,
   pullRequestRoutingConnectionKey,
@@ -57,6 +55,8 @@ import {
   upsertRoute,
   type ReportedEndpoint,
 } from "./routes.ts";
+import * as EnvironmentSupervisor from "./supervisor.ts";
+import * as ConnectionWakeups from "./wakeups.ts";
 
 const isSshConnectionProfile = Schema.is(SshConnectionProfile);
 

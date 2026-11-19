@@ -1,5 +1,5 @@
-import { CommandId, EnvironmentId, MessageId, ThreadId } from "@t3tools/contracts";
 import { expect, it } from "@effect/vitest";
+import { CommandId, EnvironmentId, MessageId, ThreadId } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import { afterEach, beforeEach, vi } from "vite-plus/test";
 
@@ -179,13 +179,14 @@ vi.mock("./use-thread-outbox", async () => {
   };
 });
 
+import { Atom } from "effect/reactivity";
+
 import {
   composerAttachmentUploadBlockReason,
   composerAttachmentsStillUploading,
   composerAttachmentUploadKey,
 } from "../lib/composerAttachmentUploadQueue";
 import type { DraftComposerAttachment } from "../lib/composerImages";
-import { Atom } from "effect/reactivity";
 import { appAtomRegistry } from "./atom-registry";
 import {
   composerAttachmentUploadRequests,
@@ -199,8 +200,8 @@ import {
   threadOutboxManager,
 } from "./thread-outbox";
 import type { QueuedThreadMessage } from "./thread-outbox-model";
-import * as drafts from "./use-composer-drafts";
 import { prepareQueuedMessageAttachments } from "./threadOutboxDelivery";
+import * as drafts from "./use-composer-drafts";
 
 const environmentId = EnvironmentId.make("environment-1");
 const draftKey = "environment-1:thread-1";

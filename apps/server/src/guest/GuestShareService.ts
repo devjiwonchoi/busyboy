@@ -34,8 +34,6 @@ import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 
-import { base64UrlDecodeUtf8, base64UrlEncode, timingSafeEqualBase64Url } from "../auth/utils.ts";
-import * as PayloadSigner from "../auth/PayloadSigner.ts";
 import {
   attachmentFileExtension,
   createAttachmentId,
@@ -43,8 +41,10 @@ import {
   resolveAttachmentPathById,
   threadHtmlRenderAttachmentIds,
 } from "../attachmentStore.ts";
-import * as ServerConfig from "../config.ts";
+import * as PayloadSigner from "../auth/PayloadSigner.ts";
+import { base64UrlDecodeUtf8, base64UrlEncode, timingSafeEqualBase64Url } from "../auth/utils.ts";
 import { CloudManagedEndpointRuntime } from "../cloud/ManagedEndpointRuntime.ts";
+import * as ServerConfig from "../config.ts";
 import * as CommandOutputHub from "../orchestration-v2/CommandOutputHub.ts";
 import { GUEST_FAILURE } from "../orchestration-v2/GuestShareDecider.ts";
 import * as Orchestrator from "../orchestration-v2/Orchestrator.ts";
@@ -59,7 +59,6 @@ import * as DocumentText from "../provider/DocumentText.ts";
 import * as ProviderRegistry from "../provider/ProviderRegistry.ts";
 import * as ServerSettings from "../serverSettings.ts";
 import * as AnalyticsService from "../telemetry/AnalyticsService.ts";
-import { guestShareView, guestThreadModel } from "./guestView.ts";
 import {
   classifyGuestUploads,
   GUEST_UPLOAD_HEADER_BYTES,
@@ -68,6 +67,7 @@ import {
   matchesImageSignature,
   repliesShowImage,
 } from "./guestAttachments.ts";
+import { guestShareView, guestThreadModel } from "./guestView.ts";
 
 const SIGNING_SECRET_NAME = "guest-share-signing-key";
 const SHARE_ID_BYTES = 16;

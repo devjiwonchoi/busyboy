@@ -6,12 +6,12 @@ import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { createPendingThreadOrder } from "../features/threads/threadOrder";
 import { makeThreadShellFixture } from "../test-fixtures";
 import { appAtomRegistry } from "./atom-registry";
+import { environmentServerConfigsAtom } from "./server";
 import {
   beginPendingThreadOrder,
   getPendingThreadOrder,
   pendingThreadOrderAtom,
 } from "./thread-order";
-import { environmentServerConfigsAtom } from "./server";
 import { steadyNavigationThreadShellsAtom } from "./threads";
 
 vi.mock("./atom-registry", async () => {

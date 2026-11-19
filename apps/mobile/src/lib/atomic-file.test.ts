@@ -49,8 +49,9 @@ vi.mock("expo-file-system", () => ({
   },
 }));
 
-import { writeFileAtomically } from "./atomic-file";
 import { File as ExpoFile } from "expo-file-system";
+
+import { writeFileAtomically } from "./atomic-file";
 
 const DIRECTORY_URI = "file:///documents/thread-outbox";
 

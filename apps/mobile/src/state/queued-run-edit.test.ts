@@ -1,9 +1,3 @@
-import { describe, expect, it, vi } from "vite-plus/test";
-import { Atom } from "effect/reactivity";
-import {
-  ATTACHMENT_ONLY_BOOTSTRAP_PROMPT,
-  restoreAttachmentOnlyBootstrapPrompt,
-} from "@t3tools/shared/composerContextReferences";
 import {
   ChatAttachmentId,
   ComposerContextId,
@@ -12,6 +6,12 @@ import {
   type ChatAttachment,
   type OrchestrationMessageContext,
 } from "@t3tools/contracts";
+import {
+  ATTACHMENT_ONLY_BOOTSTRAP_PROMPT,
+  restoreAttachmentOnlyBootstrapPrompt,
+} from "@t3tools/shared/composerContextReferences";
+import { Atom } from "effect/reactivity";
+import { describe, expect, it, vi } from "vite-plus/test";
 
 import { appAtomRegistry } from "./atom-registry";
 import {

@@ -7,6 +7,8 @@ import {
   ThreadId,
   VcsProcessExitError,
 } from "@t3tools/contracts";
+import * as IdAllocator from "@t3tools/provider-core/server/IdAllocator";
+import type * as ProviderAdapter from "@t3tools/provider-core/server/ProviderAdapter";
 import * as Context from "effect/Context";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
@@ -17,25 +19,23 @@ import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 
-import * as GitWorkflowService from "../git/GitWorkflowService.ts";
 import type * as ServerConfig from "../config.ts";
+import * as GitWorkflowService from "../git/GitWorkflowService.ts";
 import type * as ServerSettings from "../serverSettings.ts";
-import { makeIsManagedWorktreePath } from "../worktreesDirectory.ts";
+import { GIT_INDEX_LOCKED_DETAIL } from "../vcs/VcsProcess.ts";
 import {
   withCheckpointRestoreReservation,
   withWorkspaceLease,
 } from "../workspace/workspaceLease.ts";
+import { makeIsManagedWorktreePath } from "../worktreesDirectory.ts";
 import {
   isCheckpointRestoreIsolated,
   SHARED_WORKSPACE_RESTORE_MESSAGE,
 } from "./CheckpointRestoreSafety.ts";
 import { CheckpointRestoreError, CheckpointServiceV2 } from "./CheckpointService.ts";
 import { EventSinkV2 } from "./EventSink.ts";
-import * as IdAllocator from "@t3tools/provider-core/server/IdAllocator";
 import { ProjectionStoreV2 } from "./ProjectionStore.ts";
-import { GIT_INDEX_LOCKED_DETAIL } from "../vcs/VcsProcess.ts";
 import * as ProjectStore from "./ProjectStore.ts";
-import type * as ProviderAdapter from "@t3tools/provider-core/server/ProviderAdapter";
 import { ProviderSessionManagerV2 } from "./ProviderSessionManager.ts";
 import { RuntimePolicyAboveCeilingError, RuntimePolicyV2 } from "./RuntimePolicy.ts";
 import * as ThreadCommandExecutor from "./ThreadCommandExecutor.ts";

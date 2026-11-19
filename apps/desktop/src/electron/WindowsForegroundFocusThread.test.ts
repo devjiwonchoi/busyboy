@@ -1,5 +1,6 @@
-import { assert, beforeEach, it } from "@effect/vitest";
 import * as NodeEvents from "node:events";
+
+import { assert, beforeEach, it } from "@effect/vitest";
 import { vi } from "vite-plus/test";
 
 const workerConstructorMock = vi.hoisted(() => vi.fn());

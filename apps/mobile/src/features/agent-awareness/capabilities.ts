@@ -1,5 +1,6 @@
 import Constants from "expo-constants";
 import { Platform } from "react-native";
+
 import { supportsAndroidAgentNotifications } from "./androidNotifications";
 
 export function supportsAgentAwarenessPush() {

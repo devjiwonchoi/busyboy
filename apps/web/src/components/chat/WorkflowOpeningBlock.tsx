@@ -1,4 +1,3 @@
-import { T, useGT, useMessages } from "gt-react";
 import { useAtomValue } from "@effect/atom-react";
 import {
   isTerminalSubagentStatus,
@@ -13,6 +12,7 @@ import type {
   ProviderInstanceId,
   ServerProvider,
 } from "@t3tools/contracts";
+import { T, useGT, useMessages } from "gt-react";
 import { ChevronRightIcon, WorkflowIcon } from "lucide-react";
 import { useState } from "react";
 
@@ -24,8 +24,8 @@ import { Button } from "../ui/button";
 import { Tooltip, TooltipTrigger } from "../ui/tooltip";
 import { AgentElapsed } from "./AgentElapsed";
 import { findRevealRef } from "./markdownFindContext";
-import { useTallEnoughToFold } from "./useTallEnoughToFold";
 import { SubagentTooltipContent } from "./SubagentTooltipContent";
+import { useTallEnoughToFold } from "./useTallEnoughToFold";
 import { EnvironmentSubagentAvatar } from "./V2LifecycleRow";
 
 const FOLDED_SCRIPT_MASK = "linear-gradient(to bottom, black calc(100% - 1.75rem), transparent)";

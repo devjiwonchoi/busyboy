@@ -66,16 +66,17 @@ import {
   resolveProjectProviderInstanceEnabled,
   SECRET_REQUEST_UNSAVED_NOTE,
 } from "@t3tools/contracts";
+import {
+  subagentResultForRun,
+  delegatedTaskProgress,
+  delegatedTaskReportRuns,
+} from "@t3tools/provider-core/server/subagentProjection";
 import { getProviderOptionCurrentValue, withLegacyUltracodeEffort } from "@t3tools/shared/model";
 import { backgroundWorkHoldsCompletion } from "@t3tools/shared/orchestrationV2PendingBackgroundWork";
 import { runRanAfter } from "@t3tools/shared/orchestrationV2ThreadError";
 import { resolveProjectSettings } from "@t3tools/shared/projectSettings";
 import { formatThreadLink } from "@t3tools/shared/threadLinks";
 import { threadPullRequestUpdatedAtMs } from "@t3tools/shared/threadPullRequests";
-import {
-  normalizeThreadPullRequestKey,
-  visibleThreadPullRequests,
-} from "../sourceControl/threadPullRequests.ts";
 import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
 import * as SecureRandom from "effect/crypto/SecureRandom";
@@ -89,44 +90,39 @@ import * as Ref from "effect/Ref";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 
-import * as ProviderAdapterRegistry from "../orchestration-v2/ProviderAdapterRegistry.ts";
-import {
-  subagentResultForRun,
-  delegatedTaskProgress,
-  delegatedTaskReportRuns,
-} from "@t3tools/provider-core/server/subagentProjection";
+import * as Metrics from "../observability/Metrics.ts";
 import {
   DispatchModeLimit,
   type DispatchModeRefusal,
 } from "../orchestration-v2/DispatchModeLimit.ts";
+import { placeholderThreadTitle } from "../orchestration-v2/placeholderThreadTitle.ts";
 import type {
   ProjectionRecordField,
   ProjectionRecordFilter,
 } from "../orchestration-v2/ProjectionStore.ts";
+import * as ProviderAdapterRegistry from "../orchestration-v2/ProviderAdapterRegistry.ts";
 import {
   delegatedTaskAwaitsWork,
   delegatedTaskResultRun,
   delegatedTaskRuns,
   runOutcome,
 } from "../orchestration-v2/RestartBackgroundNote.ts";
-import * as ThreadManagementService from "../orchestration-v2/ThreadManagementService.ts";
-import { placeholderThreadTitle } from "../orchestration-v2/placeholderThreadTitle.ts";
 import * as ThreadLaunchService from "../orchestration-v2/ThreadLaunchService.ts";
-import * as GitVcsDriver from "../vcs/GitVcsDriver.ts";
+import * as ThreadManagementService from "../orchestration-v2/ThreadManagementService.ts";
 import { isSnoozed } from "../orchestration-v2/ThreadSettlementService.ts";
 import { userFacingDispatchErrorMessage } from "../orchestration-v2/UserFacingErrors.ts";
+import * as PeerForwarding from "../peer/PeerForwarding.ts";
+import * as RemoteDelegation from "../peer/RemoteDelegation.ts";
 import * as ProjectService from "../project/ProjectService.ts";
 import * as ProviderRegistry from "../provider/ProviderRegistry.ts";
 import * as ScheduledTaskService from "../scheduledTasks/ScheduledTaskService.ts";
+import * as SecretRequests from "../secrets/SecretRequests.ts";
 import * as ServerSettings from "../serverSettings.ts";
 import {
-  clientModeCeiling,
-  type McpInvocationScope,
-  type McpThreadInvocationScope,
-  requireThreadScope,
-  threadLinkFor,
-} from "./McpInvocationContext.ts";
-import * as Metrics from "../observability/Metrics.ts";
+  normalizeThreadPullRequestKey,
+  visibleThreadPullRequests,
+} from "../sourceControl/threadPullRequests.ts";
+import * as GitVcsDriver from "../vcs/GitVcsDriver.ts";
 import {
   interactionModeRank,
   resolveInteractionMode,
@@ -134,10 +130,14 @@ import {
   runtimeModeRank,
   taskPrompt,
 } from "./delegatedTaskModes.ts";
+import {
+  clientModeCeiling,
+  type McpInvocationScope,
+  type McpThreadInvocationScope,
+  requireThreadScope,
+  threadLinkFor,
+} from "./McpInvocationContext.ts";
 import { assertTargetWithinLimits, isLiveCallerShell, threadNotFound } from "./threadAccess.ts";
-import * as SecretRequests from "../secrets/SecretRequests.ts";
-import * as PeerForwarding from "../peer/PeerForwarding.ts";
-import * as RemoteDelegation from "../peer/RemoteDelegation.ts";
 
 // Return recoverable handles before common MCP client timeouts expire.
 const DEFAULT_WAIT_TIMEOUT_MS = 30_000;

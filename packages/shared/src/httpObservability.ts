@@ -1,7 +1,7 @@
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 import * as Headers from "effect/http/Headers";
 import * as UrlParams from "effect/http/UrlParams";
+import * as Layer from "effect/Layer";
 
 export const layer = Layer.mergeAll(
   Layer.effect(

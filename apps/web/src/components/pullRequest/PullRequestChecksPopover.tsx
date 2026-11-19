@@ -1,4 +1,3 @@
-import type * as React from "react";
 import type {
   EnvironmentId,
   PullRequestCheck,
@@ -7,6 +6,7 @@ import type {
   ScopedThreadRef,
 } from "@t3tools/contracts";
 import { msg, T, useGT, useMessages, Var } from "gt-react";
+import type * as React from "react";
 import { useState } from "react";
 
 import { useOpenLink } from "~/browser/useOpenLink";
@@ -15,11 +15,11 @@ import { cn } from "~/lib/utils";
 import { pullRequestEnvironment } from "~/state/pullRequests";
 import { useEnvironmentQuery } from "~/state/query";
 
-import { Popover, PopoverPopup, PopoverTrigger } from "../ui/popover";
 import { Button } from "../ui/button";
+import { Popover, PopoverPopup, PopoverTrigger } from "../ui/popover";
 import { ScrollArea } from "../ui/scroll-area";
-import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { toastManager } from "../ui/toast";
+import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { groupPullRequestChecks } from "./pullRequestDetail.logic";
 import {
   PullRequestCheckStatusIcon,

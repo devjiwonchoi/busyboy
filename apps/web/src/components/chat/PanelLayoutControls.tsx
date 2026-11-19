@@ -1,3 +1,4 @@
+import { useGT } from "gt-react";
 import {
   PanelBottomIcon,
   PanelRightIcon,
@@ -5,7 +6,6 @@ import {
   Maximize2Icon,
   Minimize2Icon,
 } from "lucide-react";
-import { useGT } from "gt-react";
 import { memo, type ReactNode, useLayoutEffect, useRef } from "react";
 
 import { cn } from "~/lib/utils";

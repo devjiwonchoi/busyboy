@@ -1,12 +1,12 @@
-import { describe, expect, it } from "@effect/vitest";
 import * as NodeServices from "@effect/platform-node/NodeServices";
+import { describe, expect, it } from "@effect/vitest";
+import * as HostProcess from "@t3tools/shared/HostProcess";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as FileSystem from "effect/FileSystem";
+import { HttpClient, HttpClientError, HttpClientResponse } from "effect/http";
 import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
-import { HttpClient, HttpClientError, HttpClientResponse } from "effect/http";
-import * as HostProcess from "@t3tools/shared/HostProcess";
 
 import { makeExpoApi, resolveExpoCredential, type ExpoCredential } from "./ExpoApi.ts";
 

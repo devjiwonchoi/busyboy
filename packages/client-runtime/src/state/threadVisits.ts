@@ -2,10 +2,10 @@
 import type { EnvironmentId, ScopedThreadRef, ThreadId } from "@t3tools/contracts";
 import { AsyncResult, Atom } from "effect/reactivity";
 
+import type { VisitThreadInput } from "../operations/commands.ts";
 import { parseThreadKey, threadKey } from "./entities.ts";
 import { type AtomCommand, runAtomCommand } from "./runtime.ts";
 import { claimThreadOpen } from "./threadSearch.ts";
-import type { VisitThreadInput } from "../operations/commands.ts";
 
 // During an active turn the thread's updatedAt advances several times per
 // second, and every server-side visit is a full command dispatch plus a

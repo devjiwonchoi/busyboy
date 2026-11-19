@@ -1,17 +1,17 @@
+import { useNavigation, useNavigationState } from "@react-navigation/native";
 import type {
   EnvironmentProject,
   EnvironmentThreadShell,
 } from "@t3tools/client-runtime/state/shell";
 import { EnvironmentId, ThreadId } from "@t3tools/contracts";
-import { useNavigation, useNavigationState } from "@react-navigation/native";
 
 import { scopedThreadKey } from "../../../lib/scopedEntities";
 import { uuidv4 } from "../../../lib/uuid";
 import { usePendingTaskListActions } from "../../home/usePendingTaskListActions";
-import { useAdaptiveWorkspaceLayout, useWorkspacePaneState } from "../adaptive-workspace-context";
 import { openSettings } from "../../settings/settings-navigation";
 import { ThreadNavigationSidebar } from "../../threads/ThreadNavigationSidebar";
 import { useOpenThreadPullRequests } from "../../threads/use-open-thread-pull-requests";
+import { useAdaptiveWorkspaceLayout, useWorkspacePaneState } from "../adaptive-workspace-context";
 import { useSelectWorkspaceDetail } from "./useSelectWorkspaceDetail";
 
 type Route = { readonly name: string; readonly params?: object };

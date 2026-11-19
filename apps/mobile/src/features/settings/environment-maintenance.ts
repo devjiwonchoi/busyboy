@@ -12,8 +12,8 @@ import {
   newestCliReleaseVersion,
 } from "@t3tools/shared/cliRelease";
 import { compareSemverVersions } from "@t3tools/shared/semver";
-import { msg } from "gt-react-native";
 import * as Schema from "effect/Schema";
+import { msg } from "gt-react-native";
 
 import { m } from "../../i18n/messages";
 

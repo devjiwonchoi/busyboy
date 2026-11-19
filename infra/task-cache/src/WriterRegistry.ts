@@ -4,8 +4,8 @@ import * as Digest from "effect/crypto/Digest";
 import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
-import type * as PlatformError from "effect/PlatformError";
 import * as Layer from "effect/Layer";
+import type * as PlatformError from "effect/PlatformError";
 import * as Schema from "effect/Schema";
 
 const Writers = Schema.fromJsonString(Schema.Record(Schema.String, Schema.String));

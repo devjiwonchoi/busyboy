@@ -1,5 +1,5 @@
-import { describe, expect, it } from "@effect/vitest";
 import * as NodeServices from "@effect/platform-node/NodeServices";
+import { describe, expect, it } from "@effect/vitest";
 import {
   DeviceHostUnavailableError,
   DeviceId,
@@ -7,10 +7,10 @@ import {
   ProviderInstanceId,
   ThreadId,
 } from "@t3tools/contracts";
+import { McpSchema, McpServer } from "effect/ai";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
-import { McpSchema, McpServer } from "effect/ai";
 
 import * as ServerConfig from "../config.ts";
 import * as DeviceService from "../device/DeviceService.ts";

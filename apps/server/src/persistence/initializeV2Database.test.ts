@@ -15,13 +15,13 @@ import * as Predicate from "effect/Predicate";
 import * as SqlClient from "effect/sql/SqlClient";
 
 import * as ServerConfig from "../config.ts";
-import * as SqlitePersistence from "./Sqlite.ts";
-import { runMigrations } from "./Migrations.ts";
-import { initializeV2Database } from "./initializeV2Database.ts";
-import * as EventStore from "../orchestration-v2/EventStore.ts";
-import * as ProjectionStore from "../orchestration-v2/ProjectionStore.ts";
 import * as EventSink from "../orchestration-v2/EventSink.ts";
+import * as EventStore from "../orchestration-v2/EventStore.ts";
 import * as LegacyV1ThreadImporter from "../orchestration-v2/legacy/LegacyV1ThreadImporter.ts";
+import * as ProjectionStore from "../orchestration-v2/ProjectionStore.ts";
+import { initializeV2Database } from "./initializeV2Database.ts";
+import { runMigrations } from "./Migrations.ts";
+import * as SqlitePersistence from "./Sqlite.ts";
 
 it.effect(
   "snapshots V1, imports transcripts lazily, and preserves both databases across switches",

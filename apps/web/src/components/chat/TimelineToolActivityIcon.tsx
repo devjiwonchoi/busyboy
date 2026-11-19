@@ -1,9 +1,6 @@
-import { PullRequestGlyph } from "../pullRequest/pullRequestIcons";
 import { type ToolActivityIcon } from "@t3tools/contracts";
 import { toolActivityFaviconUrl } from "@t3tools/shared/favicon";
 import { getProjectFaviconCacheKey } from "@t3tools/shared/projectFavicon";
-import { use, useState } from "react";
-import { T3Wordmark } from "../T3Wordmark";
 import {
   BotIcon,
   BrainIcon,
@@ -23,8 +20,13 @@ import {
   XIcon,
   ZapIcon,
 } from "lucide-react";
-import { useAssetUrlState } from "../../assets/assetUrls";
+import { use, useState } from "react";
+
 import { cn } from "~/lib/utils";
+
+import { useAssetUrlState } from "../../assets/assetUrls";
+import { PullRequestGlyph } from "../pullRequest/pullRequestIcons";
+import { T3Wordmark } from "../T3Wordmark";
 import { TimelineRowCtx } from "./timelineRowContext";
 
 export const failedToolIconClassName = "text-tool-error-icon/40";

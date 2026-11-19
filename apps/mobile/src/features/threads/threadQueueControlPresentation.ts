@@ -1,10 +1,10 @@
 import type { EnvironmentId, RunId, ThreadId } from "@t3tools/contracts";
-import { msg } from "gt-react-native";
 import { assistantCitationsToPlainText } from "@t3tools/shared/assistantCitations";
 import {
   isAttachmentOnlyBootstrapPrompt,
   replaceComposerContextReferences,
 } from "@t3tools/shared/composerContextReferences";
+import { msg } from "gt-react-native";
 
 export const REMOVE_QUEUED_MESSAGE_ACCESSIBILITY_LABEL = msg("Remove queued message");
 

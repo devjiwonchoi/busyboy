@@ -1,18 +1,19 @@
+import { safeErrorLogAttributes } from "@t3tools/client-runtime/errors";
+import { settleAsyncResult, squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
+import { releaseChannelOf, releaseResourceAttributes } from "@t3tools/shared/releaseResource";
 import * as Exit from "effect/Exit";
+import { HttpClient } from "effect/http";
 import * as Layer from "effect/Layer";
 import * as ManagedRuntime from "effect/ManagedRuntime";
-import * as Scope from "effect/Scope";
-import { HttpClient } from "effect/http";
 import { OtlpExporter, OtlpSerialization, OtlpTracer } from "effect/observability";
+import * as Scope from "effect/Scope";
 
-import { settleAsyncResult, squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
-import { safeErrorLogAttributes } from "@t3tools/client-runtime/errors";
-import { resolvePrimaryEnvironmentHttpUrl } from "../environments/primary";
-import { releaseChannelOf, releaseResourceAttributes } from "@t3tools/shared/releaseResource";
-import * as ClientTracer from "./clientTracer";
-import * as PrimaryEnvironmentHttpLayer from "../environments/primary/httpLayer";
-import { isElectron } from "../env";
 import { APP_VERSION } from "~/branding";
+
+import { isElectron } from "../env";
+import { resolvePrimaryEnvironmentHttpUrl } from "../environments/primary";
+import * as PrimaryEnvironmentHttpLayer from "../environments/primary/httpLayer";
+import * as ClientTracer from "./clientTracer";
 
 const DEFAULT_EXPORT_INTERVAL_MS = 1_000;
 interface NavigatorUserAgentData {

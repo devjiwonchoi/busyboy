@@ -1,12 +1,12 @@
-import { pipe } from "effect/Function";
 import {
   IMAGE_DIMENSIONS_HEADER_BYTES,
   readImageDimensions,
 } from "@t3tools/shared/imageDimensions";
-import { XMLParser, XMLValidator } from "fast-xml-parser";
-import { decodeHTMLAttribute, decodeHTMLStrict as decodeEntities } from "entities";
-import type JSZip from "jszip";
 import { terminalOutputPlainText } from "@t3tools/shared/terminalOutput";
+import { pipe } from "effect/Function";
+import { decodeHTMLAttribute, decodeHTMLStrict as decodeEntities } from "entities";
+import { XMLParser, XMLValidator } from "fast-xml-parser";
+import type JSZip from "jszip";
 
 import { type OfficeWorkerResult, type NotebookCell } from "./officePreviewProtocol";
 import { PreviewError } from "./previewFailure";

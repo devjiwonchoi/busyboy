@@ -5,8 +5,8 @@ import * as NodeModule from "node:module";
 import * as NodePath from "node:path";
 
 import { catalog } from "@handy-computer/models";
-import { format } from "vite-plus/fmt";
 import * as Schema from "effect/Schema";
+import { format } from "vite-plus/fmt";
 
 import manifest from "../package.json" with { type: "json" };
 import { renderSpeechCatalog } from "./speech-catalog.ts";

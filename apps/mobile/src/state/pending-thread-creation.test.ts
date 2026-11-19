@@ -1,3 +1,4 @@
+import { isThreadWorking } from "@t3tools/client-runtime/state/thread-inbox";
 import {
   CommandId,
   EnvironmentId,
@@ -7,7 +8,6 @@ import {
   RunId,
   ThreadId,
 } from "@t3tools/contracts";
-import { isThreadWorking } from "@t3tools/client-runtime/state/thread-inbox";
 import { describe, expect, it } from "vite-plus/test";
 
 import {

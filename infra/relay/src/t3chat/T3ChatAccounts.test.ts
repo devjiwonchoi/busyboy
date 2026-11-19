@@ -1,12 +1,12 @@
 import { describe, expect, it } from "@effect/vitest";
-import { vi } from "vite-plus/test";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
-import * as TestClock from "effect/testing/TestClock";
-import * as Layer from "effect/Layer";
-import * as Redacted from "effect/Redacted";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientResponse from "effect/http/HttpClientResponse";
+import * as Layer from "effect/Layer";
+import * as Redacted from "effect/Redacted";
+import * as TestClock from "effect/testing/TestClock";
+import { vi } from "vite-plus/test";
 
 import * as RelayConfiguration from "../Config.ts";
 import * as T3ChatAccounts from "./T3ChatAccounts.ts";

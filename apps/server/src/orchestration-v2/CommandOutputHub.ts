@@ -5,6 +5,7 @@ import {
   type OrchestrationV2SubscribeCommandOutputInput,
   type OrchestrationV2TurnItem,
 } from "@t3tools/contracts";
+import { commandItemOutput } from "@t3tools/shared/commandOutput";
 import {
   appendTerminalOutput,
   EMPTY_TERMINAL_OUTPUT,
@@ -13,7 +14,6 @@ import {
   TERMINAL_OUTPUT_TAIL_CHARS,
   terminalOutputResumeText,
 } from "@t3tools/shared/terminalOutput";
-import { commandItemOutput } from "@t3tools/shared/commandOutput";
 import * as Cause from "effect/Cause";
 import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";

@@ -11,12 +11,12 @@ import { afterEach, vi } from "vite-plus/test";
 import * as ThreadLaunchService from "../orchestration-v2/ThreadLaunchService.ts";
 import * as ThreadManagementService from "../orchestration-v2/ThreadManagementService.ts";
 import * as SqlitePersistence from "../persistence/Sqlite.ts";
+import * as ManagedPolicy from "../policy/ManagedPolicy.ts";
 import * as ManagedProjectFolders from "../project/ManagedProjectFolders.ts";
 import * as Scheduler from "../scheduling/Scheduler.ts";
 import * as SecretRequests from "../secrets/SecretRequests.ts";
 import { ServerActivation } from "../serverActivation.ts";
 import * as ScheduledTaskService from "./ScheduledTaskService.ts";
-import * as ManagedPolicy from "../policy/ManagedPolicy.ts";
 
 afterEach(() => vi.unstubAllEnvs());
 

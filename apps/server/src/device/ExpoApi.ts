@@ -1,3 +1,4 @@
+import * as HostProcess from "@t3tools/shared/HostProcess";
 /**
  * Expo's GraphQL API for Expo Simulators sessions. The operations in
  * `ExpoApi.graphql` are the ones eas-cli's `simulator:*` commands send; their
@@ -5,11 +6,6 @@
  */
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
-import * as Layer from "effect/Layer";
-import * as Option from "effect/Option";
-import * as Path from "effect/Path";
-import * as Redacted from "effect/Redacted";
-import * as Schema from "effect/Schema";
 import {
   GraphQLClient,
   GraphQLClientError,
@@ -18,10 +14,14 @@ import {
 } from "effect/graphql";
 import { HttpClient } from "effect/http";
 import * as Headers from "effect/http/Headers";
-import * as HostProcess from "@t3tools/shared/HostProcess";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as Path from "effect/Path";
+import * as Redacted from "effect/Redacted";
+import * as Schema from "effect/Schema";
 
-import { ExpoApiGraphQLGroup, type T3EasSimulatorSession } from "./ExpoApi.graphql.ts";
 import type { DeviceRunSessionStatus } from "../../schema/expo.graphql.ts";
+import { ExpoApiGraphQLGroup, type T3EasSimulatorSession } from "./ExpoApi.graphql.ts";
 
 const EXPO_GRAPHQL_URL = "https://api.expo.dev/graphql";
 const REQUEST_TIMEOUT = "30 seconds";

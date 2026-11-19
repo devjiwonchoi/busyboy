@@ -7,13 +7,10 @@ import {
   type ProviderReplayEntry as ProviderReplayEntryType,
   type ProviderReplayTranscript,
 } from "@t3tools/contracts";
+import * as IdAllocator from "@t3tools/provider-core/server/IdAllocator";
+import * as ProviderContinuationRequests from "@t3tools/provider-core/server/ProviderContinuationRequests";
+import { makeMuseAdapterV2 } from "@t3tools/provider-muse/server";
 import { MuseSettings } from "@t3tools/provider-muse/settings";
-import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
-import * as Layer from "effect/Layer";
-import * as Schema from "effect/Schema";
-
-import * as TestProviderHost from "@t3tools/provider-testing/TestProviderHost";
 import {
   museInitializeParams,
   museServeArgs,
@@ -21,12 +18,15 @@ import {
   type MuseSdkHost,
   type MuseSdkHostOptions,
 } from "@t3tools/provider-muse/testing";
-import * as IdAllocator from "@t3tools/provider-core/server/IdAllocator";
-import * as ProviderAdapterRegistry from "../ProviderAdapterRegistry.ts";
-import * as ProviderContinuationRequests from "@t3tools/provider-core/server/ProviderContinuationRequests";
-import type { OrchestratorV2ProviderReplayHarness } from "../testkit/ProviderReplayHarness.ts";
 import { materializeReplayTranscriptWorkspace } from "@t3tools/provider-testing/replayTranscript";
-import { makeMuseAdapterV2 } from "@t3tools/provider-muse/server";
+import * as TestProviderHost from "@t3tools/provider-testing/TestProviderHost";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Layer from "effect/Layer";
+import * as Schema from "effect/Schema";
+
+import * as ProviderAdapterRegistry from "../ProviderAdapterRegistry.ts";
+import type { OrchestratorV2ProviderReplayHarness } from "../testkit/ProviderReplayHarness.ts";
 
 export const MUSE_PROVIDER_KIND = "muse";
 export const MUSE_MSP_REPLAY_PROTOCOL = "muse.msp-jsonl";

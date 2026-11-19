@@ -3,8 +3,8 @@ import { useEffect } from "react";
 import { AccessibilityInfo, Platform, Pressable, View } from "react-native";
 
 import { cn } from "../../lib/cn";
-import { AppText } from "./AppText";
 import { SymbolView, type AppSymbolName } from "./AppSymbol";
+import { AppText } from "./AppText";
 import { GlassSurface } from "./GlassSurface";
 
 export function Notice(props: {

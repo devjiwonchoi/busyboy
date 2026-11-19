@@ -1,3 +1,5 @@
+import * as Cause from "effect/Cause";
+import { AsyncResult } from "effect/reactivity";
 import {
   act,
   useLayoutEffect,
@@ -9,11 +11,10 @@ import {
 } from "react";
 import { createRoot } from "react-dom/client";
 import { expect, it, vi } from "vite-plus/test";
-import { AsyncResult } from "effect/reactivity";
-import * as Cause from "effect/Cause";
+
+import type { NativeReviewDiffData } from "../review/nativeReviewDiffAdapter";
 import type { HighlightNativeReviewDiffVisibleRowsInput } from "./nativeReviewDiffHighlighter";
 import type { NativeReviewDiffViewProps } from "./nativeReviewDiffSurface";
-import type { NativeReviewDiffData } from "../review/nativeReviewDiffAdapter";
 
 const mocks = vi.hoisted(() => ({
   registrationFailures: 0,
@@ -135,12 +136,12 @@ vi.mock("../settings/appearance/AppearancePreferencesProvider", () => ({
 }));
 vi.mock("../../lib/useUniwindTheme", () => ({ useUniwindTheme: () => ({}) }));
 
-import { resolveNativeReviewDiffView } from "./nativeReviewDiffSurface";
-import { useNativeReviewDiffBridge } from "../review/useNativeReviewDiffBridge";
 import {
   handlePullRequestDiffDebugEvent,
   pullRequestDiffInitialPosition,
 } from "../pull-requests/pullRequestDiffDebug";
+import { useNativeReviewDiffBridge } from "../review/useNativeReviewDiffBridge";
+import { resolveNativeReviewDiffView } from "./nativeReviewDiffSurface";
 
 function setup(integrated = false) {
   vi.useFakeTimers();

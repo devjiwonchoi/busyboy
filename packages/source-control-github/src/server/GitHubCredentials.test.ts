@@ -1,15 +1,15 @@
 import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import { afterEach, beforeEach, describe, expect, it, vi } from "@effect/vitest";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import * as Redacted from "effect/Redacted";
-import { HttpClient } from "effect/http";
-import { ChildProcessSpawner } from "effect/process";
-
 import { DEFAULT_SERVER_SETTINGS, SecretProviderId, SecretProviderKind } from "@t3tools/contracts";
-import type * as SourceControlHost from "@t3tools/source-control-core/server/SourceControlHost";
 import { applyServerSettingsPatch } from "@t3tools/shared/serverSettings";
+import type * as SourceControlHost from "@t3tools/source-control-core/server/SourceControlHost";
 import * as TestSourceControlHost from "@t3tools/source-control-testing/TestSourceControlHost";
+import * as Effect from "effect/Effect";
+import { HttpClient } from "effect/http";
+import * as Layer from "effect/Layer";
+import { ChildProcessSpawner } from "effect/process";
+import * as Redacted from "effect/Redacted";
+
 import * as GitHubCredentials from "./GitHubCredentials.ts";
 
 const TOKEN_VARIABLES = [

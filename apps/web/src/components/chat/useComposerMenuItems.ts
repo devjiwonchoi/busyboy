@@ -1,14 +1,16 @@
-import { useGT, useMessages } from "gt-react";
-import {
-  legacyThreadPullRequestKey,
-  threadPullRequestKeyOf,
-} from "@t3tools/client-runtime/thread-pull-requests";
+import { useAtomValue } from "@effect/atom-react";
 import {
   matchComposerEnvironmentItems,
   matchComposerThreadItems,
 } from "@t3tools/client-runtime/composerThreadItems";
-import { useAtomValue } from "@effect/atom-react";
-import { useState } from "react";
+import {
+  getProviderSkillsForSlashMenu,
+  getProviderSlashCommandsForSlashMenu,
+} from "@t3tools/client-runtime/providerSkills";
+import {
+  legacyThreadPullRequestKey,
+  threadPullRequestKeyOf,
+} from "@t3tools/client-runtime/thread-pull-requests";
 import type {
   EnvironmentId,
   ProjectId,
@@ -25,15 +27,9 @@ import {
   withLinkedComposerPullRequestsFirst,
 } from "@t3tools/shared/composerPullRequestMatches";
 import { formatProviderSkillDisplayName } from "@t3tools/shared/inlineSkills";
+import { useGT, useMessages } from "gt-react";
+import { useState } from "react";
 
-import type { ComposerTrigger } from "../../composer-logic";
-import type { DraftId } from "../../composerDraftStore";
-import { basenameOfPath } from "../../pierre-icons";
-import {
-  getProviderSkillsForSlashMenu,
-  getProviderSlashCommandsForSlashMenu,
-} from "@t3tools/client-runtime/providerSkills";
-import { searchProviderSkills } from "../../providerSkillSearch";
 import { useVisibleThreadShells } from "~/state/entities";
 import { useEnvironmentIdentities, useEnvironmentMachines } from "~/state/environments";
 import { offersLinkedEnvironmentsAtom } from "~/state/peerLinks";
@@ -42,20 +38,25 @@ import {
   usePullRequestList,
   type EnvironmentQueryTarget,
 } from "~/state/pullRequests";
-import { useEnvironmentQuery } from "~/state/query";
 import { useComposerPathSearch, useDebouncedValue, useThreadSearch } from "~/state/queries";
+import { useEnvironmentQuery } from "~/state/query";
+
+import type { ComposerTrigger } from "../../composer-logic";
+import type { DraftId } from "../../composerDraftStore";
+import { basenameOfPath } from "../../pierre-icons";
+import type { ProviderInstanceEntry } from "../../providerInstances";
+import { searchProviderSkills } from "../../providerSkillSearch";
 import {
   matchesPullRequestQuery,
   rankPullRequestMatches,
 } from "../pullRequest/pullRequestList.logic";
 import type { ComposerCommandItem } from "./ComposerCommandMenu";
 import { matchComposerModelItems } from "./composerModelMentions";
-import type { ModelEsque } from "./providerIconUtils";
-import type { ProviderInstanceEntry } from "../../providerInstances";
 import {
   searchSlashCommandItems,
   slashCommandItemsForPromptPosition,
 } from "./composerSlashCommandSearch";
+import type { ModelEsque } from "./providerIconUtils";
 
 const COMPOSER_PULL_REQUEST_LIST_LIMIT = 99;
 const COMPOSER_PULL_REQUEST_RESULT_LIMIT = 12;

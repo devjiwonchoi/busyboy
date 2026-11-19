@@ -1,8 +1,9 @@
-import { act, render, type Screen } from "../../test/render";
 import { EnvironmentId } from "@t3tools/contracts";
 import { AsyncResult } from "effect/reactivity";
 import { StrictMode } from "react";
 import { describe, expect, it, vi } from "vite-plus/test";
+
+import { act, render, type Screen } from "../../test/render";
 
 vi.mock(import("~/state/session"), async (original) => ({
   ...(await original()),

@@ -1,3 +1,4 @@
+import { scopedProjectKey } from "@t3tools/client-runtime/environment";
 import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
 import {
   type DesktopBridge,
@@ -10,8 +11,6 @@ import {
 import { msg } from "gt-react";
 import { useEffect, useEffectEvent, useRef, useState } from "react";
 
-import { m } from "../../i18n/messages";
-
 import {
   type DraftId,
   type PersistedComposerImageAttachment,
@@ -22,12 +21,12 @@ import {
   lastUsedProjectKeySchema,
   useHandleNewThread,
 } from "../../hooks/useHandleNewThread";
-import { scopedProjectKey } from "@t3tools/client-runtime/environment";
 import { useLocalStorage } from "../../hooks/useLocalStorage";
-import { useStableCallback } from "../../hooks/useStableCallback";
 import { getClientSettings, useClientSettings } from "../../hooks/useSettings";
-import { readThreadShell } from "../../state/entities";
+import { useStableCallback } from "../../hooks/useStableCallback";
+import { m } from "../../i18n/messages";
 import { resolveThreadActionProjectRef } from "../../lib/chatThreadActions";
+import { dispatchSnapShotComposerFocus, getDesktopSnapShotBridge } from "../../lib/desktopSnapShot";
 import {
   beginSnapShotAnimation,
   dismissAllSnapShotAnimations,
@@ -37,15 +36,15 @@ import {
   updateSnapShotAnimationSource,
   waitForSnapShotAnimationDestination,
 } from "../../lib/snapShotAnimation";
-import { resizeSnapShotSource } from "../../lib/snapShotSource";
 import { playSnapShotSound } from "../../lib/snapShotSound";
-import { dispatchSnapShotComposerFocus, getDesktopSnapShotBridge } from "../../lib/desktopSnapShot";
+import { resizeSnapShotSource } from "../../lib/snapShotSource";
 import {
   countQuestionRequestAttachments,
   openQuestionAttachmentDraft,
 } from "../../questionAttachments";
-import { stackedThreadToast, toastManager } from "../ui/toast";
+import { readThreadShell } from "../../state/entities";
 import { readComposerImageBytes } from "../chat/composerAttachmentFiles";
+import { stackedThreadToast, toastManager } from "../ui/toast";
 
 type CaptureTarget = DraftId | ScopedThreadRef;
 type CaptureFailure = "missing-project" | "delivery";

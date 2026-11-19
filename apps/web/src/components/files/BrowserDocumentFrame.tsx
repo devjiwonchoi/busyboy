@@ -37,19 +37,20 @@ import {
   useRef,
   useState,
 } from "react";
-import { isElectron } from "~/env";
-import { FileSurfaceLoading } from "./fileSurfaceChrome";
-import type { PdfViewState } from "./PdfViewer";
 
 import { useOpenLink } from "~/browser/useOpenLink";
 import { ExpandedImageDialog } from "~/components/chat/ExpandedImageDialog";
 import type { ExpandedImagePreview } from "~/components/chat/ExpandedImagePreview";
+import { isElectron } from "~/env";
 import { useHtmlRenderTheme } from "~/hooks/useHtmlRenderTheme";
 import { shortcutConflictKey } from "~/keybindings";
 import { useOpenChangeRequestLink } from "~/lib/openPullRequestLink";
-import { readLocalApi } from "~/localApi";
 import { cn } from "~/lib/utils";
+import { readLocalApi } from "~/localApi";
 import { primaryServerKeybindingsAtom, serverEnvironment } from "~/state/server";
+
+import { FileSurfaceLoading } from "./fileSurfaceChrome";
+import type { PdfViewState } from "./PdfViewer";
 
 /**
  * The page reports the keys, and a page script can report any key it likes,

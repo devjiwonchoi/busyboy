@@ -1,10 +1,10 @@
-import * as Queue from "effect/Queue";
-import * as Stream from "effect/Stream";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
+import { ChildProcessSpawner } from "effect/process";
+import * as Queue from "effect/Queue";
 import * as Sink from "effect/Sink";
 import * as Stdio from "effect/Stdio";
-import { ChildProcessSpawner } from "effect/process";
+import * as Stream from "effect/Stream";
 
 import * as AcpError from "../errors.ts";
 

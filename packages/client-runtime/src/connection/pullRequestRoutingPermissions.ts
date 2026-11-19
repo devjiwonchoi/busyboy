@@ -1,5 +1,3 @@
-import { msg } from "gt-i18n";
-import { translatableDetail } from "../errors/translatable.ts";
 import { EnvironmentId } from "@t3tools/contracts";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -8,7 +6,9 @@ import * as Schema from "effect/Schema";
 import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
 import * as SubscriptionRef from "effect/SubscriptionRef";
+import { msg } from "gt-i18n";
 
+import { translatableDetail } from "../errors/translatable.ts";
 import type { ConnectionCatalogEntry } from "./catalog.ts";
 import { ConnectionBlockedError, type ConnectionAttemptError } from "./model.ts";
 

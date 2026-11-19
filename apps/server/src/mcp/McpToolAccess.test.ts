@@ -8,6 +8,7 @@ import {
   RuntimeMode,
   ThreadId,
 } from "@t3tools/contracts";
+import { McpSchema, McpServer, Tool, Toolkit } from "effect/ai";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
@@ -15,15 +16,14 @@ import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
 import * as Sink from "effect/Sink";
 import * as Stream from "effect/Stream";
-import { McpSchema, McpServer, Tool, Toolkit } from "effect/ai";
 
 import { OrchestratorProjectionError } from "../orchestration-v2/Orchestrator.ts";
-import * as PeerForwarding from "../peer/PeerForwarding.ts";
 import * as ThreadManagement from "../orchestration-v2/ThreadManagementService.ts";
+import * as PeerForwarding from "../peer/PeerForwarding.ts";
 import * as McpHttpServer from "./McpHttpServer.ts";
 import * as McpInvocationContext from "./McpInvocationContext.ts";
-import * as McpToolAccess from "./McpToolAccess.ts";
 import { liveThreadShell } from "./McpToolAccess.testkit.ts";
+import * as McpToolAccess from "./McpToolAccess.ts";
 
 const supervisedThreadId = ThreadId.make("thread:supervised");
 const planThreadId = ThreadId.make("thread:plan");

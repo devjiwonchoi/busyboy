@@ -21,21 +21,21 @@ import { EMPTY_SERVER_PROVIDERS } from "../../state/server";
 import { resolveEnvModeLabel, WORKTREE_SUBMODULES_LABELS } from "../BranchToolbar.logic";
 import { ProviderModelPicker } from "../chat/ProviderModelPicker";
 import { runtimeModeConfig, runtimeModeOptions } from "../chat/runtimeModeConfig";
-import { PULL_REQUEST_MERGE_METHOD_LABELS } from "../pullRequest/pullRequestDetail.logic";
 import { TraitsPicker } from "../chat/TraitsPicker";
+import { PULL_REQUEST_MERGE_METHOD_LABELS } from "../pullRequest/pullRequestDetail.logic";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
-import { toastManager } from "../ui/toast";
 import { Switch } from "../ui/switch";
+import { toastManager } from "../ui/toast";
 import { resolveDefaultModelSettingsPresentation } from "./ProjectDefaultsSettings.logic";
 import type { ProjectSettingsCategory } from "./ProjectSettingsPanel";
-import { useSearchableSetting } from "./settingsSearch";
-import { useSettingsScope } from "./SettingsScopeContext";
 import {
   SETTINGS_PICKER_TRIGGER_CLASSNAME,
   SettingResetButton,
   SettingsRow,
   SettingsSection,
 } from "./settingsLayout";
+import { useSettingsScope } from "./SettingsScopeContext";
+import { useSearchableSetting } from "./settingsSearch";
 import { useScopedModelDisabledReason } from "./useScopedModelAvailability";
 import {
   useScopedSettings,

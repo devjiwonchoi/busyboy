@@ -1,5 +1,4 @@
 import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
-import { m } from "~/i18n/messages";
 import {
   isAtomCommandInterrupted,
   settlePromise,
@@ -14,8 +13,10 @@ import {
   type ServerProvider,
 } from "@t3tools/contracts";
 import { T, useGT, useMessages } from "gt-react";
-import { useRef, useState } from "react";
 import { Trash2Icon } from "lucide-react";
+import { useRef, useState } from "react";
+
+import { m } from "~/i18n/messages";
 
 import { ensureLocalApi } from "../../localApi";
 import { useEnvironmentQuery } from "../../state/query";
@@ -23,8 +24,8 @@ import { serverEnvironment } from "../../state/server";
 import { useAtomCommand } from "../../state/use-atom-command";
 import { Button } from "../ui/button";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
-import { SettingsRow } from "./settingsLayout";
 import { ProviderAuthenticationSection } from "./ProviderAuthenticationSection";
+import { SettingsRow } from "./settingsLayout";
 
 interface ProviderSetupSectionProps {
   readonly environmentId: EnvironmentId;

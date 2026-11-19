@@ -2,14 +2,15 @@ import { StackActions, useNavigation } from "@react-navigation/native";
 import { T, useGT, useMessages, Var } from "gt-react-native";
 import { useState } from "react";
 import { View } from "react-native";
+
 import { AppText as Text } from "../../components/ui/AppText";
+import { withKnownPullRequestSummary } from "../../state/use-thread-pr";
 import { PullRequestCardGroup, PullRequestCardRow } from "./PullRequestControls";
+import { PullRequestGlyph } from "./pullRequestGlyphs";
 import { pullRequestLayerParams } from "./pullRequestStack";
 import { pullRequestStatus } from "./pullRequestStatus";
 import type { PullRequestParams } from "./usePullRequestDiff";
 import type { PullRequestStackState } from "./usePullRequestStack";
-import { PullRequestGlyph } from "./pullRequestGlyphs";
-import { withKnownPullRequestSummary } from "../../state/use-thread-pr";
 
 export function PullRequestStackCard(props: {
   readonly params: PullRequestParams;

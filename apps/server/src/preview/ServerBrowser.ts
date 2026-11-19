@@ -1,6 +1,12 @@
 // @effect-diagnostics nodeBuiltinImport:off globalDate:off globalTimers:off - Playwright callbacks run outside the Effect runtime.
 // Screencasts ignore emulated device scale; real 2x keeps captures sharp.
 // --disable-gpu uses cheaper software compositing while preserving SwiftShader WebGL.
+
+import * as NodeCrypto from "node:crypto";
+import * as NodeFSP from "node:fs/promises";
+import * as NodePath from "node:path";
+import * as NodeUtil from "node:util";
+
 import {
   BrowserProfile,
   BrowserProfileId,
@@ -53,25 +59,21 @@ import { writeFileStringAtomically } from "@t3tools/shared/atomicWrite";
 import * as HostProcess from "@t3tools/shared/HostProcess";
 import { normalizePreviewUrl } from "@t3tools/shared/preview";
 import { resolvePreviewViewport } from "@t3tools/shared/previewViewport";
-import * as NodeCrypto from "node:crypto";
-import * as NodeFSP from "node:fs/promises";
-import * as NodePath from "node:path";
-import * as NodeUtil from "node:util";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as FileSystem from "effect/FileSystem";
 import { constVoid } from "effect/Function";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import type * as Path from "effect/Path";
+import type * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Queue from "effect/Queue";
 import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
-import * as Semaphore from "effect/Semaphore";
-import * as Exit from "effect/Exit";
 import * as Scope from "effect/Scope";
+import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
-import type * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import type {
   BrowserContext,
   CDPSession,
@@ -83,19 +85,19 @@ import type {
 } from "playwright-core";
 
 import { PENDING_ATTACHMENT_THREAD_SEGMENT } from "../attachmentStore.ts";
-import * as ServerConfig from "../config.ts";
 import { resolveRootCliCommand } from "../cli/invocation.ts";
+import * as ServerConfig from "../config.ts";
 import * as ServerEnvironment from "../environment/ServerEnvironment.ts";
 import * as PreviewAutomationBroker from "../mcp/PreviewAutomationBroker.ts";
 import * as DesktopBrowserChannel from "./DesktopBrowserChannel.ts";
-import * as PreviewAgentActivity from "./PreviewAgentActivity.ts";
 import * as PreviewManager from "./Manager.ts";
-import * as ServerBrowserPage from "./ServerBrowserPage.ts";
+import { installPdfDocumentNavigation, isPdfAssetUrl } from "./PdfDocumentNavigation.ts";
+import * as PreviewAgentActivity from "./PreviewAgentActivity.ts";
 import * as PreviewBrowser from "./PreviewBrowser.ts";
 import * as PreviewBrowserHost from "./PreviewBrowserHost.ts";
 import { presentAsChrome, ServerBrowserContexts } from "./ServerBrowserContexts.ts";
+import * as ServerBrowserPage from "./ServerBrowserPage.ts";
 import { BrowserControlInterrupted, SessionControl } from "./SessionControl.ts";
-import { installPdfDocumentNavigation, isPdfAssetUrl } from "./PdfDocumentNavigation.ts";
 
 const SERVER_HOST_CLIENT_ID = SERVER_BROWSER_AUTOMATION_CLIENT_ID;
 // Each client's report is capped, but the saved catalog is their union, so it has no cap.

@@ -1,6 +1,7 @@
 // @effect-diagnostics nodeBuiltinImport:off - runs inside Vite+ before project services start.
 import * as NodeChildProcess from "node:child_process";
 import * as NodeURL from "node:url";
+
 import { remoteCacheUrl } from "./remoteCache.ts";
 import { flushTelemetry, observeSummaries } from "./telemetry.ts";
 

@@ -1,3 +1,4 @@
+import { describe, expect, it } from "@effect/vitest";
 import {
   EnvironmentId,
   type ExecutionEnvironmentDescriptor,
@@ -7,7 +8,6 @@ import {
   ThreadId,
   type ThreadPullRequestLink,
 } from "@t3tools/contracts";
-import { describe, expect, it } from "@effect/vitest";
 import * as Cause from "effect/Cause";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
@@ -28,11 +28,11 @@ import {
 } from "../connection/model.ts";
 import * as EnvironmentSupervisor from "../connection/supervisor.ts";
 import * as Persistence from "../platform/persistence.ts";
-import * as RpcSession from "../rpc/session.ts";
 import type { WsRpcProtocolClient } from "../rpc/protocol.ts";
+import * as RpcSession from "../rpc/session.ts";
+import { v2Project, v2ShellSnapshot, v2ThreadShell } from "./orchestrationV2TestFixtures.ts";
 import { type EnvironmentShellState, makeEnvironmentShellState } from "./shell.ts";
 import * as ShellSnapshotLoader from "./shellSnapshotHttp.ts";
-import { v2Project, v2ShellSnapshot, v2ThreadShell } from "./orchestrationV2TestFixtures.ts";
 
 const TARGET = new PrimaryConnectionTarget({
   environmentId: EnvironmentId.make("environment-1"),

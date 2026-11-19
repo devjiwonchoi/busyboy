@@ -1,12 +1,14 @@
 import { RegistryContext } from "@effect/atom-react";
+import { EnvironmentId, type ProjectEntry } from "@t3tools/contracts";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import { AsyncResult, Atom } from "effect/reactivity";
-import { appAtomRegistry } from "~/rpc/atomRegistry";
-import { EnvironmentId, type ProjectEntry } from "@t3tools/contracts";
 import { useEffect } from "react";
-import { act, render } from "../../../test/render";
 import { expect, it, vi } from "vite-plus/test";
+
+import { appAtomRegistry } from "~/rpc/atomRegistry";
+
+import { act, render } from "../../../test/render";
 
 const { listEntries, mocks } = vi.hoisted(() => ({
   listEntries: vi.fn(),

@@ -23,15 +23,15 @@ import * as Stream from "effect/Stream";
 
 import * as BackgroundPolicy from "../background/BackgroundPolicy.ts";
 import * as GitManager from "../git/GitManager.ts";
-import * as GitVcsDriver from "../vcs/GitVcsDriver.ts";
-import * as ProjectStore from "./ProjectStore.ts";
-import * as PullRequestService from "../pullRequest/PullRequestService.ts";
-import { makeLinkedThreadsChangeDetector } from "../pullRequest/linkedThreads.ts";
 import * as RepositoryIdentityResolver from "../project/RepositoryIdentityResolver.ts";
+import { makeLinkedThreadsChangeDetector } from "../pullRequest/linkedThreads.ts";
+import * as PullRequestService from "../pullRequest/PullRequestService.ts";
 import { forkParked } from "../serverActivation.ts";
 import { sourceControlDefinitions } from "../sourceControl/sourceControlDefinitions.ts";
+import * as GitVcsDriver from "../vcs/GitVcsDriver.ts";
 import { makeNoPullRequestRechecks } from "./noPullRequestRechecks.ts";
 import * as Orchestrator from "./Orchestrator.ts";
+import * as ProjectStore from "./ProjectStore.ts";
 
 class ThreadPullRequestServiceV2 extends Context.Service<
   ThreadPullRequestServiceV2,

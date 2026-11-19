@@ -1,5 +1,6 @@
-import { beforeEach, expect, it, vi } from "vite-plus/test";
 import type * as Electron from "electron";
+import { beforeEach, expect, it, vi } from "vite-plus/test";
+
 import { copyContextMenuImage } from "./ContextMenuImage.ts";
 
 const native = vi.hoisted(() => ({

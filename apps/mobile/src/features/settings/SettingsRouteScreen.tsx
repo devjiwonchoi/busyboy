@@ -1,3 +1,18 @@
+import { useAuth, useUser } from "@clerk/expo";
+import { useNavigation, useNavigationState } from "@react-navigation/native";
+import { deriveProjectGroupLabel } from "@t3tools/client-runtime/state/project-grouping";
+import { useGT, useMessages } from "gt-react-native";
+import { use, type ComponentProps } from "react";
+import { Platform, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+
+import { EmptyState } from "../../components/ui/EmptyState";
+import { usePaneRole } from "../../components/ui/Pane";
+import { ScreenScrollView as ScrollView } from "../../components/ui/ScreenScrollView";
+import { useNativeColumnLayoutMetrics } from "../../native/native-layout-metrics";
+import { useSavedRemoteConnections } from "../../state/use-remote-environment-registry";
+import { hasCloudPublicConfig } from "../cloud/publicConfig";
+import { useAdaptiveWorkspaceLayout } from "../layout/adaptive-workspace-context";
 import {
   navigationCustomizationAvailable,
   overflowNavigationTabs,
@@ -8,32 +23,17 @@ import {
   useNavigationTabOrder,
   useHiddenNavigationTabs,
 } from "../layout/workspace/navigation-tabs";
+import { useSelectWorkspaceTab } from "../layout/workspace/useSelectWorkspaceTab";
 import { currentWorkspaceSelections } from "../layout/workspace/workspace-selection-store";
 import { rememberedSettingsPage } from "../layout/workspace/workspace-tab-navigation";
-import { useSelectWorkspaceTab } from "../layout/workspace/useSelectWorkspaceTab";
 import { useWorkspaceTabs } from "../layout/workspace/WorkspaceTabsContext";
-import { ScreenScrollView as ScrollView } from "../../components/ui/ScreenScrollView";
-import { EmptyState } from "../../components/ui/EmptyState";
-import { useAuth, useUser } from "@clerk/expo";
-import { useNavigation, useNavigationState } from "@react-navigation/native";
-import { use, type ComponentProps } from "react";
-import { Platform, View } from "react-native";
-import { useNativeColumnLayoutMetrics } from "../../native/native-layout-metrics";
-import { deriveProjectGroupLabel } from "@t3tools/client-runtime/state/project-grouping";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
-
-import { hasCloudPublicConfig } from "../cloud/publicConfig";
-import { useAdaptiveWorkspaceLayout } from "../layout/adaptive-workspace-context";
-import { useSavedRemoteConnections } from "../../state/use-remote-environment-registry";
-import { SettingsRow } from "./components/SettingsRow";
-import { SettingsSection, SettingsSidebarContext } from "./components/SettingsSection";
-import { SettingsScreen } from "./components/SettingsScreen";
 import type { SettingsPageTarget } from "./components/settings-page-targets";
 import { useSettingsEnvironmentMenu } from "./components/SettingsEnvironmentFilterHeader";
+import { SettingsRow } from "./components/SettingsRow";
+import { SettingsScreen } from "./components/SettingsScreen";
+import { SettingsSection, SettingsSidebarContext } from "./components/SettingsSection";
 import { useSettingsEnvironmentFilter } from "./settings-environment-filter";
 import { filterSettingsSections } from "./settings-search";
-import { usePaneRole } from "../../components/ui/Pane";
-import { useGT, useMessages } from "gt-react-native";
 
 export function SettingsRouteScreen() {
   const list = useSettingsListPlacement();

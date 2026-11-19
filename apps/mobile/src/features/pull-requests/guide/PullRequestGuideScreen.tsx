@@ -1,34 +1,35 @@
-import { sourceControlClients } from "@t3tools/client-runtime/source-control-clients";
-import { parsePatchFiles } from "@pierre/diffs/utils/parsePatchFiles";
 import type { FileDiffMetadata } from "@pierre/diffs";
+import { parsePatchFiles } from "@pierre/diffs/utils/parsePatchFiles";
 import { StackActions, useNavigation, type StaticScreenProps } from "@react-navigation/native";
-import { msg, T, useGT, useMessages } from "gt-react-native";
-import { useEffect } from "react";
-import { Pressable, View } from "react-native";
-import { AppBar } from "../../../components/ui/AppBar";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   letterStopNotes,
   stepTourPosition,
   stopFilePaths,
 } from "@t3tools/client-runtime/review-guide-tour";
+import { sourceControlClients } from "@t3tools/client-runtime/source-control-clients";
+import { msg, T, useGT, useMessages } from "gt-react-native";
+import { useEffect } from "react";
+import { Pressable, View } from "react-native";
+import Animated from "react-native-reanimated";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+
+import { AppBar } from "../../../components/ui/AppBar";
 import { SymbolView } from "../../../components/ui/AppSymbol";
-import { GuideOutline } from "./GuideOutline";
 import { AppText as Text } from "../../../components/ui/AppText";
 import { ScreenScrollView } from "../../../components/ui/ScreenScrollView";
+import { composerPullRequests } from "../../../state/pull-requests";
+import { useEnvironmentQuery } from "../../../state/query";
 import { useAppearancePreferences } from "../../settings/appearance/AppearancePreferencesProvider";
+import { PR_ROW_ENTER, PR_ROW_EXIT, PR_ROW_LAYOUT } from "../pullRequestAnimations";
 import { PullRequestCardGroup, PullRequestCardRow } from "../PullRequestControls";
 import { PullRequestMarkdown, PullRequestMarkdownRepository } from "../PullRequestMarkdown";
 import { usePullRequestDiff, type PullRequestParams } from "../usePullRequestDiff";
+import { pullRequestTarget } from "../usePullRequestDiff";
+import { usePullRequestPermissions } from "../usePullRequestPermissions";
+import { GuideNotice } from "./GuideNotice";
+import { GuideOutline } from "./GuideOutline";
 import { ReviewGuideExcerpt } from "./ReviewGuideExcerpt";
 import { reviewGuideState } from "./reviewGuideState";
-import { GuideNotice } from "./GuideNotice";
-import Animated from "react-native-reanimated";
-import { PR_ROW_ENTER, PR_ROW_EXIT, PR_ROW_LAYOUT } from "../pullRequestAnimations";
-import { useEnvironmentQuery } from "../../../state/query";
-import { composerPullRequests } from "../../../state/pull-requests";
-import { usePullRequestPermissions } from "../usePullRequestPermissions";
-import { pullRequestTarget } from "../usePullRequestDiff";
 import { useReviewGuide } from "./useReviewGuide";
 
 export type GuideStopParams = PullRequestParams & {

@@ -1,4 +1,5 @@
 import { PositiveInt } from "@t3tools/contracts";
+import { Command, Flag } from "effect/cli";
 import * as Clock from "effect/Clock";
 import * as Config from "effect/Config";
 import * as Console from "effect/Console";
@@ -8,7 +9,6 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
-import { Command, Flag } from "effect/cli";
 
 import * as ServerConfig from "../config.ts";
 import { streamTraceFileLines, toRotatedTracePaths } from "../diagnostics/TraceDiagnostics.ts";

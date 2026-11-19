@@ -1,20 +1,20 @@
-import { assert, describe, expect, it } from "@effect/vitest";
 import * as NodeServices from "@effect/platform-node/NodeServices";
+import { assert, describe, expect, it } from "@effect/vitest";
 import * as Cause from "effect/Cause";
-import * as Effect from "effect/Effect";
 import * as Deferred from "effect/Deferred";
-import * as Fiber from "effect/Fiber";
+import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import * as Fiber from "effect/Fiber";
 import * as FileSystem from "effect/FileSystem";
 import { cast } from "effect/Function";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
+import type { OtlpTracer } from "effect/observability";
 import * as Path from "effect/Path";
 import * as Ref from "effect/Ref";
 import * as References from "effect/References";
 import * as Schema from "effect/Schema";
 import * as Tracer from "effect/Tracer";
-import type { OtlpTracer } from "effect/observability";
 
 import {
   causeErrorTag,

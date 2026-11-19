@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
+
 import { grade, testRange } from "./grade.ts";
 
 const source = [

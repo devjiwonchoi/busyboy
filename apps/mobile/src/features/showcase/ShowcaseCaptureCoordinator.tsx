@@ -1,5 +1,3 @@
-import { useSyncExternalStore } from "react";
-import { Appearance, Keyboard, View } from "react-native";
 import {
   CommonActions,
   StackActions,
@@ -9,6 +7,8 @@ import {
 import { runAtomCommand } from "@t3tools/client-runtime/state/runtime";
 import { AsyncResult } from "effect/reactivity";
 import { requireOptionalNativeModule } from "expo";
+import { useSyncExternalStore } from "react";
+import { Appearance, Keyboard, View } from "react-native";
 
 import { connectPairingUrl } from "../../connection/onboarding";
 import {
@@ -24,7 +24,9 @@ import { enqueueThreadOutboxMessage } from "../../state/thread-outbox";
 import { environmentThreadShells } from "../../state/threads";
 import { holdEditingQueuedMessage } from "../../state/use-thread-outbox";
 import { workspaceConnections } from "../../state/workspace";
+import { selectWorkspaceDetail } from "../layout/workspace/workspace-detail-selection";
 import { resolveThemeAppearance } from "../settings/appearance/AppearancePreferencesProvider";
+import { settingsNavigationState } from "../settings/settings-navigation";
 import {
   applyNativeShowcaseOrientation,
   getNativeShowcaseOrientation,
@@ -54,8 +56,6 @@ import {
 } from "./showcaseRenderSignal";
 import { retryShowcaseOperation } from "./showcaseRetry";
 import { stageShowcaseAgentActivity } from "./stageShowcaseAgentActivity";
-import { settingsNavigationState } from "../settings/settings-navigation";
-import { selectWorkspaceDetail } from "../layout/workspace/workspace-detail-selection";
 
 const SHOWCASE_ENABLED = process.env.EXPO_PUBLIC_SHOWCASE === "1";
 // Native launch requests (pairing links, scene switches) have no change event.

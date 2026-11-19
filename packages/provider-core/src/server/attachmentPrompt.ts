@@ -6,8 +6,8 @@ import {
   type SnapShotAccessibility,
   type SnapShotAccessibilityNode,
 } from "@t3tools/contracts";
-import * as Schema from "effect/Schema";
 import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
 
 const encodePromptJson = Schema.encodeSync(Schema.fromJsonString(Schema.Unknown));
 

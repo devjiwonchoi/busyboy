@@ -1,6 +1,6 @@
+import { BranchNamingMode, DEFAULT_SERVER_SETTINGS } from "@t3tools/contracts";
 import { msg, useGT, useMessages } from "gt-react";
 import { useRef } from "react";
-import { BranchNamingMode, DEFAULT_SERVER_SETTINGS } from "@t3tools/contracts";
 
 import { Input } from "../ui/input";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";

@@ -1,16 +1,19 @@
-import { ComposerSelectControl } from "./chat/ComposerControl";
-import { ComposerContextLabel } from "./ComposerContextLabel";
+import { useAtomValue } from "@effect/atom-react";
+import { T, useGT, useMessages } from "gt-react";
 import { FolderGit2Icon, FolderGitIcon, FolderIcon } from "lucide-react";
 import { memo, type MouseEvent as ReactMouseEvent } from "react";
-import { T, useGT, useMessages } from "gt-react";
 
+import { shortcutLabelForCommand } from "../keybindings";
+import { primaryServerKeybindingsAtom } from "../state/server";
 import {
   resolveCurrentWorkspaceLabel,
   resolveEnvModeLabel,
   resolveLockedWorkspaceLabel,
   type EnvMode,
 } from "./BranchToolbar.logic";
+import { ComposerSelectControl } from "./chat/ComposerControl";
 import { useComposerMenuProps } from "./chat/composerEventScope";
+import { ComposerContextLabel } from "./ComposerContextLabel";
 import { PreviousWorktreeItemContent } from "./PreviousWorktreeItemContent";
 import {
   Select,
@@ -21,9 +24,6 @@ import {
   SelectValue,
 } from "./ui/select";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "./ui/tooltip";
-import { useAtomValue } from "@effect/atom-react";
-import { shortcutLabelForCommand } from "../keybindings";
-import { primaryServerKeybindingsAtom } from "../state/server";
 
 const PREVIOUS_WORKTREE_SELECT_VALUE = "previous-worktree";
 

@@ -1,11 +1,3 @@
-import { msg } from "gt-i18n";
-import {
-  MarkedText,
-  markedTextEnglish,
-  messageFromError,
-  translatableMessage,
-  withI18nMessage,
-} from "../errors/translatable.ts";
 import {
   EnvironmentAuthorizationError,
   clientRpcRequiredScopes,
@@ -21,12 +13,20 @@ import * as Context from "effect/Context";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
+import { RpcClientError } from "effect/rpc";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import * as SubscriptionRef from "effect/SubscriptionRef";
-import { RpcClientError } from "effect/rpc";
+import { msg } from "gt-i18n";
 
 import * as EnvironmentSupervisor from "../connection/supervisor.ts";
+import {
+  MarkedText,
+  markedTextEnglish,
+  messageFromError,
+  translatableMessage,
+  withI18nMessage,
+} from "../errors/translatable.ts";
 import type { WsRpcProtocolClient } from "../rpc/protocol.ts";
 import type { RpcSession } from "../rpc/session.ts";
 

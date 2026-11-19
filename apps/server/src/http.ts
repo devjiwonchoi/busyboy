@@ -1,23 +1,16 @@
-import * as Mime from "effect/http/Mime";
 import {
   AuthOrchestrationOperateScope,
   AuthOrchestrationReadScope,
   EnvironmentHttpApi,
 } from "@t3tools/contracts";
 import { isDevProxiedPath } from "@t3tools/shared/devProxy";
-import { injectMcpAppCookieBootstrap, injectMcpAppThemeBootstrap } from "@t3tools/shared/mcpApp";
 import { FILE_PREVIEW_SCROLL_SCRIPT } from "@t3tools/shared/htmlRender";
+import { injectMcpAppCookieBootstrap, injectMcpAppThemeBootstrap } from "@t3tools/shared/mcpApp";
 import { decodeOtlpTraceRecords } from "@t3tools/shared/observability";
 import * as ByteSize from "effect/ByteSize";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
-import * as Layer from "effect/Layer";
-import * as Option from "effect/Option";
-import * as Path from "effect/Path";
-import * as Schema from "effect/Schema";
-import * as Stream from "effect/Stream";
-import * as Tracer from "effect/Tracer";
 import { cast, pipe } from "effect/Function";
 import {
   HttpClient,
@@ -29,35 +22,42 @@ import {
   HttpServerRespondable,
 } from "effect/http";
 import * as HttpApiBuilder from "effect/http-api/HttpApiBuilder";
+import * as Mime from "effect/http/Mime";
+import * as Layer from "effect/Layer";
 import { OtlpTracer, OtlpSerialization } from "effect/observability";
+import * as Option from "effect/Option";
+import * as Path from "effect/Path";
+import * as Schema from "effect/Schema";
+import * as Stream from "effect/Stream";
+import * as Tracer from "effect/Tracer";
 
-import * as ServerConfig from "./config.ts";
 import { ASSET_ROUTE_PREFIX, readMcpAppHtml, resolveAsset } from "./assets/AssetAccess.ts";
-import { sourceControlMediaResponse } from "./assets/sourceControlMediaResponse.ts";
-import { statMediaFile, streamMediaFile, type OpenMediaFile } from "./assets/MediaFile.ts";
 import {
   ATTACHMENT_UPLOAD_ROUTE_PREFIX,
   storeAttachmentUpload,
   validateAttachmentUploadToken,
 } from "./assets/AttachmentUpload.ts";
-import * as BrowserTraceCollector from "./observability/BrowserTraceCollector.ts";
+import { statMediaFile, streamMediaFile, type OpenMediaFile } from "./assets/MediaFile.ts";
+import { sourceControlMediaResponse } from "./assets/sourceControlMediaResponse.ts";
 import * as EnvironmentAuth from "./auth/EnvironmentAuth.ts";
-import { traceRelayRequest } from "./cloud/traceRelayRequest.ts";
 import {
   annotateEnvironmentRequest,
   failEnvironmentScopeRequired,
   failEnvironmentAuthInvalid,
   failEnvironmentInternal,
 } from "./auth/http.ts";
+import { traceRelayRequest } from "./cloud/traceRelayRequest.ts";
+import * as ServerConfig from "./config.ts";
 import * as ServerEnvironment from "./environment/ServerEnvironment.ts";
-import { WEBHOOK_ROUTE_PREFIX } from "./scheduledTasks/ScheduledTaskService.ts";
 import {
   browserApiCorsAllowedHeaders,
   browserApiCorsAllowedMethods,
   DESKTOP_RENDERER_ORIGINS,
   MCP_HTTP_PATH,
 } from "./httpCors.ts";
+import * as BrowserTraceCollector from "./observability/BrowserTraceCollector.ts";
 import { requestUrl } from "./requestUrl.ts";
+import { WEBHOOK_ROUTE_PREFIX } from "./scheduledTasks/ScheduledTaskService.ts";
 
 const OTLP_TRACES_PROXY_PATH = "/api/observability/v1/traces";
 const LOOPBACK_HOSTNAMES = new Set(["127.0.0.1", "::1", "localhost"]);

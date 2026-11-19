@@ -1,6 +1,7 @@
-import JSZip from "jszip";
 import { initWasm, openPresentation } from "@betteroffice/pptx";
+import JSZip from "jszip";
 import { expect, it } from "vite-plus/test";
+
 import { slideFonts } from "./slide-fonts";
 import { deckText } from "./slide-text";
 

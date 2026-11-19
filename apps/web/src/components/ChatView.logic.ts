@@ -1,24 +1,21 @@
 import { toServerClock } from "@t3tools/client-runtime/clock";
-import { msg } from "gt-react";
-import { m, type MessageResolver } from "../i18n/messages";
-import { type OrchestrationV2ProviderTurn, type RunAttemptId } from "@t3tools/contracts";
+import { sanitizeThreadErrorMessage, thrownErrorMessage } from "@t3tools/client-runtime/errors";
+import { resolveAssetUrl } from "@t3tools/client-runtime/state/assets";
+import type { ComposerDispatchMode } from "@t3tools/client-runtime/state/composer-dispatch";
+import { COMPACT_COMMAND_PATTERN } from "@t3tools/client-runtime/state/context-window";
+import {
+  squashAtomCommandFailure,
+  type AtomCommandResult,
+} from "@t3tools/client-runtime/state/runtime";
+import type { EnvironmentThread, ThreadStructure } from "@t3tools/client-runtime/state/shell";
+import { presentThreadShell } from "@t3tools/client-runtime/state/shell";
+import { checkpointFileTotals } from "@t3tools/client-runtime/state/thread-checkpoints";
 import {
   deriveLatestThreadRun,
   deriveThreadRuntime,
 } from "@t3tools/client-runtime/state/thread-execution";
-import { checkpointFileTotals } from "@t3tools/client-runtime/state/thread-checkpoints";
-import { COMPACT_COMMAND_PATTERN } from "@t3tools/client-runtime/state/context-window";
-import { derivePendingBackgroundWork } from "@t3tools/shared/orchestrationV2PendingBackgroundWork";
-import {
-  latestUnheldRun,
-  usageLimitRunPresentedAsLatest,
-} from "@t3tools/shared/orchestrationV2ThreadError";
-import * as Option from "effect/Option";
-import type { SetStateAction } from "react";
-import { applyClaudePromptEffortPrefix, resolvePromptInjectedEffort } from "@t3tools/shared/model";
-import { getProviderModelCapabilities } from "../providerModels";
-import { sanitizeThreadErrorMessage, thrownErrorMessage } from "@t3tools/client-runtime/errors";
-import type { EnvironmentThread, ThreadStructure } from "@t3tools/client-runtime/state/shell";
+import { worktreeSetupAgentStarted } from "@t3tools/client-runtime/worktree-setup";
+import { type OrchestrationV2ProviderTurn, type RunAttemptId } from "@t3tools/contracts";
 import {
   ANTIGRAVITY_DEFAULT_MODEL,
   PROVIDER_SEND_TURN_MAX_ATTACHMENTS,
@@ -47,21 +44,62 @@ import {
   type RunId,
   type WorktreeSetupSnapshot,
 } from "@t3tools/contracts";
-import { worktreeSetupAgentStarted } from "@t3tools/client-runtime/worktree-setup";
-import * as DateTime from "effect/DateTime";
-import { resolveAssetUrl } from "@t3tools/client-runtime/state/assets";
-import {
-  squashAtomCommandFailure,
-  type AtomCommandResult,
-} from "@t3tools/client-runtime/state/runtime";
-import { readComposerImageBytes } from "./chat/composerAttachmentFiles";
-import { videoMimeType } from "@t3tools/shared/video";
 import {
   appendCodexArtifactTemplateUsePrompt,
   codexArtifactTemplateUsePrompt,
   type CodexArtifactTemplate,
 } from "@t3tools/shared/codexArtifactTemplates";
-import { presentThreadShell } from "@t3tools/client-runtime/state/shell";
+import { applyClaudePromptEffortPrefix, resolvePromptInjectedEffort } from "@t3tools/shared/model";
+import { derivePendingBackgroundWork } from "@t3tools/shared/orchestrationV2PendingBackgroundWork";
+import {
+  latestUnheldRun,
+  usageLimitRunPresentedAsLatest,
+} from "@t3tools/shared/orchestrationV2ThreadError";
+import { videoMimeType } from "@t3tools/shared/video";
+import * as DateTime from "effect/DateTime";
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
+import { msg } from "gt-react";
+import type { SetStateAction } from "react";
+
+import {
+  removeInlineContextReference,
+  stripInlineContextReferences,
+} from "~/lib/composerContextReferences";
+
+import { type ComposerSubmissionIntent } from "../composer-logic";
+import {
+  type ComposerFileAttachment,
+  type ComposerImageAttachment,
+  type DraftId,
+  type DraftThreadState,
+} from "../composerDraftStore";
+import type { DraftThreadEnvMode } from "../composerDraftStore";
+import { m, type MessageResolver } from "../i18n/messages";
+import { threadHasStarted } from "../lib/chatThreadActions";
+import {
+  previewAnnotationContextLabel,
+  reviewCommentContextLabel,
+  terminalContextReference,
+} from "../lib/composerContextRecords";
+import {
+  filterTerminalContextsWithText,
+  formatTerminalContextLabel,
+  type TerminalContextDraft,
+} from "../lib/terminalContext";
+import type { PreviewMiniPlayerSource } from "../previewMiniPlayerStore";
+import type { DesktopPreviewOverlay } from "../previewStateStore";
+import {
+  NO_PROVIDER_MODEL_SELECTION,
+  resolveSelectableProviderInstanceEntry,
+  type ProviderInstanceEntry,
+} from "../providerInstances";
+import { getProviderModelCapabilities } from "../providerModels";
+import type { ReviewCommentContext } from "../reviewCommentContext";
+import type { RightPanelSurface } from "../rightPanelStore";
+import { appAtomRegistry } from "../rpc/atomRegistry";
+import { derivePhase, type TimelineEntry } from "../session-logic";
+import { environmentThreadDetails } from "../state/threads";
 import {
   type ChatMessage,
   isImageAttachment,
@@ -69,43 +107,7 @@ import {
   type Thread,
   type TurnDiffSummary,
 } from "../types";
-import {
-  type ComposerFileAttachment,
-  type ComposerImageAttachment,
-  type DraftId,
-  type DraftThreadState,
-} from "../composerDraftStore";
-import * as Schema from "effect/Schema";
-import { threadHasStarted } from "../lib/chatThreadActions";
-import { appAtomRegistry } from "../rpc/atomRegistry";
-import { environmentThreadDetails } from "../state/threads";
-import {
-  filterTerminalContextsWithText,
-  formatTerminalContextLabel,
-  type TerminalContextDraft,
-} from "../lib/terminalContext";
-import {
-  removeInlineContextReference,
-  stripInlineContextReferences,
-} from "~/lib/composerContextReferences";
-import {
-  previewAnnotationContextLabel,
-  reviewCommentContextLabel,
-  terminalContextReference,
-} from "../lib/composerContextRecords";
-import type { ComposerDispatchMode } from "@t3tools/client-runtime/state/composer-dispatch";
-import type { DraftThreadEnvMode } from "../composerDraftStore";
-import { type ComposerSubmissionIntent } from "../composer-logic";
-import type { ReviewCommentContext } from "../reviewCommentContext";
-import { derivePhase, type TimelineEntry } from "../session-logic";
-import type { PreviewMiniPlayerSource } from "../previewMiniPlayerStore";
-import type { DesktopPreviewOverlay } from "../previewStateStore";
-import type { RightPanelSurface } from "../rightPanelStore";
-import {
-  NO_PROVIDER_MODEL_SELECTION,
-  resolveSelectableProviderInstanceEntry,
-  type ProviderInstanceEntry,
-} from "../providerInstances";
+import { readComposerImageBytes } from "./chat/composerAttachmentFiles";
 
 type ThreadProjection = EnvironmentThread["projection"];
 type ThreadStructureRow = ThreadStructure["visibleTurnItems"][number];

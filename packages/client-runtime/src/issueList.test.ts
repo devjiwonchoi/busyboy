@@ -6,7 +6,6 @@ import type {
   IssueTrackerSummary,
   ProjectId,
 } from "@t3tools/contracts";
-import type { EnvironmentProject } from "./state/models.ts";
 import { describe, expect, it } from "vite-plus/test";
 
 import {
@@ -16,6 +15,7 @@ import {
   issueCursorsForHost,
   issueFilterScopes,
 } from "./issueList.ts";
+import type { EnvironmentProject } from "./state/models.ts";
 
 const environmentId = "env-1" as EnvironmentId;
 const api = "api" as ProjectId;

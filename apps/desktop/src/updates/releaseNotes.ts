@@ -1,5 +1,4 @@
 import type { DesktopUpdateChannel, DesktopUpdateReleaseNote } from "@t3tools/contracts";
-
 import { desktopUpdateChannelOf } from "@t3tools/shared/cliRelease";
 
 interface ElectronReleaseNoteInfo {

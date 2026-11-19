@@ -7,10 +7,10 @@ import Animated, {
   withTiming,
 } from "react-native-reanimated";
 
-import { segmentedControlColors } from "./segmentedControlColors";
 import { AppText } from "./AppText";
-import { useControlTheme } from "./useControlTheme";
 import type { SegmentedControlProps } from "./SegmentedControl.types";
+import { segmentedControlColors } from "./segmentedControlColors";
+import { useControlTheme } from "./useControlTheme";
 
 export type { SegmentedControlProps } from "./SegmentedControl.types";
 

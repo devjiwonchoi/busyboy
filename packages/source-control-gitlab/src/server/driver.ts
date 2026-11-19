@@ -6,10 +6,9 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 
 import { definition } from "../shared/definition.ts";
-
 import * as GitLabCli from "./GitLabCli.ts";
-import * as GitLabPullRequestCli from "./GitLabPullRequestCli.ts";
 import * as GitLabIssueTracker from "./GitLabIssueTracker.ts";
+import * as GitLabPullRequestCli from "./GitLabPullRequestCli.ts";
 import * as GitLabPullRequestProvider from "./GitLabPullRequestProvider.ts";
 import * as GitLabSourceControlProvider from "./GitLabSourceControlProvider.ts";
 

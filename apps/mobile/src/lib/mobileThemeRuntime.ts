@@ -1,5 +1,6 @@
-import { resolveTextScaleVariables } from "./appearancePreferences";
 import { BUILT_IN_THEME_IDS, type BuiltInThemeId } from "@t3tools/shared/themePalettes";
+
+import { resolveTextScaleVariables } from "./appearancePreferences";
 import {
   DEFAULT_MOBILE_THEME_ID,
   type MobileThemeAppearance,

@@ -1,4 +1,6 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
+import * as ProviderAdapter from "@t3tools/provider-core/server/ProviderAdapter";
+import { makeCheckpointWorkspace } from "@t3tools/provider-testing/replayWorkspace";
 import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -10,9 +12,24 @@ import {
   CLAUDE_AGENT_SDK_REPLAY_PROTOCOL,
 } from "../src/orchestration-v2/Adapters/ClaudeAdapterV2.testkit.ts";
 import { claudeRuntimeQueryPolicyForRuntimePolicy } from "../src/orchestration-v2/Adapters/ClaudeAdapterV2.ts";
-import * as ProviderAdapter from "@t3tools/provider-core/server/ProviderAdapter";
 import type { RuntimePolicyV2Override } from "../src/orchestration-v2/RuntimePolicy.ts";
-import { makeCheckpointWorkspace } from "@t3tools/provider-testing/replayWorkspace";
+import { CLAUDE_BACKGROUND_MONITOR_WAKE_PROMPT } from "../src/orchestration-v2/testkit/fixtures/claude_background_monitor_wake/input.ts";
+import { CLAUDE_BACKGROUND_SUBAGENT_AFTER_ROOT_PROMPT } from "../src/orchestration-v2/testkit/fixtures/claude_background_subagent_after_root/input.ts";
+import {
+  CLAUDE_BACKGROUND_SUBAGENT_LIFECYCLE_FINAL_PROMPT,
+  CLAUDE_BACKGROUND_SUBAGENT_LIFECYCLE_LAUNCH_PROMPT,
+  CLAUDE_BACKGROUND_SUBAGENT_LIFECYCLE_RESUME_PROMPT,
+  CLAUDE_BACKGROUND_SUBAGENT_LIFECYCLE_STOP_PROMPT,
+} from "../src/orchestration-v2/testkit/fixtures/claude_background_subagent_lifecycle/input.ts";
+import { CLAUDE_BACKGROUND_TASK_INTERRUPT_PROMPT } from "../src/orchestration-v2/testkit/fixtures/claude_background_task_interrupt/input.ts";
+import {
+  CLAUDE_BACKGROUND_TASK_WAKE_FOLLOW_UP_PROMPT,
+  CLAUDE_BACKGROUND_TASK_WAKE_PROMPT,
+} from "../src/orchestration-v2/testkit/fixtures/claude_background_task_wake/input.ts";
+import { CLAUDE_BACKGROUND_WAKE_BEFORE_QUEUED_PROMPT_LAUNCH_PROMPT } from "../src/orchestration-v2/testkit/fixtures/claude_background_wake_before_queued_prompt/input.ts";
+import { CLAUDE_MCP_TOOL_PRESENTATION_PROMPT } from "../src/orchestration-v2/testkit/fixtures/claude_mcp_tool_presentation/input.ts";
+import { CLAUDE_NESTED_BACKGROUND_SUBAGENT_WAKE_PROMPT } from "../src/orchestration-v2/testkit/fixtures/claude_nested_background_subagent_wake/input.ts";
+import { CLAUDE_NESTED_SUBAGENT_MODEL_PROMPT } from "../src/orchestration-v2/testkit/fixtures/claude_nested_subagent_model/input.ts";
 import { CLAUDE_MODEL_SELECTION } from "../src/orchestration-v2/testkit/fixtures/shared.ts";
 import {
   MESSAGE_STEERING_INITIAL_PROMPT,
@@ -48,23 +65,6 @@ import {
   WORKSPACE_NEVER_POLICY,
   WEB_SEARCH_PROMPT,
 } from "../src/orchestration-v2/testkit/fixtures/shared.ts";
-import { CLAUDE_BACKGROUND_SUBAGENT_AFTER_ROOT_PROMPT } from "../src/orchestration-v2/testkit/fixtures/claude_background_subagent_after_root/input.ts";
-import {
-  CLAUDE_BACKGROUND_SUBAGENT_LIFECYCLE_FINAL_PROMPT,
-  CLAUDE_BACKGROUND_SUBAGENT_LIFECYCLE_LAUNCH_PROMPT,
-  CLAUDE_BACKGROUND_SUBAGENT_LIFECYCLE_RESUME_PROMPT,
-  CLAUDE_BACKGROUND_SUBAGENT_LIFECYCLE_STOP_PROMPT,
-} from "../src/orchestration-v2/testkit/fixtures/claude_background_subagent_lifecycle/input.ts";
-import { CLAUDE_BACKGROUND_MONITOR_WAKE_PROMPT } from "../src/orchestration-v2/testkit/fixtures/claude_background_monitor_wake/input.ts";
-import { CLAUDE_NESTED_BACKGROUND_SUBAGENT_WAKE_PROMPT } from "../src/orchestration-v2/testkit/fixtures/claude_nested_background_subagent_wake/input.ts";
-import { CLAUDE_NESTED_SUBAGENT_MODEL_PROMPT } from "../src/orchestration-v2/testkit/fixtures/claude_nested_subagent_model/input.ts";
-import { CLAUDE_MCP_TOOL_PRESENTATION_PROMPT } from "../src/orchestration-v2/testkit/fixtures/claude_mcp_tool_presentation/input.ts";
-import { CLAUDE_BACKGROUND_TASK_INTERRUPT_PROMPT } from "../src/orchestration-v2/testkit/fixtures/claude_background_task_interrupt/input.ts";
-import { CLAUDE_BACKGROUND_WAKE_BEFORE_QUEUED_PROMPT_LAUNCH_PROMPT } from "../src/orchestration-v2/testkit/fixtures/claude_background_wake_before_queued_prompt/input.ts";
-import {
-  CLAUDE_BACKGROUND_TASK_WAKE_FOLLOW_UP_PROMPT,
-  CLAUDE_BACKGROUND_TASK_WAKE_PROMPT,
-} from "../src/orchestration-v2/testkit/fixtures/claude_background_task_wake/input.ts";
 import {
   DENIED_WRITE_POLICY,
   TOOL_CALL_DENIED_WRITE_PROMPT,

@@ -3,6 +3,7 @@ import {
   formatTerminalContextLabel,
   isTerminalContextExpired,
 } from "~/lib/terminalContext";
+
 import type { ContextPresentationCapability } from "../contextPresentationRegistry";
 import { TerminalContextInlineChip } from "./TerminalContextInlineChip";
 

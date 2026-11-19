@@ -1,31 +1,29 @@
-import { useAtomCommand } from "~/state/use-atom-command";
+import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
 import type { EnvironmentId, PullRequestRef, PullRequestReviewVerdict } from "@t3tools/contracts";
-import { CheckIcon, MessageSquareIcon, XCircleIcon } from "lucide-react";
 import { msg, useGT, useMessages } from "gt-react";
+import { CheckIcon, MessageSquareIcon, XCircleIcon } from "lucide-react";
 import { useEffect, useState, type ReactNode, type RefObject } from "react";
 
 import { m } from "~/i18n/messages";
-
 import { TextFieldSpeechControls, useTextFieldSpeech } from "~/speech/useTextFieldSpeech";
 import { pullRequestEnvironment } from "~/state/pullRequests";
-import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
+import { useAtomCommand } from "~/state/use-atom-command";
 
 import { isCommentSubmitShortcut } from "../diffs/commentSubmitShortcut";
 import { Button } from "../ui/button";
 import { Select, SelectItem, SelectPopup, SelectTrigger } from "../ui/select";
 import { toastManager } from "../ui/toast";
+import type { ChangeRequestTermKind } from "./changeRequestTerm";
 import { readableFailure } from "./pullRequestDetail.logic";
+import {
+  PullRequestMarkdownTextarea,
+  type PullRequestCompletionScope,
+} from "./PullRequestMarkdownTextarea";
 import {
   pullRequestReviewKey,
   usePendingReviewComments,
   usePullRequestReviewStore,
 } from "./pullRequestReviewStore";
-import {
-  PullRequestMarkdownTextarea,
-  type PullRequestCompletionScope,
-} from "./PullRequestMarkdownTextarea";
-
-import type { ChangeRequestTermKind } from "./changeRequestTerm";
 
 const VERDICTS: ReadonlyArray<{
   readonly value: PullRequestReviewVerdict;

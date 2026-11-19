@@ -1,7 +1,6 @@
-import { msg } from "gt-react";
-import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
-import { m } from "~/i18n/messages";
 import { useAtomValue } from "@effect/atom-react";
+import { scopedThreadKey } from "@t3tools/client-runtime/environment";
+import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
 import {
   makeQueuedRunEditStore,
   makeQueuedRunsAtom,
@@ -24,14 +23,18 @@ import {
   type ThreadContextRecord,
   type ThreadId,
 } from "@t3tools/contracts";
-import { scopedThreadKey } from "@t3tools/client-runtime/environment";
 import {
   restoreAttachmentOnlyBootstrapPrompt,
   stripAttachmentOnlyBootstrapPrompt,
 } from "@t3tools/shared/composerContextReferences";
 import { Atom } from "effect/reactivity";
+import { msg } from "gt-react";
 import type { RefObject } from "react";
+
+import { m } from "~/i18n/messages";
+
 import { useAssetUrls } from "../../assets/assetUrls";
+import type { ComposerSubmissionIntent } from "../../composer-logic";
 import {
   queuedRunEditDraftId,
   useComposerDraftStore,
@@ -54,7 +57,6 @@ import {
 } from "../../lib/composerContextReferences";
 import { readFileAsDataUrl } from "../../lib/imageCompression";
 import type { TerminalContextDraft } from "../../lib/terminalContext";
-import type { ComposerSubmissionIntent } from "../../composer-logic";
 import type { ReviewCommentContext } from "../../reviewCommentContext";
 import { appAtomRegistry } from "../../rpc/atomRegistry";
 import { environmentServerConfigsAtom } from "../../state/server";

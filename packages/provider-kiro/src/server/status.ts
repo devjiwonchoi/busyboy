@@ -1,4 +1,3 @@
-import { resolveProviderProbeTimeoutMs } from "@t3tools/provider-core/server/snapshotProbe";
 import {
   type ModelCapabilities,
   ProviderDriverKind,
@@ -6,23 +5,7 @@ import {
   type ServerProviderAuth,
   type ServerProviderModel,
 } from "@t3tools/contracts";
-import type { KiroSettings } from "../settings.ts";
-import * as HostProcess from "@t3tools/shared/HostProcess";
-import { createModelCapabilities } from "@t3tools/shared/model";
-import { resolveSpawnCommand } from "@t3tools/shared/shell";
-import type * as SecureRandom from "effect/crypto/SecureRandom";
-import * as DateTime from "effect/DateTime";
-import * as Effect from "effect/Effect";
-import * as Option from "effect/Option";
-import * as Result from "effect/Result";
-import * as Schema from "effect/Schema";
-import { ChildProcess, type ChildProcessSpawner } from "effect/process";
-
-import {
-  KIRO_AGENT_CONFIG_ID,
-  KIRO_SUPPORTED_RUNTIME_MODES,
-  makeKiroAcpRuntime,
-} from "./acpSupport.ts";
+import { resolveProviderProbeTimeoutMs } from "@t3tools/provider-core/server/snapshotProbe";
 import {
   AUTH_PROBE_TIMEOUT_MS,
   buildServerProvider,
@@ -36,6 +19,23 @@ import {
   providerProbeEnvironment,
   spawnAndCollect,
 } from "@t3tools/provider-core/server/snapshotProbe";
+import * as HostProcess from "@t3tools/shared/HostProcess";
+import { createModelCapabilities } from "@t3tools/shared/model";
+import { resolveSpawnCommand } from "@t3tools/shared/shell";
+import type * as SecureRandom from "effect/crypto/SecureRandom";
+import * as DateTime from "effect/DateTime";
+import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
+import { ChildProcess, type ChildProcessSpawner } from "effect/process";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
+
+import type { KiroSettings } from "../settings.ts";
+import {
+  KIRO_AGENT_CONFIG_ID,
+  KIRO_SUPPORTED_RUNTIME_MODES,
+  makeKiroAcpRuntime,
+} from "./acpSupport.ts";
 
 const KIRO_DRIVER_KIND = ProviderDriverKind.make("kiro");
 const KIRO_PRESENTATION = {

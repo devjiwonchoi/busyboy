@@ -1,7 +1,7 @@
 import { VoiceTranscriptionDestination } from "@t3tools/contracts";
 import * as Schema from "effect/Schema";
 import { useSyncExternalStore } from "react";
-import { randomUUID } from "../lib/utils";
+
 import {
   getLocalStorageItem,
   readLocalStorageValue,
@@ -9,6 +9,7 @@ import {
   useLocalStorage,
   writeLocalStorageValue,
 } from "../hooks/useLocalStorage";
+import { randomUUID } from "../lib/utils";
 
 // Separate keys: a stale window saving ordinary preferences must not restore either grant.
 const AUDIO_KEY = "t3code:voice-audio-grant:v1";

@@ -1,9 +1,9 @@
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
 import { AsyncResult } from "effect/reactivity";
 
+import type { PullRequestSavedView } from "../../persistence/mobile-preferences";
 import { mobilePreferencesAtom, updateMobilePreferencesAtom } from "../../state/preferences";
 import { DEFAULT_PR_LIST_CONTROLS, type PullRequestListControls } from "./pullRequestList";
-import type { PullRequestSavedView } from "../../persistence/mobile-preferences";
 import { pullRequestSavedViewPreferences } from "./pullRequestSavedViews";
 
 export function usePullRequestListControls() {

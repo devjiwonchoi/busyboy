@@ -3,10 +3,10 @@ import { parsePatchFiles } from "@pierre/diffs/utils/parsePatchFiles";
 import { StrictMode, type ComponentProps } from "react";
 import { describe, expect, it, vi } from "vite-plus/test";
 
-import { act, render } from "../../../test/render";
-
 import { DraftId, useComposerDraftStore } from "~/composerDraftStore";
 import { buildFileDiffIdentityKey } from "~/lib/diffRendering";
+
+import { act, render } from "../../../test/render";
 
 type ViewerProps = Omit<ComponentProps<typeof StyledDiffCodeView<unknown>>, "options"> & {
   options: {

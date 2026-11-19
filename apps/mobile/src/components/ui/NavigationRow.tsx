@@ -3,8 +3,8 @@ import { Platform, Pressable, View } from "react-native";
 
 import { useAppearancePreferences } from "../../features/settings/appearance/AppearancePreferencesProvider";
 import { cn } from "../../lib/cn";
-import { AppText } from "./AppText";
 import { SymbolView } from "./AppSymbol";
+import { AppText } from "./AppText";
 import { useAndroidControlSizing } from "./useAndroidControlSizing";
 
 export function NavigationRow({

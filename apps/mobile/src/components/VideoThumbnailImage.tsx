@@ -1,8 +1,8 @@
 import { useAtomValue } from "@effect/atom-react";
+import { useIsFocused } from "@react-navigation/native";
 import * as Effect from "effect/Effect";
 import { Atom, AsyncResult } from "effect/reactivity";
 import { Image } from "expo-image";
-import { useIsFocused } from "@react-navigation/native";
 import type { VideoThumbnail } from "expo-video";
 import { useState } from "react";
 import { StyleSheet } from "react-native";

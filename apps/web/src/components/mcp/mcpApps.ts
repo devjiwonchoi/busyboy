@@ -1,3 +1,7 @@
+import { msg } from "gt-react";
+
+import { m, type MessageResolver } from "~/i18n/messages";
+
 import chatgptLogo from "./logos/chatgpt.png";
 import claudeLogo from "./logos/claude.png";
 import geminiLogo from "./logos/gemini.png";
@@ -7,9 +11,6 @@ import instinctLogo from "./logos/instinct.png";
 import museLogo from "./logos/muse.png";
 import openClawLogo from "./logos/openclaw.png";
 import pokeLogo from "./logos/poke.png";
-import { msg } from "gt-react";
-
-import { m, type MessageResolver } from "~/i18n/messages";
 
 /** How the Connect step hands T3 Code's MCP URL to an app. Every `link` is https. */
 export type McpAppHandoff =

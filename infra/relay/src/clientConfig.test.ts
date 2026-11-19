@@ -1,6 +1,8 @@
 // @effect-diagnostics anyUnknownInErrorContext:off - ScratchStack.deploy is typed with `any` in its error channel by Alchemy.
-import { inMemoryState } from "alchemy/State";
+
 import * as Test from "@alchemy.run/test/Vitest";
+import * as NodeServices from "@effect/platform-node/NodeServices";
+import { inMemoryState } from "alchemy/State";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -8,7 +10,6 @@ import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
 import { describe, expect, it } from "vite-plus/test";
-import * as NodeServices from "@effect/platform-node/NodeServices";
 
 import { PublishClientConfig, reconcileEnvFile, tokenDigest } from "./clientConfig.ts";
 

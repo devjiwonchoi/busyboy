@@ -1,18 +1,17 @@
-import { msg } from "gt-react";
-import { m } from "../i18n/messages";
+import { parseThreadKey, threadKey } from "@t3tools/client-runtime/state/entities";
 import {
   type EnvironmentThreadShell,
   type PendingSubagentRequest,
   presentThreadShell,
 } from "@t3tools/client-runtime/state/models";
 import { isShownUnderParent } from "@t3tools/client-runtime/state/threads";
-import type { AnyRouter } from "@tanstack/react-router";
-import { parseThreadKey, threadKey } from "@t3tools/client-runtime/state/entities";
 import type { EnvironmentId, OrchestrationV2ThreadShell, ThreadId } from "@t3tools/contracts";
-import { monitorHoldsWakeCompletion } from "@t3tools/shared/orchestrationV2PendingBackgroundWork";
 import type { ClientSettings } from "@t3tools/contracts/settings";
+import { monitorHoldsWakeCompletion } from "@t3tools/shared/orchestrationV2PendingBackgroundWork";
+import type { AnyRouter } from "@tanstack/react-router";
 import * as Option from "effect/Option";
 import type { AtomRegistry } from "effect/reactivity";
+import { msg } from "gt-react";
 import {
   CircleAlertIcon,
   CircleCheckIcon,
@@ -21,6 +20,7 @@ import {
 } from "lucide-react";
 
 import { getClientSettings, subscribeClientSettings } from "../hooks/useSettings";
+import { m } from "../i18n/messages";
 import { isWindowsPlatform } from "../lib/utils";
 import { environmentSummaries } from "../state/presentation";
 import { environmentShell } from "../state/shell";

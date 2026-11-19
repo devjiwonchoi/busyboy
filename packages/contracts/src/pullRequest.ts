@@ -1,7 +1,7 @@
-import * as Schema from "effect/Schema";
 import * as Effect from "effect/Effect";
 import * as HttpServerRespondable from "effect/http/HttpServerRespondable";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import * as Schema from "effect/Schema";
 
 import {
   ForwardCompatibleArray,

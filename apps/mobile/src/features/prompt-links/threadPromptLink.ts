@@ -1,4 +1,3 @@
-import * as Dialog from "../../components/ui/Dialog";
 import type { NavigationState, PartialState } from "@react-navigation/native";
 import { EnvironmentId, ThreadId, type ScopedThreadRef } from "@t3tools/contracts";
 import type { LinkedPrompt } from "@t3tools/shared/promptLinks";
@@ -7,6 +6,7 @@ import * as Option from "effect/Option";
 import { AsyncResult } from "effect/reactivity";
 import { msg } from "gt-react-native";
 
+import * as Dialog from "../../components/ui/Dialog";
 import { m } from "../../i18n/messages";
 import { findStackRoute } from "../../lib/appLinking";
 import { rootNavigationRef } from "../../lib/rootNavigation";

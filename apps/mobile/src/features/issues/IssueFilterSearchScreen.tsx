@@ -6,8 +6,8 @@ import { useState } from "react";
 
 import { refreshIssueFilterCandidates, useIssueFilterCandidates } from "../../state/issues";
 import { PullRequestLabelDot } from "../pull-requests/PullRequestLabelDot";
-import { PullRequestAvatar } from "../pull-requests/PullRequestPresentation";
 import { pullRequestLabelColor } from "../pull-requests/pullRequestList";
+import { PullRequestAvatar } from "../pull-requests/PullRequestPresentation";
 import { IssueCandidatesSheet } from "./IssueCandidatesSheet";
 import { issueListFiltersAtom, unofferedIssueFilters } from "./issueListFilters";
 

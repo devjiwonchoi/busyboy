@@ -1,5 +1,6 @@
+import type { PreparedConnection } from "@t3tools/client-runtime/connection";
 import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
-import { m } from "~/i18n/messages";
+import { openRouterIcon } from "@t3tools/client-runtime/provider-clients";
 import {
   cancelEnvironmentSpeechModelDownload,
   downloadEnvironmentSpeechModel,
@@ -11,8 +12,6 @@ import {
   updateEnvironmentSpeechAcceleration,
   updateEnvironmentSpeechModelUnloadTimeout,
 } from "@t3tools/client-runtime/voice-input";
-import type { PreparedConnection } from "@t3tools/client-runtime/connection";
-import { openRouterIcon } from "@t3tools/client-runtime/provider-clients";
 import {
   AuthFilesystemReadScope,
   AuthSettingsWriteScope,
@@ -37,6 +36,7 @@ import {
   recommendSpeechModels,
   type SpeechRecommendationRole,
 } from "@t3tools/shared/speech";
+import { msg, T, useGT, useLocale, useMessages, Var } from "gt-react";
 import {
   ArrowDownUpIcon,
   AudioLinesIcon,
@@ -56,10 +56,16 @@ import {
   XIcon,
 } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { msg, T, useGT, useLocale, useMessages, Var } from "gt-react";
 
 import { useStableCallback } from "~/hooks/useStableCallback";
+import { m } from "~/i18n/messages";
 import { cn } from "~/lib/utils";
+
+import { updateClientSettings, useClientSettings } from "../../hooks/useSettings";
+import {
+  getTextGenerationModelOptionsByInstance,
+  resolveAppModelSelectionState,
+} from "../../modelSelection";
 import {
   listAudioInputs,
   updateMicrophoneOrder,
@@ -71,33 +77,27 @@ import {
   rememberMicrophones,
 } from "../../speech/microphoneOrder";
 import { preferredSpeechLanguages } from "../../speech/preferredSpeechLanguages";
+import { runEnvironmentSpeech } from "../../speech/runEnvironmentSpeech";
+import {
+  useEnvironmentSpeechInput,
+  useVoiceTranscriptionDestination,
+} from "../../speech/useEnvironmentSpeechInput";
 import {
   chooseAudioDestination,
   chooseTranscriptCleanup,
   useCleanupGrant,
 } from "../../speech/voiceConsent";
-import { updateClientSettings, useClientSettings } from "../../hooks/useSettings";
-import { runEnvironmentSpeech } from "../../speech/runEnvironmentSpeech";
-import {
-  getTextGenerationModelOptionsByInstance,
-  resolveAppModelSelectionState,
-} from "../../modelSelection";
-import { useTextGenerationTargets } from "../../textGenerators";
 import { useEnvironmentProviders, useEnvironments } from "../../state/environments";
-import { useEnvironmentScope } from "../../state/session";
 import { EMPTY_SERVER_PROVIDERS } from "../../state/server";
-import {
-  useEnvironmentSpeechInput,
-  useVoiceTranscriptionDestination,
-} from "../../speech/useEnvironmentSpeechInput";
+import { useEnvironmentScope } from "../../state/session";
+import { useTextGenerationTargets } from "../../textGenerators";
 import { ComposerSpeechRecordingPill } from "../chat/ComposerSpeechButton";
-import { ProviderModelPicker } from "../chat/ProviderModelPicker";
 import { ProviderInstanceIcon } from "../chat/ProviderInstanceIcon";
+import { ProviderModelPicker } from "../chat/ProviderModelPicker";
 import { ProviderPackageIcon } from "../chat/ProviderPackageIcon";
 import { TraitsPicker } from "../chat/TraitsPicker";
 import { VoiceInputSetup } from "../chat/VoiceInputSetup";
 import { Badge } from "../ui/badge";
-import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "../ui/input-group";
@@ -126,13 +126,11 @@ import {
 import { Switch } from "../ui/switch";
 import { Textarea } from "../ui/textarea";
 import { toastManager } from "../ui/toast";
+import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
+import { AdvancedSettings } from "./AdvancedSettings";
+import { CloudVoiceConfiguration } from "./CloudVoiceConfiguration";
 import { MicrophoneOrderList } from "./MicrophoneOrderList";
 import { MicrophoneTest } from "./MicrophoneTest";
-import { CloudVoiceConfiguration } from "./CloudVoiceConfiguration";
-import { ModelBenchmarks, orderSpeechLanguages } from "./SpeechModelComparison";
-import { languageLabel, SpeechLanguageSelect } from "./SpeechLanguageSelect";
-import { filterSpeechModels, type SpeechModelSort } from "./speechModelBrowser";
-import { AdvancedSettings } from "./AdvancedSettings";
 import {
   SETTINGS_PICKER_TRIGGER_CLASSNAME,
   SettingsPageContainer,
@@ -140,8 +138,11 @@ import {
   SettingsSearchTarget,
   SettingsSection,
 } from "./settingsLayout";
-import { useSearchableSetting } from "./settingsSearch";
 import { useOptionalSettingsScope, useSettingsScope } from "./SettingsScopeContext";
+import { useSearchableSetting } from "./settingsSearch";
+import { languageLabel, SpeechLanguageSelect } from "./SpeechLanguageSelect";
+import { filterSpeechModels, type SpeechModelSort } from "./speechModelBrowser";
+import { ModelBenchmarks, orderSpeechLanguages } from "./SpeechModelComparison";
 import { useScopedModelDisabledReason } from "./useScopedModelAvailability";
 import { useScopedSettings, useUpdateScopedSettings } from "./useScopedSettings";
 

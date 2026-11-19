@@ -1,5 +1,4 @@
 import { describe, expect, it } from "@effect/vitest";
-
 import type {
   EnvironmentId,
   OrchestrationV2ThreadShell,

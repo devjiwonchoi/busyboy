@@ -1,4 +1,5 @@
 import { errorDisplayMessage } from "@t3tools/client-runtime/errors";
+import { msg, T, useGT, useMessages } from "gt-react";
 import {
   MousePointer2Icon,
   PaintbrushIcon,
@@ -9,6 +10,10 @@ import {
   ChevronUpIcon,
 } from "lucide-react";
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+
+import { useViewportSize } from "../../hooks/useViewportSize";
+import { m, type MessageResolver } from "../../i18n/messages";
+import { cn } from "../../lib/utils";
 import {
   applyThemeColorPreview,
   THEME_COLOR_ROLES,
@@ -30,8 +35,6 @@ import {
   type ThemeColorRole,
   type ThemeDefinition,
 } from "../../themePalette";
-import { useViewportSize } from "../../hooks/useViewportSize";
-import { cn } from "../../lib/utils";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Switch } from "../ui/switch";
@@ -49,8 +52,6 @@ import {
   showThemeInspectorHover,
   type ThemeElementInspection,
 } from "./themeInspector";
-import { msg, T, useGT, useMessages } from "gt-react";
-import { m, type MessageResolver } from "../../i18n/messages";
 
 const THEME_EDITOR_SIMPLE_ROLES: ReadonlyArray<ThemeColorRole> = ["canvas", "accent"];
 

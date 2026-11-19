@@ -1,9 +1,9 @@
+import { useGT } from "gt-react";
 import type {
   CSSProperties,
   KeyboardEvent as ReactKeyboardEvent,
   PointerEvent as ReactPointerEvent,
 } from "react";
-import { useGT } from "gt-react";
 
 import { cn } from "~/lib/utils";
 

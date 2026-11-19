@@ -5,16 +5,16 @@
  * stream.
  */
 import * as Effect from "effect/Effect";
-import * as Redacted from "effect/Redacted";
 import type { HttpClient } from "effect/http";
+import * as Redacted from "effect/Redacted";
 
 import * as RemoteEnvironmentAuthorization from "../authorization/service.ts";
 import type { PreparedConnection } from "../connection/model.ts";
+import type { DeviceHubAccess } from "../device/hubAccess.ts";
 import { environmentEndpointUrl } from "../environment/endpoint.ts";
 import * as ManagedRelay from "../relay/managedRelay.ts";
 import type { RemoteEnvironmentRequestError } from "../rpc/http.ts";
 import { executeAuthenticatedEnvironmentHttpRequest } from "./environmentHttpAuth.ts";
-import type { DeviceHubAccess } from "../device/hubAccess.ts";
 
 export { type DeviceHubAccess, withDeviceHubQuery } from "../device/hubAccess.ts";
 

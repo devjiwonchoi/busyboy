@@ -1,9 +1,8 @@
-import * as Dialog from "../../components/ui/Dialog";
 import { buildNewThreadLink, type LinkedPrompt } from "@t3tools/shared/promptLinks";
 import { msg } from "gt-react-native";
 
+import * as Dialog from "../../components/ui/Dialog";
 import { m } from "../../i18n/messages";
-
 import { tryCopyTextWithHaptic } from "../../lib/copyTextWithHaptic";
 import {
   getComposerDraftSnapshot,

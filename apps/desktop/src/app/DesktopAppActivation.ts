@@ -1,5 +1,5 @@
 // @effect-diagnostics nodeBuiltinImport:off -- Local socket ownership checks need lstat, an atomic rename, and a directory watch at the Node adapter boundary.
-import { pipe } from "effect/Function";
+
 import * as NodeCrypto from "node:crypto";
 import * as NodeFS from "node:fs";
 import * as NodeFSP from "node:fs/promises";
@@ -16,12 +16,12 @@ import { resolveDesktopAppControlAddress } from "@t3tools/shared/desktopAppContr
 import * as HostProcess from "@t3tools/shared/HostProcess";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
+import { pipe } from "effect/Function";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
-
 import type * as Electron from "electron";
 
 import * as ElectronWindow from "../electron/ElectronWindow.ts";

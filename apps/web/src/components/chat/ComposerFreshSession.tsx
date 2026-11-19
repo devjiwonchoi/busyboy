@@ -2,7 +2,6 @@ import { msg } from "gt-react";
 import { EraserIcon } from "lucide-react";
 
 import { m, type MessageResolver } from "../../i18n/messages";
-
 import type { ComposerBannerStackItem } from "./ComposerBannerStack";
 
 /** Shown while `/clear` is armed; dismissing it keeps the current conversation. */

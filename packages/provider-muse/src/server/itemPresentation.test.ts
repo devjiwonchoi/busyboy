@@ -1,7 +1,7 @@
 import { describe, expect, it } from "@effect/vitest";
 
-import type { MuseItem } from "./protocol.ts";
 import { museItemStatus, museToolPresentation } from "./itemPresentation.ts";
+import type { MuseItem } from "./protocol.ts";
 
 const item = (fields: Partial<MuseItem>): MuseItem => ({
   itemId: "native-item",

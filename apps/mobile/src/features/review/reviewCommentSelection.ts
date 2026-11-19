@@ -1,13 +1,13 @@
-import { useSyncExternalStore } from "react";
 import type { OrchestrationMessageContext } from "@t3tools/contracts";
 import {
   collectComposerContextReferences,
   replaceComposerContextReferences,
 } from "@t3tools/shared/composerContextReferences";
-
-import type { ReviewRenderableLineRow } from "./reviewModel";
 import { msg } from "gt-react-native";
+import { useSyncExternalStore } from "react";
+
 import { m, type MessageResolver } from "../../i18n/messages";
+import type { ReviewRenderableLineRow } from "./reviewModel";
 
 export interface ReviewCommentTarget {
   readonly sectionId: string;

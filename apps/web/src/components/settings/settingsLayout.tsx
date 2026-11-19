@@ -1,17 +1,13 @@
-import { SettingsGroup } from "./SettingsGroup";
 import { AuthSettingsWriteScope } from "@t3tools/contracts";
-import { usePrimaryEnvironmentId, usePrimaryEnvironment } from "../../state/environments";
-import { useEnvironmentScope, useEnvironmentsWithScope } from "../../state/session";
-import { useServerConfigs } from "../../state/entities";
-import { InfoIcon, Undo2Icon } from "lucide-react";
 import {
   DEFAULT_SERVER_SETTINGS,
   isManagedSettingPath,
   type ServerSettings,
 } from "@t3tools/contracts";
+import { useLocation, useNavigate } from "@tanstack/react-router";
 import * as Equal from "effect/Equal";
 import { useGT } from "gt-react";
-import { useLocation, useNavigate } from "@tanstack/react-router";
+import { InfoIcon, Undo2Icon } from "lucide-react";
 import { createContext, type ComponentPropsWithoutRef, type ReactNode, useContext } from "react";
 
 import {
@@ -19,11 +15,12 @@ import {
   usePrimarySettingsAvailable,
 } from "../../hooks/useSettings";
 import { cn } from "../../lib/utils";
-import { WorkspacePageContainer, type WorkspacePageWidth } from "../WorkspacePageContainer";
+import { useServerConfigs } from "../../state/entities";
+import { usePrimaryEnvironmentId, usePrimaryEnvironment } from "../../state/environments";
+import { useEnvironmentScope, useEnvironmentsWithScope } from "../../state/session";
 import { Button } from "../ui/button";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
-import { useOptionalSettingsScope } from "./SettingsScopeContext";
-import { SettingsScopeSentence } from "./SettingsScopeSentence";
+import { WorkspacePageContainer, type WorkspacePageWidth } from "../WorkspacePageContainer";
 import {
   isProjectScopedSettingKey,
   listProjectOverrides,
@@ -31,12 +28,15 @@ import {
   scopedSettingsAreMixed,
   scopedSettingsSource,
 } from "./scopedSettings";
-import { useClearProjectOverrides, useClearScopedSettings } from "./useScopedSettings";
 import {
   SettingInheritance,
   type SettingInheritanceState,
   type SettingOverridingProject,
 } from "./SettingInheritance";
+import { SettingsGroup } from "./SettingsGroup";
+import { useOptionalSettingsScope } from "./SettingsScopeContext";
+import { SettingsScopeSentence } from "./SettingsScopeSentence";
+import { useClearProjectOverrides, useClearScopedSettings } from "./useScopedSettings";
 
 const EMPTY_SETTING_KEYS: readonly (keyof ServerSettings)[] = [];
 const EMPTY_MANAGED_PATHS: readonly string[] = [];

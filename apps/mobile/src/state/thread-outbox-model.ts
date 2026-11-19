@@ -1,10 +1,9 @@
 import { isTransportConnectionErrorMessage } from "@t3tools/client-runtime/errors";
-import { msg } from "gt-react-native";
-import { m } from "../i18n/messages";
 import {
   clampFileAttachmentUploadBytes,
   fileAttachmentTooLargeMessage,
 } from "@t3tools/client-runtime/state/attachments";
+import type { ComposerDispatchMode } from "@t3tools/client-runtime/state/composer-dispatch";
 import type { EnvironmentShellStatus } from "@t3tools/client-runtime/state/shell";
 import type { ThreadFamilyRead } from "@t3tools/client-runtime/state/threads";
 import {
@@ -27,11 +26,12 @@ import {
   type ServerProviderModel,
 } from "@t3tools/contracts";
 import * as Schema from "effect/Schema";
+import { msg } from "gt-react-native";
 
+import { m } from "../i18n/messages";
 import { DraftComposerAttachmentSchema } from "../lib/composer-image-schema";
-import { withImplicitFastModeSelection } from "../lib/providerOptions";
-import type { ComposerDispatchMode } from "@t3tools/client-runtime/state/composer-dispatch";
 import type { DraftComposerAttachment } from "../lib/composerImages";
+import { withImplicitFastModeSelection } from "../lib/providerOptions";
 import { scopedThreadKey } from "../lib/scopedEntities";
 
 // Keep current writes until a compatible native baseline includes the v4 reader.

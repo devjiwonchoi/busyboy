@@ -1,5 +1,5 @@
-import * as Effect from "effect/Effect";
 import { Argument, Command } from "effect/cli";
+import * as Effect from "effect/Effect";
 
 /** Single-executable builds lack Node, so they use this subcommand instead of claudeHistoryWorker.mjs. */
 export const claudeHistoryCommand = Command.make("__claude-history", {

@@ -1,18 +1,18 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { describe, expect, it } from "@effect/vitest";
+import { CodexSettings } from "@t3tools/contracts";
+import { symlinksSupported } from "@t3tools/shared/testing/symlinks";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 
-import { CodexSettings } from "@t3tools/contracts";
 import {
   CodexShadowHomeEntryConflictError,
   CodexShadowHomePathConflictError,
   materializeCodexShadowHome,
   resolveCodexHomeLayout,
 } from "./CodexHomeLayout.ts";
-import { symlinksSupported } from "@t3tools/shared/testing/symlinks";
 const decodeCodexSettingsValue = Schema.decodeSync(CodexSettings);
 
 const decodeCodexSettings = (input: {

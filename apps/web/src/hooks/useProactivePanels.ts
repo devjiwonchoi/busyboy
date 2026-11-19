@@ -1,13 +1,7 @@
-import type { RunId, ScopedThreadRef, ThreadLinkedPullRequest } from "@t3tools/contracts";
 import { scopedThreadKey } from "@t3tools/client-runtime/environment";
+import type { RunId, ScopedThreadRef, ThreadLinkedPullRequest } from "@t3tools/contracts";
 import { useEffect, useRef } from "react";
-import { useDiffPanelStore } from "../diffPanelStore";
-import {
-  selectActiveRightPanelSurface,
-  pullRequestSurface,
-  useRightPanelStore,
-} from "../rightPanelStore";
-import type { TurnDiffSummary } from "../types";
+
 import {
   observeProactivePanelUserChoice,
   resolveProactiveTurnDiffAction,
@@ -15,6 +9,13 @@ import {
   shouldOpenProactiveTurnDiff,
   shouldRetargetThreadPullRequestPanel,
 } from "../components/ChatView.logic";
+import { useDiffPanelStore } from "../diffPanelStore";
+import {
+  selectActiveRightPanelSurface,
+  pullRequestSurface,
+  useRightPanelStore,
+} from "../rightPanelStore";
+import type { TurnDiffSummary } from "../types";
 
 // Settings and drafts unmount ChatView; remember links until the page reloads.
 const observedThreadPullRequests = new Map<string, ThreadLinkedPullRequest | null>();

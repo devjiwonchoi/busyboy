@@ -1,7 +1,5 @@
+import { afterEach, describe, expect, it } from "@effect/vitest";
 import { PrimaryConnectionTarget } from "@t3tools/client-runtime/connection";
-import * as Effect from "effect/Effect";
-import * as Fiber from "effect/Fiber";
-import { createEnvironmentThreadShellAtoms } from "@t3tools/client-runtime/state/threads";
 import {
   applyShellStreamEvent,
   createEnvironmentSnapshotAtom,
@@ -9,13 +7,7 @@ import {
   type EnvironmentShellState,
   type EnvironmentShellStatus,
 } from "@t3tools/client-runtime/state/shell";
-import {
-  v2ShellSnapshot,
-  v2ThreadShell,
-} from "../../../../packages/client-runtime/src/state/orchestrationV2TestFixtures";
-import * as Option from "effect/Option";
-import { AsyncResult, Atom, AtomRegistry } from "effect/reactivity";
-import { afterEach, describe, expect, it } from "@effect/vitest";
+import { createEnvironmentThreadShellAtoms } from "@t3tools/client-runtime/state/threads";
 import {
   CommandId,
   ComposerContextId,
@@ -28,8 +20,16 @@ import {
   type OrchestrationV2ShellSnapshot,
   type ModelSelection,
 } from "@t3tools/contracts";
+import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
+import * as Option from "effect/Option";
+import { AsyncResult, Atom, AtomRegistry } from "effect/reactivity";
 import { onTestFinished, vi } from "vite-plus/test";
 
+import {
+  v2ShellSnapshot,
+  v2ThreadShell,
+} from "../../../../packages/client-runtime/src/state/orchestrationV2TestFixtures";
 import { buildIncomingShareDraft } from "../features/sharing/incoming-share-model";
 import { composerContextSendBlockReason } from "../lib/composerContext";
 
@@ -170,11 +170,13 @@ vi.mock("../features/sharing/incoming-share-storage", () => ({
   loadIncomingShareDrafts: incomingShareStorageMocks.load,
 }));
 
-import type { DraftComposerAttachment } from "../lib/composerImages";
 import {
   collectComposerContextReferences,
   formatComposerContextReference,
 } from "@t3tools/shared/composerContextReferences";
+
+import { retainComposerAttachmentFileForPreview } from "../lib/composerAttachmentPreviewRetention";
+import type { DraftComposerAttachment } from "../lib/composerImages";
 import { appAtomRegistry } from "./atom-registry";
 import { startComposerDraftOperation } from "./composerDraftOperations";
 import { threadOutboxManager } from "./thread-outbox";
@@ -222,7 +224,6 @@ import {
   undoComposerDraftMergeState,
   updateComposerDraftSettings,
 } from "./use-composer-drafts";
-import { retainComposerAttachmentFileForPreview } from "../lib/composerAttachmentPreviewRetention";
 
 const DRAFT: ComposerDraft = {
   text: "hello",

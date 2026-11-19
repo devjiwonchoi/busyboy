@@ -1,3 +1,4 @@
+import { settlePromise, squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
 import type {
   EnvironmentId,
   PullRequestActor,
@@ -8,6 +9,7 @@ import type {
   PullRequestThreadCommentsResult,
   PullRequestThreadComment,
 } from "@t3tools/contracts";
+import { T, useGT } from "gt-react";
 import {
   HammerIcon,
   MessageSquareIcon,
@@ -16,32 +18,30 @@ import {
   CircleCheckIcon,
   CircleIcon,
 } from "lucide-react";
-import { T, useGT } from "gt-react";
 import { type ReactNode, useRef, useState } from "react";
-import { settlePromise, squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
 
 import { RelativeTime } from "~/components/RelativeTime";
 import { cn } from "~/lib/utils";
 import { SpeechTextField, TextFieldSpeechControls } from "~/speech/useTextFieldSpeech";
 
+import { isCommentSubmitShortcut } from "../diffs/commentSubmitShortcut";
 import { Button } from "../ui/button";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
-import { PullRequestEditButton } from "./PullRequestEditButton";
-import { isCommentSubmitShortcut } from "../diffs/commentSubmitShortcut";
 import {
   editPullRequestThreadComment,
   mergePullRequestThreadComments,
   visibleBody,
 } from "./pullRequestDetail.logic";
-import { PullRequestActorAvatar, PullRequestActorLabel } from "./pullRequestPresentation";
+import { PullRequestEditButton } from "./PullRequestEditButton";
 import { PullRequestMarkdown } from "./PullRequestMarkdown";
 import { PullRequestMarkdownEditor } from "./PullRequestMarkdownEditor";
-import { PullRequestReactionBar } from "./PullRequestReactions";
-import type { PendingReviewComment } from "./pullRequestReviewStore";
 import {
   PullRequestMarkdownTextarea,
   type PullRequestCompletionScope,
 } from "./PullRequestMarkdownTextarea";
+import { PullRequestActorAvatar, PullRequestActorLabel } from "./pullRequestPresentation";
+import { PullRequestReactionBar } from "./PullRequestReactions";
+import type { PendingReviewComment } from "./pullRequestReviewStore";
 
 const CARD_CLASS =
   "mx-3 my-2 rounded-xl border border-border/70 bg-background p-3 text-sm shadow-sm";

@@ -1,10 +1,10 @@
+import { IssueTrackerKind, IssueTrackerProjectBinding, ProjectId } from "@t3tools/contracts";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
 import * as SqlClient from "effect/sql/SqlClient";
 import * as SqlSchema from "effect/sql/SqlSchema";
-import { IssueTrackerKind, IssueTrackerProjectBinding, ProjectId } from "@t3tools/contracts";
 
 import {
   PersistenceDecodeError,

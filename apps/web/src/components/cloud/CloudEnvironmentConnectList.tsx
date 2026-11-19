@@ -1,9 +1,4 @@
 import {
-  errorDisplayMessage,
-  findErrorTraceId,
-  thrownErrorMessage,
-} from "@t3tools/client-runtime/errors";
-import {
   connectionErrorText,
   type ConnectionTarget,
   type EnvironmentConnectionPresentation,
@@ -11,6 +6,11 @@ import {
   RelayConnectionTarget,
   orchestrationProtocolCompatibilityError,
 } from "@t3tools/client-runtime/connection";
+import {
+  errorDisplayMessage,
+  findErrorTraceId,
+  thrownErrorMessage,
+} from "@t3tools/client-runtime/errors";
 import { relayOfflineReasonMessage } from "@t3tools/client-runtime/relay";
 import {
   isAtomCommandInterrupted,
@@ -33,14 +33,15 @@ import { type ReactNode, useEffect, useEffectEvent, useState } from "react";
 import { environmentCatalog } from "~/connection/catalog";
 import { isDesktopLocalConnectionTarget } from "~/connection/desktopLocal";
 import { cn } from "~/lib/utils";
-import { relayEnvironmentDiscovery } from "~/state/relay";
 import { useRelayEnvironmentDiscovery } from "~/state/environments";
+import { relayEnvironmentDiscovery } from "~/state/relay";
 import { useAtomCommand } from "~/state/use-atom-command";
+
 import { ConnectionStatusDot } from "../ConnectionStatusDot";
 import { EnvironmentMachineIcon } from "../EnvironmentMachineIcon";
 import { ITEM_ROW_CLASSNAME, ITEM_ROW_INNER_CLASSNAME } from "../settings/itemRows";
-import { Checkbox } from "../ui/checkbox";
 import { Button } from "../ui/button";
+import { Checkbox } from "../ui/checkbox";
 import { Skeleton } from "../ui/skeleton";
 import { toastManager } from "../ui/toast";
 import { Tooltip, TooltipTrigger, TooltipPopup } from "../ui/tooltip";

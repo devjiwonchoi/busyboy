@@ -1,5 +1,4 @@
 import { useAtomValue } from "@effect/atom-react";
-import { useGT, useMessages } from "gt-react-native";
 import { StackActions, useNavigation } from "@react-navigation/native";
 import { scopeThreadRef } from "@t3tools/client-runtime/environment";
 import {
@@ -14,24 +13,24 @@ import type {
   OrchestrationV2TurnItem,
   ServerConfig,
 } from "@t3tools/contracts";
+import { useGT, useMessages } from "gt-react-native";
 import { Pressable, View, type ColorValue } from "react-native";
 
-import { AppText as Text } from "../../components/ui/AppText";
-import { SymbolView } from "../../components/ui/AppSymbol";
 import { ProviderIcon, ProviderInstanceIcon } from "../../components/ProviderIcon";
+import { SymbolView } from "../../components/ui/AppSymbol";
+import { AppText as Text } from "../../components/ui/AppText";
 import { cn } from "../../lib/cn";
 import type { ThreadFeedActivity } from "../../lib/threadActivity";
+import { useServerConfigs } from "../../state/entities";
+import { useEnvironments } from "../../state/environments";
 import { serverEnvironment } from "../../state/server";
 import { environmentThreadDetails } from "../../state/threads";
 import { subagentCardElapsed } from "./subagent-card-presentation";
-import { useEnvironments } from "../../state/environments";
-import { useServerConfigs } from "../../state/entities";
 import { SubagentRow } from "./SubagentRow";
-import { useVisibleSecondClock } from "./use-visible-second-clock";
-import { subagentThreadTarget } from "./threadAgentsPresentation";
-import { WorkLogBlock } from "./work-log-layout";
-
 import { useOpenThreadInspector } from "./thread-inspector-navigation";
+import { subagentThreadTarget } from "./threadAgentsPresentation";
+import { useVisibleSecondClock } from "./use-visible-second-clock";
+import { WorkLogBlock } from "./work-log-layout";
 
 type SubagentItem = Extract<OrchestrationV2TurnItem, { type: "subagent" }>;
 type AgentTiming = Pick<OrchestrationV2Subagent, "status" | "startedAt" | "completedAt">;

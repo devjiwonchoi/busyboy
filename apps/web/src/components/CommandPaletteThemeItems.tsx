@@ -2,10 +2,10 @@ import { BUILT_IN_THEMES } from "@t3tools/shared/themePalettes";
 import { msg, T, useGT, useMessages } from "gt-react";
 import { MonitorIcon, MoonIcon, PaletteIcon, SunIcon } from "lucide-react";
 
-import { m } from "../i18n/messages";
 import { useCustomThemes } from "../hooks/useCustomThemes";
 import { useEnvironmentThemeDefinitions } from "../hooks/useEnvironmentTheme";
 import { useTheme } from "../hooks/useTheme";
+import { m } from "../i18n/messages";
 import { getThemeDefinition } from "../themePalette";
 import {
   ADDON_ICON_CLASS,

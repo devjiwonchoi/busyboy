@@ -1,11 +1,11 @@
 import { useAtomValue } from "@effect/atom-react";
-import * as Effect from "effect/Effect";
-import { AsyncResult, Atom } from "effect/reactivity";
-import { useId, useState } from "react";
 import {
   resolveOfficialAcpRegistryIconUrl,
   officialAcpRegistryIconUrlForAgentId,
 } from "@t3tools/contracts";
+import * as Effect from "effect/Effect";
+import { AsyncResult, Atom } from "effect/reactivity";
+import { useId, useState } from "react";
 
 import { cn } from "../../lib/utils";
 import { ACPRegistryIcon } from "../Icons";

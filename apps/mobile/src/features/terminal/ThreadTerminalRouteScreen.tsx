@@ -1,5 +1,6 @@
-import * as Dialog from "../../components/ui/Dialog";
-import { m } from "../../i18n/messages";
+import { useAtomMount } from "@effect/atom-react";
+import { StackActions, useNavigation, type StaticScreenProps } from "@react-navigation/native";
+import { type KnownTerminalSession } from "@t3tools/client-runtime/state/terminal";
 import {
   AuthTerminalReadScope,
   AuthTerminalOperateScope,
@@ -9,67 +10,71 @@ import {
   ThreadId,
   sessionGrantsScope,
 } from "@t3tools/contracts";
-import { type KnownTerminalSession } from "@t3tools/client-runtime/state/terminal";
-import { SymbolView } from "../../components/ui/AppSymbol";
-import { AppBar } from "../../components/ui/AppBar";
-import { useNativeColumnLayoutMetrics } from "../../native/native-layout-metrics";
-import { useContentTopInset } from "../../components/ui/useBarInset";
-import { StackActions, useNavigation, type StaticScreenProps } from "@react-navigation/native";
-import { useAtomMount } from "@effect/atom-react";
+import { AsyncResult } from "effect/reactivity";
+import * as Schema from "effect/Schema";
+import * as Clipboard from "expo-clipboard";
 import { msg, T, useGT, useMessages } from "gt-react-native";
 import { useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { Platform, Pressable, View } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { AppText as Text } from "../../components/ui/AppText";
-import { TerminalContextSheet } from "./TerminalContextSheet";
-import { hasNativeTerminalSurface, supportsNativeTerminalOutput } from "./nativeTerminalModule";
-import * as Clipboard from "expo-clipboard";
-import * as Schema from "effect/Schema";
-import { AsyncResult } from "effect/reactivity";
 import {
   KeyboardController,
   KeyboardStickyView,
   useKeyboardState,
 } from "react-native-keyboard-controller";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import {
   ComposerToolbarButton,
   ComposerToolbarRow,
   ComposerToolbarScroller,
 } from "../../components/ComposerToolbar";
+import { LoadingScreen } from "../../components/LoadingScreen";
+import { AppBar } from "../../components/ui/AppBar";
+import { SymbolView } from "../../components/ui/AppSymbol";
+import { AppText as Text } from "../../components/ui/AppText";
+import { Button } from "../../components/ui/Button";
+import * as Dialog from "../../components/ui/Dialog";
 import { EmptyState } from "../../components/ui/EmptyState";
 import { GlassSurface } from "../../components/ui/GlassSurface";
-import { LoadingScreen } from "../../components/LoadingScreen";
-import { ScreenContent } from "../../components/ui/ScreenContent";
-import { Button } from "../../components/ui/Button";
 import { IconButton } from "../../components/ui/IconButton";
-import { useEnvironmentPresentation } from "../../state/presentation";
-import { terminalEnvironment } from "../../state/terminal";
-import { environmentSession, readEnvironmentScope } from "../../state/session";
-import { useEnvironmentQuery } from "../../state/query";
-import { appAtomRegistry } from "../../state/atom-registry";
-import { useAtomCommand } from "../../state/use-atom-command";
-import { uuidv4 } from "../../lib/uuid";
-import { useServerConfigs } from "../../state/entities";
-import { useConnectionsReady } from "../../state/workspace";
+import { ScreenContent } from "../../components/ui/ScreenContent";
+import { useContentTopInset } from "../../components/ui/useBarInset";
+import { m } from "../../i18n/messages";
 import {
   MAX_TERMINAL_FONT_SIZE,
   MIN_TERMINAL_FONT_SIZE,
   TERMINAL_FONT_SIZE_STEP,
   stepTerminalFontSize,
 } from "../../lib/appearancePreferences";
-import { useAppearancePreferences } from "../settings/appearance/AppearancePreferencesProvider";
+import { uuidv4 } from "../../lib/uuid";
+import { useNativeColumnLayoutMetrics } from "../../native/native-layout-metrics";
+import { appAtomRegistry } from "../../state/atom-registry";
+import { useServerConfigs } from "../../state/entities";
+import { useEnvironmentPresentation } from "../../state/presentation";
+import { useEnvironmentQuery } from "../../state/query";
+import { environmentSession, readEnvironmentScope } from "../../state/session";
+import { terminalEnvironment } from "../../state/terminal";
+import { useAtomCommand } from "../../state/use-atom-command";
 import {
   useAttachedTerminalSession,
   useKnownTerminalSessions,
 } from "../../state/use-terminal-session";
-import { useThreadSelection } from "../../state/use-thread-selection";
 import { useSelectedThreadProjection } from "../../state/use-thread-detail";
+import { useThreadSelection } from "../../state/use-thread-selection";
+import { useConnectionsReady } from "../../state/workspace";
 import { EnvironmentConnectionNotice } from "../connection/EnvironmentConnectionNotice";
 import { useRetryEnvironment } from "../connection/useRetryEnvironment";
+import { useAppearancePreferences } from "../settings/appearance/AppearancePreferencesProvider";
+import { hasNativeTerminalSurface, supportsNativeTerminalOutput } from "./nativeTerminalModule";
 import { TerminalSurface, type TerminalSurfaceHandle } from "./NativeTerminalSurface";
-import { getMobileTerminalTheme } from "./terminalTheme";
-import { useTerminalExitNavigation } from "./useTerminalExitNavigation";
+import { TerminalContextSheet } from "./TerminalContextSheet";
+import {
+  hostPlatformFromOs,
+  resolveModifiedTerminalInput,
+  type HostPlatform,
+  type PendingModifier,
+} from "./terminalInput";
+import { getKeyboardShowEpoch, subscribeKeyboardShowing } from "./terminalKeyboardShowing";
 import {
   useInitialTerminalLaunchLocation,
   takePendingTerminalLaunch,
@@ -84,15 +89,10 @@ import {
   resolveTerminalSessionLabel,
   type TerminalMenuSession,
 } from "./terminalMenu";
-import {
-  hostPlatformFromOs,
-  resolveModifiedTerminalInput,
-  type HostPlatform,
-  type PendingModifier,
-} from "./terminalInput";
 import { createTerminalPasteSession } from "./terminalPaste";
+import { getMobileTerminalTheme } from "./terminalTheme";
 import { cacheTerminalGridSize, getCachedTerminalGridSize } from "./terminalUiState";
-import { getKeyboardShowEpoch, subscribeKeyboardShowing } from "./terminalKeyboardShowing";
+import { useTerminalExitNavigation } from "./useTerminalExitNavigation";
 
 function TerminalHeader(props: {
   readonly subtitle: string;

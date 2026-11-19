@@ -1,17 +1,17 @@
+import { useNavigation, useNavigationState } from "@react-navigation/native";
 import { useGT } from "gt-react-native";
 import { useEffect, useState } from "react";
-import { useNavigation, useNavigationState } from "@react-navigation/native";
 import { BackHandler, Keyboard } from "react-native";
 
 import { AppBar } from "../../../components/ui/AppBar";
 import { useWorkspaceConnectionState } from "../../../state/workspace";
 import { useHardwareKeyboardCommand } from "../../keyboard/hardwareKeyboardCommands";
 import { WorkspaceBrandTitle } from "./WorkspaceBrandTitle";
-import { useWorkspaceTabs } from "./WorkspaceTabsContext";
 import {
   workspaceListFilterIcon,
   type WorkspaceListHeaderProps,
 } from "./WorkspaceListHeader.types";
+import { useWorkspaceTabs } from "./WorkspaceTabsContext";
 
 export function WorkspaceListHeader(props: WorkspaceListHeaderProps) {
   const gt = useGT();

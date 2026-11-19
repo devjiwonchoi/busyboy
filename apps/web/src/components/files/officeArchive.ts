@@ -1,8 +1,8 @@
-import JSZip from "jszip";
 import { checkZipDirectory } from "@t3tools/client-runtime/zip/directory";
+import JSZip from "jszip";
 import { SaxesParser } from "saxes";
-import { externalUrl } from "./office/links";
 
+import { externalUrl } from "./office/links";
 import {
   OFFICE_PREVIEW_MAX_BYTES,
   OFFICE_PREVIEW_MAX_COLUMNS,

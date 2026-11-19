@@ -3,28 +3,6 @@ import {
   type ServerProviderModel,
   type ServerProviderSubProvider,
 } from "@t3tools/contracts";
-import type { FxSettings } from "../settings.ts";
-import { createModelCapabilities } from "@t3tools/shared/model";
-import { resolveSpawnCommand } from "@t3tools/shared/shell";
-import * as DateTime from "effect/DateTime";
-import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
-import * as Option from "effect/Option";
-import * as Path from "effect/Path";
-import * as Result from "effect/Result";
-import * as Schema from "effect/Schema";
-import * as ChildProcess from "effect/process/ChildProcess";
-import type * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
-
-import {
-  FX_DEFAULT_MODEL_SLUG,
-  FX_DRIVER_KIND,
-  FX_EFFORT_OPTION_DESCRIPTOR,
-  FX_FULL_ACCESS_MODE_ID,
-  FX_SUPPORTED_RUNTIME_MODES,
-  type FxModelChoice,
-  fxModelSlug,
-} from "./acpSupport.ts";
 import {
   AUTH_PROBE_TIMEOUT_MS,
   buildServerProvider,
@@ -38,6 +16,28 @@ import {
   resolveProviderProbeTimeoutMs,
   spawnAndCollect,
 } from "@t3tools/provider-core/server/snapshotProbe";
+import { createModelCapabilities } from "@t3tools/shared/model";
+import { resolveSpawnCommand } from "@t3tools/shared/shell";
+import * as DateTime from "effect/DateTime";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Option from "effect/Option";
+import * as Path from "effect/Path";
+import * as ChildProcess from "effect/process/ChildProcess";
+import type * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
+
+import type { FxSettings } from "../settings.ts";
+import {
+  FX_DEFAULT_MODEL_SLUG,
+  FX_DRIVER_KIND,
+  FX_EFFORT_OPTION_DESCRIPTOR,
+  FX_FULL_ACCESS_MODE_ID,
+  FX_SUPPORTED_RUNTIME_MODES,
+  type FxModelChoice,
+  fxModelSlug,
+} from "./acpSupport.ts";
 
 const fxPresentation = (fullAccess: boolean) => ({
   displayName: "fx",

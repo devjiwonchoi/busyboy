@@ -1,11 +1,13 @@
 // @effect-diagnostics nodeBuiltinImport:off - Drives the real shell installer against a local GitHub fixture.
-import * as HostProcess from "@t3tools/shared/HostProcess";
+
 import * as NodeChildProcess from "node:child_process";
 import * as NodeCrypto from "node:crypto";
 import * as NodeFSP from "node:fs/promises";
 import * as NodeHttp from "node:http";
 import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
+
+import * as HostProcess from "@t3tools/shared/HostProcess";
 import { describe, expect, it } from "vite-plus/test";
 
 /** The launcher install.sh, `t3 install`, and `t3 update` write; exec by absolute path. */

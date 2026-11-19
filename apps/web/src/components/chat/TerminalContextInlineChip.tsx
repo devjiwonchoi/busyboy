@@ -1,8 +1,8 @@
 import { useGT } from "gt-react";
 import { TerminalIcon } from "lucide-react";
 
-import type { ContextPresentationCapability } from "../contextPresentationRegistry";
 import { ContextChipPopover, ContextChipShell } from "../contextChipParts";
+import type { ContextPresentationCapability } from "../contextPresentationRegistry";
 
 interface TerminalContextInlineChipProps {
   label: string;

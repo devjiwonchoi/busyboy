@@ -15,16 +15,16 @@ import {
   type TextGeneratorModel,
 } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
-import { msg, useMessages } from "gt-react";
 import * as Option from "effect/Option";
 import { AsyncResult, Atom } from "effect/reactivity";
+import { msg, useMessages } from "gt-react";
 
+import { m, type MessageResolver } from "./i18n/messages";
 import {
   deriveProviderInstanceEntries,
   type ProviderInstanceEntry,
   providerInstanceEntriesFor,
 } from "./providerInstances";
-import { m, type MessageResolver } from "./i18n/messages";
 import { appAtomRegistry } from "./rpc/atomRegistry";
 import { formatEnvironmentQueryError } from "./state/query";
 import { serverEnvironment } from "./state/server";

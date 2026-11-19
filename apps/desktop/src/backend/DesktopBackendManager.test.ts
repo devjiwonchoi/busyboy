@@ -1,3 +1,4 @@
+import { assert, describe, it } from "@effect/vitest";
 import {
   SERVER_EXIT_CODE_MANAGED_POLICY,
   SERVER_EXIT_CODE_STATE_DIR_OWNED,
@@ -10,31 +11,30 @@ import {
   DATABASE_MIGRATIONS_FINISHED_MESSAGE,
   DATABASE_MIGRATIONS_STARTED_MESSAGE,
 } from "@t3tools/shared/databaseMigrationLog";
-import { assert, describe, it } from "@effect/vitest";
 import * as Clock from "effect/Clock";
 import * as Deferred from "effect/Deferred";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
 import * as Fiber from "effect/Fiber";
+import * as FileSystem from "effect/FileSystem";
+import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as PlatformError from "effect/PlatformError";
+import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import * as Queue from "effect/Queue";
 import * as Ref from "effect/Ref";
 import * as Schema from "effect/Schema";
-import * as Sink from "effect/Sink";
 import * as Scope from "effect/Scope";
+import * as Sink from "effect/Sink";
 import * as Stream from "effect/Stream";
 import * as TestClock from "effect/testing/TestClock";
-import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http";
-import { ChildProcess, ChildProcessSpawner } from "effect/process";
 
-import * as DesktopBackendManager from "./DesktopBackendManager.ts";
 import * as DesktopObservability from "../app/DesktopObservability.ts";
-import * as DesktopTelemetryPublisher from "../telemetry/DesktopTelemetryPublisher.ts";
 import * as DesktopBrowserHost from "../preview/DesktopBrowserHost.ts";
+import * as DesktopTelemetryPublisher from "../telemetry/DesktopTelemetryPublisher.ts";
 import * as DesktopWslEnvironment from "../wsl/DesktopWslEnvironment.ts";
+import * as DesktopBackendManager from "./DesktopBackendManager.ts";
 
 const decodeDesktopBackendBootstrap = Schema.decodeEffect(
   Schema.fromJsonString(DesktopBackendBootstrap),

@@ -1,11 +1,13 @@
 // @effect-diagnostics nodeBuiltinImport:off
+
+import * as NodePath from "node:path";
+
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, describe, it } from "@effect/vitest";
+import type * as EffectAcpSchema from "effect-acp/compat";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
-import type * as EffectAcpSchema from "effect-acp/compat";
-import * as NodePath from "node:path";
 
 import {
   acpClientExecuteDisposition,

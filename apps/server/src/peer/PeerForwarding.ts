@@ -11,6 +11,7 @@ import {
   type PeerLinkError,
   RuntimeMode,
 } from "@t3tools/contracts";
+import type * as Tool from "effect/ai/Tool";
 import * as Context from "effect/Context";
 import * as Digest from "effect/crypto/Digest";
 import * as DateTime from "effect/DateTime";
@@ -19,7 +20,6 @@ import * as Hex from "effect/encoding/Hex";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
-import type * as Tool from "effect/ai/Tool";
 
 import { runtimeModeRank } from "../mcp/delegatedTaskModes.ts";
 import { assertNotLinked } from "../mcp/linkOrigin.ts";

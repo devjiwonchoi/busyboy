@@ -1,6 +1,5 @@
-import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
-import { m } from "~/i18n/messages";
 import { scopeProjectRef } from "@t3tools/client-runtime/environment";
+import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
 import type {
   DesktopPreviewAnnotationVoiceConfig,
   DesktopPreviewAnnotationVoiceEvent,
@@ -15,9 +14,11 @@ import { VoiceInputSetup } from "~/components/chat/VoiceInputSetup";
 import { toastManager } from "~/components/ui/toast";
 import { useComposerDraftStore } from "~/composerDraftStore";
 import { useStableCallback } from "~/hooks/useStableCallback";
+import { m } from "~/i18n/messages";
 import { useDictationShortcut, type DictationKeyHandlers } from "~/speech/useDictationShortcut";
 import { useEnvironmentSpeechInput } from "~/speech/useEnvironmentSpeechInput";
 import { useProject, useThreadShell } from "~/state/entities";
+
 import { previewBridge } from "./previewBridge";
 
 /**

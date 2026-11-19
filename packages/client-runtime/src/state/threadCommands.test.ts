@@ -12,8 +12,8 @@ import {
   type OrchestrationV2Command,
   type OrchestrationV2ShellSnapshot,
 } from "@t3tools/contracts";
-import * as DateTime from "effect/DateTime";
 import * as SecureRandom from "effect/crypto/SecureRandom";
+import * as DateTime from "effect/DateTime";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
@@ -21,17 +21,17 @@ import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Queue from "effect/Queue";
+import { Atom, AtomRegistry } from "effect/reactivity";
 import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 import * as SubscriptionRef from "effect/SubscriptionRef";
-import { Atom, AtomRegistry } from "effect/reactivity";
 
-import * as EnvironmentRegistry from "../connection/registry.ts";
 import {
   AVAILABLE_CONNECTION_STATE,
   BearerConnectionTarget,
   type SupervisorConnectionState,
 } from "../connection/model.ts";
+import * as EnvironmentRegistry from "../connection/registry.ts";
 import * as EnvironmentSupervisor from "../connection/supervisor.ts";
 import type { RpcSession } from "../rpc/session.ts";
 import { createThreadEnvironmentAtoms } from "./threadCommands.ts";

@@ -4,8 +4,8 @@ import { Platform, View } from "react-native";
 import { FormSheet, ScreenStack } from "react-native-screens";
 import { useResolveClassNames } from "uniwind";
 
-import { nativeHeaderScrollEdgeEffects } from "../../native/StackHeader";
 import { formSheetDetents } from "../../native/sheet-surface";
+import { nativeHeaderScrollEdgeEffects } from "../../native/StackHeader";
 import { NativeHeader, NativeScreen } from "../../native/ThemedScreenStack";
 
 const HEADER_SCROLL_EDGE_EFFECTS = nativeHeaderScrollEdgeEffects(Platform.OS, Platform.Version);

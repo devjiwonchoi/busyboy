@@ -141,6 +141,7 @@ vi.mock("@t3tools/client-runtime/state/runtime", () => ({
   squashAtomCommandFailure: vi.fn(),
 }));
 
+import type { ComposerEditorHandle } from "../native/T3ComposerEditor.types";
 import { appAtomRegistry } from "../state/atom-registry";
 import {
   clearComposerDraftContent,
@@ -149,7 +150,6 @@ import {
   useComposerDraft,
 } from "../state/use-composer-drafts";
 import { ComposerEditor } from "./ComposerEditor";
-import type { ComposerEditorHandle } from "../native/T3ComposerEditor.types";
 
 const DRAFT_KEY = "environment:thread";
 

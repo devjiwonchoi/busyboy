@@ -1,10 +1,14 @@
 import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
 import {
+  isAtomCommandInterrupted,
+  squashAtomCommandFailure,
+  type AtomCommandResult,
+} from "@t3tools/client-runtime/state/runtime";
+import {
   AuthOrchestrationOperateScope,
   AuthProvidersManageScope,
   AuthOrchestrationReadScope,
 } from "@t3tools/contracts";
-import { useEnvironmentScope, readEnvironmentScope } from "~/state/session";
 import type {
   AcpRegistryConfigurableProvider,
   AcpRegistrySession,
@@ -13,15 +17,12 @@ import type {
   ProviderInstanceId,
   ServerProvider,
 } from "@t3tools/contracts";
-import {
-  isAtomCommandInterrupted,
-  squashAtomCommandFailure,
-  type AtomCommandResult,
-} from "@t3tools/client-runtime/state/runtime";
-import { useLayoutEffect, useRef, useState } from "react";
 import { msg, T, useGT } from "gt-react";
-import { m } from "../../i18n/messages";
+import { useLayoutEffect, useRef, useState } from "react";
 
+import { useEnvironmentScope, readEnvironmentScope } from "~/state/session";
+
+import { m } from "../../i18n/messages";
 import { ensureLocalApi } from "../../localApi";
 import { serverEnvironment } from "../../state/server";
 import { useAtomCommand } from "../../state/use-atom-command";

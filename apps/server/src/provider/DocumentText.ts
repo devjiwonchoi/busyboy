@@ -1,6 +1,8 @@
 // @effect-diagnostics nodeBuiltinImport:off -- the isolated parser process is an external runtime boundary.
 import * as NodeChildProcess from "node:child_process";
 import * as NodeURL from "node:url";
+
+import * as HostProcess from "@t3tools/shared/HostProcess";
 import * as Cache from "effect/Cache";
 import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
@@ -9,7 +11,6 @@ import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
 import * as Semaphore from "effect/Semaphore";
-import * as HostProcess from "@t3tools/shared/HostProcess";
 
 const extensions = new Set(["docx", "xlsx", "pptx", "odt", "ods", "odp", "rtf", "epub", "ipynb"]);
 

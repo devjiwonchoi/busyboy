@@ -1,16 +1,20 @@
+import { RegistryContext, useAtomMount, useAtomValue } from "@effect/atom-react";
+import type { LegendListRenderItemProps } from "@legendapp/list/react-native";
+import { AnimatedLegendList } from "@legendapp/list/reanimated";
+import {
+  useNavigation,
+  useRoute,
+  type RouteProp,
+  type StaticScreenProps,
+} from "@react-navigation/native";
+import { type NativeStackNavigationProp } from "@react-navigation/native-stack";
 import {
   getPromptControlledTraits,
   getTraitSelectChange,
 } from "@t3tools/client-runtime/model-traits";
-import { T, useGT, useLocale, useMessages } from "gt-react-native";
-import * as Dialog from "../../components/ui/Dialog";
-import { createV5StackNavigator as createNativeStackNavigator } from "../../native/createV5StackNavigator";
-import { useSheetStackOptions } from "../layout/nested-stacks";
+import { groupModelsBySubProvider } from "@t3tools/client-runtime/providerSubProviders";
+import { formatProviderUpdateRequiredNotice } from "@t3tools/client-runtime/providerUpdateRequiredModels";
 import { DEFAULT_SERVER_SETTINGS, ProviderInstanceId } from "@t3tools/contracts";
-import {
-  modelPreferencesMigrationPatch,
-  resolveModelPreferences,
-} from "@t3tools/shared/serverSettings";
 import type {
   EnvironmentId,
   ModelSelection,
@@ -21,22 +25,17 @@ import type {
   ServerSettings,
   ThreadId,
 } from "@t3tools/contracts";
-import type { LegendListRenderItemProps } from "@legendapp/list/react-native";
-import { RegistryContext, useAtomMount, useAtomValue } from "@effect/atom-react";
-import { AnimatedLegendList } from "@legendapp/list/reanimated";
 import {
   getProviderOptionCurrentLabel,
   getProviderOptionCurrentValue,
 } from "@t3tools/shared/model";
 import {
-  useNavigation,
-  useRoute,
-  type RouteProp,
-  type StaticScreenProps,
-} from "@react-navigation/native";
-import { type NativeStackNavigationProp } from "@react-navigation/native-stack";
-import * as Haptics from "expo-haptics";
+  modelPreferencesMigrationPatch,
+  resolveModelPreferences,
+} from "@t3tools/shared/serverSettings";
 import { AsyncResult } from "effect/reactivity";
+import * as Haptics from "expo-haptics";
+import { T, useGT, useLocale, useMessages } from "gt-react-native";
 import {
   createContext,
   use,
@@ -47,8 +46,6 @@ import {
   type ReactNode,
 } from "react";
 import { Pressable, ScrollView, View } from "react-native";
-import { READABLE_WIDTH_STYLE, ROW_MIN_HEIGHT } from "../../components/ui/listMetrics";
-import { RefreshControl } from "../../components/ui/RefreshControl";
 import Animated, {
   FadeIn,
   FadeOut,
@@ -57,13 +54,21 @@ import Animated, {
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { ProviderIcon } from "../../components/ProviderIcon";
+import { AppBar } from "../../components/ui/AppBar";
+import type { AppBarSearch } from "../../components/ui/AppBar";
 import { SymbolView } from "../../components/ui/AppSymbol";
 import { AppText as Text } from "../../components/ui/AppText";
-import { AppBar } from "../../components/ui/AppBar";
-import { ProviderIcon } from "../../components/ProviderIcon";
+import * as Dialog from "../../components/ui/Dialog";
+import { READABLE_WIDTH_STYLE, ROW_MIN_HEIGHT } from "../../components/ui/listMetrics";
+import { RefreshControl } from "../../components/ui/RefreshControl";
+import { ScreenContent } from "../../components/ui/ScreenContent";
 import { ThemedSwitch } from "../../components/ui/ThemedSwitch";
-import { cn } from "../../lib/cn";
+import { useSearchToolbarInset } from "../../components/ui/useBarInset";
+import { environmentCatalog } from "../../connection/catalog";
+import type { MessageResolver } from "../../i18n/messages";
 import { useReduceMotionEnabled } from "../../lib/appState";
+import { cn } from "../../lib/cn";
 import {
   buildModelOptions,
   groupByProvider,
@@ -72,43 +77,39 @@ import {
   type ProviderGroup,
   withStoredThreadModelOptions,
 } from "../../lib/modelOptions";
-import { groupModelsBySubProvider } from "@t3tools/client-runtime/providerSubProviders";
 import { applyProviderOptionSelection } from "../../lib/providerOptions";
 import { resolveProviderOptionDescriptors } from "../../lib/providerOptions";
-import {
-  rememberModelOptions,
-  withRememberedModelOptions,
-} from "../../state/use-model-option-memory";
-import { ChatGptSharingStatus } from "./ChatGptSharingStatus";
-import { environmentCatalog } from "../../connection/catalog";
-import { useEnvironmentQuery } from "../../state/query";
 import { scopedThreadKey } from "../../lib/scopedEntities";
+import { createV5StackNavigator as createNativeStackNavigator } from "../../native/createV5StackNavigator";
 import { useThreadReportedModelSelection } from "../../state/entities";
+import { mobilePreferencesAtom } from "../../state/preferences";
+import { providerWorkspaceSnapshotRefresh } from "../../state/provider-workspace-snapshot-refresh";
+import { useEnvironmentQuery } from "../../state/query";
+import { activeComposerDraftKey, useQueuedRunEdit } from "../../state/queued-run-edit";
+import { environmentServerConfigsAtom, serverEnvironment } from "../../state/server";
+import { selectThreadModel } from "../../state/thread-model-selection";
+import { threadAllowsProviderSwitch } from "../../state/thread-provider-switching";
+import { useAtomCommand } from "../../state/use-atom-command";
 import {
   setComposerDraftText,
   updateComposerDraftSettings,
   useComposerDraft,
   useComposerDraftSettings,
 } from "../../state/use-composer-drafts";
-import { useQuietThreadStructure } from "../../state/use-thread-detail";
-import { activeComposerDraftKey, useQueuedRunEdit } from "../../state/queued-run-edit";
-import { selectThreadModel } from "../../state/thread-model-selection";
-import { useThreadSelection } from "../../state/use-thread-selection";
+import {
+  rememberModelOptions,
+  withRememberedModelOptions,
+} from "../../state/use-model-option-memory";
 import { useSelectedThreadWorktree } from "../../state/use-selected-thread-worktree";
-import { providerWorkspaceSnapshotRefresh } from "../../state/provider-workspace-snapshot-refresh";
-import { threadAllowsProviderSwitch } from "../../state/thread-provider-switching";
-import { environmentServerConfigsAtom, serverEnvironment } from "../../state/server";
-import { mobilePreferencesAtom } from "../../state/preferences";
-import { useAtomCommand } from "../../state/use-atom-command";
+import { useQuietThreadStructure } from "../../state/use-thread-detail";
+import { useThreadSelection } from "../../state/use-thread-selection";
+import { useSheetStackOptions } from "../layout/nested-stacks";
+import { ChatGptSharingStatus } from "./ChatGptSharingStatus";
 import { useNewTaskFlow } from "./new-task-flow-provider";
-import { ScreenContent } from "../../components/ui/ScreenContent";
 import {
   createProviderCatalogRefreshRunner,
   providerCatalogRefreshError,
 } from "./provider-catalog-refresh";
-import { useSearchToolbarInset } from "../../components/ui/useBarInset";
-import type { AppBarSearch } from "../../components/ui/AppBar";
-import { ModelRow, ChoiceRow } from "./ThreadSettingsRows";
 import {
   compatibleRuntimeModeForChoices,
   runtimeModeChoicesForSupportedModes,
@@ -124,8 +125,7 @@ import {
   pendingModelAfterPress,
   providerSectionIsCollapsed,
 } from "./thread-settings-sheet-state";
-import { formatProviderUpdateRequiredNotice } from "@t3tools/client-runtime/providerUpdateRequiredModels";
-import type { MessageResolver } from "../../i18n/messages";
+import { ModelRow, ChoiceRow } from "./ThreadSettingsRows";
 
 const PRIMARY_PROVIDER_DRIVERS: ReadonlySet<string> = new Set([
   "claudeAgent",

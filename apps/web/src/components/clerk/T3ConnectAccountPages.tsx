@@ -1,6 +1,6 @@
 import { useAuth, useClerk } from "@clerk/react";
-import { MessageSquareIcon, ServerIcon, SmartphoneIcon } from "lucide-react";
 import { msg, useMessages } from "gt-react";
+import { MessageSquareIcon, ServerIcon, SmartphoneIcon } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { createPortal } from "react-dom";
 

@@ -1,6 +1,7 @@
 import { assert, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import { HttpClient, HttpClientResponse } from "effect/http";
+
 import { chatGptModels } from "./CodexChatGptModels.ts";
 
 it.effect(

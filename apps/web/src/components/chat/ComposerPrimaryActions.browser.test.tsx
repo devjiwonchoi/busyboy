@@ -1,7 +1,7 @@
 import "~/index.css";
-
 import type { ComponentProps } from "react";
 import { expect, it, vi } from "vite-plus/test";
+
 import { act, fakeTimers, render } from "../../../test/render";
 
 vi.mock("~/hooks/useSettings", () => ({

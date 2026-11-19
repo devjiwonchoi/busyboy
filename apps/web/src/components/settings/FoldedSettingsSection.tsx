@@ -1,9 +1,10 @@
-import { SettingsGroup } from "./SettingsGroup";
 import { ChevronRightIcon } from "lucide-react";
 import { type ReactNode, useState } from "react";
 
 import { cn } from "~/lib/utils";
+
 import { Collapsible, CollapsiblePanel, CollapsibleTrigger } from "../ui/collapsible";
+import { SettingsGroup } from "./SettingsGroup";
 import { useSettingsSearchTarget, useSettingsSearchTargetId } from "./settingsLayout";
 
 export function FoldedSettingsSection({

@@ -3,10 +3,10 @@ import * as HostProcess from "@t3tools/shared/HostProcess";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as Sink from "effect/Sink";
-import * as Stream from "effect/Stream";
 import * as PlatformError from "effect/PlatformError";
 import { ChildProcessSpawner } from "effect/process";
+import * as Sink from "effect/Sink";
+import * as Stream from "effect/Stream";
 import { beforeEach, vi } from "vite-plus/test";
 
 import {

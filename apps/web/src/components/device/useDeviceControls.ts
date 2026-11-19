@@ -2,9 +2,11 @@ import { useAtomMount, useAtomSet, useAtomValue } from "@effect/atom-react";
 import type { DeviceHubAccess } from "@t3tools/client-runtime/state/deviceHubAccess";
 import type { DeviceActionInput, DeviceSummary, EnvironmentId } from "@t3tools/contracts";
 import { useRef, useState } from "react";
+
 import { deviceDetailAtom, deviceDetailReadAtom, deviceEnvironment } from "~/state/device";
 import { formatEnvironmentQueryError } from "~/state/query";
 import { useAtomCommand } from "~/state/use-atom-command";
+
 import { deviceForegroundAtom, NO_FOREGROUND_ATOM, NOOP_ATOM } from "./deviceHubAtoms";
 
 type ActionBody = DeviceActionInput extends infer A

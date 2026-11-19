@@ -1,10 +1,10 @@
 import { RegistryContext } from "@effect/atom-react";
+import { EnvironmentId } from "@t3tools/contracts";
 import { AtomRegistry } from "effect/reactivity";
 import { act, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import type { AppStateStatus } from "react-native";
 import { expect, it, vi } from "vite-plus/test";
-import { EnvironmentId } from "@t3tools/contracts";
 
 const mocks = vi.hoisted(() => ({
   focused: true,
@@ -110,16 +110,16 @@ vi.mock("../components/ui/FilePreviewModal", () => ({ FilePreviewModal: () => nu
 vi.mock("../components/ui/VideoPreviewModal", () => ({ VideoPreviewModal: () => null }));
 vi.mock("../features/threads/ThreadMarkdownImage", () => ({ ThreadMarkdownImageView: () => null }));
 
-import {
-  ThreadMarkdownVideo,
-  ThreadMediaVisibleContext,
-} from "../features/threads/ThreadMarkdownVideo";
+import { MediaVideoPlayer } from "../components/MediaVideoPlayer";
 import {
   PullRequestMedia,
   PullRequestMediaContext,
   PullRequestMediaVisibleContext,
 } from "../features/pull-requests/PullRequestMedia";
-import { MediaVideoPlayer } from "../components/MediaVideoPlayer";
+import {
+  ThreadMarkdownVideo,
+  ThreadMediaVisibleContext,
+} from "../features/threads/ThreadMarkdownVideo";
 
 function createPlayer() {
   let playing = false;

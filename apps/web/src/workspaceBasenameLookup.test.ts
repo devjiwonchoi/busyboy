@@ -1,5 +1,3 @@
-import { describe, expect, it } from "vite-plus/test";
-
 import {
   agentWorkingDirectories,
   findAgentDirectoryMatch,
@@ -8,6 +6,7 @@ import {
   pickWorkspaceLinkMatch,
   workspaceLinkLookupQuery,
 } from "@t3tools/client-runtime/workspace-basename-lookup";
+import { describe, expect, it } from "vite-plus/test";
 
 describe("pickWorkspaceBasenameMatch", () => {
   const entries = [

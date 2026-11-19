@@ -1,12 +1,11 @@
-import { useMemo } from "react";
-
-import type { EnvironmentThreadShell } from "@t3tools/client-runtime/state/shell";
 import {
   normalizeProviderAccentColor,
   resolveProviderInstanceDisplayName,
   shouldShowInstanceBadge,
 } from "@t3tools/client-runtime/state/provider-instance-display";
+import type { EnvironmentThreadShell } from "@t3tools/client-runtime/state/shell";
 import type { EnvironmentId, ProviderDriverKind } from "@t3tools/contracts";
+import { useMemo } from "react";
 
 import type { ThreadListProvider } from "../../state/thread-list-environments";
 export interface ThreadRowProviderInstance {

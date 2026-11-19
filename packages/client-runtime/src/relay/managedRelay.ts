@@ -39,14 +39,15 @@ import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as HttpApiClient from "effect/http-api/HttpApiClient";
+import * as HttpClientError from "effect/http/HttpClientError";
+import type * as HttpMethod from "effect/http/HttpMethod";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as SynchronizedRef from "effect/SynchronizedRef";
-import * as HttpClientError from "effect/http/HttpClientError";
-import type * as HttpMethod from "effect/http/HttpMethod";
-import * as HttpApiClient from "effect/http-api/HttpApiClient";
 import { msg } from "gt-i18n";
+
 import { NETWORK_BLOCKING_HINT } from "../errors/network.ts";
 import { type MarkedText, markedTextEnglish } from "../errors/translatable.ts";
 import { relayRequestFailureText } from "./errorPresentation.ts";

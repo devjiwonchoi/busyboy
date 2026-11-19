@@ -1,12 +1,11 @@
+import type { ConnectionTarget } from "@t3tools/client-runtime/connection";
 import type {
   BrowserNavigationTarget,
   EnvironmentId,
   PreviewUrlResolution,
 } from "@t3tools/contracts";
-import { isLoopbackHost, normalizePreviewUrl } from "@t3tools/shared/preview";
 import { isLocalLoopbackHost, isPrivateNetworkHost } from "@t3tools/shared/hostClassification";
-
-import type { ConnectionTarget } from "@t3tools/client-runtime/connection";
+import { isLoopbackHost, normalizePreviewUrl } from "@t3tools/shared/preview";
 
 import { isDesktopLocalConnectionTarget } from "~/connection/desktopLocal";
 import { isElectron } from "~/env";

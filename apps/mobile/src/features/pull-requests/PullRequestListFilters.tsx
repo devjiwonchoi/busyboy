@@ -5,14 +5,15 @@ import { Atom } from "effect/reactivity";
 import { msg, useGT, useMessages } from "gt-react-native";
 import type { ReactNode } from "react";
 import { Platform, ScrollView } from "react-native";
+
 import type { MenuProps } from "../../components/ui/Menu.types";
-import { ListFilterMenu } from "../layout/workspace/ListFilterMenu";
+import type { MessageResolver } from "../../i18n/messages";
+import { useMobileProjectGroupingSettings } from "../../state/project-grouping";
 import { environmentProjects } from "../../state/projects";
 import { environmentThreadShells } from "../../state/threads";
-import { useMobileProjectGroupingSettings } from "../../state/project-grouping";
 import { buildHomeProjectScopes, sortHomeProjectScopes } from "../home/homeThreadList";
+import { ListFilterMenu } from "../layout/workspace/ListFilterMenu";
 import { DEFAULT_PR_LIST_CONTROLS, type PullRequestListControls } from "./pullRequestList";
-import type { MessageResolver } from "../../i18n/messages";
 
 const STATES = {
   open: msg("Open", { $context: "pull request state filter" }),

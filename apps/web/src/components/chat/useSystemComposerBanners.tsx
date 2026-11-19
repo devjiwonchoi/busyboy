@@ -1,34 +1,28 @@
-import { T, msg, useGT, useMessages } from "gt-react";
-import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
-import { m } from "~/i18n/messages";
-import { useStableCallback } from "../../hooks/useStableCallback";
-import { type EnvironmentId } from "@t3tools/contracts";
-import { type EnvironmentConnectionPresentation } from "@t3tools/client-runtime/connection";
 import { useAtomValue } from "@effect/atom-react";
-import { useState } from "react";
-import { useNavigate } from "@tanstack/react-router";
+import { type EnvironmentConnectionPresentation } from "@t3tools/client-runtime/connection";
+import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
 import {
   isAtomCommandInterrupted,
   squashAtomCommandFailure,
 } from "@t3tools/client-runtime/state/runtime";
+import { type EnvironmentId } from "@t3tools/contracts";
+import { useNavigate } from "@tanstack/react-router";
+import { T, msg, useGT, useMessages } from "gt-react";
 import { WifiOffIcon } from "lucide-react";
-import { stackedThreadToast, toastManager } from "../ui/toast";
+import { useState } from "react";
+
+import { m } from "~/i18n/messages";
+
 import { environmentCatalog } from "../../connection/catalog";
-import { ConnectionDiagnosisHeadline } from "../settings/ConnectionDiagnosisDetails";
 import { isDesktopLocalConnectionTarget } from "../../connection/desktopLocal";
 import {
   useEnvironmentDisconnectDelay,
   useEnvironmentStateHeldFor,
 } from "../../hooks/useEnvironmentDisconnectDelay";
-import { serverEnvironment } from "../../state/server";
+import { useStableCallback } from "../../hooks/useStableCallback";
 import { type EnvironmentPresentation } from "../../state/environments";
-import type { ComposerBannerStackItem } from "./ComposerBannerStack";
-import { ENVIRONMENT_RECONNECT_WARNING_GRACE_MS } from "../ChatView.logic";
+import { serverEnvironment } from "../../state/server";
 import { useAtomCommand } from "../../state/use-atom-command";
-import { Button } from "../ui/button";
-import { ServerUpdateAction, serverUpdateStageLabel } from "../ServerUpdateAction";
-import { useAutoBalanceUpdateBanner } from "./useAutoBalanceUpdateBanner";
-import { ComposerServerUpdateIcon } from "./ComposerServerUpdateStatus";
 import {
   dismissServerUpdateFailure,
   isServerUpdateFailureDismissed,
@@ -36,6 +30,14 @@ import {
   resolveServerSelfUpdateCapability,
   supportsDesktopAppUpdate,
 } from "../../versionSkew";
+import { ENVIRONMENT_RECONNECT_WARNING_GRACE_MS } from "../ChatView.logic";
+import { ServerUpdateAction, serverUpdateStageLabel } from "../ServerUpdateAction";
+import { ConnectionDiagnosisHeadline } from "../settings/ConnectionDiagnosisDetails";
+import { Button } from "../ui/button";
+import { stackedThreadToast, toastManager } from "../ui/toast";
+import type { ComposerBannerStackItem } from "./ComposerBannerStack";
+import { ComposerServerUpdateIcon } from "./ComposerServerUpdateStatus";
+import { useAutoBalanceUpdateBanner } from "./useAutoBalanceUpdateBanner";
 
 export type EnvironmentUnavailableState = {
   readonly environmentId: EnvironmentId;

@@ -1,7 +1,7 @@
 import * as NodeV8 from "node:v8";
 
+import { assert, describe, it } from "@effect/vitest";
 import { SourceControlProviderKind } from "@t3tools/contracts";
-import * as Stream from "effect/Stream";
 import {
   EventId,
   MessageId,
@@ -24,7 +24,6 @@ import {
   type ThreadPullRequestLink,
   type ThreadPullRequestSnapshot,
 } from "@t3tools/contracts";
-import { assert, describe, it } from "@effect/vitest";
 import * as Cache from "effect/Cache";
 import * as Clock from "effect/Clock";
 import * as SecureRandom from "effect/crypto/SecureRandom";
@@ -34,9 +33,10 @@ import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
+import { ChildProcessSpawner } from "effect/process";
 import * as Queue from "effect/Queue";
 import * as Ref from "effect/Ref";
-import { ChildProcessSpawner } from "effect/process";
+import * as Stream from "effect/Stream";
 import { TestClock } from "effect/testing";
 
 import * as GitManager from "../git/GitManager.ts";

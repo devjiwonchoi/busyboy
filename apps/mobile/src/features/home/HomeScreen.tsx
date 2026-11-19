@@ -1,23 +1,14 @@
-import { useGT, useMessages } from "gt-react-native";
-
-import { useContentTopInset } from "../../components/ui/useBarInset";
-import { usePaneRole } from "../../components/ui/Pane";
-import { ScreenContent } from "../../components/ui/ScreenContent";
-import { useActiveNewTask } from "../../state/active-new-task";
-import { AppActivityIndicator } from "../../components/ui/AppActivityIndicator";
-import { useAndroidControlSizing } from "../../components/ui/useAndroidControlSizing";
-import type { ThreadMoveDestination } from "../threads/threadOrder";
+import { useAtomValue } from "@effect/atom-react";
 import type { LegendListRef } from "@legendapp/list/react-native";
 import { AnimatedLegendList } from "@legendapp/list/reanimated";
-import { THREAD_LIST_ROW_LAYOUT } from "../threads/threadListAnimations";
+import { pickableProjectGroups } from "@t3tools/client-runtime/state/project-grouping";
 import {
   type EnvironmentProject,
   type EnvironmentThreadShell,
 } from "@t3tools/client-runtime/state/shell";
-import { pickableProjectGroups } from "@t3tools/client-runtime/state/project-grouping";
 import { threadSearchMatchKey } from "@t3tools/client-runtime/state/thread-search";
 import { type EnvironmentId, type SidebarProjectGroupingMode } from "@t3tools/contracts";
-import { useAtomValue } from "@effect/atom-react";
+import { useGT, useMessages } from "gt-react-native";
 import {
   use,
   useEffect,
@@ -37,41 +28,44 @@ import {
   type NativeScrollEvent,
   type NativeSyntheticEvent,
 } from "react-native";
-import { NativeScrollViewMarker as ScrollViewMarker } from "../../native/NativeScrollViewMarker";
 import { GestureDetector, useNativeGesture } from "react-native-gesture-handler";
 import type { SwipeableMethods } from "react-native-gesture-handler/ReanimatedSwipeable";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { AppActivityIndicator } from "../../components/ui/AppActivityIndicator";
+import { EmptyState } from "../../components/ui/EmptyState";
+import { FloatingActionButton } from "../../components/ui/FloatingActionButton";
+import { usePaneRole } from "../../components/ui/Pane";
+import { ScreenContent } from "../../components/ui/ScreenContent";
+import { useAndroidControlSizing } from "../../components/ui/useAndroidControlSizing";
+import { useContentTopInset } from "../../components/ui/useBarInset";
 import { cn } from "../../lib/cn";
+import type { SavedRemoteConnection } from "../../lib/connection";
 import {
   ANDROID_READING_MAX_WIDTH,
   deriveCenteredContentHorizontalPadding,
 } from "../../lib/layout";
-import { EmptyState } from "../../components/ui/EmptyState";
-import { FloatingActionButton } from "../../components/ui/FloatingActionButton";
-import type { WorkspaceEnvironment, WorkspaceState } from "../../state/workspaceModel";
-import type { SavedRemoteConnection } from "../../lib/connection";
 import { scopedProjectKey, scopedThreadKey } from "../../lib/scopedEntities";
-import { NativePrimaryColumnContext } from "../../native/v5-workspace-context";
-import { nativeHeaderScrollEdgeEffects } from "../../native/scrollEdgeEffects";
 import {
   useNativeColumnLayoutMetrics,
   useNativeLayoutMetrics,
 } from "../../native/native-layout-metrics";
-import { useWorkspaceListEmptyTopInset } from "../layout/workspace/workspace-list-insets";
+import { NativeScrollViewMarker as ScrollViewMarker } from "../../native/NativeScrollViewMarker";
 import { useNativeWorkspaceColumnsSupported } from "../../native/NativeWorkspaceColumns";
-import { useThreadSearch } from "../../state/queries";
-import { requestThreadMessageJump } from "../threads/threadMessageJump";
-import { useThreadListSearchMatches } from "../threads/useThreadListSearchMatches";
-import { useThreadListV2 } from "../threads/useThreadListV2";
-import { useSidebarRowThreadKey } from "../threads/useSidebarRowThreadKey";
-import { useThreadListNow } from "../threads/use-thread-list-now";
-import { useSearchScrollRestoration } from "../layout/workspace/useSearchScrollRestoration";
-import { useThreadJumpShortcuts } from "../keyboard/threadKeyboardShortcuts";
-import { usePendingThreadOrder } from "../../state/thread-order";
+import { nativeHeaderScrollEdgeEffects } from "../../native/scrollEdgeEffects";
+import { NativePrimaryColumnContext } from "../../native/v5-workspace-context";
+import { useActiveNewTask } from "../../state/active-new-task";
 import { threadListEnvironmentsAtom } from "../../state/presentation";
+import { useThreadSearch } from "../../state/queries";
+import { usePendingThreadOrder } from "../../state/thread-order";
+import type { ThreadPrPresentation } from "../../state/thread-pr-presentation";
 import type { PendingNewTask } from "../../state/use-pending-new-tasks";
 import { useQueuedThreadKeys } from "../../state/use-thread-outbox";
+import type { WorkspaceEnvironment, WorkspaceState } from "../../state/workspaceModel";
+import { useThreadJumpShortcuts } from "../keyboard/threadKeyboardShortcuts";
+import { useSearchScrollRestoration } from "../layout/workspace/useSearchScrollRestoration";
+import { useWorkspaceListEmptyTopInset } from "../layout/workspace/workspace-list-insets";
+import { useWorkspaceTabs } from "../layout/workspace/WorkspaceTabsContext";
 import {
   ThreadListV2PendingRow,
   ThreadListV2Row,
@@ -81,15 +75,24 @@ import {
   ThreadListV2WorkingShelfHeader,
 } from "../threads/thread-list-v2-items";
 import { useThreadRowProviderInstanceResolver } from "../threads/thread-provider-instance";
-import { useOpenThreadPullRequests } from "../threads/use-open-thread-pull-requests";
-import type { ThreadPrPresentation } from "../../state/thread-pr-presentation";
+import { THREAD_LIST_ROW_LAYOUT } from "../threads/threadListAnimations";
 import {
   threadListV2ListItemsAreEqual,
   THREAD_LIST_V2_SETTLED_INITIAL_COUNT,
   THREAD_LIST_V2_SETTLED_PAGE_COUNT,
   type ThreadListV2ListItem,
 } from "../threads/threadListV2";
+import { requestThreadMessageJump } from "../threads/threadMessageJump";
+import type { ThreadMoveDestination } from "../threads/threadOrder";
+import { useOpenThreadPullRequests } from "../threads/use-open-thread-pull-requests";
+import { useThreadListNow } from "../threads/use-thread-list-now";
 import { useThreadListV2ShelfPreferences } from "../threads/use-thread-list-v2-shelf-preferences";
+import { useSidebarRowThreadKey } from "../threads/useSidebarRowThreadKey";
+import { useThreadListSearchMatches } from "../threads/useThreadListSearchMatches";
+import { useThreadListV2 } from "../threads/useThreadListV2";
+import { useFabScroll } from "./FabScrollContext";
+import { deriveHomeEmptyState } from "./home-empty-state";
+import { holdLaunchSplashForHomeRows, settleLaunchSplashHomeRows } from "./home-launch-splash";
 import type { HomeListFilterMenuEnvironment } from "./home-list-filter-menu";
 import {
   buildHomeProjectScopes,
@@ -99,11 +102,7 @@ import {
 } from "./homeThreadList";
 import { createSwipeRowActivation } from "./swipe-row-activation";
 import { SwipeableScrollGateProvider, useSwipeableScrollGate } from "./thread-swipe-actions";
-import { useFabScroll } from "./FabScrollContext";
-import { holdLaunchSplashForHomeRows, settleLaunchSplashHomeRows } from "./home-launch-splash";
-import { useWorkspaceTabs } from "../layout/workspace/WorkspaceTabsContext";
 import { ThreadListFilters } from "./ThreadListFilters";
-import { deriveHomeEmptyState } from "./home-empty-state";
 
 interface HomeScreenProps {
   /** Whether this list is the one on screen; see `useHomeRouteVisible`. */

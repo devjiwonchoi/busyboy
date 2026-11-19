@@ -1,5 +1,5 @@
-import type { NativeReviewDiffSource } from "./nativeReviewDiffTypes";
 import { diffHighlightTraceId, traceDiffHighlight } from "./nativeReviewDiffTrace";
+import type { NativeReviewDiffSource } from "./nativeReviewDiffTypes";
 
 const MAX_SOURCE_FILES = 4;
 // Bound retained UTF-16 text across files without discarding an already-fetched

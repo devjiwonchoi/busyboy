@@ -1,13 +1,12 @@
+import { useAtomValue } from "@effect/atom-react";
 import { type EnvironmentId, T3_PROJECT_FILE_NAME, type T3ProjectFile } from "@t3tools/contracts";
 import { parseT3ProjectFile } from "@t3tools/shared/t3ProjectFile";
-import { useAtomValue } from "@effect/atom-react";
 import { AsyncResult, Atom } from "effect/reactivity";
 import { useMessages } from "gt-react";
 import { createContext, type ReactNode, useContext } from "react";
 
 import { useEnvironments, usePrimaryEnvironmentId } from "../../state/environments";
 import { getProjectFileQueryAtom, optimisticFileAtom } from "../files/projectFilesQueryState";
-import { useSettingsProjectGroups } from "./useSettingsProjectGroups";
 import {
   applyPendingScopedWrites,
   pendingScopedWritesAtom,
@@ -16,6 +15,7 @@ import {
 } from "./scopedSettings";
 import { resolveSettingsScope, type SettingsScopeSearch } from "./settingsScope";
 import { selectSingleEnvironmentScope } from "./settingsScopeAxis";
+import { useSettingsProjectGroups } from "./useSettingsProjectGroups";
 
 type ProjectFileMember = readonly [
   environmentId: EnvironmentId,

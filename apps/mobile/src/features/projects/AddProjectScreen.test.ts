@@ -1,11 +1,11 @@
 import * as NodeFS from "node:fs";
 import * as NodeFSP from "node:fs/promises";
+import * as NodeModule from "node:module";
 import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
-import * as NodeModule from "node:module";
-import type { EnvironmentConnectionPhase } from "@t3tools/client-runtime/connection";
-import { workspaceDetailRouter } from "../layout/workspace/workspace-detail-selection";
+
 import type { NavigationState } from "@react-navigation/native";
+import type { EnvironmentConnectionPhase } from "@t3tools/client-runtime/connection";
 import {
   AuthFilesystemReadScope,
   AuthOrchestrationOperateScope,
@@ -16,6 +16,8 @@ import { AsyncResult } from "effect/reactivity";
 import { act, createElement, isValidElement, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
+
+import { workspaceDetailRouter } from "../layout/workspace/workspace-detail-selection";
 
 const state = vi.hoisted(() => ({
   scopes: new Set<string>(),

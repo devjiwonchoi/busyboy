@@ -2,8 +2,8 @@ import { assert } from "@effect/vitest";
 import type { ProviderReplayTranscript } from "@t3tools/contracts";
 
 import type { OrchestratorV2ScenarioResult } from "../../OrchestratorScenario.ts";
-import { assertMultiTurnOutput } from "./codex_output.ts";
 import { projectionFor } from "../shared.ts";
+import { assertMultiTurnOutput } from "./codex_output.ts";
 
 function isReplayFrameWithType(
   frame: unknown,

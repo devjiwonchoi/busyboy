@@ -81,6 +81,7 @@ vi.mock("./modelScene.ts", async () => {
 });
 
 import { Group, Quaternion } from "three";
+
 import { createPhoneViewer } from "./phoneViewer.ts";
 import { type DeviceShapeProfile } from "./shapeProfile.ts";
 

@@ -2,9 +2,8 @@ import { Platform, Text as NativeText, View } from "react-native";
 
 import { cn } from "../../lib/cn";
 import { MOBILE_CODE_SURFACE } from "../../lib/typography";
-
-import type { ReviewRenderableLineRow } from "./reviewModel";
 import type { ReviewHighlightedToken } from "./reviewHighlightedToken.types";
+import type { ReviewRenderableLineRow } from "./reviewModel";
 
 export const REVIEW_MONO_FONT_FAMILY = Platform.select({
   ios: "ui-monospace",

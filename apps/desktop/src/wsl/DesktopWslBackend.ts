@@ -1,3 +1,4 @@
+import * as NetService from "@t3tools/shared/Net";
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -5,8 +6,6 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Ref from "effect/Ref";
 import * as Semaphore from "effect/Semaphore";
-
-import * as NetService from "@t3tools/shared/Net";
 
 import * as DesktopObservability from "../app/DesktopObservability.ts";
 import * as DesktopBackendConfiguration from "../backend/DesktopBackendConfiguration.ts";

@@ -1,12 +1,12 @@
-import { useGT } from "gt-react";
 import {
   AuthPreviewOperateScope,
   type PreviewAnnotationPayload,
   type ScopedThreadRef,
 } from "@t3tools/contracts";
+import { useGT } from "gt-react";
 
-import type { ComposerImageAttachment } from "~/composerDraftStore";
 import { usePreviewAvailable } from "~/browser/previewRuntime";
+import type { ComposerImageAttachment } from "~/composerDraftStore";
 import { useEnvironmentScope } from "~/state/session";
 
 import { PreviewPanelShell, type PreviewPanelMode } from "./PreviewPanelShell";

@@ -1,30 +1,4 @@
-import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
-import { DownloadIcon, CopyIcon, CheckIcon, Code2Icon, EyeIcon, Table2Icon } from "lucide-react";
-import { msg, T, useGT, useMessages, Var } from "gt-react";
-import { m, type MessageResolver } from "~/i18n/messages";
-import { namedClipboardTarget, useCopyToClipboard } from "~/hooks/useCopyToClipboard";
-import { Spinner } from "~/components/ui/spinner";
-import {
-  type AssetResource,
-  AuthPreviewOperateScope,
-  type EditorId,
-  type EnvironmentId,
-  type ProjectId,
-  type ResolvedKeybindingsConfig,
-  type ScopedThreadRef,
-} from "@t3tools/contracts";
-import { filePreviewDelimiter } from "@t3tools/shared/delimitedPreview";
-import { AuthFilesystemWriteScope } from "@t3tools/contracts";
-import {
-  isWorkspaceAudioPreviewPath,
-  isWorkspaceImagePreviewPath,
-  isWorkspaceFontPreviewPath,
-  isWorkspaceVideoPreviewPath,
-  officePreviewKind,
-  binaryPreviewKind,
-} from "@t3tools/shared/filePreview";
 import { useAtomMount, useAtomValue } from "@effect/atom-react";
-import { Atom } from "effect/reactivity";
 import {
   DEFAULT_TOKENIZE_MAX_LENGTH,
   VirtualizedFile,
@@ -40,17 +14,41 @@ import {
   type EditorFactory,
   type EditorOptions,
 } from "@pierre/diffs/edit";
-import type { WorkerPoolManager } from "@pierre/diffs/worker";
 import { EditProvider, File, Virtualizer, useWorkerPool } from "@pierre/diffs/react";
-import { DiffWorkerPoolProvider } from "../DiffWorkerPoolProvider";
-import { useFilesystemReadAccess } from "~/state/filesystem";
+import type { WorkerPoolManager } from "@pierre/diffs/worker";
+import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
+import { mediaFileReference } from "@t3tools/client-runtime/media-reference";
 import {
   isAtomCommandInterrupted,
   squashAtomCommandFailure,
 } from "@t3tools/client-runtime/state/runtime";
-import { mediaFileReference } from "@t3tools/client-runtime/media-reference";
-import { FolderTree, Globe2, WrapTextIcon } from "lucide-react";
+import {
+  type AssetResource,
+  AuthPreviewOperateScope,
+  type EditorId,
+  type EnvironmentId,
+  type ProjectId,
+  type ResolvedKeybindingsConfig,
+  type ScopedThreadRef,
+} from "@t3tools/contracts";
+import { AuthFilesystemWriteScope } from "@t3tools/contracts";
+import { filePreviewDelimiter } from "@t3tools/shared/delimitedPreview";
+import { resolvePathLinkTarget } from "@t3tools/shared/fileLinks";
+import {
+  isWorkspaceAudioPreviewPath,
+  isWorkspaceImagePreviewPath,
+  isWorkspaceFontPreviewPath,
+  isWorkspaceVideoPreviewPath,
+  officePreviewKind,
+  binaryPreviewKind,
+} from "@t3tools/shared/filePreview";
+import { setMarkdownTaskChecked } from "@t3tools/shared/markdownTaskList";
+import { isHostPath } from "@t3tools/shared/path";
+import { Atom } from "effect/reactivity";
 import * as Schema from "effect/Schema";
+import { msg, T, useGT, useMessages, Var } from "gt-react";
+import { DownloadIcon, CopyIcon, CheckIcon, Code2Icon, EyeIcon, Table2Icon } from "lucide-react";
+import { FolderTree, Globe2, WrapTextIcon } from "lucide-react";
 import {
   lazy,
   Suspense,
@@ -60,47 +58,48 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
 } from "react";
 
-import { isBrowserPreviewFile, openFileInPreview } from "~/browser/openFileInPreview";
 import { useAssetUrlRefresh, useAssetUrlState } from "~/assets/assetUrls";
+import { isBrowserPreviewFile, openFileInPreview } from "~/browser/openFileInPreview";
+import { usePreviewAvailable } from "~/browser/previewRuntime";
 import { OpenInPicker } from "~/components/chat/OpenInPicker";
-import { MediaVideoPlayer } from "~/components/media/MediaVideoPlayer";
 import { MediaActions, type MediaActionSource } from "~/components/media/MediaActions";
-import { useRemoteOpenState } from "~/remoteOpen";
-import { useClientSettings } from "~/hooks/useSettings";
-import { useTheme } from "~/hooks/useTheme";
-import { useStableCallback } from "~/hooks/useStableCallback";
+import { MediaVideoPlayer } from "~/components/media/MediaVideoPlayer";
+import { ScrollArea } from "~/components/ui/scroll-area";
+import { Spinner } from "~/components/ui/spinner";
+import { stackedThreadToast, toastManager } from "~/components/ui/toast";
+import { type DraftId, useComposerDraftStore } from "~/composerDraftStore";
+import { namedClipboardTarget, useCopyToClipboard } from "~/hooks/useCopyToClipboard";
 import { getLocalStorageItem, setLocalStorageItem, useLocalStorage } from "~/hooks/useLocalStorage";
+import { useClientSettings } from "~/hooks/useSettings";
+import { useStableCallback } from "~/hooks/useStableCallback";
+import { useTheme } from "~/hooks/useTheme";
+import { m, type MessageResolver } from "~/i18n/messages";
 import { resolveDiffThemeName } from "~/lib/diffRendering";
 import { PREFERRED_HIGHLIGHTER } from "~/lib/syntaxHighlighting";
 import { cn, isMacPlatform } from "~/lib/utils";
 import { requestWorkspaceFocus } from "~/lib/workspaceFocus";
-import type { ChatFileAttachment } from "~/types";
-import { isHostPath } from "@t3tools/shared/path";
-import { resolvePathLinkTarget } from "@t3tools/shared/fileLinks";
-import { ScrollArea } from "~/components/ui/scroll-area";
-import { stackedThreadToast, toastManager } from "~/components/ui/toast";
-import { type DraftId, useComposerDraftStore } from "~/composerDraftStore";
+import { useRemoteOpenState } from "~/remoteOpen";
 import { buildFileReviewComment, type ReviewCommentContext } from "~/reviewCommentContext";
 import { assetEnvironment } from "~/state/assets";
-import { usePreviewAvailable } from "~/browser/previewRuntime";
 import { useEnvironmentHttpBaseUrl, usePrimaryEnvironmentId } from "~/state/environments";
-import { hostEnvironmentIdAtom } from "~/state/primaryEnvironment";
+import { useFilesystemReadAccess } from "~/state/filesystem";
 import { previewEnvironment } from "~/state/preview";
+import { hostEnvironmentIdAtom } from "~/state/primaryEnvironment";
+import { revisionedQuery } from "~/state/revisionedQuery";
 import { serverEnvironment } from "~/state/server";
 import { useEnvironmentScope } from "~/state/session";
 import { useAtomCommand } from "~/state/use-atom-command";
 import { useAtomQueryRunner } from "~/state/use-atom-query-runner";
+import type { ChatFileAttachment } from "~/types";
 
+import { DiffCommentAnnotation } from "../diffs/DiffCommentAnnotation";
+import { DiffWorkerPoolProvider } from "../DiffWorkerPoolProvider";
 import { AttachmentFilePreview } from "./AttachmentFilePreview";
 import { AudioPreview } from "./AudioPreview";
 import { BrowserDocumentFrame, isPdfPreviewFile } from "./BrowserDocumentFrame";
 import { DelimitedTablePreview } from "./DelimitedTablePreview";
-import { PreviewImage } from "./PreviewImage";
-import FileBrowserPanel from "./FileBrowserPanel";
-import { FileExplorerPane } from "./FileExplorerPane";
 import { FileBreadcrumbs } from "./FileBreadcrumbs";
-import { breadcrumbPathOf, retainedBreadcrumbTrail, trailChildOf } from "./filePath";
-import { FileMarkdownPreview } from "./FileMarkdownPreview";
+import FileBrowserPanel from "./FileBrowserPanel";
 import {
   type FileCommentAnnotationEntry,
   type FileCommentAnnotationGroup,
@@ -111,7 +110,20 @@ import {
   remapFileCommentAnnotations,
   promptFileCommentEntries,
 } from "./fileCommentAnnotations";
+import { projectFileCacheKey } from "./fileContentRevision";
 import { installFileEditorDismissal } from "./fileEditorDismissal";
+import { FileExplorerPane } from "./FileExplorerPane";
+import { resolveCenteredFileLineScrollTop } from "./fileLineReveal";
+import { FileMarkdownPreview } from "./FileMarkdownPreview";
+import { breadcrumbPathOf, retainedBreadcrumbTrail, trailChildOf } from "./filePath";
+import {
+  filePreviewReadErrorMessage,
+  isMarkdownPreviewFile,
+  resolveFilePreviewPath,
+  shouldShowFileExplorer,
+  workspaceAssetResource,
+} from "./filePreviewMode";
+import { changeFileSaveSession, useFileSaveSession } from "./fileSaveSessions";
 import {
   FILE_LINK_REVEAL_ATTRIBUTE,
   FILE_LINK_REVEAL_UNSAFE_CSS,
@@ -120,20 +132,7 @@ import {
   FileSurfaceFailure,
   FileSurfaceLoading,
 } from "./fileSurfaceChrome";
-import SourceFilePreview from "./ReadOnlySourcePreview";
-import { resolveCenteredFileLineScrollTop } from "./fileLineReveal";
-import { DiffCommentAnnotation } from "../diffs/DiffCommentAnnotation";
-import { projectFileCacheKey } from "./fileContentRevision";
-import {
-  filePreviewReadErrorMessage,
-  isMarkdownPreviewFile,
-  resolveFilePreviewPath,
-  shouldShowFileExplorer,
-  workspaceAssetResource,
-} from "./filePreviewMode";
-import { setMarkdownTaskChecked } from "@t3tools/shared/markdownTaskList";
-import { changeFileSaveSession, useFileSaveSession } from "./fileSaveSessions";
-import { revisionedQuery } from "~/state/revisionedQuery";
+import { PreviewImage } from "./PreviewImage";
 import {
   getOptimisticProjectFileQueryData,
   getProjectFileContents,
@@ -141,6 +140,7 @@ import {
   setProjectFileQueryData,
   useProjectFileQuery,
 } from "./projectFilesQueryState";
+import SourceFilePreview from "./ReadOnlySourcePreview";
 
 const NO_FILE_REVISION_ATOM = Atom.make(null);
 

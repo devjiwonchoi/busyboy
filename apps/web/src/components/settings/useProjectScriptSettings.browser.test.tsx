@@ -1,4 +1,3 @@
-import { act, render } from "../../../test/render";
 import {
   DEFAULT_SERVER_SETTINGS,
   EnvironmentId,
@@ -9,6 +8,7 @@ import {
 import { AsyncResult } from "effect/reactivity";
 import { describe, expect, it, vi } from "vite-plus/test";
 
+import { act, render } from "../../../test/render";
 import type { NewProjectScriptInput } from "../projectScriptEditor";
 
 const commands = vi.hoisted(() => ({

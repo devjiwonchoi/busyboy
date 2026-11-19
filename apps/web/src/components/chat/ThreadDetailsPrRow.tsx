@@ -1,13 +1,10 @@
 import { resolvePullRequestDetailChecks } from "@t3tools/client-runtime/pull-request-checks";
 import { sourceControlClients } from "@t3tools/client-runtime/source-control-clients";
-import { changeRequestTermKind } from "../pullRequest/changeRequestTerm";
-import { T, useGT, useMessages, Var } from "gt-react";
-import { PullRequestChangeBreakdownRows } from "../pullRequest/PullRequestChangeBreakdownStat";
-import { ThreadDetailsControl } from "./ThreadDetailsControl";
-import { PullRequestGlyph } from "../pullRequest/pullRequestIcons";
 import { selectEnvironmentQueryData } from "@t3tools/client-runtime/state/runtime";
 import type { EnvironmentProject } from "@t3tools/client-runtime/state/shell";
 import type { EnvironmentId, ProjectId, PullRequestRef } from "@t3tools/contracts";
+import { AsyncResult } from "effect/reactivity";
+import { T, useGT, useMessages, Var } from "gt-react";
 import {
   ArrowUpRightIcon,
   EyeIcon,
@@ -16,7 +13,6 @@ import {
   GitBranchIcon,
   TriangleAlertIcon,
 } from "lucide-react";
-import { AsyncResult } from "effect/reactivity";
 import { useState, type MouseEvent as ReactMouseEvent } from "react";
 
 import type { ComposerThreadTarget } from "~/composerDraftStore";
@@ -25,13 +21,16 @@ import { usePullRequestChecksRefresh } from "~/hooks/usePullRequestChecksRefresh
 import { cn } from "~/lib/utils";
 import { useServerConfigs } from "~/state/entities";
 import { pullRequestEnvironment } from "~/state/pullRequests";
-import { useUiStateStore } from "~/uiStateStore";
 import {
   useEnvironmentQueryIsNewer,
   useEnvironmentQueryRefresh,
   useEnvironmentQuerySelector,
 } from "~/state/query";
+import { useUiStateStore } from "~/uiStateStore";
 
+import { changeRequestTermKind } from "../pullRequest/changeRequestTerm";
+import { PullRequestChangeBreakdownRows } from "../pullRequest/PullRequestChangeBreakdownStat";
+import { PullRequestChecksPopover } from "../pullRequest/PullRequestChecksPopover";
 import {
   buildFixFindingsHandoff,
   buildResolveConflictsPrompt,
@@ -42,7 +41,7 @@ import {
   allowedPullRequestMergeMethods,
   resolveThreadPanelPullRequestAction,
 } from "../pullRequest/pullRequestDetail.logic";
-import { PullRequestChecksPopover } from "../pullRequest/PullRequestChecksPopover";
+import { PullRequestGlyph } from "../pullRequest/pullRequestIcons";
 import {
   pullRequestChecksState,
   PullRequestCheckStatusIcon,
@@ -74,6 +73,7 @@ import { Button } from "../ui/button";
 import { Spinner } from "../ui/spinner";
 import { toastManager } from "../ui/toast";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
+import { ThreadDetailsControl } from "./ThreadDetailsControl";
 import {
   THREAD_DETAILS_PANEL_ICON_CLASS,
   THREAD_DETAILS_PANEL_LABEL_CLASS,

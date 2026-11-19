@@ -9,10 +9,10 @@ import { describe, expect, it } from "@effect/vitest";
 import * as HostProcess from "@t3tools/shared/HostProcess";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
-import * as Sink from "effect/Sink";
-import * as Stream from "effect/Stream";
 import type * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
+import * as Sink from "effect/Sink";
+import * as Stream from "effect/Stream";
 
 import * as ProcessRunner from "../processRunner.ts";
 import * as ServiceProtection from "./serviceProtection.ts";

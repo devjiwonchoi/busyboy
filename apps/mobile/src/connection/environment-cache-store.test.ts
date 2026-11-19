@@ -1,3 +1,4 @@
+import { describe, expect, it } from "@effect/vitest";
 import {
   ORCHESTRATION_CACHE_SCHEMA_VERSION,
   ORCHESTRATION_THREAD_CACHE_SCHEMA_VERSION,
@@ -17,7 +18,6 @@ import {
   type OrchestrationV2ThreadDetailSnapshot,
   type ThreadPullRequestLink,
 } from "@t3tools/contracts";
-import { describe, expect, it } from "@effect/vitest";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";

@@ -1,24 +1,24 @@
-import * as Sink from "effect/Sink";
-import * as Deferred from "effect/Deferred";
-import * as Fiber from "effect/Fiber";
-import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
-import * as TestClock from "effect/testing/TestClock";
 import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import * as NodePath from "@effect/platform-node/NodePath";
 import * as NodeServices from "@effect/platform-node/NodeServices";
+import { describe, expect, it } from "@effect/vitest";
 import { ProviderInstanceId } from "@t3tools/contracts";
 import * as HostProcess from "@t3tools/shared/HostProcess";
-import { describe, expect, it } from "@effect/vitest";
+import { symlinksSupported } from "@t3tools/shared/testing/symlinks";
+import * as AcpErrors from "effect-acp/errors";
+import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
+import * as Ndjson from "effect/encoding/Ndjson";
+import * as Fiber from "effect/Fiber";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
+import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
+import * as Sink from "effect/Sink";
 import * as Stream from "effect/Stream";
-import * as Ndjson from "effect/encoding/Ndjson";
-import * as AcpErrors from "effect-acp/errors";
-import { symlinksSupported } from "@t3tools/shared/testing/symlinks";
+import * as TestClock from "effect/testing/TestClock";
 
 import {
   ANTIGRAVITY_AUTH_BROWSER_MARKER,

@@ -1,12 +1,12 @@
-import { builtInSourceControlDefinitions } from "@t3tools/source-control-definitions/registry";
+import type { ServerSettings, SourceControlAppAccessInput } from "@t3tools/contracts";
+import { parseGitRemoteRepository } from "@t3tools/shared/git";
 import {
   HostCredentialSettings,
   readSourceControlHostSettings,
   type SourceControlAppSignIn,
   type SourceControlDefinition,
 } from "@t3tools/source-control-core/shared/definition";
-import type { ServerSettings, SourceControlAppAccessInput } from "@t3tools/contracts";
-import { parseGitRemoteRepository } from "@t3tools/shared/git";
+import { builtInSourceControlDefinitions } from "@t3tools/source-control-definitions/registry";
 
 export {
   isMonochromeSourceControlIcon,

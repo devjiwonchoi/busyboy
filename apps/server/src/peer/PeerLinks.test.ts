@@ -2,23 +2,16 @@
 import * as NodeFS from "node:fs";
 // @effect-diagnostics-next-line nodeBuiltinImport:off - A peer with a certificate this machine does not trust.
 import * as NodeHttps from "node:https";
+
 import { NodeHttpServer } from "@effect/platform-node";
-import { type ExecutionEnvironmentDescriptor, OrchestratorMcpFailure } from "@t3tools/contracts";
 import { expect, it } from "@effect/vitest";
+import { type ExecutionEnvironmentDescriptor, OrchestratorMcpFailure } from "@t3tools/contracts";
+import { Tool, Toolkit } from "effect/ai";
 import * as Context from "effect/Context";
 import * as Deferred from "effect/Deferred";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
-import * as Layer from "effect/Layer";
-import * as Option from "effect/Option";
-import * as Queue from "effect/Queue";
-import * as Ref from "effect/Ref";
-import * as Schema from "effect/Schema";
-import * as HttpRouter from "effect/http/HttpRouter";
-import * as SqlClient from "effect/sql/SqlClient";
-import * as TestClock from "effect/testing/TestClock";
-import { Tool, Toolkit } from "effect/ai";
 import {
   FetchHttpClient,
   HttpClient,
@@ -26,12 +19,20 @@ import {
   HttpServerRequest,
   HttpServerResponse,
 } from "effect/http";
+import * as HttpRouter from "effect/http/HttpRouter";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as Queue from "effect/Queue";
+import * as Ref from "effect/Ref";
+import * as Schema from "effect/Schema";
+import * as SqlClient from "effect/sql/SqlClient";
+import * as TestClock from "effect/testing/TestClock";
 
 import * as ServerSecretStore from "../auth/ServerSecretStore.ts";
 import * as McpHttpServer from "../mcp/McpHttpServer.ts";
 import * as McpInvocationContext from "../mcp/McpInvocationContext.ts";
 import * as McpToolAccess from "../mcp/McpToolAccess.ts";
-import * as PeerLinks from "./PeerLinks.ts";
+import { layerReaderDatabase, traceSqlRouting } from "../persistence/testkit/SqliteRouting.ts";
 import * as ServerSettings from "../serverSettings.ts";
 import {
   descriptorOf,
@@ -39,9 +40,8 @@ import {
   servePeer,
   type ServedPeer,
 } from "./PeerLinks.testkit.ts";
+import * as PeerLinks from "./PeerLinks.ts";
 import * as PeerMcpClient from "./PeerMcpClient.ts";
-
-import { layerReaderDatabase, traceSqlRouting } from "../persistence/testkit/SqliteRouting.ts";
 
 /** What B's probe saw: the calling client and the modes it may start work with. */
 const Probe = Schema.Struct({ caller: Schema.String, modes: Schema.String });

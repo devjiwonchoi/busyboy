@@ -1,6 +1,3 @@
-import { msg } from "gt-i18n";
-import { translatableMessage } from "../errors/translatable.ts";
-import { remapComposerContextAttachments } from "@t3tools/shared/composerContextReferences";
 import {
   type ThreadLinkedPullRequest,
   CommandId,
@@ -30,17 +27,20 @@ import {
   type UploadChatAttachment,
   type GuestMessageId,
 } from "@t3tools/contracts";
+import { remapComposerContextAttachments } from "@t3tools/shared/composerContextReferences";
 import { derivePendingBackgroundWork } from "@t3tools/shared/orchestrationV2PendingBackgroundWork";
 import { visibleThreadPullRequests } from "@t3tools/shared/threadPullRequests";
-import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Cause from "effect/Cause";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
 import * as SubscriptionRef from "effect/SubscriptionRef";
+import { msg } from "gt-i18n";
 
 import * as EnvironmentSupervisor from "../connection/supervisor.ts";
+import { translatableMessage } from "../errors/translatable.ts";
 import {
   EnvironmentRpcUnavailableError,
   getInitialServerConfig,

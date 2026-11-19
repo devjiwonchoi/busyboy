@@ -1,4 +1,6 @@
+import { useAtomValue } from "@effect/atom-react";
 import { parseScopedThreadKey } from "@t3tools/client-runtime/environment";
+import { runAtomCommand } from "@t3tools/client-runtime/state/runtime";
 import {
   AuthPreviewOperateScope,
   type DesktopPreviewBridge,
@@ -6,15 +8,11 @@ import {
   type EnvironmentId,
   FILL_PREVIEW_VIEWPORT,
 } from "@t3tools/contracts";
-import { useAtomValue } from "@effect/atom-react";
-import { runAtomCommand } from "@t3tools/client-runtime/state/runtime";
 import { type ComponentProps, useState } from "react";
 
-import { primaryEnvironmentIdAtom } from "~/state/primaryEnvironment";
-
+import { useDesktopHostedPreviewSessions } from "~/components/preview/usePreviewSession";
 import { isElectron } from "~/env";
 import { useClientSettingsHydrated } from "~/hooks/useSettings";
-import { useDesktopHostedPreviewSessions } from "~/components/preview/usePreviewSession";
 import {
   readActivePreviewSessions,
   type ThreadPreviewState,
@@ -23,6 +21,7 @@ import {
 import { appAtomRegistry } from "~/rpc/atomRegistry";
 import { previewEnvironment } from "~/state/preview";
 import { readPreviewTunnelUrl } from "~/state/previewTunnel";
+import { primaryEnvironmentIdAtom } from "~/state/primaryEnvironment";
 import { useEnvironmentScope } from "~/state/session";
 
 import { readPreviewAnnotationTheme } from "./annotationTheme";

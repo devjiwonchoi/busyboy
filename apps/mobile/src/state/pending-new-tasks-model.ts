@@ -1,18 +1,18 @@
 import type { EnvironmentShellStatus } from "@t3tools/client-runtime/state/shell";
 import type { EnvironmentId, MessageId, ProjectId } from "@t3tools/contracts";
-
 import { msg } from "gt-react-native";
+
+import { resolveNewTaskDraftWorkspace } from "../features/threads/new-task-context-presentation";
 import { m, type MessageResolver } from "../i18n/messages";
 import { deriveThreadTitleFromPrompt } from "../lib/projectThreadStartTurn";
+import { isNewTaskDraftKey } from "./new-task-draft-key";
 import {
   isQueuedThreadCreationSendable,
   resolveThreadOutboxDeliveryAction,
   type QueuedThreadCreation,
   type QueuedThreadMessage,
 } from "./thread-outbox-model";
-import { isNewTaskDraftKey } from "./new-task-draft-key";
 import type { ComposerDraft } from "./use-composer-drafts";
-import { resolveNewTaskDraftWorkspace } from "../features/threads/new-task-context-presentation";
 
 export type PendingNewTask = PendingQueuedTask | PendingDraftTask;
 

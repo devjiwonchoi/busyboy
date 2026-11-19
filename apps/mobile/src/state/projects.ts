@@ -3,8 +3,8 @@ import { createProjectEnvironmentAtoms } from "@t3tools/client-runtime/state/pro
 
 import { environmentCatalog } from "../connection/catalog";
 import { connectionAtomRuntime } from "../connection/runtime";
-import { environmentSnapshotAtom } from "./shell";
 import { serverEnvironment } from "./server";
+import { environmentSnapshotAtom } from "./shell";
 
 export const environmentProjects = createEnvironmentProjectAtoms({
   catalogValueAtom: environmentCatalog.catalogValueAtom,

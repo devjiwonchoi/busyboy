@@ -1,4 +1,3 @@
-import * as Dialog from "../../components/ui/Dialog";
 import { useAtomValue } from "@effect/atom-react";
 import type { MenuAction } from "@react-native-menu/menu";
 import {
@@ -14,6 +13,7 @@ import { PREVIEW_VIEWPORT_PRESETS } from "@t3tools/shared/previewViewport";
 import { msg, useGT, useMessages } from "gt-react-native";
 
 import { ControlPill } from "../../components/ui/ControlPill";
+import * as Dialog from "../../components/ui/Dialog";
 import { Menu } from "../../components/ui/Menu";
 import { m } from "../../i18n/messages";
 import { previewEnvironment } from "../../state/preview";

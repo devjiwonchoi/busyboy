@@ -1,14 +1,14 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, it } from "@effect/vitest";
+import { fromJsonStringPretty } from "@t3tools/shared/schemaJson";
+import { Command } from "effect/cli";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
-import { Command } from "effect/cli";
 import * as TestConsole from "effect/testing/TestConsole";
-import { fromJsonStringPretty } from "@t3tools/shared/schemaJson";
 
 import {
   releasePackageFiles,

@@ -19,6 +19,8 @@ import {
   type RunId,
   type ThreadId,
 } from "@t3tools/contracts";
+import { withExecutedModelNote } from "@t3tools/provider-core/server/subagentProjection";
+import * as Tool from "effect/ai/Tool";
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
 import * as SecureRandom from "effect/crypto/SecureRandom";
@@ -30,20 +32,18 @@ import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
 import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
-import * as Tool from "effect/ai/Tool";
-import { withExecutedModelNote } from "@t3tools/provider-core/server/subagentProjection";
 
-import type * as McpInvocationContext from "../mcp/McpInvocationContext.ts";
-import { ProjectToolkit } from "../mcp/toolkits/project/tools.ts";
+import * as ServerEnvironment from "../environment/ServerEnvironment.ts";
 import {
   resolveInteractionMode,
   resolveRuntimeMode,
   taskPrompt,
 } from "../mcp/delegatedTaskModes.ts";
+import type * as McpInvocationContext from "../mcp/McpInvocationContext.ts";
+import { ProjectToolkit } from "../mcp/toolkits/project/tools.ts";
 import { followUpOwnerRun } from "../orchestration-v2/CommandPolicy.ts";
 import * as ProjectionStore from "../orchestration-v2/ProjectionStore.ts";
 import * as ThreadManagement from "../orchestration-v2/ThreadManagementService.ts";
-import * as ServerEnvironment from "../environment/ServerEnvironment.ts";
 import * as ProjectService from "../project/ProjectService.ts";
 import * as RepositoryIdentityResolver from "../project/RepositoryIdentityResolver.ts";
 import { forkParked } from "../serverActivation.ts";

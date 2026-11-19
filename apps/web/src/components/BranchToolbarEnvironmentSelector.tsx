@@ -1,17 +1,16 @@
-import { ComposerSelectControl } from "./chat/ComposerControl";
-import { ComposerContextLabel } from "./ComposerContextLabel";
-import { Tooltip, TooltipTrigger, TooltipPopup } from "./ui/tooltip";
 import { useAtomValue } from "@effect/atom-react";
-import { shortcutLabelForCommand } from "../keybindings";
-import { primaryServerKeybindingsAtom } from "../state/server";
 import type { EnvironmentId } from "@t3tools/contracts";
+import { T, useGT } from "gt-react";
 import { PlusIcon, ScaleIcon } from "lucide-react";
 import { memo } from "react";
-import { T, useGT } from "gt-react";
 
+import { shortcutLabelForCommand } from "../keybindings";
+import { primaryServerKeybindingsAtom } from "../state/server";
 import { ADD_TO_MACHINE_LABEL_CLASS, type EnvironmentOption } from "./BranchToolbar.logic";
-import { EnvironmentMachineIcon } from "./EnvironmentMachineIcon";
+import { ComposerSelectControl } from "./chat/ComposerControl";
 import { useComposerMenuProps } from "./chat/composerEventScope";
+import { ComposerContextLabel } from "./ComposerContextLabel";
+import { EnvironmentMachineIcon } from "./EnvironmentMachineIcon";
 import {
   Select,
   SelectGroup,
@@ -20,6 +19,7 @@ import {
   SelectPopup,
   SelectValue,
 } from "./ui/select";
+import { Tooltip, TooltipTrigger, TooltipPopup } from "./ui/tooltip";
 
 interface BranchToolbarEnvironmentSelectorProps {
   autoEnvironmentLabel?: string | undefined;

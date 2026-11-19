@@ -1,5 +1,6 @@
-import { buildHostedPairingUrl } from "../../hostedPairing";
 import { setPairingTokenOnUrl } from "@t3tools/shared/remote";
+
+import { buildHostedPairingUrl } from "../../hostedPairing";
 
 export function resolveDesktopPairingUrl(endpointUrl: string, credential: string): string {
   const url = new URL(endpointUrl);

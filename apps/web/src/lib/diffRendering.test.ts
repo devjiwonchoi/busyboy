@@ -1,5 +1,6 @@
 import { hydratePartialDiff } from "@pierre/diffs";
 import { describe, expect, it } from "vite-plus/test";
+
 import { resolveDiffReviewPosition } from "../reviewCommentContext";
 import {
   buildFileDiffContentVersion,

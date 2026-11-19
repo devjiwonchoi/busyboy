@@ -16,6 +16,7 @@ import {
   type DesktopAppControlAddress,
 } from "@t3tools/shared/desktopAppControl";
 import * as HostProcess from "@t3tools/shared/HostProcess";
+import { Argument, Command } from "effect/cli";
 import * as Config from "effect/Config";
 import * as Console from "effect/Console";
 import * as SecureRandom from "effect/crypto/SecureRandom";
@@ -23,7 +24,6 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
-import { Argument, Command } from "effect/cli";
 
 import { expandHomePath, resolveBaseDir } from "../os-jank.ts";
 import { baseDirFlag } from "./config.ts";

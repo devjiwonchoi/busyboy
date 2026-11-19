@@ -7,9 +7,9 @@ import type {
 } from "@t3tools/contracts";
 import { useEffect, useEffectEvent, useRef } from "react";
 
-import { recordFaviconForThread } from "~/browserFaviconStore";
 import { useBrowserPointerStore } from "~/browser/browserPointerStore";
 import { acquireBrowserSurfaceActivity } from "~/browser/browserSurfaceStore";
+import { recordFaviconForThread } from "~/browserFaviconStore";
 import { applyPreviewDesktopState, type DesktopPreviewOverlay } from "~/previewStateStore";
 import { previewEnvironment } from "~/state/preview";
 import { useAtomCommand } from "~/state/use-atom-command";

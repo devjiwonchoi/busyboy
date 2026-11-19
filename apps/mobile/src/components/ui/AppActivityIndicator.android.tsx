@@ -1,8 +1,9 @@
-import { NativeThemeHost } from "./NativeThemeHost.android";
 import { LoadingIndicator } from "@expo/ui/jetpack-compose";
 import { size as composeSize } from "@expo/ui/jetpack-compose/modifiers";
 import { StyleSheet, View, type ActivityIndicatorProps } from "react-native";
 import { useResolveClassNames, withUniwind } from "uniwind";
+
+import { NativeThemeHost } from "./NativeThemeHost.android";
 
 function AndroidActivityIndicator({
   animating = true,

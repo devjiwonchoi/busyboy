@@ -1,5 +1,3 @@
-import { presentThreadShell } from "./models.ts";
-import { threadKey } from "./entities.ts";
 import {
   EnvironmentId,
   EventId,
@@ -12,9 +10,12 @@ import {
   TurnItemId,
   type OrchestrationV2ThreadProjection,
 } from "@t3tools/contracts";
-import { describe, expect, it, vi } from "vite-plus/test";
-import { Atom, AtomRegistry, AsyncResult } from "effect/reactivity";
 import * as Cause from "effect/Cause";
+import { Atom, AtomRegistry, AsyncResult } from "effect/reactivity";
+import { describe, expect, it, vi } from "vite-plus/test";
+
+import { threadKey } from "./entities.ts";
+import { presentThreadShell } from "./models.ts";
 import { applyOrchestrationV2ProjectionEvent } from "./orchestrationV2Projection.ts";
 import { v2Now, v2Projection, v2ThreadShell } from "./orchestrationV2TestFixtures.ts";
 import {

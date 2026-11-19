@@ -1,24 +1,26 @@
-import { msg } from "gt-react";
-import { m } from "~/i18n/messages";
-import type { EnvironmentProject } from "@t3tools/client-runtime/state/shell";
-import type { UnifiedSettings } from "@t3tools/contracts";
-import { useStableCallback } from "../../hooks/useStableCallback";
 import { scopeProjectRef } from "@t3tools/client-runtime/environment";
-import { resolveProjectSettings } from "@t3tools/shared/projectSettings";
-import { useNavigate } from "@tanstack/react-router";
-import { DEFAULT_INTERACTION_MODE } from "../../types";
-import { newDraftId, newThreadId } from "~/lib/utils";
 import {
   deriveLogicalProjectKeyFromSettings,
   selectProjectGroupingSettings,
 } from "@t3tools/client-runtime/state/project-grouping";
-import { buildDraftThreadRouteParams } from "../../threadRoutes";
+import type { EnvironmentProject } from "@t3tools/client-runtime/state/shell";
+import type { UnifiedSettings } from "@t3tools/contracts";
+import { resolveProjectSettings } from "@t3tools/shared/projectSettings";
+import { useNavigate } from "@tanstack/react-router";
+import { msg } from "gt-react";
+
+import { m } from "~/i18n/messages";
+import { newDraftId, newThreadId } from "~/lib/utils";
+
 import {
   type DraftCheckoutPullRequest,
   type DraftThreadEnvMode,
   useComposerDraftStore,
   DraftId,
 } from "../../composerDraftStore";
+import { useStableCallback } from "../../hooks/useStableCallback";
+import { buildDraftThreadRouteParams } from "../../threadRoutes";
+import { DEFAULT_INTERACTION_MODE } from "../../types";
 import { openPullRequestThreadDialog } from "./ChatOverlayHosts";
 interface PullRequestDraftThreadInput {
   readonly routeKind: "server" | "draft";

@@ -1,5 +1,5 @@
-import * as Schema from "effect/Schema";
 import { compareSemverVersions } from "@t3tools/shared/semver";
+import * as Schema from "effect/Schema";
 
 export const ANTIGRAVITY_CLI_MANIFEST_BASE =
   "https://antigravity-cli-auto-updater-974169037036.us-central1.run.app/manifests";

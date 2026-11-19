@@ -2,13 +2,6 @@ import type {
   OrchestrationV2SearchThreadInput,
   OrchestrationV2SearchThreadResult,
 } from "@t3tools/contracts";
-import type {
-  ActiveThreadListEntry,
-  ProjectionRecordField,
-  ProjectionRecordFilter,
-  ProjectionRecords,
-  ShellSnapshotOptions,
-} from "./ProjectionStore.ts";
 import {
   type ChatAttachment,
   CommandId,
@@ -44,8 +37,8 @@ import {
   type TurnItemId,
 } from "@t3tools/contracts";
 import { delegatedTaskProgress } from "@t3tools/provider-core/server/subagentProjection";
-import { threadTranscriptHeader } from "@t3tools/shared/threadTranscript";
 import { AgentScope } from "@t3tools/shared/AgentScope";
+import { threadTranscriptHeader } from "@t3tools/shared/threadTranscript";
 import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
 import * as DateTime from "effect/DateTime";
@@ -59,18 +52,25 @@ import * as Schema from "effect/Schema";
 import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
 
-import * as CommandReceiptStore from "./CommandReceiptStore.ts";
-import * as Orchestrator from "./Orchestrator.ts";
 import * as ServerEnvironment from "../environment/ServerEnvironment.ts";
-import { projectedRowEncodedBytes } from "./threadHistoryPaging.ts";
+import * as ServerSettings from "../serverSettings.ts";
 import { threadPullRequestsOf } from "../sourceControl/threadPullRequests.ts";
+import { ThreadWorktreeRestore } from "../workspace/restoreMissingWorktree.ts";
+import * as CommandReceiptStore from "./CommandReceiptStore.ts";
+import { DispatchModeLimit, exceededDispatchModeLimit } from "./DispatchModeLimit.ts";
+import * as LegacyV1ThreadImporter from "./legacy/LegacyV1ThreadImporter.ts";
+import * as Orchestrator from "./Orchestrator.ts";
+import type {
+  ActiveThreadListEntry,
+  ProjectionRecordField,
+  ProjectionRecordFilter,
+  ProjectionRecords,
+  ShellSnapshotOptions,
+} from "./ProjectionStore.ts";
 import * as ProviderSessionManager from "./ProviderSessionManager.ts";
 import * as ThreadCommandExecutor from "./ThreadCommandExecutor.ts";
-import { DispatchModeLimit, exceededDispatchModeLimit } from "./DispatchModeLimit.ts";
+import { projectedRowEncodedBytes } from "./threadHistoryPaging.ts";
 import { projectTurnItemForDetail } from "./WireProjection.ts";
-import * as LegacyV1ThreadImporter from "./legacy/LegacyV1ThreadImporter.ts";
-import * as ServerSettings from "../serverSettings.ts";
-import { ThreadWorktreeRestore } from "../workspace/restoreMissingWorktree.ts";
 
 export type ThreadManagementSendMode = "auto" | "queue" | "steer" | "restart";
 

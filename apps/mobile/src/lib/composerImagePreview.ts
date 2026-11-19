@@ -1,8 +1,8 @@
 import * as Effect from "effect/Effect";
 import * as Equal from "effect/Equal";
 import * as Hash from "effect/Hash";
-import * as Schema from "effect/Schema";
 import { Atom } from "effect/reactivity";
+import * as Schema from "effect/Schema";
 
 import type { DraftComposerImageAttachment } from "./composerImages";
 

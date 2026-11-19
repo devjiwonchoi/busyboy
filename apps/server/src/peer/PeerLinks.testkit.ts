@@ -9,21 +9,21 @@ import {
 import * as Context from "effect/Context";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import * as Queue from "effect/Queue";
-import * as Ref from "effect/Ref";
+import * as HttpApi from "effect/http-api/HttpApi";
+import * as HttpApiBuilder from "effect/http-api/HttpApiBuilder";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as HttpRouter from "effect/http/HttpRouter";
 import * as HttpServer from "effect/http/HttpServer";
 import * as HttpServerRequest from "effect/http/HttpServerRequest";
-import * as HttpApi from "effect/http-api/HttpApi";
-import * as HttpApiBuilder from "effect/http-api/HttpApiBuilder";
+import * as Layer from "effect/Layer";
+import * as Queue from "effect/Queue";
+import * as Ref from "effect/Ref";
+import type * as SqlClient from "effect/sql/SqlClient";
 
 import * as EnvironmentAuth from "../auth/EnvironmentAuth.ts";
 import * as AuthHttp from "../auth/http.ts";
 import * as McpOAuth from "../auth/McpOAuth.ts";
 import * as McpOAuthHttp from "../auth/mcpOAuthHttp.ts";
-import type * as SqlClient from "effect/sql/SqlClient";
 import * as ServerSecretStore from "../auth/ServerSecretStore.ts";
 import * as CloudLink from "../cloud/CloudLink.ts";
 import * as ServerConfig from "../config.ts";
@@ -32,10 +32,10 @@ import * as ServerHttp from "../http.ts";
 import * as McpHttpServer from "../mcp/McpHttpServer.ts";
 import * as McpSessionRegistry from "../mcp/McpSessionRegistry.ts";
 import * as Sqlite from "../persistence/Sqlite.ts";
-import * as PeerLinks from "./PeerLinks.ts";
-import * as ServerSettings from "../serverSettings.ts";
-import * as PeerMcpClient from "./PeerMcpClient.ts";
 import * as ManagedPolicy from "../policy/ManagedPolicy.ts";
+import * as ServerSettings from "../serverSettings.ts";
+import * as PeerLinks from "./PeerLinks.ts";
+import * as PeerMcpClient from "./PeerMcpClient.ts";
 
 class PeerTestApi extends HttpApi.make("environment")
   .add(EnvironmentHttpApi.groups.metadata)

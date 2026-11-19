@@ -6,9 +6,9 @@ import { EnvironmentId, type PersistedSavedEnvironmentRecord } from "@t3tools/co
 import * as Effect from "effect/Effect";
 import * as Base64 from "effect/encoding/Base64";
 import * as FileSystem from "effect/FileSystem";
-import * as Path from "effect/Path";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as Path from "effect/Path";
 import * as Ref from "effect/Ref";
 import * as Schema from "effect/Schema";
 

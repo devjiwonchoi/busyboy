@@ -1,14 +1,11 @@
-import { useLegendListRef } from "~/hooks/useLegendListRef";
-import type { VcsRef } from "@t3tools/contracts";
 import { LegendList, type LegendListRef } from "@legendapp/list/react";
-import { useId, useRef, useState, type ComponentProps, type ReactNode } from "react";
+import type { VcsRef } from "@t3tools/contracts";
 import { T, useGT } from "gt-react";
+import { useId, useRef, useState, type ComponentProps, type ReactNode } from "react";
 
-import { MiddleTruncate } from "./ui/middle-truncate";
+import { useLegendListRef } from "~/hooks/useLegendListRef";
+
 import { cn } from "../lib/utils";
-import { RefreshIcon } from "./ui/refresh-icon";
-import { Switch } from "./ui/switch";
-import { getVirtualizedScrollFadeClassName } from "./ui/scroll-area";
 import {
   Combobox,
   ComboboxEmpty,
@@ -18,6 +15,10 @@ import {
   ComboboxPopup,
   ComboboxStatus,
 } from "./ui/combobox";
+import { MiddleTruncate } from "./ui/middle-truncate";
+import { RefreshIcon } from "./ui/refresh-icon";
+import { getVirtualizedScrollFadeClassName } from "./ui/scroll-area";
+import { Switch } from "./ui/switch";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "./ui/tooltip";
 
 export function BranchPicker({

@@ -1,6 +1,6 @@
 import { scaledTypographyLineHeight } from "./appearancePreferences";
-import { MOBILE_TYPOGRAPHY } from "./typography";
 import type { NativeLayoutMetrics } from "./reserved-regions";
+import { MOBILE_TYPOGRAPHY } from "./typography";
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max);

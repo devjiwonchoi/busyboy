@@ -4,32 +4,32 @@ import * as Deferred from "effect/Deferred";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
-import * as Queue from "effect/Queue";
-import * as TestClock from "effect/testing/TestClock";
 import * as FileSystem from "effect/FileSystem";
+import { HttpClient, HttpClientResponse } from "effect/http";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
+import { ChildProcessSpawner } from "effect/process";
+import * as Queue from "effect/Queue";
 import * as Ref from "effect/Ref";
 import * as Sink from "effect/Sink";
 import * as Stream from "effect/Stream";
-import { HttpClient, HttpClientResponse } from "effect/http";
-import { ChildProcessSpawner } from "effect/process";
+import * as TestClock from "effect/testing/TestClock";
 
 import * as DesktopConfig from "../app/DesktopConfig.ts";
 import * as DesktopEnvironment from "../app/DesktopEnvironment.ts";
 import * as DesktopObservability from "../app/DesktopObservability.ts";
 import * as DesktopState from "../app/DesktopState.ts";
+import * as ElectronApp from "../electron/ElectronApp.ts";
+import * as ElectronDialog from "../electron/ElectronDialog.ts";
+import * as DesktopBrowserHost from "../preview/DesktopBrowserHost.ts";
 import * as DesktopAppSettings from "../settings/DesktopAppSettings.ts";
 import * as DesktopTelemetryPublisher from "../telemetry/DesktopTelemetryPublisher.ts";
-import * as DesktopBrowserHost from "../preview/DesktopBrowserHost.ts";
-import * as ElectronDialog from "../electron/ElectronDialog.ts";
-import * as ElectronApp from "../electron/ElectronApp.ts";
 import * as DesktopWindow from "../window/DesktopWindow.ts";
 import * as DesktopWslEnvironment from "../wsl/DesktopWslEnvironment.ts";
 import * as DesktopBackendConfiguration from "./DesktopBackendConfiguration.ts";
-import * as DesktopBackendPool from "./DesktopBackendPool.ts";
 import type { DesktopBackendStartConfig } from "./DesktopBackendManager.ts";
+import * as DesktopBackendPool from "./DesktopBackendPool.ts";
 
 // Models the spawner's release for a backend that ignores SIGTERM, without OS signals.
 const makeFakeBackendProcess = Effect.fn("test.makeFakeBackendProcess")(function* () {

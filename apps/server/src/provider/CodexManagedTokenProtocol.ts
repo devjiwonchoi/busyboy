@@ -1,5 +1,6 @@
 // @effect-diagnostics nodeBuiltinImport:off - Private local IPC framing, shared by server and lean CLI.
 import type * as NodeNet from "node:net";
+
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 

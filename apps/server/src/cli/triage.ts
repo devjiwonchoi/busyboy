@@ -5,12 +5,12 @@ import * as NodePath from "node:path";
 import * as NodeReadlinePromises from "node:readline/promises";
 
 import { isCommandAvailable, resolveSpawnCommand } from "@t3tools/shared/shell";
+import { Command, Flag } from "effect/cli";
 import * as Config from "effect/Config";
 import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
-import { Command, Flag } from "effect/cli";
 
 import packageJson from "../../package.json" with { type: "json" };
 import * as ServerConfig from "../config.ts";
