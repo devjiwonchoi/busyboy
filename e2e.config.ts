@@ -13,7 +13,7 @@ const anthropic = createAnthropic({
 });
 
 export default {
-  tests: "tests/e2e/*.e2e.ts",
+  tests: "tests/*.e2e.ts",
   workers: 1,
   agents: {
     default: { model: anthropic("claude-haiku-5-5") },
@@ -36,7 +36,7 @@ export default {
           ],
           env: {
             BUSYBOY_HOME: home,
-            BUSYBOY_CLAUDE_PATH: resolve("tests/e2e/utils/fake-claude.mjs"),
+            BUSYBOY_CLAUDE_PATH: resolve("tests/utils/fake-claude.mjs"),
           },
           startupTimeout: 120_000,
           log: ".e2e/logs/app.log",

@@ -333,23 +333,20 @@ const noEmptyLoading = {
 };
 
 const testsDirectory = "tests";
-const e2eDirectory = [testsDirectory, "e2e"].join(sep);
-const e2eHelpersFolder = "utils";
+const testHelpersFolder = "utils";
 const e2eTestFile = /\.e2e\.ts$/;
 
-function e2eLayoutProblem(path: string) {
+function testLayoutProblem(path: string) {
   if (!path.startsWith(testsDirectory + sep)) return undefined;
-  if (!path.startsWith(e2eDirectory + sep))
-    return "Put e2e tests in tests/e2e and the code they share in tests/e2e/utils.";
-  const parts = relative(e2eDirectory, path).split(sep);
+  const parts = relative(testsDirectory, path).split(sep);
   const isTest = e2eTestFile.test(path);
   if (parts.length === 1 && isTest) return undefined;
   if (parts.length === 1)
-    return "Only *.e2e.ts tests sit in tests/e2e. Move shared code to tests/e2e/utils.";
-  if (parts.length === 2 && parts[0] === e2eHelpersFolder && !isTest) return undefined;
-  if (parts.length === 2 && parts[0] === e2eHelpersFolder)
-    return "tests/e2e/utils holds shared code only. Move the test up to tests/e2e.";
-  return "Keep tests/e2e flat: tests directly in it, shared code directly in tests/e2e/utils.";
+    return "Only *.e2e.ts tests sit in tests. Move shared code to tests/utils.";
+  if (parts.length === 2 && parts[0] === testHelpersFolder && !isTest) return undefined;
+  if (parts.length === 2 && parts[0] === testHelpersFolder)
+    return "tests/utils holds shared code only. Move the test up to tests.";
+  return "Keep tests flat: tests directly in it, shared code directly in tests/utils.";
 }
 
 function isTestExtend(callee: Node) {
@@ -364,14 +361,14 @@ function isTestExtend(callee: Node) {
   );
 }
 
-const flatE2e = {
+const flatTests = {
   meta: { type: "problem" },
   create(context: Context) {
     const path = repositoryPath(context);
     if (!path.startsWith(testsDirectory + sep)) return {};
     return {
       Program(program: Node) {
-        const message = e2eLayoutProblem(path);
+        const message = testLayoutProblem(path);
         if (message) context.report({ node: program, message });
       },
       CallExpression(node: Node) {
@@ -379,7 +376,7 @@ const flatE2e = {
           context.report({
             node,
             message:
-              "Write e2e setup inline or in a beforeEach and share it from tests/e2e/utils, not as a test.extend fixture.",
+              "Write e2e setup inline or in a beforeEach and share it from tests/utils, not as a test.extend fixture.",
           });
       },
     };
@@ -396,7 +393,7 @@ const busyboyPlugin = {
     "no-empty-suspense-fallback": noEmptySuspenseFallback,
     "no-empty-loading": noEmptyLoading,
     "no-negated-predicate": noNegatedPredicate,
-    "flat-e2e": flatE2e,
+    "flat-tests": flatTests,
   },
 };
 
