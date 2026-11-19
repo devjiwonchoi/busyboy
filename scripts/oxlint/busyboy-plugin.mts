@@ -332,6 +332,57 @@ const noEmptyLoading = {
   },
 };
 
+const testsDirectory = "tests";
+const testHelpersFolder = "utils";
+const e2eTestFile = /\.e2e\.ts$/;
+
+function testLayoutProblem(path: string) {
+  if (!path.startsWith(testsDirectory + sep)) return undefined;
+  const parts = relative(testsDirectory, path).split(sep);
+  const isTest = e2eTestFile.test(path);
+  if (parts.length === 1 && isTest) return undefined;
+  if (parts.length === 1)
+    return "Only *.e2e.ts tests sit in tests. Move shared code to tests/utils.";
+  if (parts.length === 2 && parts[0] === testHelpersFolder && !isTest) return undefined;
+  if (parts.length === 2 && parts[0] === testHelpersFolder)
+    return "tests/utils holds shared code only. Move the test up to tests.";
+  return "Keep tests flat: tests directly in it, shared code directly in tests/utils.";
+}
+
+function isTestExtend(callee: Node) {
+  if (callee.type !== "MemberExpression") return false;
+  const object = callee.object as Node;
+  const property = callee.property as Node;
+  return (
+    object.type === "Identifier" &&
+    object.name === "test" &&
+    property.type === "Identifier" &&
+    property.name === "extend"
+  );
+}
+
+const flatTests = {
+  meta: { type: "problem" },
+  create(context: Context) {
+    const path = repositoryPath(context);
+    if (!path.startsWith(testsDirectory + sep)) return {};
+    return {
+      Program(program: Node) {
+        const message = testLayoutProblem(path);
+        if (message) context.report({ node: program, message });
+      },
+      CallExpression(node: Node) {
+        if (isTestExtend(node.callee as Node))
+          context.report({
+            node,
+            message:
+              "Write e2e setup inline or in a beforeEach and share it from tests/utils, not as a test.extend fixture.",
+          });
+      },
+    };
+  },
+};
+
 const busyboyPlugin = {
   meta: { name: "busyboy" },
   rules: {
@@ -342,6 +393,7 @@ const busyboyPlugin = {
     "no-empty-suspense-fallback": noEmptySuspenseFallback,
     "no-empty-loading": noEmptyLoading,
     "no-negated-predicate": noNegatedPredicate,
+    "flat-tests": flatTests,
   },
 };
 

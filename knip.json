@@ -3,10 +3,10 @@
   "ignoreBinaries": ["ditto", "spctl", "shadcn"],
   "workspaces": {
     ".": {
-      "entry": ["scripts/*.mts"]
+      "entry": ["scripts/*.mts", "e2e.config.ts", "tests/*.e2e.ts", "tests/utils/fake-claude.mjs"]
     },
     "apps/web": {
-      "entry": ["scripts/*.mts", "e2e.config.ts", "tests/**/*.e2e.ts"],
+      "entry": ["scripts/*.mts"],
       "ignore": ["components/ui/**", "lib/utils.ts"]
     },
     "apps/native": {

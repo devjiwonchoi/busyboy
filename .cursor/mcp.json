@@ -2,7 +2,7 @@
   "mcpServers": {
     "e2e": {
       "command": "pnpm",
-      "args": ["--filter", "@busyboy/web", "exec", "e2e", "mcp"]
+      "args": ["exec", "e2e", "mcp"]
     }
   }
 }

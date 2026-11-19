@@ -10,16 +10,22 @@
     "build:electron": "pnpm --filter @busyboy/native build",
     "dev:desktop": "pnpm --filter @busyboy/native dev",
     "build:desktop": "pnpm --filter @busyboy/native build:desktop",
-    "typecheck": "pnpm --filter @busyboy/web --filter @busyboy/native typecheck",
+    "typecheck": "pnpm --filter @busyboy/web --filter @busyboy/native typecheck && tsc -p tsconfig.json",
     "lint": "oxlint && knip && node scripts/check-no-korean.mts",
     "format": "oxfmt",
     "format:check": "oxfmt --check",
-    "test:e2e": "pnpm --filter @busyboy/web test:e2e"
+    "test:e2e": "e2e run"
   },
   "devDependencies": {
+    "@ai-sdk/anthropic": "4.0.106",
+    "@e2e-dev/web": "0.16.0",
+    "@types/node": "24.19.2",
+    "ai": "7.0.173",
+    "e2e": "0.23.1",
     "knip": "6.45.1",
     "oxfmt": "0.79.0",
-    "oxlint": "1.94.0"
+    "oxlint": "1.94.0",
+    "typescript": "6.0.3"
   },
   "packageManager": "pnpm@11.10.0"
 }
