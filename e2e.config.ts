@@ -24,6 +24,7 @@ export default {
       app: {
         url: "http://127.0.0.1:0",
         command: {
+          cwd: "apps/web",
           executable: "node",
           args: [
             "node_modules/next/dist/bin/next",

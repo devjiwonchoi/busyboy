@@ -332,7 +332,7 @@ const noEmptyLoading = {
   },
 };
 
-const testsDirectory = [webDirectory, "tests"].join(sep);
+const testsDirectory = "tests";
 const e2eDirectory = [testsDirectory, "e2e"].join(sep);
 const e2eHelpersFolder = "utils";
 const e2eTestFile = /\.e2e\.ts$/;
@@ -340,16 +340,16 @@ const e2eTestFile = /\.e2e\.ts$/;
 function e2eLayoutProblem(path: string) {
   if (!path.startsWith(testsDirectory + sep)) return undefined;
   if (!path.startsWith(e2eDirectory + sep))
-    return "Put e2e tests in apps/web/tests/e2e and the code they share in apps/web/tests/e2e/utils.";
+    return "Put e2e tests in tests/e2e and the code they share in tests/e2e/utils.";
   const parts = relative(e2eDirectory, path).split(sep);
   const isTest = e2eTestFile.test(path);
   if (parts.length === 1 && isTest) return undefined;
   if (parts.length === 1)
-    return "Only *.e2e.ts tests sit in apps/web/tests/e2e. Move shared code to apps/web/tests/e2e/utils.";
+    return "Only *.e2e.ts tests sit in tests/e2e. Move shared code to tests/e2e/utils.";
   if (parts.length === 2 && parts[0] === e2eHelpersFolder && !isTest) return undefined;
   if (parts.length === 2 && parts[0] === e2eHelpersFolder)
-    return "apps/web/tests/e2e/utils holds shared code only. Move the test up to apps/web/tests/e2e.";
-  return "Keep apps/web/tests/e2e flat: tests directly in it, shared code directly in apps/web/tests/e2e/utils.";
+    return "tests/e2e/utils holds shared code only. Move the test up to tests/e2e.";
+  return "Keep tests/e2e flat: tests directly in it, shared code directly in tests/e2e/utils.";
 }
 
 function isTestExtend(callee: Node) {
@@ -379,7 +379,7 @@ const flatE2e = {
           context.report({
             node,
             message:
-              "Write e2e setup inline or in a beforeEach and share it from apps/web/tests/e2e/utils, not as a test.extend fixture.",
+              "Write e2e setup inline or in a beforeEach and share it from tests/e2e/utils, not as a test.extend fixture.",
           });
       },
     };
