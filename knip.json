@@ -3,7 +3,8 @@
   "ignoreBinaries": ["ditto", "spctl", "shadcn"],
   "workspaces": {
     ".": {
-      "entry": ["scripts/*.mts", "e2e.config.ts", "tests/*.e2e.ts", "tests/utils/fake-claude.mjs"]
+      "entry": ["scripts/*.mts", "e2e.config.ts", "tests/*.e2e.ts", "tests/utils/fake-claude.mjs"],
+      "ignoreDependencies": ["@agentclientprotocol/claude-agent-acp"]
     },
     "apps/web": {
       "entry": ["scripts/*.mts"],
